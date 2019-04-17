@@ -1,0 +1,11 @@
+[package]
+name = "akka_api"
+version = "0.1.0"
+authors = ["Max Meldrum <mmeldrum@kth.se>"]
+edition = "2018"
+
+[dependencies]
+protobuf = "2.0"
+
+[build-dependencies]
+protoc-rust = "2.0"

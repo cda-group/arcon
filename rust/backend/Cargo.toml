@@ -1,0 +1,15 @@
+[package]
+name = "backend"
+version = "0.1.0"
+authors = ["Max Meldrum <mmeldrum@kth.se>"]
+edition = "2018"
+
+[features]
+default = ["rocksdb"]
+
+[dependencies]
+rocksdb = { git = "https://github.com/pingcap/rust-rocksdb.git", optional = true }
+
+[dev-dependencies]
+tempdir = "0.3"
+

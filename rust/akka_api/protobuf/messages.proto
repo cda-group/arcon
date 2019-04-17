@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+
+message Hello {
+    string hey = 1;
+}
+
+message Ask {
+    string askActor = 1;
+    KompactAkkaMsg msg = 2;
+}
+
+message AskReply {
+    string askActor = 1;
+    KompactAkkaMsg msg = 2;
+}
+
+message ExecutorRegistration {
+    string jobId = 1;
+    KompactAkkaPath src = 2;
+    KompactAkkaPath dst = 3;
+}
+
+message KompactAkkaPath {
+    string path = 1;
+    string ip = 2;
+    int32 port = 3;
+}
+
+message KompactAkkaMsg {
+    oneof payload {
+        ExecutorRegistration executorRegistration = 1;
+        Hello hello = 2;
+        Ask ask = 3;
+        AskReply askReply = 4;
+    }
+}
+
+message KompactAkkaEnvelope {
+    KompactAkkaPath src = 1;
+    KompactAkkaPath dst = 2;
+    KompactAkkaMsg msg = 3;
+}
