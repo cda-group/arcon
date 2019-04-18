@@ -1,0 +1,5 @@
+.swp
+*.rs.swp
+*.proto.swp
+target/
+messages.rs

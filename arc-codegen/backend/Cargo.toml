@@ -1,0 +1,17 @@
+[package]
+name = "backend"
+version = "0.1.0"
+authors = ["Max Meldrum <mmeldrum@kth.se>"]
+edition = "2018"
+
+[features]
+default = ["rocksdb"]
+
+[dependencies.rocksdb]
+version = "0.12.1"
+default-features = false
+features = ["lz4"]
+optional = true
+
+[dev-dependencies]
+tempdir = "0.3"

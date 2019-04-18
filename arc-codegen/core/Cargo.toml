@@ -1,0 +1,12 @@
+[package]
+name = "core"
+version = "0.1.0"
+authors = ["Max Meldrum <mmeldrum@kth.se>"]
+edition = "2018"
+
+[dependencies]
+weld = "0.3.0"
+tokio = "0.1"
+tokio-threadpool = "0.1.11"
+futures = "0.1"
+regex = "1"

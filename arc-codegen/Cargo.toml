@@ -1,0 +1,42 @@
+[package]
+name = "arc-codegen"
+version = "0.1.0"
+authors = ["Max Meldrum <mmeldrum@kth.se>"]
+edition = "2018"
+
+[features]
+default = ["http"]
+
+[dependencies]
+http = { path ="http", optional = true }
+kafka = { path ="kafka", optional = true }
+core = { path = "core" }
+akka-api = { path = "akka-api" }
+backend = { path = "backend" }
+
+fnv = "1.0.3"
+
+# Logging
+slog = {version = "2.2"}
+slog-async = "2.3"
+slog-term = "2.4"
+
+# Middleware
+kompact = { git = "https://github.com/kompics/kompact", branch = "master", features = ["protobuf"]}
+bytes = "0.4"
+tokio = "0.1"
+tokio-threadpool = "0.1.11"
+futures = "0.1"
+
+# Kompact IO
+tokio-codec = "0.1"
+
+[[bin]]
+name = "operator"
+path = "src/bin/operator.rs"
+bench = false
+
+[[bin]]
+name = "coordinator_test"
+path = "src/bin/coordinator_test.rs"
+bench = false

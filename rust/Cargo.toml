@@ -1,9 +1,0 @@
-[workspace]
-members = [
-    "http",
-    "kafka",
-    "akka_api",
-    "backend",
-    "operator",
-    "core",
-]
