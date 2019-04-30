@@ -6,7 +6,7 @@ use crate::error::*;
 use std::marker::PhantomData;
 use weld::*;
 
-use futures::{Future, Async, Poll};
+use futures::{Async, Future, Poll};
 
 pub struct WeldFuture<A: ?Sized, B: ?Sized> {
     pub module: Arc<Module>,
@@ -14,7 +14,7 @@ pub struct WeldFuture<A: ?Sized, B: ?Sized> {
     output: PhantomData<B>,
 }
 
-impl <A, B: Clone>WeldFuture <A, B> {
+impl<A, B: Clone> WeldFuture<A, B> {
     pub fn new(module: Arc<Module>, input: A) -> WeldFuture<A, B> {
         WeldFuture {
             module: Arc::clone(&module),
@@ -31,7 +31,7 @@ impl <A, B: Clone>WeldFuture <A, B> {
 
 unsafe impl<A, B> Send for WeldFuture<A, B> {}
 
-impl <A, B: Clone> Future for WeldFuture<A, B> {
+impl<A, B: Clone> Future for WeldFuture<A, B> {
     type Item = Result<B>;
     type Error = ();
 
@@ -41,7 +41,6 @@ impl <A, B: Clone> Future for WeldFuture<A, B> {
         Ok(Async::Ready(result))
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -61,14 +60,16 @@ mod tests {
 
         let task: WeldFuture<i32, i32> = WeldFuture::new(mod_1, arg);
 
-        let future = task.map(move |res| res.unwrap() + 100).and_then(|v| {
-            let task2: WeldFuture<i32, i32> = WeldFuture::new(mod_2, v);
-            task2
-        })
-        .and_then(|end| { 
-            assert_eq!(end.unwrap(), 380);
-            Ok(())
-        });
+        let future = task
+            .map(move |res| res.unwrap() + 100)
+            .and_then(|v| {
+                let task2: WeldFuture<i32, i32> = WeldFuture::new(mod_2, v);
+                task2
+            })
+            .and_then(|end| {
+                assert_eq!(end.unwrap(), 380);
+                Ok(())
+            });
         tokio::run(future);
     }
 }

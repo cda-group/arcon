@@ -1,9 +1,9 @@
-extern crate arc_codegen;
+extern crate core;
 
+use core::components::io::*;
+use core::prelude::future::Future;
+use core::prelude::*;
 use http::client::HttpsClient;
-use arc_codegen::prelude::future::Future;
-use arc_codegen::prelude::io::*;
-use arc_codegen::prelude::*;
 use tokio_threadpool::ThreadPool;
 
 fn main() {

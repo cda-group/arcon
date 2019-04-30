@@ -106,10 +106,10 @@ impl Actor for TaskManager {
 mod tests {
     use super::*;
     use crate::akka_api::util::*;
-    use backend::*;
+    use crate::module::{Module, ModuleRun};
+    use crate::prelude::*;
     use backend::state_backend::StateBackend;
-    use core::module::{Module, ModuleRun};
-    use core::prelude::*;
+    use backend::*;
     use kompact::default_components::DeadletterBox;
     use std::sync::Arc;
     use std::time::Duration;
@@ -233,7 +233,8 @@ mod tests {
         let module = Module::new(id, code, priority, None).unwrap();
         let db = in_memory::InMemory::create("test_storage");
 
-        let (task, _) = system.create_and_register(move || Task::new("f1".to_string(), module, Arc::new(db)));
+        let (task, _) =
+            system.create_and_register(move || Task::new("f1".to_string(), module, Arc::new(db)));
 
         let coordinator_proxy = String::from("127.0.0.1:2500");
         let coordinator_handler_path = String::from("operator_handler");

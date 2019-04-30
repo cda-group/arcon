@@ -1,6 +1,6 @@
-extern crate arc_codegen;
+extern crate core;
 
-use arc_codegen::prelude::*;
+use core::prelude::*;
 
 fn main() {
     let system = KompactConfig::default().build().expect("KompactSystem");
