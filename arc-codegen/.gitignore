@@ -1,4 +1,5 @@
 .swp
+.swo
 *.rs.swp
 *.proto.swp
 target/
