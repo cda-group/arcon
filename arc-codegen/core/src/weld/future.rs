@@ -1,4 +1,4 @@
-use crate::module::Module;
+use crate::weld::module::Module;
 use std::sync::Arc;
 
 use crate::error::*;

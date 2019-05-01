@@ -4,7 +4,7 @@ use rocksdb::{Options, DB};
 
 use crate::error::ErrorKind::*;
 use crate::error::*;
-use crate::state_backend::StateBackend;
+use crate::StateBackend;
 
 pub struct RocksDB {
     db: DB,
@@ -49,5 +49,26 @@ impl RocksDB {
             db: DB::open(&options, &name).unwrap(),
             storage_dir: name.to_string(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn simple_rocksdb_test() {
+        let tmp_dir = TempDir::new().unwrap();
+        let dir_path = tmp_dir.path().to_string_lossy().into_owned();
+        let mut db = RocksDB::create(&dir_path);
+
+        let key = "key";
+        let value = "test";
+
+        db.put(key.as_bytes(), value.as_bytes()).expect("put");
+
+        let v = db.get(key.as_bytes()).unwrap();
+        assert_eq!(value, String::from_utf8_lossy(&v));
     }
 }

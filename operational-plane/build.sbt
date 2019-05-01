@@ -17,7 +17,7 @@ version in asciiGraphs := "0.0.7-SNAPSHOT"
 
 lazy val generalSettings = Seq(
   organization := "se.kth.arcon",
-  scalaVersion := "2.12.6"
+  scalaVersion := "2.12.8"
 )
 
 lazy val arconSettings = generalSettings ++ Seq(

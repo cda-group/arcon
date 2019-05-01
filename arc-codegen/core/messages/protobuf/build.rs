@@ -4,9 +4,9 @@ use protoc_rust::Customize;
 
 fn main() {
     protoc_rust::run(protoc_rust::Args {
-        out_dir: "src/messages",
-        includes: &["./../../proto"],
-        input: &["./../../proto/messages.proto"],
+        out_dir: "src/",
+        includes: &["./protobuf"],
+        input: &["./protobuf/messages.proto"],
         customize: Customize {
             ..Default::default()
         },

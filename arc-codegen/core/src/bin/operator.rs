@@ -1,4 +1,7 @@
+
 extern crate core;
+#[cfg(feature = "http")]
+extern crate http;
 
 use core::components::io::*;
 use core::prelude::future::Future;

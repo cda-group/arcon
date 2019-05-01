@@ -1,0 +1,12 @@
+[package]
+name = "messages"
+version = "0.1.0"
+authors = ["Max Meldrum <mmeldrum@kth.se>"]
+edition = "2018"
+
+[features]
+default = ["protobuf"]
+
+[dependencies]
+protobuf = { path ="protobuf", optional = true }
+capnproto = { path ="capnproto", optional = true }

@@ -5,12 +5,12 @@ use kompact::*;
 use std::net::SocketAddr;
 
 #[derive(Clone, Debug)]
-struct Metric {
-    task_id: String,
-    task_avg: u64,
+pub struct Metric {
+    pub task_id: String,
+    pub task_avg: u64,
 }
 
-struct MetricPort;
+pub struct MetricPort;
 
 impl Port for MetricPort {
     type Indication = Metric;
@@ -23,7 +23,7 @@ type TaskAvg = u64;
 #[derive(ComponentDefinition)]
 pub struct TaskManager {
     ctx: ComponentContext<TaskManager>,
-    metric_port: RequiredPort<MetricPort, TaskManager>,
+    metric_port: ProvidedPort<MetricPort, TaskManager>,
     coordinator: AkkaConnection,
     self_addr: SocketAddr,
     task_metrics: FnvHashMap<TaskId, TaskAvg>,
@@ -33,7 +33,7 @@ impl TaskManager {
     pub fn new(coordinator: AkkaConnection, self_addr: SocketAddr) -> TaskManager {
         TaskManager {
             ctx: ComponentContext::new(),
-            metric_port: RequiredPort::new(),
+            metric_port: ProvidedPort::new(),
             coordinator,
             self_addr,
             task_metrics: FnvHashMap::default(),
@@ -76,13 +76,10 @@ impl Provide<ControlPort> for TaskManager {
     }
 }
 
-impl Require<MetricPort> for TaskManager {
+impl Provide<MetricPort> for TaskManager {
     fn handle(&mut self, metric: Metric) {
         debug!(self.ctx.log(), "Got metric {:?}", metric);
         self.task_metrics.insert(metric.task_id, metric.task_avg);
-        for (key, val) in self.task_metrics.iter() {
-            println!("key: {} val: {}", key, val);
-        }
     }
 }
 
@@ -106,118 +103,16 @@ impl Actor for TaskManager {
 mod tests {
     use super::*;
     use crate::akka_api::util::*;
-    use crate::module::{Module, ModuleRun};
     use crate::prelude::*;
-    use backend::state_backend::StateBackend;
-    use backend::*;
+    use crate::weld::*;
+    use state_backend::StateBackend;
+    use state_backend::*;
     use kompact::default_components::DeadletterBox;
     use std::sync::Arc;
     use std::time::Duration;
 
     #[derive(Clone, Copy)]
     struct MetricReport {}
-
-    // Example Task setup
-
-    #[derive(ComponentDefinition)]
-    pub struct Task {
-        ctx: ComponentContext<Task>,
-        report_timer: Option<ScheduledTimer>,
-        manager_port: ProvidedPort<MetricPort, Task>,
-        udf: Module,
-        udf_avg: u64,
-        udf_executions: u64,
-        backend: Arc<StateBackend>,
-        id: String,
-    }
-
-    impl Task {
-        pub fn new(id: String, udf: Module, backend: Arc<StateBackend>) -> Task {
-            Task {
-                ctx: ComponentContext::new(),
-                report_timer: None,
-                manager_port: ProvidedPort::new(),
-                udf,
-                udf_avg: 0,
-                udf_executions: 0,
-                backend: Arc::clone(&backend),
-                id,
-            }
-        }
-
-        fn stop_report(&mut self) {
-            if let Some(timer) = self.report_timer.clone() {
-                self.cancel_timer(timer);
-                self.report_timer = None;
-            }
-        }
-
-        fn run_udf(&mut self) {
-            // Example for now.
-            // Assuming the return type is i32
-            let input: i32 = 10;
-            let ref mut ctx = WeldContext::new(&self.udf.conf()).unwrap();
-            let result: ModuleRun<i32> = self.udf.run(&input, ctx).unwrap();
-            let ns = result.1;
-            self.update_avg(ns);
-        }
-
-        fn update_avg(&mut self, ns: u64) {
-            if self.udf_executions == 0 {
-                self.udf_avg = ns;
-            } else {
-                let ema: i32 = ((ns as f32 - self.udf_avg as f32)
-                    * (2.0 / (self.udf_executions + 1) as f32))
-                    as i32
-                    + self.udf_avg as i32;
-                self.udf_avg = ema as u64;
-            }
-            self.udf_executions += 1;
-        }
-    }
-
-    impl Provide<ControlPort> for Task {
-        fn handle(&mut self, event: ControlEvent) -> () {
-            match event {
-                ControlEvent::Start => {
-                    let timeout = Duration::from_millis(250);
-                    let timer = self.schedule_periodic(timeout, timeout, |self_c, _| {
-                        self_c.actor_ref().tell(Box::new(MetricReport {}), self_c);
-                    });
-
-                    self.report_timer = Some(timer);
-                }
-                ControlEvent::Stop => self.stop_report(),
-                ControlEvent::Kill => self.stop_report(),
-            }
-        }
-    }
-
-    impl Actor for Task {
-        fn receive_local(&mut self, _sender: ActorRef, msg: Box<Any>) {
-            if let Ok(_report) = msg.downcast::<MetricReport>() {
-                self.manager_port.trigger(Metric {
-                    task_id: self.id.clone(),
-                    task_avg: self.udf_avg,
-                });
-            }
-            // Snapshot State
-            //if let Ok(_) = self.backend.snapshot() {
-            //
-            //}
-        }
-        fn receive_message(&mut self, sender: ActorPath, ser_id: u64, buf: &mut Buf) {
-            // Process Element
-            // Process Watermark
-            // self.run_udf()
-        }
-    }
-
-    impl Provide<MetricPort> for Task {
-        fn handle(&mut self, event: Metric) -> () {
-            // TODO: Remove??
-        }
-    }
 
     #[test]
     fn task_test() {
@@ -229,12 +124,24 @@ mod tests {
 
         let id = String::from("addition");
         let code = String::from("|x:i32| 40 + x");
+        let raw_code = generate_raw_module(code.clone(), true).unwrap();
+        let serialize_fmt = serialize_module_fmt(raw_code.clone()).unwrap();
         let priority = 0;
-        let module = Module::new(id, code, priority, None).unwrap();
+        let mut module = Module::new(id, raw_code, priority, None).unwrap();
         let db = in_memory::InMemory::create("test_storage");
 
-        let (task, _) =
-            system.create_and_register(move || Task::new("f1".to_string(), module, Arc::new(db)));
+        let ref input: i32 = 10;
+        let ref mut ctx = WeldContext::new(&module.conf()).unwrap();
+        module
+            .add_serializer(code)
+            .expect("failed to compile module");
+        let serialized_input: Vec<i8> = module.serialize_input(&input, ctx).unwrap();
+
+        let (task, _) = system.create_and_register(move || {
+            crate::components::task::Task::new("add".to_string(), module, Arc::new(db), None)
+        });
+
+        let _ = system.register_by_alias(&task, "add");
 
         let coordinator_proxy = String::from("127.0.0.1:2500");
         let coordinator_handler_path = String::from("operator_handler");
@@ -263,6 +170,23 @@ mod tests {
 
         system.start(&task_manager);
         system.start(&task);
+
+        use crate::messages::*;
+        let mut msg = TaskMsg::new();
+        let mut element = Element::new();
+        element.set_timestamp(crate::util::get_system_time());
+        element.set_id(1);
+        element.set_task_id("add".to_string());
+        element.set_data(i8_slice_to_u8(&serialized_input).to_vec());
+        msg.set_element(element);
+
+        let task_path = ActorPath::Named(NamedPath::with_system(
+            system.system_path(),
+            vec!["add".clone().into()],
+        ));
+
+        task_path.tell(msg, &system);
+
         std::thread::sleep(Duration::from_millis(500));
         system.shutdown().expect("fail");
     }

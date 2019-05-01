@@ -1,14 +1,15 @@
 use crate::error::ErrorKind::*;
 use crate::error::*;
-use crate::util::*;
+use crate::weld::util::*;
 use std::time::Instant;
-use weld::ast::ScalarKind::I8;
-use weld::ast::*;
-use weld::data::*;
-use weld::*;
+use weld_core::ast::ScalarKind::I8;
+use weld_core::ast::*;
+use weld_core::data::*;
+use weld_core::*;
 
 pub type ModuleRun<A> = (A, u64);
 
+#[allow(dead_code)]
 pub struct Module {
     pub id: String,
     code: String,
@@ -19,7 +20,12 @@ pub struct Module {
 }
 
 impl Module {
-    pub fn new(id: String, code: String, priority: i32, threads: Option<i32>) -> Result<Module> {
+    pub fn new(
+        id: String,
+        code: String,
+        priority: i32,
+        threads: Option<i32>,
+    ) -> Result<Module> {
         let mut conf = WeldConf::new();
         if let Some(t) = threads {
             let threads = format!("{}", t);
@@ -30,9 +36,20 @@ impl Module {
             Error::new(CompilationError(e.message().to_string_lossy().into_owned()))
         })?;
 
-        let serializer_str = serialize_module_fmt(code.clone())?;
-        let serialize_module: WeldModule =
-            WeldModule::compile(serializer_str, &conf).map_err(|e| {
+        Ok(Module {
+            id,
+            code,
+            priority,
+            module,
+            serialize_module: None,
+            conf,
+        })
+    }
+
+    pub fn add_serializer(&mut self, ser_code: String) -> Result<()> {
+        let serializer_str = serialize_module_fmt(ser_code)?;
+        let serialize_module: WeldModule = WeldModule::compile(serializer_str, &self.conf)
+            .map_err(|e| {
                 Error::new(CompilationError(e.message().to_string_lossy().into_owned()))
             })?;
 
@@ -43,14 +60,8 @@ impl Module {
             )));
         }
 
-        Ok(Module {
-            id,
-            code,
-            priority,
-            module,
-            serialize_module: Some(serialize_module),
-            conf,
-        })
+        self.serialize_module = Some(serialize_module);
+        Ok(())
     }
 
     pub fn conf(&self) -> &WeldConf {
@@ -203,10 +214,17 @@ mod tests {
             x: WeldVec::from(&x),
             y: WeldVec::from(&y),
         };
-        let mut module = Module::new(id, code.clone().to_string(), priority, None).unwrap();
+        let mut module = Module::new(
+            id,
+            code.clone().to_string(),
+            priority,
+            None,
+        )
+        .unwrap();
         let ref mut ctx = WeldContext::new(&module.conf).unwrap();
 
         // Serialize our input data
+        module.add_serializer(code.clone().to_string()).unwrap();
         let serialized_input: Vec<i8> = module.serialize_input(input_data, ctx).unwrap();
 
         // Generate a raw module of the original code

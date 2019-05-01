@@ -1,0 +1,13 @@
+[package]
+name = "capnproto"
+version = "0.1.0"
+authors = ["Max Meldrum <mmeldrum@kth.se>"]
+edition = "2018"
+
+[dependencies]
+capnp = "0.9.4"
+kompact = { git = "https://github.com/kompics/kompact", branch = "master", features = ["protobuf"]}
+derivative = "1.0.2"
+
+[build-dependencies]
+capnpc = "0.9"

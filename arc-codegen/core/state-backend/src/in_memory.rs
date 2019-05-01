@@ -1,6 +1,6 @@
 use crate::error::ErrorKind::GetError;
 use crate::error::*;
-use crate::state_backend::StateBackend;
+use crate::StateBackend;
 use std::collections::HashMap;
 
 pub struct InMemory {

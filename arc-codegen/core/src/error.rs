@@ -1,5 +1,4 @@
 use std::error::Error as StdError;
-use std::ffi::CStr;
 use std::fmt;
 
 #[derive(Debug, Eq, PartialEq)]
@@ -8,6 +7,7 @@ pub enum ErrorKind {
     ModuleRunError(String),
     ContextError(String),
     SerializationError(String),
+    BadTaskError(String),
     IOError(String),
 }
 
@@ -23,6 +23,7 @@ impl fmt::Display for Error {
             ErrorKind::CompilationError(ref err) => err,
             ErrorKind::ContextError(ref err) => err,
             ErrorKind::ModuleRunError(ref err) => err,
+            ErrorKind::BadTaskError(ref err) => err,
             ErrorKind::SerializationError(ref err) => err,
             ErrorKind::IOError(ref err) => err,
         };

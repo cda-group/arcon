@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+message Checkpoint {}
+
+message Watermark {}
+
+message Element {
+  uint64 id = 1;
+  uint64 timestamp = 2;
+  bytes data = 3;
+  string task_id = 4;
+}
+
+message TaskMsg {
+  oneof payload {
+    Element element = 1;
+    Watermark watermark = 2;
+    Checkpoint checkpoint = 3;
+  }
+}

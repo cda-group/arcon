@@ -1,3 +1,12 @@
+#[cfg(test)]
+extern crate tempfile;
+
+pub mod in_memory;
+#[cfg(feature = "rocksdb")]
+pub mod rocksdb;
+
+mod error;
+
 use crate::error::*;
 
 pub trait StateBackend: Send + Sync {

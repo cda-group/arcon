@@ -1,9 +1,5 @@
-[package]
-name = "arc-codegen"
-version = "0.1.0"
-authors = ["Max Meldrum <mmeldrum@kth.se>"]
-edition = "2018"
-
-[dependencies]
-core = { path = "core" }
-quote = "0.6"
+[workspace]
+members = [
+    "core",
+    "codegen",
+]
