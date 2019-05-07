@@ -1,3 +1,4 @@
+/// Experimental code generation
 use proc_macro2::{Ident, Span, TokenStream};
 
 pub fn task(name: &str) -> TokenStream {
@@ -49,8 +50,8 @@ pub fn task(name: &str) -> TokenStream {
                 if self.udf_executions == 0 {
                     self.udf_avg = ns;
                 } else {
-                    let ema: i32 = ((ns as f32 - self.udf_avg as f32)
-                        * (2.0 / (self.udf_executions + 1) as f32)) as i32 + self.udf_avg as i32; self.udf_avg = ema as u64;
+                    let ema: u64 = (ns - self.udf_avg) * (2 / (self.udf_executions + 1)) + self.udf_avg;
+                    self.udf_avg = ema;
                 }
                 self.udf_executions += 1;
             }
