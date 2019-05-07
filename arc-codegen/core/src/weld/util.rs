@@ -1,8 +1,6 @@
 use crate::error::ErrorKind::*;
 use crate::error::*;
-//use crate::weld::module::*;
 use weld_core::data::*;
-//use weld_core::*;
 
 pub fn u8_slice_to_i8(bytes: &[u8]) -> &[i8] {
     let i8slice = unsafe {
@@ -24,7 +22,7 @@ pub fn i8_slice_to_u8(bytes: &[i8]) -> &[u8] {
 
 // TODO: There is probably a better way..
 /// Turns a WeldVec of i8's into a Rust Vec
-pub fn weld_to_raw(input: WeldVec<i8>) -> Result<Vec<i8>> {
+pub fn to_rust_vec(input: WeldVec<i8>) -> Result<Vec<i8>> {
     let boxed: Box<[i8]> = unsafe {
         Vec::from_raw_parts(
             input.data as *mut i8,

@@ -1,18 +1,22 @@
+/// Experimental Task Component
+
 use crate::components::task_manager::Metric;
 use crate::components::task_manager::MetricPort;
+use messages::protobuf::TaskMsg_oneof_payload::*;
 use messages::protobuf::*;
 
 use crate::destination::Destination;
 use crate::error::Error;
 use crate::error::ErrorKind::*;
 use crate::weld::*;
-use state_backend::StateBackend;
 use kompact::*;
+use state_backend::StateBackend;
 use std::sync::Arc;
 use std::time::Duration;
 use weld::*;
 
 #[derive(ComponentDefinition)]
+#[allow(dead_code)]
 pub struct Task {
     ctx: ComponentContext<Task>,
     report_timer: Option<ScheduledTimer>,
@@ -74,13 +78,13 @@ impl Task {
 
             if let Some(dest) = &self.destination {
                 let mut msg = TaskMsg::new();
-                let mut element = Element::new();
-                element.set_timestamp(crate::util::get_system_time());
-                element.set_id(e.get_id());
-                element.set_task_id(dest.task_id.clone());
-                let to_raw = weld_to_raw(run.0).unwrap();
-                element.set_data(i8_slice_to_u8(&to_raw).to_vec());
-                msg.set_element(element);
+                let mut element_obj = Element::new();
+                element_obj.set_timestamp(crate::util::get_system_time());
+                element_obj.set_id(e.get_id());
+                element_obj.set_task_id(dest.task_id.clone());
+                let to_raw = to_rust_vec(run.0).unwrap();
+                element_obj.set_data(i8_slice_to_u8(&to_raw).to_vec());
+                msg.set_element(element_obj);
 
                 dest.path.tell(msg, self);
             }
@@ -130,8 +134,10 @@ impl Actor for Task {
             let r: Result<TaskMsg, SerError> = ProtoSer::deserialise(buf);
             if let Ok(msg) = r {
                 match msg.payload.unwrap() {
-                    TaskMsg_oneof_payload::watermark(_) => {}
-                    TaskMsg_oneof_payload::element(e) => {
+                    watermark(_) => {
+                        unimplemented!();
+                    }
+                    element(e) => {
                         if let Err(err) = self.run_udf(e) {
                             error!(
                                 self.ctx.log(),
@@ -140,8 +146,8 @@ impl Actor for Task {
                             );
                         }
                     }
-                    TaskMsg_oneof_payload::checkpoint(_) => {
-                        let _ = self.backend.checkpoint("some_id".to_string());
+                    checkpoint(_) => {
+                        unimplemented!();
                     }
                 }
             }

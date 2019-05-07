@@ -1,4 +1,5 @@
 use akka_api::messages::*;
+use akka_api::messages::KompactAkkaMsg_oneof_payload::*;
 use akka_api::AkkaConnection;
 use fnv::FnvHashMap;
 use kompact::*;
@@ -44,11 +45,11 @@ impl TaskManager {
         let payload = envelope.msg.unwrap().payload.unwrap();
 
         match payload {
-            KompactAkkaMsg_oneof_payload::snapshotRequest(_) => {}
-            KompactAkkaMsg_oneof_payload::hello(_) => {}
-            KompactAkkaMsg_oneof_payload::ask(_) => {}
-            KompactAkkaMsg_oneof_payload::kompactRegistration(_) => {}
-            KompactAkkaMsg_oneof_payload::askReply(_) => {}
+            snapshotRequest(_) => {}
+            hello(_) => {}
+            ask(_) => {}
+            kompactRegistration(_) => {}
+            askReply(_) => {}
         }
 
         Ok(())
@@ -100,6 +101,7 @@ impl Actor for TaskManager {
 }
 
 #[cfg(test)]
+#[allow(dead_code)]
 mod tests {
     use super::*;
     use crate::akka_api::util::*;
@@ -110,9 +112,6 @@ mod tests {
     use kompact::default_components::DeadletterBox;
     use std::sync::Arc;
     use std::time::Duration;
-
-    #[derive(Clone, Copy)]
-    struct MetricReport {}
 
     #[test]
     fn task_test() {
@@ -125,7 +124,6 @@ mod tests {
         let id = String::from("addition");
         let code = String::from("|x:i32| 40 + x");
         let raw_code = generate_raw_module(code.clone(), true).unwrap();
-        let serialize_fmt = serialize_module_fmt(raw_code.clone()).unwrap();
         let priority = 0;
         let mut module = Module::new(id, raw_code, priority, None).unwrap();
         let db = in_memory::InMemory::create("test_storage");
@@ -163,7 +161,7 @@ mod tests {
 
         // Connect ports
         let tm_port = task_manager.on_definition(|c| c.metric_port.share());
-        let task_port = task.on_definition(|c| {
+        let _task_port = task.on_definition(|c| {
             c.manager_port.connect(tm_port);
             c.manager_port.share();
         });
@@ -171,7 +169,6 @@ mod tests {
         system.start(&task_manager);
         system.start(&task);
 
-        use crate::messages::*;
         let mut msg = TaskMsg::new();
         let mut element = Element::new();
         element.set_timestamp(crate::util::get_system_time());

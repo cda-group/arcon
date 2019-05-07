@@ -123,7 +123,6 @@ mod tests {
     use super::*;
     use tokio::io;
     use tokio::net::TcpStream;
-    use tokio::prelude::*;
 
     #[derive(ComponentDefinition)]
     pub struct TcpSource {
@@ -177,8 +176,8 @@ mod tests {
 
         let addr = "127.0.0.1:3000".parse()?;
         let client = TcpStream::connect(&addr)
-            .and_then(|stream| io::write_all(stream, "hello\n").then(|result| Ok(())))
-            .map_err(|err| {
+            .and_then(|stream| io::write_all(stream, "hello\n").then(|_| Ok(())))
+            .map_err(|_| {
                 assert!(false);
             });
 

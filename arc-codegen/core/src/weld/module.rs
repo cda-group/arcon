@@ -80,7 +80,7 @@ impl Module {
         let ref arg = WeldValue::new_from_data(ptr as *const _ as Data);
         let res = unsafe { self.serializer(ctx, arg) };
         if let Ok(raw) = res {
-            let bytes = weld_to_raw(raw)?;
+            let bytes = to_rust_vec(raw)?;
             Ok(bytes)
         } else {
             Err(Error::new(SerializationError(
@@ -97,7 +97,7 @@ impl Module {
     pub fn raw_to_raw(&self, bytes: &Vec<i8>, ctx: &mut WeldContext) -> Result<Vec<i8>> {
         let input: WeldVec<i8> = WeldVec::from(bytes);
         let (result, _ns) = self.run(&input, ctx)?;
-        weld_to_raw(result)
+        to_rust_vec(result)
     }
 
     pub fn run<I, O: Clone>(&self, ptr: &I, ctx: &mut WeldContext) -> Result<(O, u64)> {

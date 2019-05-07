@@ -38,13 +38,7 @@ tokio-codec = "0.1"
 rand = "0.6.5"
 
 [[bin]]
-name = "operator"
-path = "src/bin/operator.rs"
+name = "http_async"
+path = "src/bin/http_async.rs"
 bench = false
 required-features = ["http"]
-
-
-[[bin]]
-name = "coordinator_test"
-path = "src/bin/coordinator_test.rs"
-bench = false

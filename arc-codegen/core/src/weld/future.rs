@@ -53,7 +53,6 @@ mod tests {
         let code = String::from("|x:i32| 40 + x");
         let priority = 0;
         let module = Arc::new(Module::new(id, code, priority, None).unwrap());
-        let ref mut ctx = WeldContext::new(&module.conf()).unwrap();
         let arg = 200;
         let mod_1 = Arc::clone(&module);
         let mod_2 = Arc::clone(&module);

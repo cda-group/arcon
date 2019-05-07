@@ -1,4 +1,3 @@
-
 extern crate core;
 #[cfg(feature = "http")]
 extern crate http;

@@ -9,6 +9,7 @@ pub mod prelude {
     pub use rdkafka::config::ClientConfig;
 }
 
+#[allow(dead_code)]
 pub struct EventConsumer {
     consumer: StreamConsumer,
 }
@@ -25,6 +26,7 @@ impl EventConsumer {
 }
 
 
+#[allow(dead_code)]
 pub struct EventProducer {
     producer: FutureProducer,
     topic: String,
