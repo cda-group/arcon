@@ -97,8 +97,8 @@ impl Task {
         if self.udf_executions == 0 {
             self.udf_avg = ns;
         } else {
-            let ema: u64 = (ns - self.udf_avg) * (2 / (self.udf_executions + 1)) + self.udf_avg;
-            self.udf_avg = ema;
+            let ema: i32 = (ns as i32 - self.udf_avg as i32) * (2 / (self.udf_executions + 1)) as i32 + self.udf_avg as i32;
+            self.udf_avg = ema as u64;
         }
         self.udf_executions += 1;
     }
