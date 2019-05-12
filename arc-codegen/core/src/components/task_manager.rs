@@ -133,7 +133,7 @@ mod tests {
         module
             .add_serializer(code)
             .expect("failed to compile module");
-        let serialized_input: Vec<i8> = module.serialize_input(&input, ctx).unwrap();
+        let serialized_input: Vec<u8> = module.serialize_input(&input, ctx).unwrap();
 
         let (task, _) = system.create_and_register(move || {
             crate::components::task::Task::new("add".to_string(), module, Arc::new(db), None)
@@ -174,7 +174,7 @@ mod tests {
         element.set_timestamp(crate::util::get_system_time());
         element.set_id(1);
         element.set_task_id("add".to_string());
-        element.set_data(i8_slice_to_u8(&serialized_input).to_vec());
+        element.set_data(serialized_input);
         msg.set_element(element);
 
         let task_path = ActorPath::Named(NamedPath::with_system(

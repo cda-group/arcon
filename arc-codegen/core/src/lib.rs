@@ -1,6 +1,8 @@
+#![feature(futures_api)]
+
 extern crate akka_api;
 extern crate fnv;
-extern crate futures;
+//extern crate futures;
 extern crate kompact;
 extern crate messages;
 extern crate regex;

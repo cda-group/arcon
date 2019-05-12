@@ -149,8 +149,8 @@ fn generate_element(id: u64, filter_module: &mut Module) -> TaskMsg {
     let input = WeldVec::from(&numbers);
 
     let ref mut ctx = WeldContext::new(&filter_module.conf()).unwrap();
-    let raw: Vec<i8> = filter_module.serialize_input(&input, ctx).unwrap();
-    element.set_data(i8_slice_to_u8(&raw).to_vec()); // Uglllly
+    let raw: Vec<u8> = filter_module.serialize_input(&input, ctx).unwrap();
+    element.set_data(raw);
     msg.set_element(element);
 
     msg
@@ -184,9 +184,8 @@ impl Actor for Sink {
                 TaskMsg_oneof_payload::watermark(_) => {}
                 TaskMsg_oneof_payload::element(e) => {
                     let raw = e.get_data();
-                    let s = u8_slice_to_i8(raw);
-                    let input: WeldVec<i8> =
-                        WeldVec::new(s.as_ref().as_ptr(), s.as_ref().len() as i64);
+                    let input: WeldVec<u8> =
+                        WeldVec::new(raw.as_ref().as_ptr(), raw.as_ref().len() as i64);
 
                     let ref mut ctx = WeldContext::new(&self.udf.conf()).unwrap();
                     let run: ModuleRun<i64> = self.udf.run(&input, ctx).unwrap();

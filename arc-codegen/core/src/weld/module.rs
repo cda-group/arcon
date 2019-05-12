@@ -2,7 +2,7 @@ use crate::error::ErrorKind::*;
 use crate::error::*;
 use crate::weld::util::*;
 use std::time::Instant;
-use weld_core::ast::ScalarKind::I8;
+use weld_core::ast::ScalarKind::U8;
 use weld_core::ast::*;
 use weld_core::data::*;
 use weld_core::*;
@@ -54,9 +54,9 @@ impl Module {
             })?;
 
         // Verify serialize_module actually outputs raw bytes
-        if serialize_module.return_type() != ast::Type::Vector(Box::new(Type::Scalar(I8))) {
+        if serialize_module.return_type() != ast::Type::Vector(Box::new(Type::Scalar(U8))) {
             return Err(Error::new(CompilationError(
-                "Serialize module has to output Vec<i8>".to_string(),
+                "Serialize module has to output Vec<u8>".to_string(),
             )));
         }
 
@@ -76,7 +76,7 @@ impl Module {
         self.module.param_types()
     }
 
-    pub fn serialize_input<I>(&mut self, ptr: &I, ctx: &mut WeldContext) -> Result<Vec<i8>> {
+    pub fn serialize_input<I>(&mut self, ptr: &I, ctx: &mut WeldContext) -> Result<Vec<u8>> {
         let ref arg = WeldValue::new_from_data(ptr as *const _ as Data);
         let res = unsafe { self.serializer(ctx, arg) };
         if let Ok(raw) = res {
@@ -89,13 +89,13 @@ impl Module {
         }
     }
 
-    pub fn raw_to_mat<O: Clone>(&self, bytes: &Vec<i8>, ctx: &mut WeldContext) -> Result<(O, u64)> {
-        let input: WeldVec<i8> = WeldVec::from(bytes);
+    pub fn raw_to_mat<O: Clone>(&self, bytes: &Vec<u8>, ctx: &mut WeldContext) -> Result<(O, u64)> {
+        let input: WeldVec<u8> = WeldVec::from(bytes);
         self.run(&input, ctx)
     }
 
-    pub fn raw_to_raw(&self, bytes: &Vec<i8>, ctx: &mut WeldContext) -> Result<Vec<i8>> {
-        let input: WeldVec<i8> = WeldVec::from(bytes);
+    pub fn raw_to_raw(&self, bytes: &Vec<u8>, ctx: &mut WeldContext) -> Result<Vec<u8>> {
+        let input: WeldVec<u8> = WeldVec::from(bytes);
         let (result, _ns) = self.run(&input, ctx)?;
         to_rust_vec(result)
     }
@@ -125,13 +125,13 @@ impl Module {
         Ok((res, ns))
     }
 
-    unsafe fn serializer(&mut self, ctx: &mut WeldContext, arg: &WeldValue) -> Result<WeldVec<i8>> {
+    unsafe fn serializer(&mut self, ctx: &mut WeldContext, arg: &WeldValue) -> Result<WeldVec<u8>> {
         if let Some(module) = &self.serialize_module {
             let res = module.run(ctx, arg).map_err(|e| {
                 Error::new(ModuleRunError(e.message().to_string_lossy().into_owned()))
             })?;
 
-            let data = res.data() as *const WeldVec<i8>;
+            let data = res.data() as *const WeldVec<u8>;
             let cloned = (*data).clone();
             Ok(cloned)
         } else {
@@ -225,7 +225,7 @@ mod tests {
 
         // Serialize our input data
         module.add_serializer(code.clone().to_string()).unwrap();
-        let serialized_input: Vec<i8> = module.serialize_input(input_data, ctx).unwrap();
+        let serialized_input: Vec<u8> = module.serialize_input(input_data, ctx).unwrap();
 
         // Generate a raw module of the original code
         // and run it using the serialized input
