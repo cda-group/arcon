@@ -7,17 +7,22 @@ extern crate rustfmt_nightly;
 
 // Public interface
 pub mod error;
+pub mod system;
 pub mod task;
 
 use error::ErrorKind::*;
 use error::*;
+use proc_macro2::TokenStream;
 use rustfmt_nightly::*;
 use std::fs;
+use std::path::Path;
 
 pub mod prelude {
     pub use core::components::*;
+    pub use core::prelude::*;
 }
 
+/// Rustfmt the generated code to make it readable
 pub fn format_code(code: String) -> crate::error::Result<String> {
     let input = Input::Text(code);
     let mut config = Config::default();
@@ -32,14 +37,55 @@ pub fn format_code(code: String) -> crate::error::Result<String> {
         let _ = session
             .format(input)
             .map_err(|e| Error::new(CodeFmtError(e.to_string())))?;
-
     }
 
     String::from_utf8(buf).map_err(|e| Error::new(CodeFmtError(e.to_string())))
 }
 
+/// Save generated code to file
 pub fn to_file(input: String, path: String) -> std::result::Result<(), std::io::Error> {
     fs::write(&path, input)
+}
+
+/// Creates Cargo workspace for the target binary
+pub fn create_workspace(id: &str) -> crate::error::Result<()> {
+    if Path::new(id).exists() {
+        return Err(Error::new(CodegenError(
+            "Workspace already exists".to_string(),
+        )));
+    }
+
+    let manifest = format!(
+        "[package] \
+         \nname = \"{}\" \
+         \nversion = \"0.1.0\" \
+         \nauthors = [\"Max Meldrum <mmeldrum@kth.se>\"] \
+         \nedition = \"2018\" \
+         \n[dependencies] \
+         \ncore = {{path = \"../../core\"}}",
+        id
+    );
+
+    let path = format!("{}/src/", id);
+    fs::create_dir_all(path).map_err(|e| Error::new(CodegenError(e.to_string())))?;
+
+    let manifest_file = format!("{}/Cargo.toml", id);
+    to_file(manifest, manifest_file).map_err(|e| Error::new(CodegenError(e.to_string())))?;
+
+    Ok(())
+}
+
+/// Generates the main file of the Operator process
+pub fn generate_main(stream: TokenStream) -> TokenStream {
+    quote! {
+        extern crate core;
+        use core::components::*;
+        use core::prelude::*;
+
+        fn main() {
+            #stream
+        }
+    }
 }
 
 #[cfg(test)]
