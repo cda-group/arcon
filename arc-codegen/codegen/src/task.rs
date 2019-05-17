@@ -144,8 +144,4 @@ fn task_control_port(task_name: &str, timer_ident: u64) -> proc_macro2::TokenStr
 #[cfg(test)]
 mod tests {
 
-    #[test]
-    fn test() {
-        // TODO
-    }
 }

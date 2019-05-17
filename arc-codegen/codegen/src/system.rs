@@ -4,6 +4,7 @@ pub fn system(
     addr: &str,
     kompact_extra_options: Option<TokenStream>,
     kompact_connections: Option<TokenStream>,
+    termination: Option<TokenStream>,
 ) -> TokenStream {
     quote! {
         let mut cfg = KompactConfig::new();
@@ -19,15 +20,12 @@ pub fn system(
 
         #kompact_connections
 
-        system.await_termination();
+        // enable optional termination for testing
+        #termination 
     }
 }
 
 #[cfg(test)]
 mod tests {
 
-    #[test]
-    fn test() {
-        // TODO
-    }
 }

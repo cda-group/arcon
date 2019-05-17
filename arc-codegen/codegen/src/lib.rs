@@ -59,7 +59,7 @@ pub fn create_workspace(id: &str) -> crate::error::Result<()> {
         "[package] \
          \nname = \"{}\" \
          \nversion = \"0.1.0\" \
-         \nauthors = [\"Max Meldrum <mmeldrum@kth.se>\"] \
+         \nauthors = [\"Arcon Developers <cda-project@googlegroups.com>\"] \
          \nedition = \"2018\" \
          \n[dependencies] \
          \ncore = {{path = \"../../core\"}}",
@@ -78,9 +78,8 @@ pub fn create_workspace(id: &str) -> crate::error::Result<()> {
 /// Generates the main file of the Operator process
 pub fn generate_main(stream: TokenStream) -> TokenStream {
     quote! {
-        extern crate core;
-        use core::components::*;
-        use core::prelude::*;
+        extern crate codegen;
+        use codegen::prelude::*;
 
         fn main() {
             #stream
