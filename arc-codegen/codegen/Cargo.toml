@@ -9,3 +9,6 @@ core = { path = "../core" }
 quote = "0.6"
 proc-macro2 = "0.4"
 rustfmt-nightly = "1.2.2"
+
+[dev-dependencies]
+compiletest_rs = { version = "*", features = ["tmp"] }

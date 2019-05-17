@@ -143,13 +143,5 @@ fn task_control_port(task_name: &str, timer_ident: u64) -> proc_macro2::TokenStr
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::format_code;
 
-    #[test]
-    fn test() {
-        let task_stream = task("FilterTask");
-        println!("{}", format_code(task_stream.to_string()).unwrap());
-        // TODO
-    }
 }

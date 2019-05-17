@@ -66,13 +66,12 @@ impl Task {
             Err(Error::new(BadTaskError(err_fmt)))
         } else {
             let raw = e.get_data();
-            let s = u8_slice_to_i8(raw);
-            let input: WeldVec<i8> = WeldVec::new(s.as_ref().as_ptr(), s.as_ref().len() as i64);
+            let input: WeldVec<u8> = WeldVec::new(raw.as_ref().as_ptr(), raw.as_ref().len() as i64);
 
             let ref mut ctx = WeldContext::new(&self.udf.conf()).map_err(|e| {
                 Error::new(ContextError(e.message().to_string_lossy().into_owned()))
             })?;
-            let run: ModuleRun<WeldVec<i8>> = self.udf.run(&input, ctx)?;
+            let run: ModuleRun<WeldVec<u8>> = self.udf.run(&input, ctx)?;
             let ns = run.1;
             self.update_avg(ns);
 
@@ -83,7 +82,7 @@ impl Task {
                 element_obj.set_id(e.get_id());
                 element_obj.set_task_id(dest.task_id.clone());
                 let to_raw = to_rust_vec(run.0).unwrap();
-                element_obj.set_data(i8_slice_to_u8(&to_raw).to_vec());
+                element_obj.set_data(to_raw.to_vec());
                 msg.set_element(element_obj);
 
                 dest.path.tell(msg, self);
@@ -97,8 +96,8 @@ impl Task {
         if self.udf_executions == 0 {
             self.udf_avg = ns;
         } else {
-            let ema: u64 = (ns - self.udf_avg) * (2 / (self.udf_executions + 1)) + self.udf_avg;
-            self.udf_avg = ema;
+            let ema: i32 = (ns as i32 - self.udf_avg as i32) * (2 / (self.udf_executions + 1)) as i32 + self.udf_avg as i32;
+            self.udf_avg = ema as u64;
         }
         self.udf_executions += 1;
     }

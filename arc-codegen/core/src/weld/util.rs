@@ -2,30 +2,12 @@ use crate::error::ErrorKind::*;
 use crate::error::*;
 use weld_core::data::*;
 
-pub fn u8_slice_to_i8(bytes: &[u8]) -> &[i8] {
-    let i8slice = unsafe {
-        {
-            &*(bytes as *const _ as *const [i8])
-        }
-    };
-    i8slice
-}
-
-pub fn i8_slice_to_u8(bytes: &[i8]) -> &[u8] {
-    let u8slice = unsafe {
-        {
-            &*(bytes as *const _ as *const [u8])
-        }
-    };
-    u8slice
-}
-
-// TODO: There is probably a better way..
-/// Turns a WeldVec of i8's into a Rust Vec
-pub fn to_rust_vec(input: WeldVec<i8>) -> Result<Vec<i8>> {
-    let boxed: Box<[i8]> = unsafe {
+// TODO: There is probably a better way to do this.
+//       Getting double free with other approaches..
+pub fn to_rust_vec(input: WeldVec<u8>) -> Result<Vec<u8>> {
+    let boxed: Box<[u8]> = unsafe {
         Vec::from_raw_parts(
-            input.data as *mut i8,
+            input.data as *mut u8,
             input.len as usize,
             input.len as usize,
         )
@@ -76,10 +58,10 @@ pub fn serialize_module_fmt(code: String) -> Result<String> {
 }
 
 // Converts a "normal" Weld module to accept raw bytes instead
-// i.e., vec[i8]
+// i.e., vec[u8]
 pub fn generate_raw_module(code: String, serialize_ouput: bool) -> Result<String> {
     let mut module_code = String::new();
-    module_code += "|raw: vec[i8]| ";
+    module_code += "|raw: vec[u8]| ";
     let re = regex::Regex::new(r"\|(.*?)\|(.*)").unwrap();
     if let Some(caps) = re.captures(&code) {
         // TODO: Verify these
@@ -163,9 +145,9 @@ mod tests {
             a: WeldVec::from(&input_vec),
             b: 1,
         };
-        let module = Module::new(id, result,  priority, None).unwrap();
+        let module = Module::new(id, result, priority, None).unwrap();
         let ref mut ctx = WeldContext::new(&module.conf()).unwrap();
-        let serialized_input: Result<ModuleRun<WeldVec<i8>>> = module.run(input_data, ctx);
+        let serialized_input: Result<ModuleRun<WeldVec<u8>>> = module.run(input_data, ctx);
         assert_eq!(serialized_input.is_ok(), true);
     }
 
@@ -174,7 +156,7 @@ mod tests {
         // Example taken from the weld tests
         let code = "|x:vec[i32], y:vec[i32]| map(zip(x,y), |e| e.$0 + e.$1)";
         let result = generate_raw_module(code.to_string(), true).unwrap();
-        let expected = "|raw: vec[i8]| let res = deserialize[{vec[i32],vec[i32]}](raw);\nlet x = res.$0;\nlet y = res.$1;\nserialize(map(zip(x,y), |e| e.$0 + e.$1))";
+        let expected = "|raw: vec[u8]| let res = deserialize[{vec[i32],vec[i32]}](raw);\nlet x = res.$0;\nlet y = res.$1;\nserialize(map(zip(x,y), |e| e.$0 + e.$1))";
         assert_eq!(result, expected);
         let id = String::from("raw_module_test");
         let priority = 0;

@@ -7,6 +7,7 @@ pub enum ErrorKind {
     ModuleRunError(String),
     ContextError(String),
     CodeFmtError(String),
+    CodegenError(String),
     SocketAddrError,
     SpecParseError,
 }
@@ -24,6 +25,7 @@ impl fmt::Display for Error {
             ErrorKind::ContextError(ref err) => err,
             ErrorKind::ModuleRunError(ref err) => err,
             ErrorKind::CodeFmtError(ref err) => err,
+            ErrorKind::CodegenError(ref err) => err,
             ErrorKind::SpecParseError => "Could not parse executor spec",
             ErrorKind::SocketAddrError => "Issue parsing SocketAddr",
         };

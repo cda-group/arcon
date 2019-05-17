@@ -15,7 +15,7 @@ state-backend = { path = "state-backend" }
 http = { path ="http", optional = true }
 kafka = { path ="kafka", optional = true }
 
-weld = "0.3.0"
+weld = { git = "https://github.com/weld-project/weld", branch = "master" }
 tokio-threadpool = "0.1.11"
 futures = "0.1"
 regex = "1"
