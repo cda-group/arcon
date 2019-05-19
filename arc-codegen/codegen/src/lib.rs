@@ -18,8 +18,10 @@ use std::fs;
 use std::path::Path;
 
 pub mod prelude {
+    pub use core::components::task_manager::*;
     pub use core::components::*;
     pub use core::prelude::*;
+    pub use core::weld::module::*;
 }
 
 /// Rustfmt the generated code to make it readable
