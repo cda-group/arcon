@@ -8,6 +8,6 @@ rustc --version
 ./ci/install_capnproto.sh
 ./ci/install_llvm.sh
 export RUST_BACKTRACE=1
-cd arc-codegen && cargo test
+cd arcc && cargo test --all
 cd ../ && ./ci/install_sbt.sh
 cd operational-plane && sbt test

@@ -36,6 +36,10 @@ fn add_empty_main(path: &str) {
 
 #[test]
 fn codegen_test() {
+    // makes sure that tests/run-pass does not exist
+    let _ = fs::remove_dir_all(RUN_PASS_PATH);
+
+    // Fresh start of run-pass tests
     fs::create_dir_all(RUN_PASS_PATH).unwrap();
 
     basic_system();

@@ -1,4 +1,4 @@
-# Arc Codegen
+# arcc
 
 Install Rust (Requires Nightly):
 
@@ -6,7 +6,6 @@ Install Rust (Requires Nightly):
 ```bash
 $ curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly
 ```
-
 
 ## Ubuntu (>= 16.04)
 
@@ -45,11 +44,23 @@ Install Protobuf:
   $ sudo cp /usr/local/opt/protobuf@3.6/include/* /usr/local/include/
 ```
 
+## Building
+
+```
+$ cargo build --release
+```
+
+## Running
+
+```
+$ ./target/release/arcc help
+```
+
 ## Testing
 
 General
 ```
-$ cargo test
+$ cargo test --all
 ```
 
 Specific test case

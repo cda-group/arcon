@@ -64,7 +64,7 @@ pub fn create_workspace(id: &str) -> crate::error::Result<()> {
          \nauthors = [\"Arcon Developers <cda-project@googlegroups.com>\"] \
          \nedition = \"2018\" \
          \n[dependencies] \
-         \ncore = {{path = \"../../core\"}}",
+         \ncodegen= {{path = \"../../codegen\"}}",
         id
     );
 

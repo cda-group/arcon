@@ -1,8 +1,6 @@
-#![feature(futures_api)]
-
 extern crate akka_api;
 extern crate fnv;
-//extern crate futures;
+extern crate futures;
 extern crate kompact;
 extern crate messages;
 extern crate regex;
@@ -11,7 +9,6 @@ extern crate slog_async;
 extern crate slog_term;
 extern crate state_backend;
 extern crate tokio;
-extern crate tokio_threadpool;
 extern crate weld as weld_core;
 
 #[cfg(feature = "http")]

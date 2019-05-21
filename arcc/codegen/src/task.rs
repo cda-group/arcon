@@ -92,3 +92,15 @@ fn task_control_port(task_name: &str) -> TokenStream {
         }
     }
 }
+
+fn local_task_port(task_name: &str, component_event: &str, udf: TokenStream) -> TokenStream {
+    let task_name = Ident::new(&task_name, Span::call_site());
+    let component_event = Ident::new(&component_event, Span::call_site());
+    quote! {
+        impl Provide<#component_event> for #task_name {
+            fn handle(&mut self, event: #component_event) {
+                #udf
+            }
+        }
+    }
+}

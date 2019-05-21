@@ -10,7 +10,7 @@ use tokio::prelude::*;
 use tokio_codec::BytesCodec;
 
 use bytes::BytesMut;
-use futures::Future;
+use crate::tokio::prelude::Future;
 
 pub enum IOKind {
     Http,
