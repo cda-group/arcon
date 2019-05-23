@@ -18,8 +18,10 @@ use std::fs;
 use std::path::Path;
 
 pub mod prelude {
+    pub use core::components::task_manager::*;
     pub use core::components::*;
     pub use core::prelude::*;
+    pub use core::weld::module::*;
 }
 
 /// Rustfmt the generated code to make it readable
@@ -62,7 +64,7 @@ pub fn create_workspace(id: &str) -> crate::error::Result<()> {
          \nauthors = [\"Arcon Developers <cda-project@googlegroups.com>\"] \
          \nedition = \"2018\" \
          \n[dependencies] \
-         \ncore = {{path = \"../../core\"}}",
+         \ncodegen= {{path = \"../../codegen\"}}",
         id
     );
 

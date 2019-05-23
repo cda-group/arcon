@@ -8,37 +8,28 @@ edition = "2018"
 default = []
 
 [dependencies]
-messages = { path="messages" }
+messages = { path = "messages" }
 akka-api = { path = "akka-api" }
 state-backend = { path = "state-backend" }
 
-http = { path ="http", optional = true }
-kafka = { path ="kafka", optional = true }
-
 weld = { git = "https://github.com/weld-project/weld", branch = "master" }
-tokio-threadpool = "0.1.11"
+kompact = { git = "https://github.com/kompics/kompact", branch = "master", features = ["protobuf"]}
+
 futures = "0.1"
 regex = "1"
 fnv = "1.0.3"
-
-# Middleware
-kompact = { git = "https://github.com/kompics/kompact", branch = "master", features = ["protobuf"]}
-bytes = "0.4"
 tokio = "0.1"
+tokio-codec = "0.1"
+bytes = "0.4"
 
 # Logging
 slog = "2.2"
 slog-async = "2.3"
 slog-term = "2.4"
 
-# Kompact IO
-tokio-codec = "0.1"
+# Optional 
+http = { path = "http", optional = true }
+kafka = { path = "kafka", optional = true }
 
 [dev-dependencies]
 rand = "0.6.5"
-
-[[bin]]
-name = "http_async"
-path = "src/bin/http_async.rs"
-bench = false
-required-features = ["http"]
