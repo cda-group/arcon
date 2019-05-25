@@ -1,7 +1,6 @@
 #![recursion_limit = "128"]
 #[macro_use]
 extern crate quote;
-extern crate core;
 extern crate proc_macro2;
 extern crate rustfmt_nightly;
 
@@ -17,12 +16,6 @@ use rustfmt_nightly::*;
 use std::fs;
 use std::path::Path;
 
-pub mod prelude {
-    pub use core::components::task_manager::*;
-    pub use core::components::*;
-    pub use core::prelude::*;
-    pub use core::weld::module::*;
-}
 
 /// Rustfmt the generated code to make it readable
 pub fn format_code(code: String) -> crate::error::Result<String> {
@@ -49,39 +42,14 @@ pub fn to_file(input: String, path: String) -> std::result::Result<(), std::io::
     fs::write(&path, input)
 }
 
-/// Creates Cargo workspace for the target binary
-pub fn create_workspace(id: &str) -> crate::error::Result<()> {
-    if Path::new(id).exists() {
-        return Err(Error::new(CodegenError(
-            "Workspace already exists".to_string(),
-        )));
-    }
-
-    let manifest = format!(
-        "[package] \
-         \nname = \"{}\" \
-         \nversion = \"0.1.0\" \
-         \nauthors = [\"Arcon Developers <cda-project@googlegroups.com>\"] \
-         \nedition = \"2018\" \
-         \n[dependencies] \
-         \ncodegen= {{path = \"../../codegen\"}}",
-        id
-    );
-
-    let path = format!("{}/src/", id);
-    fs::create_dir_all(path).map_err(|e| Error::new(CodegenError(e.to_string())))?;
-
-    let manifest_file = format!("{}/Cargo.toml", id);
-    to_file(manifest, manifest_file).map_err(|e| Error::new(CodegenError(e.to_string())))?;
-
-    Ok(())
-}
-
 /// Generates the main file of the Operator process
 pub fn generate_main(stream: TokenStream) -> TokenStream {
     quote! {
-        extern crate codegen;
-        use codegen::prelude::*;
+        extern crate runtime;
+        use runtime::components::task_manager::*;
+        use runtime::components::*;
+        use runtime::prelude::*;
+        use runtime::weld::module::*;
 
         fn main() {
             #stream

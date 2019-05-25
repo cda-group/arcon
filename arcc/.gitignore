@@ -10,3 +10,10 @@ target/
 messages.rs
 spec.json
 run-pass/
+
+# Generated code
+grpc/src/arcc_grpc.rs
+grpc/src/arcc.rs
+
+# Compile workspace
+build/

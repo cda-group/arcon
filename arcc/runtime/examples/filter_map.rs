@@ -1,16 +1,16 @@
 /// Early PoC
 /// Ugly code to be expected
-extern crate core;
+extern crate runtime;
 extern crate rand;
 
-use core::components::task::Task;
-use core::prelude::StateBackend;
-use core::destination::*;
-use core::prelude::*;
-use core::util::*;
-use core::weld::module::*;
-use core::weld::util::*;
-use core::weld::*;
+use runtime::components::task::Task;
+use runtime::prelude::StateBackend;
+use runtime::destination::*;
+use runtime::prelude::*;
+use runtime::util::*;
+use runtime::weld::module::*;
+use runtime::weld::util::*;
+use runtime::weld::*;
 use rand::Rng;
 use std::sync::Arc;
 
@@ -78,7 +78,7 @@ fn filter_task(
     map_task_id: String,
     system: &KompactSystem,
     remote: &KompactSystem,
-) -> Arc<core::prelude::Component<core::components::task::Task>> {
+) -> Arc<runtime::prelude::Component<runtime::components::task::Task>> {
     let raw_code = generate_raw_module(code.to_string(), true).unwrap();
     let prio = 0;
     let filter_module = Module::new(filter_task_id.clone(), raw_code, prio, None).unwrap();
@@ -110,7 +110,7 @@ fn map_task(
     map_task_id: String,
     system: &KompactSystem,
     remote: &KompactSystem,
-) -> Arc<core::prelude::Component<core::components::task::Task>> {
+) -> Arc<runtime::prelude::Component<runtime::components::task::Task>> {
     let raw_code = generate_raw_module(code.to_string(), true).unwrap();
     let prio = 0;
     let map_module = Module::new(map_task_id.clone(), raw_code, prio, None).unwrap();
@@ -176,7 +176,7 @@ impl Provide<ControlPort> for Sink {
 }
 
 impl Actor for Sink {
-    fn receive_local(&mut self, _sender: ActorRef, _msg: Box<Any>) {}
+    fn receive_local(&mut self, _sender: ActorRef, _msg: &Any) {}
     fn receive_message(&mut self, _sender: ActorPath, ser_id: u64, buf: &mut Buf) {
         if ser_id == serialisation_ids::PBUF {
             let msg = ProtoSer::deserialise(buf).unwrap();

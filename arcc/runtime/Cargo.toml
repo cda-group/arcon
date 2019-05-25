@@ -1,5 +1,5 @@
 [package]
-name = "core"
+name = "runtime"
 version = "0.1.0"
 authors = ["Max Meldrum <mmeldrum@kth.se>"]
 edition = "2018"

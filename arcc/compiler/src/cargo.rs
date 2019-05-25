@@ -1,6 +1,6 @@
-use cargo::core::{compiler::CompileMode, Shell, Workspace};
+use cargo::core::{compiler::CompileMode, Workspace};
 use cargo::ops::{self, CompileOptions};
-use cargo::util::{config::Config, errors::ManifestError};
+use cargo::util::{config::Config};
 use std::path::Path;
 
 pub fn is_workspace(path: &str) -> bool {
@@ -24,6 +24,8 @@ mod tests {
 
     #[test]
     fn bad_workspace_test() {
+        let s = compile("./spec");
+        println!("{:?}", s);
         assert_eq!(is_workspace("."), false);
     }
 }

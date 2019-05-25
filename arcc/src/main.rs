@@ -8,13 +8,13 @@ extern crate failure;
 extern crate lazy_static;
 
 use clap::{App, AppSettings, Arg, SubCommand};
+use compiler::*;
 use ferris_says::say;
 use indicatif::ProgressBar;
 use spec::ArcSpec;
 use std::io::{stdout, BufWriter};
 use std::str::FromStr;
 
-mod cargo;
 mod repl;
 mod server;
 mod util;
@@ -29,7 +29,9 @@ arg_enum! {
 }
 
 const DEFAULT_SERVER_PORT: i32 = 3000;
+const DEFAULT_SERVER_HOST: &str = "127.0.0.1";
 const DEFAULT_ARC_INPUT: &str = "spec.json";
+const DEFAULT_BUILD_DIR: &str = "build";
 
 lazy_static! {
     static ref TARGETS: Vec<String> = {
@@ -57,12 +59,19 @@ fn main() {
         .short("p")
         .help("Port for server");
 
-    let target_arg = Arg::with_name("t")
-        .required(false)
+    let host_arg = Arg::with_name("h")
         .takes_value(true)
-        .long("target")
-        .short("t")
-        .help("Target triple (e.g., x86_64-unknown-linux-gnu)");
+        .long("Host address")
+        .short("h")
+        .help("Address for server");
+
+    let build_dir_arg = Arg::with_name("b")
+        .required(false)
+        .default_value("build/")
+        .takes_value(true)
+        .long("build-dir")
+        .short("b")
+        .help("Directory where arcc builds binaries");
 
     let matches = App::new("Arc Compiler")
         .setting(AppSettings::ColoredHelp)
@@ -88,13 +97,15 @@ fn main() {
             SubCommand::with_name("compile")
                 .setting(AppSettings::ColoredHelp)
                 .arg(&spec_arg)
-                .arg(&target_arg)
+                .arg(&build_dir_arg)
                 .about("Compile Arc IR"),
         )
         .subcommand(
             SubCommand::with_name("server")
                 .setting(AppSettings::ColoredHelp)
                 .arg(&port_arg)
+                .arg(&host_arg)
+                .arg(&build_dir_arg)
                 .about("Launch Arc Compiler in gRPC server mode"),
         )
         .subcommand(
@@ -123,9 +134,9 @@ fn main() {
                 .value_of("s")
                 .expect("Should not happen as there is a default");
 
-            let target: Option<&str> = arg_matches.value_of("t");
+            let build_dir: &str = arg_matches.value_of("b").unwrap_or(DEFAULT_BUILD_DIR);
 
-            if let Err(err) = compile(spec_path, target, daemonize, mode) {
+            if let Err(err) = compile(spec_path, build_dir, daemonize, mode) {
                 error!("Error: {} ", err.to_string());
             }
         }
@@ -135,7 +146,10 @@ fn main() {
                 .and_then(|x| <i32 as FromStr>::from_str(x).ok())
                 .unwrap_or(DEFAULT_SERVER_PORT);
 
-            if let Err(err) = server(port, daemonize, mode) {
+            let host: &str = arg_matches.value_of("h").unwrap_or(DEFAULT_SERVER_HOST);
+            let build_dir: &str = arg_matches.value_of("b").unwrap_or(DEFAULT_BUILD_DIR);
+
+            if let Err(err) = server(host, port, build_dir, daemonize, mode) {
                 error!("Error: {} ", err.to_string());
             }
         }
@@ -159,18 +173,19 @@ fn fetch_args() -> Vec<String> {
 }
 
 fn compile(
-    path: &str,
-    target: Option<&str>,
+    spec_path: &str,
+    build_dir: &str,
     daemonize: bool,
     mode: CompilerMode,
 ) -> Result<(), failure::Error> {
     greeting("Wait while I compile for you");
 
-    let spec_file = &(path.to_owned() + "/" + DEFAULT_ARC_INPUT);
+    let spec_file = &(spec_path.to_owned() + "/" + DEFAULT_ARC_INPUT);
     let spec = ArcSpec::load(spec_file)?;
 
     // TODO: Send to Arc
-    debug!("input: {}", spec.code);
+    debug!("input: {}", spec.ir);
+    let _compiler = Compiler::new(build_dir.to_string());
 
     let pb = ProgressBar::new(524);
     for _ in 0..524 {
@@ -182,9 +197,17 @@ fn compile(
     Ok(())
 }
 
-fn server(port: i32, daemonize: bool, mode: CompilerMode) -> Result<(), failure::Error> {
+fn server(
+    host: &str,
+    port: i32,
+    build_dir: &str,
+    daemonize: bool,
+    mode: CompilerMode,
+) -> Result<(), failure::Error> {
     // TODO: start up gRPC server
     greeting("Server is coming soon!");
+    let _compiler = Compiler::new(build_dir.to_string())?;
+    server::start_server(host, port);
     Ok(())
 }
 

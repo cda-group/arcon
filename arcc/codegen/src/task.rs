@@ -4,8 +4,11 @@ pub fn task(name: &str) -> TokenStream {
     let task_name = Ident::new(&name, Span::call_site());
 
     let imports = quote! {
-        extern crate codegen;
-        use codegen::prelude::*;
+        extern crate runtime;
+        use runtime::components::task_manager::*;
+        use runtime::components::*;
+        use runtime::prelude::*;
+        use runtime::weld::module::*;
     };
 
     let struct_def = quote! {
@@ -54,7 +57,7 @@ fn actor_impl(
 
     quote! {
         impl Actor for #task_name {
-            fn receive_local(&mut self, sender: ActorRef, msg: Box<Any>) {
+            fn receive_local(&mut self, sender: ActorRef, msg: &Any) {
                 #recv_local
             }
             fn receive_message(&mut self, sender: ActorPath, ser_id: u64, buf: &mut Buf) {
