@@ -85,7 +85,7 @@ impl Provide<MetricPort> for TaskManager {
 }
 
 impl Actor for TaskManager {
-    fn receive_local(&mut self, _sender: ActorRef, _msg: Box<Any>) {}
+    fn receive_local(&mut self, _sender: ActorRef, _msg: &Any) {}
     fn receive_message(&mut self, sender: ActorPath, ser_id: u64, buf: &mut Buf) {
         if ser_id == serialisation_ids::PBUF {
             let r: Result<KompactAkkaEnvelope, SerError> = akka_api::ProtoSer::deserialise(buf);

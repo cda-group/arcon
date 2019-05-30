@@ -2,13 +2,15 @@
 name = "codegen"
 version = "0.1.0"
 authors = ["Max Meldrum <mmeldrum@kth.se>"]
+description = "Code generation for Arcon thorugh the use of Quasi-quoting."
 edition = "2018"
+publish = false
 
 [dependencies]
-core = { path = "../core" }
 quote = "0.6"
 proc-macro2 = "0.4"
 rustfmt-nightly = "1.2.2"
 
 [dev-dependencies]
 compiletest_rs = { version = "*", features = ["tmp"] }
+runtime = { path = "../runtime" }

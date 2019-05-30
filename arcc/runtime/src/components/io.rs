@@ -112,7 +112,7 @@ impl Provide<ControlPort> for IO {
 }
 
 impl Actor for IO {
-    fn receive_local(&mut self, _sender: ActorRef, _msg: Box<Any>) {}
+    fn receive_local(&mut self, _sender: ActorRef, _msg: &Any) {}
     fn receive_message(&mut self, sender: ActorPath, _ser_id: u64, _buf: &mut Buf) {
         error!(self.ctx.log(), "Got unexpected message from {}", sender);
     }
@@ -140,7 +140,7 @@ mod tests {
     }
 
     impl Actor for TcpSource {
-        fn receive_local(&mut self, _sender: ActorRef, msg: Box<Any>) {
+        fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
             if let Some(ref recv) = msg.downcast_ref::<TcpRecv>() {
                 info!(self.ctx.log(), "{:?}", recv.bytes);
                 self.received += 1;

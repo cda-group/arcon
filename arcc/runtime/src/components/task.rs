@@ -125,7 +125,7 @@ impl Provide<ControlPort> for Task {
 }
 
 impl Actor for Task {
-    fn receive_local(&mut self, _sender: ActorRef, _msg: Box<Any>) {}
+    fn receive_local(&mut self, _sender: ActorRef, _msg: &Any) {}
     fn receive_message(&mut self, sender: ActorPath, ser_id: u64, buf: &mut Buf) {
         if ser_id == serialisation_ids::PBUF {
             let r: Result<TaskMsg, SerError> = ProtoSer::deserialise(buf);
