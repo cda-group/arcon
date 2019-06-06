@@ -22,6 +22,7 @@ pub mod destination;
 pub mod error;
 pub mod util;
 pub mod weld;
+pub mod streaming;
 
 pub mod prelude {
     pub use futures::future;
