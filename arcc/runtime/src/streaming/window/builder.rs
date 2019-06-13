@@ -8,13 +8,21 @@ use std::sync::Arc;
 
 use weld::*;
 
+/// `WindowModules` is a helper struct that holds Weld UDFs
+///  for a specific WindowBuilder
+pub struct WindowModules {
+    pub init_builder: Arc<Module>,
+    pub udf: Arc<Module>,
+    pub materializer: Arc<Module>,
+}
+
 /// `WindowFn` consists of the methods required by the `WindowBuilder` where:
 ///
 /// A: Element type sent to the Window
 /// B: Weld Builder type (e.g., Appender<u32>)
 /// C: Expected output type of the Window
 pub trait WindowFn<A, B: Clone, C: Clone> {
-    fn new(builder: B, udf: Arc<Module>, materializer: Arc<Module>) -> Self;
+    fn new(modules: WindowModules) -> Result<Box<Self>>;
     fn on_element(&mut self, element: A) -> Result<()>;
     fn result(&mut self) -> Result<C>;
 }
@@ -48,16 +56,19 @@ pub struct WindowBuilder<A, B, C> {
 }
 
 impl<A, B: Clone, C: Clone> WindowFn<A, B, C> for WindowBuilder<A, B, C> {
-    fn new(builder: B, udf: Arc<Module>, materializer: Arc<Module>) -> WindowBuilder<A, B, C> {
-        let ctx = WeldContext::new(udf.conf()).unwrap();
-        WindowBuilder {
-            builder: UnsafeCell::new(builder),
+    fn new(modules: WindowModules) -> Result<Box<WindowBuilder<A, B, C>>> {
+        let mut ctx = WeldContext::new(modules.udf.conf())
+            .map_err(|e| Error::new(ContextError(e.message().to_string_lossy().into_owned())))?;
+        let run: ModuleRun<B> = modules.init_builder.run(&1, &mut ctx)?;
+
+        Ok(Box::new(WindowBuilder {
+            builder: UnsafeCell::new(run.0),
             builder_ctx: ctx,
-            udf,
-            materializer,
+            udf: modules.udf,
+            materializer: modules.materializer,
             _input: PhantomData,
             _output: PhantomData,
-        }
+        }))
     }
     fn on_element(&mut self, element: A) -> Result<()> {
         let ref input = WindowBuilderInput {
@@ -73,16 +84,22 @@ impl<A, B: Clone, C: Clone> WindowFn<A, B, C> for WindowBuilder<A, B, C> {
     }
 
     fn result(&mut self) -> Result<C> {
-        let ref mut ctx = WeldContext::new(&self.materializer.conf())
-            .map_err(|e| Error::new(ContextError(e.message().to_string_lossy().into_owned())))?;
-        let run: ModuleRun<C> = self.materializer.run(&self.builder, ctx)?;
+        let run: ModuleRun<C> = self
+            .materializer
+            .run(&self.builder, &mut self.builder_ctx)?;
         Ok(run.0)
     }
 }
 
+unsafe impl<A, B, C> Send for WindowBuilder<A, B, C> {}
+unsafe impl<A, B, C> Sync for WindowBuilder<A, B, C> {}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use kompact::default_components::*;
+    use kompact::*;
+    use std::sync::Arc;
     use weld::data::Appender;
     use weld::data::DictMerger;
     use weld::data::WeldVec;
@@ -106,47 +123,56 @@ mod tests {
         // initialize the WindowBuilder's builder
         let init_builder_code = String::from("|| appender[u32]");
         let prio = 0;
-        let module =
-            Module::new("init_builder".to_string(), init_builder_code, prio, None).unwrap();
-        let ref input = 1;
-        let ref mut ctx = WeldContext::new(module.conf()).unwrap();
-        let run: ModuleRun<Appender<u32>> = module.run(input, ctx).unwrap();
-        let init_builder = run.0;
+        let init_builder = Arc::new(
+            Module::new("init_builder".to_string(), init_builder_code, prio, None).unwrap(),
+        );
 
         // define the main udf to be executed on each window element
         let udf_code = String::from("|x: u32, y: appender[u32]| merge(y, x)");
         let udf = Arc::new(Module::new("udf".to_string(), udf_code, prio, None).unwrap());
 
         // define the materializer
-        let result_udf = String::from("|y: appender[u32]| result(y)");
-        let result_udf =
+        let result_udf = String::from("|y: appender[u32]| map(result(y), |a:u32| a + u32(5))");
+        let materializer =
             Arc::new(Module::new("result".to_string(), result_udf, prio, None).unwrap());
 
-        let mut window_builder: WindowBuilder<u32, Appender<u32>, WeldVec<u32>> =
-            WindowBuilder::new(init_builder, udf.clone(), result_udf.clone());
+        let window_modules = WindowModules {
+            init_builder,
+            udf,
+            materializer,
+        };
 
-        let _ = window_builder.on_element(10);
-        let _ = window_builder.on_element(20);
-        let _ = window_builder.on_element(30);
+        let mut window_builder: Box<WindowBuilder<u32, Appender<u32>, WeldVec<u32>>> =
+            WindowBuilder::new(window_modules).unwrap();
 
-        // NOTE: this does not do anything special.
-        //       the result_udf simply materializes
-        //       the appender builder into a WeldVec<>
+        for i in 0..10000 {
+            let _ = window_builder.on_element(i);
+        }
+
         let result = window_builder.result().unwrap();
-        assert_eq!(result.len as usize, 3);
+        assert_eq!(result.len as usize, 10000);
+        for i in 0..(result.len as isize) {
+            let item = unsafe { *result.data.offset(i) };
+            assert_eq!(item, i as u32 + 5);
+        }
     }
 
     #[test]
     fn avg_agg_window_builder_test() {
+        #[derive(Clone, Debug)]
+        #[repr(C)]
+        pub struct AvgAgg {
+            total: u64,
+            counter: u64,
+        }
+
         // initialize the WindowBuilder's builder
-        let init_builder_code = String::from("|| {u64(0),u32(0)}");
+        let init_builder_code = String::from("|| {u64(0),u64(0)}");
         let prio = 0;
-        let module =
-            Module::new("init_builder".to_string(), init_builder_code, prio, None).unwrap();
-        let ref input = 1;
-        let ref mut ctx = WeldContext::new(module.conf()).unwrap();
-        let run: ModuleRun<Item> = module.run(input, ctx).unwrap();
-        let init_builder = run.0;
+        let init_builder = Arc::new(
+            Module::new("init_builder".to_string(), init_builder_code, prio, None).unwrap(),
+        );
+
         // define the main udf to be executed on each window element
         let udf_code = String::from(
             "type item = {u64,u32}; type avg_agg = {u64, u64};
@@ -157,11 +183,17 @@ mod tests {
         // define the materializer
         let result_udf =
             String::from("type avg_agg = {u64,u64}; |x: avg_agg| f64(x.$0) / f64(x.$1)");
-        let result_udf =
+        let materializer =
             Arc::new(Module::new("result".to_string(), result_udf, prio, None).unwrap());
 
-        let mut window_builder: WindowBuilder<Item, Item, f64> =
-            WindowBuilder::new(init_builder, udf.clone(), result_udf.clone());
+        let window_modules = WindowModules {
+            init_builder,
+            udf,
+            materializer,
+        };
+
+        let mut window_builder: Box<WindowBuilder<Item, AvgAgg, f64>> =
+            WindowBuilder::new(window_modules).unwrap();
 
         let i1 = Item { id: 1, price: 100 };
         let i2 = Item { id: 2, price: 150 };
@@ -197,12 +229,9 @@ mod tests {
         // initialize the WindowBuilder's builder
         let init_builder_code = String::from("|| dictmerger[u64,u64,+]");
         let prio = 0;
-        let module =
-            Module::new("init_builder".to_string(), init_builder_code, prio, None).unwrap();
-        let ref input = 0;
-        let ref mut ctx = WeldContext::new(module.conf()).unwrap();
-        let run: ModuleRun<DictMerger<u64, u64>> = module.run(input, ctx).unwrap();
-        let init_builder = run.0;
+        let init_builder = Arc::new(
+            Module::new("init_builder".to_string(), init_builder_code, prio, None).unwrap(),
+        );
 
         // define the main udf to be executed on each window element
         let udf_code = String::from(
@@ -213,14 +242,18 @@ mod tests {
 
         // define the materializer
         let result_udf = String::from("|dm: dictmerger[u64,u64,+]| tovec(result(dm))");
-        let result_udf =
+        let materializer =
             Arc::new(Module::new("result".to_string(), result_udf, prio, None).unwrap());
 
-        let mut window_builder: WindowBuilder<
-            Input,
-            DictMerger<u64, u64>,
-            WeldVec<Pair<u64, u64>>,
-        > = WindowBuilder::new(init_builder, udf.clone(), result_udf.clone());
+        let window_modules = WindowModules {
+            init_builder,
+            udf,
+            materializer,
+        };
+
+        let mut window_builder: Box<
+            WindowBuilder<Input, DictMerger<u64, u64>, WeldVec<Pair<u64, u64>>>,
+        > = WindowBuilder::new(window_modules).unwrap();
 
         let i1_nums: Vec<u64> = vec![1, 3, 5, 6];
         let i1 = Input {
@@ -248,7 +281,7 @@ mod tests {
 
         let expected: Vec<(u64, u64)> = vec![(1, 15), (2, 18), (3, 160)];
 
-        let mut collected: Vec<(u64, u64)> = (0..result.len)
+        let collected: Vec<(u64, u64)> = (0..result.len)
             .into_iter()
             .map(|x| {
                 let id = unsafe { (*result.data.offset(x as isize)).ele1 };
@@ -271,12 +304,9 @@ mod tests {
         //       behaviour which took hours to debug...
         let init_builder_code = String::from("|| {u64(0),u32(0)}");
         let prio = 0;
-        let module =
-            Module::new("init_builder".to_string(), init_builder_code, prio, None).unwrap();
-        let ref input = 1;
-        let ref mut ctx = WeldContext::new(module.conf()).unwrap();
-        let run: ModuleRun<Item> = module.run(input, ctx).unwrap();
-        let init_builder = run.0;
+        let init_builder = Arc::new(
+            Module::new("init_builder".to_string(), init_builder_code, prio, None).unwrap(),
+        );
 
         // define the main udf to be executed on each window element
         let udf_code = String::from("|a: {u64,u32}, b: {u64,u32}| if(a.$1 > b.$1, a, b)");
@@ -284,11 +314,17 @@ mod tests {
 
         // define the materializer
         let result_udf = String::from("|y: {u64,u32}| y");
-        let result_udf =
+        let materializer =
             Arc::new(Module::new("result".to_string(), result_udf, prio, None).unwrap());
 
-        let mut window_builder: WindowBuilder<Item, Item, Item> =
-            WindowBuilder::new(init_builder, udf.clone(), result_udf.clone());
+        let window_modules = WindowModules {
+            init_builder,
+            udf,
+            materializer,
+        };
+
+        let mut window_builder: Box<WindowBuilder<Item, Item, Item>> =
+            WindowBuilder::new(window_modules).unwrap();
 
         let i1 = Item { id: 1, price: 10 };
         let i2 = Item { id: 2, price: 15 };
@@ -309,12 +345,9 @@ mod tests {
         // initialize the WindowBuilder's builder
         let init_builder_code = String::from("|| appender[vec[u32]]");
         let prio = 0;
-        let module =
-            Module::new("init_builder".to_string(), init_builder_code, prio, None).unwrap();
-        let ref input = 1;
-        let ref mut ctx = WeldContext::new(module.conf()).unwrap();
-        let run: ModuleRun<Appender<WeldVec<u32>>> = module.run(input, ctx).unwrap();
-        let init_builder = run.0;
+        let init_builder = Arc::new(
+            Module::new("init_builder".to_string(), init_builder_code, prio, None).unwrap(),
+        );
 
         // define the main udf to be executed on each window element
         let udf_code = String::from(
@@ -325,14 +358,17 @@ mod tests {
 
         // define the materializer
         let result_udf = String::from("|y: appender[vec[u32]]| result(y)");
-        let result_udf =
+        let materializer =
             Arc::new(Module::new("result".to_string(), result_udf, prio, None).unwrap());
 
-        let mut window_builder: WindowBuilder<
-            WeldVec<u32>,
-            Appender<WeldVec<u32>>,
-            WeldVec<WeldVec<u32>>,
-        > = WindowBuilder::new(init_builder, udf.clone(), result_udf.clone());
+        let window_modules = WindowModules {
+            init_builder,
+            udf,
+            materializer,
+        };
+        let mut window_builder: Box<
+            WindowBuilder<WeldVec<u32>, Appender<WeldVec<u32>>, WeldVec<WeldVec<u32>>>,
+        > = WindowBuilder::new(window_modules).unwrap();
 
         let mut window_data: Vec<Vec<u32>> = Vec::new();
 
@@ -371,6 +407,91 @@ mod tests {
                     window_data[i as usize][x as usize] + window_data[i as usize][x as usize] + 5
                 );
             }
+        }
+    }
+
+    #[derive(ComponentDefinition)]
+    pub struct WindowComponent {
+        ctx: ComponentContext<WindowComponent>,
+        window_builder: Box<WindowBuilder<u32, Appender<u32>, WeldVec<u32>>>,
+        pub result: Option<WeldVec<u32>>,
+    }
+
+    impl WindowComponent {
+        pub fn new(udf: Arc<Module>, materializer: Arc<Module>) -> WindowComponent {
+            let init_builder_code = String::from("|| appender[u32]");
+            let init_builder = Arc::new(
+                Module::new("init_builder".to_string(), init_builder_code, 0, None).unwrap(),
+            );
+
+            let window_modules = WindowModules {
+                init_builder,
+                udf,
+                materializer,
+            };
+
+            let window_builder: Box<WindowBuilder<u32, Appender<u32>, WeldVec<u32>>> =
+                WindowBuilder::new(window_modules).unwrap();
+
+            WindowComponent {
+                ctx: ComponentContext::new(),
+                window_builder,
+                result: None,
+            }
+        }
+    }
+
+    impl Provide<ControlPort> for WindowComponent {
+        fn handle(&mut self, event: ControlEvent) -> () {}
+    }
+
+    impl Actor for WindowComponent {
+        fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
+            if let Some(payload) = msg.downcast_ref::<Item>() {
+                let _ = self.window_builder.on_element(payload.price);
+            }
+
+            if let Some(payload) = msg.downcast_ref::<String>() {
+                self.result = Some(self.window_builder.result().unwrap());
+            }
+        }
+        fn receive_message(&mut self, sender: ActorPath, ser_id: u64, buf: &mut Buf) {}
+    }
+
+    #[test]
+    fn window_builder_component_test() {
+        let mut cfg = KompactConfig::new();
+        cfg.system_components(DeadletterBox::new, NetworkConfig::default().build());
+        let system = KompactSystem::new(cfg).expect("KompactSystem");
+
+        let udf_code = String::from("|x: u32, y: appender[u32]| merge(y, x)");
+        let udf_result = String::from("|y: appender[u32]| result(y)");
+        let prio = 0;
+        let code_udf = Arc::new(Module::new("udf".to_string(), udf_code, prio, None).unwrap());
+        let result_udf =
+            Arc::new(Module::new("result".to_string(), udf_result, prio, None).unwrap());
+
+        let (window_comp, _) = system.create_and_register(move || {
+            WindowComponent::new(code_udf.clone(), result_udf.clone())
+        });
+        system.start(&window_comp);
+        let window_comp_ref = window_comp.actor_ref();
+
+        let items = 1000;
+
+        for i in 0..items {
+            let item = Item { id: i, price: 100 };
+            window_comp_ref.tell(Box::new(item), &window_comp_ref);
+        }
+        window_comp_ref.tell(Box::new(String::from("done")), &window_comp_ref);
+
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        let mut window_c = window_comp.definition().lock().unwrap();
+        let result = window_c.result.take().unwrap();
+        assert_eq!(result.len, items as i64);
+        for i in 0..(result.len as isize) {
+            let price = unsafe { *result.data.offset(i) };
+            assert_eq!(price, 100);
         }
     }
 }
