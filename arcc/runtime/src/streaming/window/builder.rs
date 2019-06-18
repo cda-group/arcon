@@ -448,7 +448,7 @@ mod tests {
     }
 
     impl Provide<ControlPort> for WindowComponent {
-        fn handle(&mut self, event: ControlEvent) -> () {}
+        fn handle(&mut self, _event: ControlEvent) -> () {}
     }
 
     impl Actor for WindowComponent {
@@ -457,11 +457,11 @@ mod tests {
                 let _ = self.window_builder.on_element(payload.price);
             }
 
-            if let Some(payload) = msg.downcast_ref::<String>() {
+            if let Some(_) = msg.downcast_ref::<String>() {
                 self.result = Some(self.window_builder.result().unwrap());
             }
         }
-        fn receive_message(&mut self, sender: ActorPath, ser_id: u64, buf: &mut Buf) {}
+        fn receive_message(&mut self, _sender: ActorPath, _ser_id: u64, _buf: &mut Buf) {}
     }
 
     #[test]

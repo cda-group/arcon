@@ -1,17 +1,31 @@
 syntax = "proto3";
 
-message Checkpoint {}
-
-message Watermark {}
-
 message Element {
-  uint64 id = 1;
-  uint64 timestamp = 2;
-  bytes data = 3;
-  string task_id = 4;
+  uint64 timestamp = 1;
+  bytes data = 2;
+  // Id to help identify correct Weld module
+  string task_id = 3;
 }
 
-message TaskMsg {
+message WindowTrigger {}
+
+message WindowComplete {}
+
+message WindowMessage {
+  oneof payload {
+    WindowTrigger trigger = 1;
+    WindowComplete complete = 2;
+    Element element = 3;
+  }
+}
+
+message Checkpoint {}
+
+message Watermark {
+  uint64 timestamp = 1;
+}
+
+message StreamTaskMessage {
   oneof payload {
     Element element = 1;
     Watermark watermark = 2;

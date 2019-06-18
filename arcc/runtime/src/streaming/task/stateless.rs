@@ -1,42 +1,31 @@
-/// Experimental Task Component
-
-use crate::components::task_manager::Metric;
-use crate::components::task_manager::MetricPort;
-use messages::protobuf::TaskMsg_oneof_payload::*;
+use crate::streaming::task::manager::{Metric, MetricPort};
+use messages::protobuf::StreamTaskMessage_oneof_payload::*;
 use messages::protobuf::*;
 
-use crate::destination::Destination;
+use crate::streaming::task::Destination;
 use crate::error::Error;
 use crate::error::ErrorKind::*;
 use crate::weld::*;
 use kompact::*;
-use state_backend::StateBackend;
-use std::sync::Arc;
 use std::time::Duration;
 use weld::*;
 
 #[derive(ComponentDefinition)]
 #[allow(dead_code)]
-pub struct Task {
-    ctx: ComponentContext<Task>,
+pub struct StreamTask {
+    ctx: ComponentContext<StreamTask>,
     report_timer: Option<ScheduledTimer>,
-    pub manager_port: RequiredPort<MetricPort, Task>,
+    pub manager_port: RequiredPort<MetricPort, StreamTask>,
     destination: Option<Destination>,
     udf: Module,
     udf_avg: u64,
     udf_executions: u64,
-    backend: Arc<StateBackend>,
     id: String,
 }
 
-impl Task {
-    pub fn new(
-        id: String,
-        udf: Module,
-        backend: Arc<StateBackend>,
-        destination: Option<Destination>,
-    ) -> Task {
-        Task {
+impl StreamTask {
+    pub fn new(id: String, udf: Module, destination: Option<Destination>) -> StreamTask {
+        StreamTask {
             ctx: ComponentContext::new(),
             report_timer: None,
             manager_port: RequiredPort::new(),
@@ -44,7 +33,6 @@ impl Task {
             udf,
             udf_avg: 0,
             udf_executions: 0,
-            backend: Arc::clone(&backend),
             id,
         }
     }
@@ -54,6 +42,30 @@ impl Task {
             self.cancel_timer(timer);
             self.report_timer = None;
         }
+    }
+
+    fn handle_msg(&mut self, data: StreamTaskMessage) -> crate::error::Result<()> {
+        let payload = data.payload.unwrap();
+
+        match payload {
+            element(e) => {
+                if let Err(err) = self.run_udf(e) {
+                    error!(
+                        self.ctx.log(),
+                        "Failed to run StreamTask UDF with err: {}",
+                        err.to_string()
+                    );
+                }
+            }
+            watermark(_) => {
+                unimplemented!();
+            }
+            checkpoint(_) => {
+                unimplemented!();
+            }
+        }
+
+        Ok(())
     }
 
     fn run_udf(&mut self, e: Element) -> crate::error::Result<()> {
@@ -71,15 +83,15 @@ impl Task {
             let ref mut ctx = WeldContext::new(&self.udf.conf()).map_err(|e| {
                 Error::new(ContextError(e.message().to_string_lossy().into_owned()))
             })?;
+
             let run: ModuleRun<WeldVec<u8>> = self.udf.run(&input, ctx)?;
             let ns = run.1;
             self.update_avg(ns);
 
             if let Some(dest) = &self.destination {
-                let mut msg = TaskMsg::new();
+                let mut msg = StreamTaskMessage::new();
                 let mut element_obj = Element::new();
                 element_obj.set_timestamp(crate::util::get_system_time());
-                element_obj.set_id(e.get_id());
                 element_obj.set_task_id(dest.task_id.clone());
                 let to_raw = to_rust_vec(run.0).unwrap();
                 element_obj.set_data(to_raw.to_vec());
@@ -96,18 +108,20 @@ impl Task {
         if self.udf_executions == 0 {
             self.udf_avg = ns;
         } else {
-            let ema: i32 = (ns as i32 - self.udf_avg as i32) * (2 / (self.udf_executions + 1)) as i32 + self.udf_avg as i32;
+            let ema: i32 = (ns as i32 - self.udf_avg as i32)
+                * (2 / (self.udf_executions + 1)) as i32
+                + self.udf_avg as i32;
             self.udf_avg = ema as u64;
         }
         self.udf_executions += 1;
     }
 }
 
-impl Provide<ControlPort> for Task {
+impl Provide<ControlPort> for StreamTask {
     fn handle(&mut self, event: ControlEvent) -> () {
         match event {
             ControlEvent::Start => {
-                info!(self.ctx.log(), "Task {} Starting up", self.id);
+                info!(self.ctx.log(), "StreamTask {} Starting up", self.id);
                 let timeout = Duration::from_millis(250);
                 let timer = self.schedule_periodic(timeout, timeout, |self_c, _| {
                     self_c.manager_port.trigger(Metric {
@@ -124,29 +138,15 @@ impl Provide<ControlPort> for Task {
     }
 }
 
-impl Actor for Task {
+impl Actor for StreamTask {
     fn receive_local(&mut self, _sender: ActorRef, _msg: &Any) {}
     fn receive_message(&mut self, sender: ActorPath, ser_id: u64, buf: &mut Buf) {
         if ser_id == serialisation_ids::PBUF {
-            let r: Result<TaskMsg, SerError> = ProtoSer::deserialise(buf);
+            let r: Result<StreamTaskMessage, SerError> = ProtoSer::deserialise(buf);
             if let Ok(msg) = r {
-                match msg.payload.unwrap() {
-                    watermark(_) => {
-                        unimplemented!();
-                    }
-                    element(e) => {
-                        if let Err(err) = self.run_udf(e) {
-                            error!(
-                                self.ctx.log(),
-                                "Failed to run Task UDF with err: {}",
-                                err.to_string()
-                            );
-                        }
-                    }
-                    checkpoint(_) => {
-                        unimplemented!();
-                    }
-                }
+                let _ = self.handle_msg(msg);
+            } else {
+                error!(self.ctx.log(), "Failed to handle StreamTaskMessage",);
             }
         } else {
             error!(self.ctx.log(), "Got unexpected message from {}", sender);
@@ -154,7 +154,7 @@ impl Actor for Task {
     }
 }
 
-impl Require<MetricPort> for Task {
+impl Require<MetricPort> for StreamTask {
     fn handle(&mut self, _event: Metric) -> () {
         // ?
     }

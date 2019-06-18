@@ -43,7 +43,7 @@ fn codegen_test() {
     fs::create_dir_all(RUN_PASS_PATH).unwrap();
 
     basic_system();
-    basic_task();
+    //basic_task();
 
     // TODO: Add more complex tests
 
@@ -60,7 +60,7 @@ fn basic_system() {
     let _ = to_file(main_fmt, sys_path.to_string());
 }
 
-fn basic_task() {
+fn _basic_task() {
     let task = task::task("Basic");
     let task_fmt = format_code(task.to_string()).unwrap();
     let task_path = format!("{}/basic_task.rs", RUN_PASS_PATH);

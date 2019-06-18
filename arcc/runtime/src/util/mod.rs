@@ -1,3 +1,5 @@
+pub mod io;
+
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub fn get_system_time() -> u64 {
