@@ -3,6 +3,7 @@ set -e
 
 curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly
 export PATH=$PATH:$HOME/.cargo/bin
+rustup install nightly
 rustc --version
 ./ci/install_protobuf.sh
 ./ci/install_capnproto.sh
