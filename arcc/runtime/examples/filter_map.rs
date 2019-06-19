@@ -3,9 +3,9 @@
 extern crate runtime;
 extern crate rand;
 
-use runtime::components::task::Task;
+use runtime::streaming::task::stateless::StreamTask;
 use runtime::prelude::StateBackend;
-use runtime::destination::*;
+use runtime::streaming::task::Destination;
 use runtime::prelude::*;
 use runtime::util::*;
 use runtime::weld::module::*;
@@ -64,8 +64,8 @@ fn main() {
     let mut filter_module = Module::new("input".to_string(), filter_code.clone(), 0, None).unwrap();
     filter_module.add_serializer(filter_code).unwrap();
     std::thread::sleep(std::time::Duration::from_millis(300));
-    for i in 0..3 {
-        let msg = generate_element(i, &mut filter_module);
+    for _i in 0..3 {
+        let msg = generate_element(&mut filter_module);
         filter.tell(msg, &system);
     }
 
@@ -78,11 +78,10 @@ fn filter_task(
     map_task_id: String,
     system: &KompactSystem,
     remote: &KompactSystem,
-) -> Arc<runtime::prelude::Component<runtime::components::task::Task>> {
+) -> Arc<runtime::prelude::Component<StreamTask>> {
     let raw_code = generate_raw_module(code.to_string(), true).unwrap();
     let prio = 0;
     let filter_module = Module::new(filter_task_id.clone(), raw_code, prio, None).unwrap();
-    let db = in_memory::InMemory::create("test_storage");
 
     let map_path = ActorPath::Named(NamedPath::with_system(
         remote.system_path(),
@@ -92,10 +91,9 @@ fn filter_task(
     let map_destination = Destination::new(map_path, map_task_id.clone());
 
     let (filter_task, _) = system.create_and_register(move || {
-        Task::new(
+        StreamTask::new(
             filter_task_id,
             filter_module,
-            Arc::new(db),
             Some(map_destination),
         )
     });
@@ -110,11 +108,10 @@ fn map_task(
     map_task_id: String,
     system: &KompactSystem,
     remote: &KompactSystem,
-) -> Arc<runtime::prelude::Component<runtime::components::task::Task>> {
+) -> Arc<runtime::prelude::Component<StreamTask>> {
     let raw_code = generate_raw_module(code.to_string(), true).unwrap();
     let prio = 0;
     let map_module = Module::new(map_task_id.clone(), raw_code, prio, None).unwrap();
-    let db = in_memory::InMemory::create("test_storage");
 
     let sink_path = ActorPath::Named(NamedPath::with_system(
         remote.system_path(),
@@ -124,10 +121,9 @@ fn map_task(
     let sink_destination = Destination::new(sink_path, "sink".to_string());
 
     let (map_task, _) = system.create_and_register(move || {
-        Task::new(
+        StreamTask::new(
             map_task_id.clone(),
             map_module,
-            Arc::new(db),
             Some(sink_destination),
         )
     });
@@ -136,11 +132,10 @@ fn map_task(
     map_task
 }
 
-fn generate_element(id: u64, filter_module: &mut Module) -> TaskMsg {
-    let mut msg = TaskMsg::new();
+fn generate_element(filter_module: &mut Module) -> StreamTaskMessage {
+    let mut msg = StreamTaskMessage::new();
     let mut element = Element::new();
     element.set_timestamp(get_system_time());
-    element.set_id(id);
     element.set_task_id("filter_over_5".to_string());
 
     let mut rng = rand::thread_rng();
@@ -179,10 +174,10 @@ impl Actor for Sink {
     fn receive_local(&mut self, _sender: ActorRef, _msg: &Any) {}
     fn receive_message(&mut self, _sender: ActorPath, ser_id: u64, buf: &mut Buf) {
         if ser_id == serialisation_ids::PBUF {
-            let msg = ProtoSer::deserialise(buf).unwrap();
+            let msg: StreamTaskMessage = ProtoSer::deserialise(buf).unwrap();
             match msg.payload.unwrap() {
-                TaskMsg_oneof_payload::watermark(_) => {}
-                TaskMsg_oneof_payload::element(e) => {
+                StreamTaskMessage_oneof_payload::watermark(_) => {}
+                StreamTaskMessage_oneof_payload::element(e) => {
                     let raw = e.get_data();
                     let input: WeldVec<u8> =
                         WeldVec::new(raw.as_ref().as_ptr(), raw.as_ref().len() as i64);
@@ -191,7 +186,7 @@ impl Actor for Sink {
                     let run: ModuleRun<i64> = self.udf.run(&input, ctx).unwrap();
                     info!(self.ctx.log(), "SINK result with len {}", run.0);
                 }
-                TaskMsg_oneof_payload::checkpoint(_) => {}
+                StreamTaskMessage_oneof_payload::checkpoint(_) => {}
             }
         }
     }

@@ -14,8 +14,6 @@ use error::*;
 use proc_macro2::TokenStream;
 use rustfmt_nightly::*;
 use std::fs;
-use std::path::Path;
-
 
 /// Rustfmt the generated code to make it readable
 pub fn format_code(code: String) -> crate::error::Result<String> {
@@ -46,8 +44,6 @@ pub fn to_file(input: String, path: String) -> std::result::Result<(), std::io::
 pub fn generate_main(stream: TokenStream) -> TokenStream {
     quote! {
         extern crate runtime;
-        use runtime::components::task_manager::*;
-        use runtime::components::*;
         use runtime::prelude::*;
         use runtime::weld::module::*;
 

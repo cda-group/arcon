@@ -22,7 +22,9 @@ pub struct WindowModules {
 /// B: Weld Builder type (e.g., Appender<u32>)
 /// C: Expected output type of the Window
 pub trait WindowFn<A, B: Clone, C: Clone> {
-    fn new(modules: WindowModules) -> Result<Box<Self>>;
+    fn new(modules: WindowModules) -> Result<Self>
+    where
+        Self: Sized;
     fn on_element(&mut self, element: A) -> Result<()>;
     fn result(&mut self) -> Result<C>;
 }
@@ -56,19 +58,19 @@ pub struct WindowBuilder<A, B, C> {
 }
 
 impl<A, B: Clone, C: Clone> WindowFn<A, B, C> for WindowBuilder<A, B, C> {
-    fn new(modules: WindowModules) -> Result<Box<WindowBuilder<A, B, C>>> {
+    fn new(modules: WindowModules) -> Result<WindowBuilder<A, B, C>> {
         let mut ctx = WeldContext::new(modules.udf.conf())
             .map_err(|e| Error::new(ContextError(e.message().to_string_lossy().into_owned())))?;
         let run: ModuleRun<B> = modules.init_builder.run(&1, &mut ctx)?;
 
-        Ok(Box::new(WindowBuilder {
+        Ok(WindowBuilder {
             builder: UnsafeCell::new(run.0),
             builder_ctx: ctx,
             udf: modules.udf,
             materializer: modules.materializer,
             _input: PhantomData,
             _output: PhantomData,
-        }))
+        })
     }
     fn on_element(&mut self, element: A) -> Result<()> {
         let ref input = WindowBuilderInput {
@@ -142,7 +144,7 @@ mod tests {
             materializer,
         };
 
-        let mut window_builder: Box<WindowBuilder<u32, Appender<u32>, WeldVec<u32>>> =
+        let mut window_builder: WindowBuilder<u32, Appender<u32>, WeldVec<u32>> =
             WindowBuilder::new(window_modules).unwrap();
 
         for i in 0..10000 {
@@ -192,7 +194,7 @@ mod tests {
             materializer,
         };
 
-        let mut window_builder: Box<WindowBuilder<Item, AvgAgg, f64>> =
+        let mut window_builder: WindowBuilder<Item, AvgAgg, f64> =
             WindowBuilder::new(window_modules).unwrap();
 
         let i1 = Item { id: 1, price: 100 };
@@ -251,8 +253,10 @@ mod tests {
             materializer,
         };
 
-        let mut window_builder: Box<
-            WindowBuilder<Input, DictMerger<u64, u64>, WeldVec<Pair<u64, u64>>>,
+        let mut window_builder: WindowBuilder<
+            Input,
+            DictMerger<u64, u64>,
+            WeldVec<Pair<u64, u64>>,
         > = WindowBuilder::new(window_modules).unwrap();
 
         let i1_nums: Vec<u64> = vec![1, 3, 5, 6];
@@ -323,7 +327,7 @@ mod tests {
             materializer,
         };
 
-        let mut window_builder: Box<WindowBuilder<Item, Item, Item>> =
+        let mut window_builder: WindowBuilder<Item, Item, Item> =
             WindowBuilder::new(window_modules).unwrap();
 
         let i1 = Item { id: 1, price: 10 };
@@ -366,8 +370,10 @@ mod tests {
             udf,
             materializer,
         };
-        let mut window_builder: Box<
-            WindowBuilder<WeldVec<u32>, Appender<WeldVec<u32>>, WeldVec<WeldVec<u32>>>,
+        let mut window_builder: WindowBuilder<
+            WeldVec<u32>,
+            Appender<WeldVec<u32>>,
+            WeldVec<WeldVec<u32>>,
         > = WindowBuilder::new(window_modules).unwrap();
 
         let mut window_data: Vec<Vec<u32>> = Vec::new();
@@ -413,7 +419,7 @@ mod tests {
     #[derive(ComponentDefinition)]
     pub struct WindowComponent {
         ctx: ComponentContext<WindowComponent>,
-        window_builder: Box<WindowBuilder<u32, Appender<u32>, WeldVec<u32>>>,
+        window_builder: WindowBuilder<u32, Appender<u32>, WeldVec<u32>>,
         pub result: Option<WeldVec<u32>>,
     }
 
@@ -430,7 +436,7 @@ mod tests {
                 materializer,
             };
 
-            let window_builder: Box<WindowBuilder<u32, Appender<u32>, WeldVec<u32>>> =
+            let window_builder: WindowBuilder<u32, Appender<u32>, WeldVec<u32>> =
                 WindowBuilder::new(window_modules).unwrap();
 
             WindowComponent {
@@ -442,7 +448,7 @@ mod tests {
     }
 
     impl Provide<ControlPort> for WindowComponent {
-        fn handle(&mut self, event: ControlEvent) -> () {}
+        fn handle(&mut self, _event: ControlEvent) -> () {}
     }
 
     impl Actor for WindowComponent {
@@ -451,11 +457,11 @@ mod tests {
                 let _ = self.window_builder.on_element(payload.price);
             }
 
-            if let Some(payload) = msg.downcast_ref::<String>() {
+            if let Some(_) = msg.downcast_ref::<String>() {
                 self.result = Some(self.window_builder.result().unwrap());
             }
         }
-        fn receive_message(&mut self, sender: ActorPath, ser_id: u64, buf: &mut Buf) {}
+        fn receive_message(&mut self, _sender: ActorPath, _ser_id: u64, _buf: &mut Buf) {}
     }
 
     #[test]
