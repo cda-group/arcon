@@ -1,10 +1,9 @@
+#![allow(warnings)]
 /// Early PoC
-/// Ugly code to be expected
 extern crate runtime;
 extern crate rand;
 
 use runtime::streaming::task::stateless::StreamTask;
-use runtime::prelude::StateBackend;
 use runtime::streaming::task::Destination;
 use runtime::prelude::*;
 use runtime::util::*;
