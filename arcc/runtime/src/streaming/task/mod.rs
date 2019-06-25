@@ -1,5 +1,6 @@
 pub mod stateless;
 pub mod manager;
+pub mod partitioner;
 
 use kompact::ActorPath;
 
