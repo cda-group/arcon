@@ -71,19 +71,22 @@ impl<A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync 
     }
 
     fn handle_window_message(&mut self, msg: &WindowMessage) -> () {
-        let payload = msg.payload.as_ref().unwrap();
-        match payload {
-            element(_) => {
-                // TODO: Handle elements from remote source
-                //self.add_value(e.data); <- Doesn't work because element isn't generic
+        if let Some(payload) = msg.payload.as_ref() {
+            match payload {
+                element(_) => {
+                    // TODO: Handle elements from remote source
+                    //self.add_value(e.data); <- Doesn't work because element isn't generic
+                }
+                trigger(_) => {
+                    self.complete = true;
+                    self.trigger();
+                }
+                complete(_) => {
+                    // Unused for now
+                }
             }
-            trigger(_) => {
-                self.complete = true;
-                self.trigger();
-            }
-            complete(_) => {
-                // Unused for now
-            }
+        } else {
+            debug!(self.ctx.log(), "Window received empty WindowMessage")
         }
     }
     fn trigger(&mut self) -> () {
