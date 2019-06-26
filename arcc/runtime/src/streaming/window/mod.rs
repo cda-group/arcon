@@ -1,3 +1,3 @@
-pub mod window_assigner;
-pub mod window_component;
+pub mod assigner;
 pub mod builder;
+pub mod component;
