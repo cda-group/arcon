@@ -10,6 +10,7 @@ use weld::*;
 
 /// `WindowModules` is a helper struct that holds Weld UDFs
 ///  for a specific WindowBuilder
+#[derive(Clone)]
 pub struct WindowModules {
     pub init_builder: Arc<Module>,
     pub udf: Arc<Module>,
