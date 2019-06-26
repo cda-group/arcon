@@ -1,40 +1,60 @@
-use messages::protobuf::WindowMessage_oneof_payload::*;
-use crate::weld::module::Module;
-use crate::streaming::window::window_assigner::*;
 use crate::streaming::window::builder::*;
-use messages::protobuf::*;
-use std::string::ToString;
-use std::fmt::Display;
-use std::fmt::Debug;
-use std::sync::Arc;
+use crate::streaming::window::window_assigner::*;
+use crate::weld::module::Module;
 use kompact::*;
+use messages::protobuf::WindowMessage_oneof_payload::*;
+use messages::protobuf::*;
+use std::fmt::Debug;
+use std::fmt::Display;
+use std::string::ToString;
+use std::sync::Arc;
 use LocalElement;
 
-pub struct WindowComponent<A: 'static + Send + Clone + Sync + Debug + Display, B: 'static + Clone, C: 'static + Send + Clone + Sync + Display> {
-	ctx: ComponentContext<WindowComponent<A, B, C>>,
+pub struct WindowComponent<
+    A: 'static + Send + Clone + Sync + Debug + Display,
+    B: 'static + Clone,
+    C: 'static + Send + Clone + Sync + Display,
+> {
+    ctx: ComponentContext<WindowComponent<A, B, C>>,
     builder: WindowBuilder<A, B, C>,
-	targetPointer: ActorRef,
-	id: u64,
+    targetPointer: ActorRef,
+    id: u64,
     complete: bool,
     timestamp: u64,
 }
 
 // Implement ComponentDefinition
-impl <A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync + Display> ComponentDefinition for WindowComponent<A, B, C> {
+impl<A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync + Display>
+    ComponentDefinition for WindowComponent<A, B, C>
+{
     fn setup(&mut self, self_component: Arc<Component<Self>>) -> () {
-    	self.ctx_mut().initialise(self_component);
+        self.ctx_mut().initialise(self_component);
     }
     fn execute(&mut self, max_events: usize, skip: usize) -> ExecuteResult {
-    	ExecuteResult::new(skip, skip)
+        ExecuteResult::new(skip, skip)
     }
-    fn ctx(&self) -> &ComponentContext<Self> {&self.ctx}
-    fn ctx_mut(&mut self) -> &mut ComponentContext<Self> {&mut self.ctx}
-    fn type_name() -> &'static str {"WindowComponent"}
+    fn ctx(&self) -> &ComponentContext<Self> {
+        &self.ctx
+    }
+    fn ctx_mut(&mut self) -> &mut ComponentContext<Self> {
+        &mut self.ctx
+    }
+    fn type_name() -> &'static str {
+        "WindowComponent"
+    }
 }
 
-impl <A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync + Display> WindowComponent<A, B, C> {
-    pub fn new(target: ActorRef, init_builder: Arc<Module>, code_module: Arc<Module>, result_module: Arc<Module>, id: u64, ts: u64) -> WindowComponent<A, B, C> {
-
+impl<A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync + Display>
+    WindowComponent<A, B, C>
+{
+    pub fn new(
+        target: ActorRef,
+        init_builder: Arc<Module>,
+        code_module: Arc<Module>,
+        result_module: Arc<Module>,
+        id: u64,
+        ts: u64,
+    ) -> WindowComponent<A, B, C> {
         let window_modules = WindowModules {
             init_builder,
             udf: code_module,
@@ -60,7 +80,13 @@ impl <A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync
             let result = self.builder.result().unwrap();
             debug!(self.ctx.log(), "Late-value, arrived sending new result",);
             // Report our result to the target
-            self.targetPointer.tell(Arc::new(LocalElement{data: result, timestamp: self.timestamp}), &self.actor_ref());
+            self.targetPointer.tell(
+                Arc::new(LocalElement {
+                    data: result,
+                    timestamp: self.timestamp,
+                }),
+                &self.actor_ref(),
+            );
         }
     }
 
@@ -88,31 +114,42 @@ impl <A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync
         if (!self.complete) {
             self.complete = true;
             let result = self.builder.result().unwrap();
-            debug!(self.ctx.log(), "triggered result for window {}", self.timestamp);
+            debug!(
+                self.ctx.log(),
+                "triggered result for window {}", self.timestamp
+            );
             // Report our result to the target
-            self.targetPointer.tell(Arc::new(LocalElement{data: result, timestamp: self.timestamp}), &self.actor_ref());
+            self.targetPointer.tell(
+                Arc::new(LocalElement {
+                    data: result,
+                    timestamp: self.timestamp,
+                }),
+                &self.actor_ref(),
+            );
         }
     }
 }
 
-impl <A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync + Display> Provide<ControlPort> for WindowComponent<A, B, C> {
+impl<A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync + Display>
+    Provide<ControlPort> for WindowComponent<A, B, C>
+{
     fn handle(&mut self, event: ControlEvent) -> () {
         match event {
             ControlEvent::Start => {
-                debug!(self.ctx.log(), "Window {} started", self.timestamp);        
+                debug!(self.ctx.log(), "Window {} started", self.timestamp);
             }
             ControlEvent::Kill => {
                 debug!(self.ctx.log(), "Window {} being killed", self.timestamp);
                 self.trigger();
             }
-            ControlEvent::Stop => {
-
-            }
+            ControlEvent::Stop => {}
         }
     }
 }
 
-impl <A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync + Display> Actor for WindowComponent<A, B, C> {
+impl<A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync + Display> Actor
+    for WindowComponent<A, B, C>
+{
     fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
         if let Some(payload) = msg.downcast_ref::<LocalElement<A>>() {
             // "Normal message"
@@ -120,7 +157,10 @@ impl <A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync
         } else if let Some(wm) = msg.downcast_ref::<WindowMessage>() {
             self.handle_window_message(wm);
         } else {
-            error!(self.ctx.log(), "Window {} bad local message {:?} from {}", self.timestamp, msg, _sender);
+            error!(
+                self.ctx.log(),
+                "Window {} bad local message {:?} from {}", self.timestamp, msg, _sender
+            );
         }
     }
     fn receive_message(&mut self, sender: ActorPath, ser_id: u64, buf: &mut Buf) {
@@ -132,7 +172,10 @@ impl <A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync
                 error!(self.ctx.log(), "Failed to handle WindowMessage",);
             }
         } else {
-            error!(self.ctx.log(), "Window {} bad remote message from {}", self.timestamp, sender);
+            error!(
+                self.ctx.log(),
+                "Window {} bad remote message from {}", self.timestamp, sender
+            );
         }
     }
 }
