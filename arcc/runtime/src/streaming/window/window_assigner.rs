@@ -31,7 +31,14 @@ use kompact::*;
         WindowBy parameter allowing for EventTime/ProcessingTime/IngestionTime?
         Flexible late-arrival policy?
             Send new result per each late or just once before window closes?
-            Diff / New result / something else? 
+            Diff / New result / something else?
+        Watermark skipping ahead in line question:
+            Kill event, ie. watermarks "jumps" the event queue (due to control-event),
+            meaning events currently in the event queue of a window component may be
+            deleted. 
+            Is this wanted behaviour, could be good for times where result delivery
+            matters more than completeness?
+            See test case overlapping_windows for the "determinism issue" (late arrivals)
 */
 
 // Used to avoid serialization/deserialization of data in local sends
@@ -52,6 +59,7 @@ pub struct EventTimeWindowAssigner<A: 'static + Send + Clone + Sync + Debug + Di
     max_window_ts: u64,
     max_watermark: u64,
     window_map: BTreeMap<u64, ActorRef>,
+    component_map: BTreeMap<u64, Arc<Component<window_component::WindowComponent<A,B,C>>>>,
     code_module: Arc<Module>,
     result_module: Arc<Module>,
     builder_module: Arc<Module>,
@@ -76,7 +84,6 @@ impl <A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync
         let init_builder = Arc::new(Module::new("init_builder".to_string(), init_builder_code, prio, None).unwrap());
         let code_udf = Arc::new(Module::new("udf".to_string(), udf_code, prio, None).unwrap());
         let result_udf = Arc::new(Module::new("result".to_string(), udf_result, prio, None).unwrap());
-        let mut map = BTreeMap::new();
         // TODO: Should handle weld compilation errors here
 
         EventTimeWindowAssigner {
@@ -89,7 +96,8 @@ impl <A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync
             late_arrival_time: late,
             max_window_ts: 0,
             max_watermark: 0,
-            window_map: map,
+            window_map: BTreeMap::new(),
+            component_map: BTreeMap::new(), // Used for direct access to components, for killing
             builder_module: init_builder,
             code_module: code_udf,
             result_module: result_udf,
@@ -110,6 +118,7 @@ impl <A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync
         let (wp, _) = self.ctx.system().create_and_register(move || wc);
         self.ctx.system().start(&wp);
         self.window_map.insert(ts, wp.actor_ref());
+        self.component_map.insert(ts, wp);
         self.max_window_ts = ts;
         self.window_count = self.window_count+1;
     }
@@ -131,9 +140,14 @@ impl <A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync
 
         // Check for windows to kill
         let new_map = self.window_map.split_off(&(w-self.late_arrival_time));
-        for (_, wp) in &self.window_map {
-            wp.tell(Box::new(create_window_complete()), &self.actor_ref());
-
+        for (ts, wp) in &self.window_map {
+            debug!(self.ctx.log(), "WindowAssigner killing window {}", ts);
+            if let Some(comp) = self.component_map.remove(ts) {
+                //self.ctx.system().stop(&comp);
+                self.ctx.system().kill(comp);
+                //let killtimer = self.schedule_once(time::Duration::from_secs(5), comp {
+                //});
+            }
         }
 
         // Update the window map
@@ -231,7 +245,8 @@ mod tests {
             fn handle(&mut self, event: ControlEvent) -> () {}
         }
         impl Actor for Sink {
-            fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {       
+            fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
+                println!("sink received message");
                 if let Some(m) = msg.downcast_ref::<LocalElement<WeldVec<u8>>>() {
                     self.result.push(Some(m.data.clone()));
                 }
@@ -342,14 +357,16 @@ mod tests {
     #[test]
     fn overlapping_windows() {
         // Use overlapping windows (slide = length/2), check that messages appear correctly
-        let (assigner, assigner_ref, sink) = window_assigner_test_setup(10,5,0);
+        let (assigner, assigner_ref, sink) = window_assigner_test_setup(10,5,2);
         wait(1);
         // Send messages
         let moment = now();
         assigner_ref.tell(Box::new(LocalElement{data: 1 as u8, timestamp: moment}), &assigner_ref);
         assigner_ref.tell(Box::new(LocalElement{data: 1 as u8, timestamp: moment+6}), &assigner_ref);
         assigner_ref.tell(Box::new(LocalElement{data: 1 as u8, timestamp: moment+6}), &assigner_ref);
-        assigner_ref.tell(Box::new(watermark(moment+25)), &assigner_ref);
+        assigner_ref.tell(Box::new(watermark(moment+11)), &assigner_ref);
+        wait(1);
+        assigner_ref.tell(Box::new(watermark(moment+21)), &assigner_ref);
         wait(1);
         // Inspect and assert
         let mut sink_inspect = sink.definition().lock().unwrap();

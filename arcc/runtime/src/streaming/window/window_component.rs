@@ -63,6 +63,7 @@ impl <A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync
             self.targetPointer.tell(Arc::new(LocalElement{data: result, timestamp: self.timestamp}), &self.actor_ref());
         }
     }
+
     fn handle_window_message(&mut self, msg: &WindowMessage) -> () {
         let payload = msg.payload.as_ref().unwrap();
         match payload {
@@ -71,26 +72,43 @@ impl <A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync
                 //self.add_value(e.data); <- Doesn't work because element isn't generic
             }
             trigger(t) => {
-                // Close the window
-                self.complete = true;
-                let result = self.builder.result().unwrap();
-                debug!(self.ctx.log(), "triggered result for window {}", self.timestamp);
-
-                // Report our result to the target
-                self.targetPointer.tell(Arc::new(LocalElement{data: result, timestamp: self.timestamp}), &self.actor_ref());
+                self.trigger();
             }
             complete(c) => {
                 // Suicide
                 debug!(self.ctx.log(), "Window {} shutting down", self.timestamp);
-                
+                // Arc<crate::prelude::Component<TestComp>>
+
+                //self.ctx.system().kill(Arc::new(self.core));
             }
+        }
+    }
+    fn trigger(&mut self) -> () {
+        // Close the window, only trigger if we weren't already complete
+        if (!self.complete) {
+            self.complete = true;
+            let result = self.builder.result().unwrap();
+            debug!(self.ctx.log(), "triggered result for window {}", self.timestamp);
+            // Report our result to the target
+            self.targetPointer.tell(Arc::new(LocalElement{data: result, timestamp: self.timestamp}), &self.actor_ref());
         }
     }
 }
 
 impl <A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync + Display> Provide<ControlPort> for WindowComponent<A, B, C> {
     fn handle(&mut self, event: ControlEvent) -> () {
-        debug!(self.ctx.log(), "Window {} started", self.timestamp);        
+        match event {
+            ControlEvent::Start => {
+                debug!(self.ctx.log(), "Window {} started", self.timestamp);        
+            }
+            ControlEvent::Kill => {
+                debug!(self.ctx.log(), "Window {} being killed", self.timestamp);
+                self.trigger();
+            }
+            ControlEvent::Stop => {
+
+            }
+        }
     }
 }
 
