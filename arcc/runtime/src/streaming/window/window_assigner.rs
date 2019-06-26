@@ -18,10 +18,9 @@ use kompact::*;
         * Requires watermarks to complete windows
         * Windows don't actually "die" currently
     TOOD:
-        Change print statements to proper debug info
         Kill windows properly
         Handle weld compilation errors
-        Use generalized/common message format/objects
+        Use generalized/common message format/objects <- Element is not generic
         More tests
         Early arrivals before watermarks may be discarded, what to do with them?
             Currently only allows window_assigner to "fast-forward" on watermarks
@@ -34,26 +33,13 @@ use kompact::*;
             Send new result per each late or just once before window closes?
             Diff / New result / something else? 
 */
+
+// Used to avoid serialization/deserialization of data in local sends
 #[derive(Clone, Debug)]
-pub struct LocalElement<T> {     // The type of message received by the sink
+pub struct LocalElement<T> {     
     pub data: T,
     pub timestamp: u64,
 }
-/*
-#[derive(Clone, Debug)]
-pub struct ResultObject<T> {     // The type of message received by the sink
-    pub id: u64,
-    pub result: T,
-}
-#[derive(Clone, Debug)]
-pub struct Watermark {     // The type of message received by the sink
-    pub ts: u64,
-}
-#[derive(Clone, Debug)]
-pub struct WindowComplete {}     // Used to materialize window results
-#[derive(Clone, Debug)]
-pub struct KillWindow {} // Used to kill windows
-*/
 
 pub struct EventTimeWindowAssigner<A: 'static + Send + Clone + Sync + Debug + Display, B: 'static + Clone, C: 'static + Send + Clone + Sync + Display> {
     ctx: ComponentContext<EventTimeWindowAssigner<A, B, C>>,
@@ -123,8 +109,6 @@ impl <A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync
             window_component::WindowComponent::new(target, init, udf, res, id, ts.clone());
         let (wp, _) = self.ctx.system().create_and_register(move || wc);
         self.ctx.system().start(&wp);
-        
-        debug!(self.ctx.log(), "Started window {} time stamp {}", self.window_count, ts);
         self.window_map.insert(ts, wp.actor_ref());
         self.max_window_ts = ts;
         self.window_count = self.window_count+1;
@@ -134,22 +118,22 @@ impl <A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync
         if (w > self.max_watermark) {self.max_watermark = w;} 
         else {return;}
 
-        // Spawn new windows if we were behind
+        // Spawn new windows if we are behind
         while(self.max_window_ts < w + self.window_length){
+            debug!(self.ctx.log(), "WindowAssigner received a future watermark {} fast-forwarding window creation", w);
             self.new_window();
         }
 
-        // Check for windows to complete
+        // Check for windows to trigger
         for (ts, wp) in self.window_map.range(0..w) {
-            println!("Sending trigger!");
             wp.tell(Box::new(create_window_trigger()), &self.actor_ref());
         }
 
-        // Kill old windows
+        // Check for windows to kill
         let new_map = self.window_map.split_off(&(w-self.late_arrival_time));
         for (_, wp) in &self.window_map {
-            println!("Sending complete!");
             wp.tell(Box::new(create_window_complete()), &self.actor_ref());
+
         }
 
         // Update the window map
@@ -160,18 +144,16 @@ impl <A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync
 impl <A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync + Display> Provide<ControlPort> for EventTimeWindowAssigner<A, B, C> {
     fn handle(&mut self, event: ControlEvent) -> () {
         if let ControlEvent::Start = event {
-            println!("EventTimeWindowAssigner is starting up!");
-
             // Register windowing start time
             self.window_start = time::SystemTime::now().duration_since(UNIX_EPOCH).expect("error").as_secs();
+            debug!(self.ctx.log(), "WindowAssigner starting at time {}", self.window_start);
             // Create two windows to cover early arrivals and set-up time for the components
             self.new_window();
             self.new_window();
 
-            // Schedule creation of new windows
+            // Schedule regular creation of new windows
             let timer = self.schedule_periodic(time::Duration::from_secs(self.window_slide), time::Duration::from_secs(self.window_slide), |self_c, _| {
                 self_c.new_window();
-                println!("Old window closed, opened new window {}", self_c.window_count);
             });
         }
     }
@@ -179,9 +161,7 @@ impl <A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync
 
 impl <A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync + Display> Actor for EventTimeWindowAssigner<A, B, C> {
     fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
-        //if let Some() = msg.downcast_ref::<>
         if let Some(payload) = msg.downcast_ref::<LocalElement<A>>() {
-            //debug!(self.ctx.log(), "Windowing event with timestamp {}", payload.ts);
             // Send to all relevant windows
             let ts = payload.timestamp;
             for (_, wp) in self.window_map.range(ts..ts+self.window_length) {
@@ -194,7 +174,6 @@ impl <A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync
         }
     }
     fn receive_message(&mut self, sender: ActorPath, ser_id: u64, buf: &mut Buf) {
-        // println!("EventTimeWindowAssigner bad remote message from {}", sender);
         if ser_id == serialisation_ids::PBUF {
             let r: Result<StreamTaskMessage, SerError> = ProtoSer::deserialise(buf);
             if let Ok(msg) = r {
@@ -217,6 +196,8 @@ impl <A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync
             } else {
                 error!(self.ctx.log(), "Failed to handle StreamTaskMessage",);
             }
+        } else {
+            debug!(self.ctx.log(), "Unrecognized remote message",);
         }
     }
 }
@@ -360,7 +341,7 @@ mod tests {
     } 
     #[test]
     fn overlapping_windows() {
-        // Use overlapping windows (slide = length/2), check that messages in appear correctly
+        // Use overlapping windows (slide = length/2), check that messages appear correctly
         let (assigner, assigner_ref, sink) = window_assigner_test_setup(10,5,0);
         wait(1);
         // Send messages
@@ -378,5 +359,30 @@ mod tests {
         assert_eq!(r0.len, 3);
         assert_eq!(r1.len, 2);
         assert_eq!(r2.len, 0);
+    }
+    #[test]
+    fn fastforward_windows() {
+        // check that we receive correct number windows from fast forwarding
+        let (assigner, assigner_ref, sink) = window_assigner_test_setup(5,5,0);
+        wait(1);
+        // Send messages
+        let moment = now();
+        assigner_ref.tell(Box::new(watermark(moment+25)), &assigner_ref);
+        wait(1);
+        // Inspect and assert
+        let mut sink_inspect = sink.definition().lock().unwrap();
+        assert_eq!(&sink_inspect.result.len(), &(5 as usize));
+    }
+    #[test]
+    fn empty_window() {
+        // check that we receive correct number windows from fast forwarding
+        let (assigner, assigner_ref, sink) = window_assigner_test_setup(5,5,0);
+        wait(1);
+        assigner_ref.tell(Box::new(watermark(now()+5)), &assigner_ref);
+        wait(1);
+        let mut sink_inspect = sink.definition().lock().unwrap();
+        let r0 = &sink_inspect.result[0].take().unwrap();
+        assert_eq!(r0.len, 0);
+        assert_eq!(&sink_inspect.result.len(), &(1 as usize));
     }
 }

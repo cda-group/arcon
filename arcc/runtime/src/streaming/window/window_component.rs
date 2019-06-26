@@ -54,28 +54,35 @@ impl <A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync
         }
     }
     fn add_value(&mut self, v: A) -> () {
-        //println!("Appending {}!", v);
         self.builder.on_element(v);
+        if (self.complete) {
+            // The message was a late arrival, resend result
+            let result = self.builder.result().unwrap();
+            debug!(self.ctx.log(), "Late-value, arrived sending new result",);
+            // Report our result to the target
+            self.targetPointer.tell(Arc::new(LocalElement{data: result, timestamp: self.timestamp}), &self.actor_ref());
+        }
     }
     fn handle_window_message(&mut self, msg: &WindowMessage) -> () {
         let payload = msg.payload.as_ref().unwrap();
         match payload {
             element(e) => {
-                //println!("WindowComponent nr.{} handle_window_message Element: {}", self.id, e);
                 // TODO: Handle elements from remote source
+                //self.add_value(e.data); <- Doesn't work because element isn't generic
             }
             trigger(t) => {
                 // Close the window
                 self.complete = true;
                 let result = self.builder.result().unwrap();
-                println!("WindowComponent nr.{} triggered! result: {}", self.id, result);
+                debug!(self.ctx.log(), "triggered result for window {}", self.timestamp);
 
                 // Report our result to the target
                 self.targetPointer.tell(Arc::new(LocalElement{data: result, timestamp: self.timestamp}), &self.actor_ref());
             }
             complete(c) => {
                 // Suicide
-                println!("WindowComponent nr.{} complete!", self.id);                
+                debug!(self.ctx.log(), "Window {} shutting down", self.timestamp);
+                
             }
         }
     }
@@ -83,30 +90,19 @@ impl <A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync
 
 impl <A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync + Display> Provide<ControlPort> for WindowComponent<A, B, C> {
     fn handle(&mut self, event: ControlEvent) -> () {
-        println!("Starting WindowComponent nr. {}...", self.id);
+        debug!(self.ctx.log(), "Window {} started", self.timestamp);        
     }
 }
 
 impl <A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync + Display> Actor for WindowComponent<A, B, C> {
     fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
-        println!("WindowComponent nr.{} received message", self.id);
         if let Some(payload) = msg.downcast_ref::<LocalElement<A>>() {
             // "Normal message"
-            // println!("WindowComponent nr.{} received message {:?}", self.id, payload);
             self.add_value(payload.data.clone());
-            if (self.complete) {
-                // The message was a late arrival, resend result
-                let result = self.builder.result().unwrap();
-                //println!("WindowComponent nr.{} late arrival! result: {}", self.id, result);
-
-                // Report our result to the target
-                self.targetPointer.tell(Arc::new(LocalElement{data: result, timestamp: self.timestamp}), &self.actor_ref());
-            }
         } else if let Some(wm) = msg.downcast_ref::<WindowMessage>() {
             self.handle_window_message(wm);
         } else {
-            // This shouldn't happen in our experiment
-            println!("WindowComponent nr.{} bad local message {:?}", self.id, msg);
+            error!(self.ctx.log(), "Window {} bad local message {:?} from {}", self.timestamp, msg, _sender);
         }
     }
     fn receive_message(&mut self, sender: ActorPath, ser_id: u64, buf: &mut Buf) {
@@ -118,7 +114,7 @@ impl <A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync
                 error!(self.ctx.log(), "Failed to handle WindowMessage",);
             }
         } else {
-            error!(self.ctx.log(), "Got unexpected message from {}", sender);
+            error!(self.ctx.log(), "Window {} bad remote message from {}", self.timestamp, sender);
         }
     }
 }
