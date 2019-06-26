@@ -1,12 +1,12 @@
-use crate::streaming::task::partitioner::Partitioner;
-use crate::streaming::task::partitioner::Task;
+use crate::streaming::partitioner::Partitioner;
+use crate::streaming::partitioner::Task;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::default::Default;
 use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
 use std::marker::PhantomData;
 
-/// A hash based partitioner for Streaming Tasks
+/// A hash based partitioner
 ///
 /// `HashPartitioner` may be constructed with
 /// either a custom hasher or the default std one
@@ -57,11 +57,25 @@ impl HashPartitioner {
 }
 
 impl<A: Hash> Partitioner<A> for HashPartitioner {
+    /// Hashes the object based on its key
+    ///
+    /// May return either an ActorRef or ActorPath using the Task Enum
     fn get_task(&mut self, input: A) -> Option<Task> {
         let mut h = self.builder.build_hasher();
         input.hash(&mut h);
         let hash = h.finish() as u32;
         let id = (hash % self.parallelism) as i32;
+        if id >= 0 && id <= self.parallelism as i32 {
+            Some(self.map.get(&(id as usize)).unwrap().clone())
+        } else {
+            None
+        }
+    }
+    /// Used together with `KeyedElement`, where we can access
+    /// the objects key and thus forward it to the correct task
+    /// without having to deserialise the complete object
+    fn get_task_by_key(&mut self, key: u64) -> Option<Task> {
+        let id = (key as u32 % self.parallelism) as i32;
         if id >= 0 && id <= self.parallelism as i32 {
             Some(self.map.get(&(id as usize)).unwrap().clone())
         } else {
@@ -134,8 +148,7 @@ mod tests {
         let mut comps: Vec<Arc<crate::prelude::Component<TestComp>>> = Vec::new();
 
         for i in 0..parallelism {
-            let (comp, _) = system.create_and_register(move || TestComp::new(i as u64));
-            system.start(&comp);
+            let comp = system.create_and_start(move || TestComp::new(i as u64));
             tasks.push(Task::Local(comp.actor_ref()));
             comps.push(comp);
         }
@@ -171,6 +184,7 @@ mod tests {
             let mut comp_inspect = &comp.definition().lock().unwrap();
             assert!(comp_inspect.counter > 0);
         }
+        system.shutdown();
     }
 
     // TODO: Create tests with both ActorRefs and ActorPaths

@@ -185,6 +185,7 @@ impl Actor for Sink {
                     let run: ModuleRun<i64> = self.udf.run(&input, ctx).unwrap();
                     info!(self.ctx.log(), "SINK result with len {}", run.0);
                 }
+                StreamTaskMessage_oneof_payload::keyed_element(_) => {}
                 StreamTaskMessage_oneof_payload::checkpoint(_) => {}
             }
         }

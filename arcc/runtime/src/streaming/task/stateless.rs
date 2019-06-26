@@ -57,6 +57,9 @@ impl StreamTask {
                     );
                 }
             }
+            keyed_element(_) => {
+                unimplemented!();
+            }
             watermark(_) => {
                 unimplemented!();
             }
