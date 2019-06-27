@@ -1,5 +1,5 @@
 use crate::streaming::partitioner::Partitioner;
-use crate::streaming::partitioner::Task;
+use crate::streaming::Channel;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::default::Default;
@@ -10,83 +10,92 @@ use std::marker::PhantomData;
 ///
 /// `HashPartitioner` may be constructed with
 /// either a custom hasher or the default std one
-pub struct HashPartitioner<H = BuildHasherDefault<DefaultHasher>> {
+pub struct HashPartitioner<
+    A: 'static + Send + Sync + Copy + Hash,
+    H = BuildHasherDefault<DefaultHasher>,
+> {
     builder: H,
     parallelism: u32,
-    map: HashMap<usize, Task, H>,
+    map: HashMap<usize, Channel, H>,
+    phantom: PhantomData<A>,
 }
 
-impl HashPartitioner {
+impl<A: 'static + Send + Sync + Copy + Hash> HashPartitioner<A> {
     pub fn with_hasher<B: BuildHasher + Default>(
         builder: B,
         parallelism: u32,
-        tasks: Vec<Task>,
-    ) -> HashPartitioner<B> {
-        assert_eq!(tasks.len(), parallelism as usize);
+        channels: Vec<Channel>,
+    ) -> HashPartitioner<A, B> {
+        assert_eq!(channels.len(), parallelism as usize);
         let mut map = HashMap::with_capacity_and_hasher(parallelism as usize, Default::default());
-        for i in 0..tasks.len() as usize {
-            let task: Task = tasks.get(i).take().unwrap().clone();
-            map.insert(i, task);
+        for i in 0..channels.len() as usize {
+            let channel: Channel = channels.get(i).take().unwrap().clone();
+            map.insert(i, channel);
         }
         HashPartitioner {
             builder: builder.into(),
             parallelism,
             map,
+            phantom: PhantomData,
         }
     }
 
     pub fn with_default_hasher<B>(
         parallelism: u32,
-        tasks: Vec<Task>,
-    ) -> HashPartitioner<BuildHasherDefault<B>>
+        channels: Vec<Channel>,
+    ) -> HashPartitioner<A, BuildHasherDefault<B>>
     where
         B: Hasher + Default,
     {
-        assert_eq!(tasks.len(), parallelism as usize);
+        assert_eq!(channels.len(), parallelism as usize);
         let mut map = HashMap::with_capacity_and_hasher(parallelism as usize, Default::default());
-        for i in 0..tasks.len() as usize {
-            let task: Task = tasks.get(i).take().unwrap().clone();
-            map.insert(i, task);
+        for i in 0..channels.len() as usize {
+            let channel: Channel = channels.get(i).take().unwrap().clone();
+            map.insert(i, channel);
         }
         HashPartitioner {
             builder: BuildHasherDefault::<B>::default(),
             parallelism,
             map,
+            phantom: PhantomData,
         }
     }
 }
 
-impl<A: Hash> Partitioner<A> for HashPartitioner {
-    /// Hashes the object based on its key
-    ///
-    /// May return either an ActorRef or ActorPath using the Task Enum
-    fn get_task(&mut self, input: A) -> Option<Task> {
+impl<A: 'static + Send + Sync + Copy + Hash> Partitioner<A> for HashPartitioner<A> {
+    fn output(&mut self, event: A, source: &Channel, key: Option<u64>) -> crate::error::Result<()> {
         let mut h = self.builder.build_hasher();
-        input.hash(&mut h);
+        event.hash(&mut h);
         let hash = h.finish() as u32;
         let id = (hash % self.parallelism) as i32;
         if id >= 0 && id <= self.parallelism as i32 {
-            Some(self.map.get(&(id as usize)).unwrap().clone())
+            if let Some(channel) = self.map.get(&(id as usize)) {
+                match channel {
+                    Channel::Local(actor_ref) => {
+                        // TODO: extract source and insert as second arg
+                        actor_ref.tell(Box::new(event), actor_ref);
+                    }
+                    Channel::Remote(actor_path) => {
+                        if let Some(key) = key {
+                            // KeyedElement
+                            unimplemented!();
+                        } else {
+                            // Element
+                            unimplemented!();
+                        }
+                    }
+                }
+            }
         } else {
-            None
+            // ERR
         }
+
+        Ok(())
     }
-    /// Used together with `KeyedElement`, where we can access
-    /// the objects key and thus forward it to the correct task
-    /// without having to deserialise the complete object
-    fn get_task_by_key(&mut self, key: u64) -> Option<Task> {
-        let id = (key as u32 % self.parallelism) as i32;
-        if id >= 0 && id <= self.parallelism as i32 {
-            Some(self.map.get(&(id as usize)).unwrap().clone())
-        } else {
-            None
-        }
-    }
-    fn add_task(&mut self, task: Task) {
+    fn add_channel(&mut self, channel: Channel) {
         unimplemented!();
     }
-
-    fn remove_task(&mut self, task: Task) {
+    fn remove_channel(&mut self, channel: Channel) {
         unimplemented!();
     }
 }
@@ -103,15 +112,13 @@ mod tests {
     #[allow(dead_code)]
     pub struct TestComp {
         ctx: ComponentContext<TestComp>,
-        pub id: u64,
         pub counter: u64,
     }
 
     impl TestComp {
-        pub fn new(id: u64) -> TestComp {
+        pub fn new() -> TestComp {
             TestComp {
                 ctx: ComponentContext::new(),
-                id,
                 counter: 0,
             }
         }
@@ -144,17 +151,18 @@ mod tests {
         let parallelism: u32 = 8;
         let total_msgs = 1000;
 
-        let mut tasks: Vec<Task> = Vec::new();
+        let mut channels: Vec<Channel> = Vec::new();
         let mut comps: Vec<Arc<crate::prelude::Component<TestComp>>> = Vec::new();
 
         for i in 0..parallelism {
-            let comp = system.create_and_start(move || TestComp::new(i as u64));
-            tasks.push(Task::Local(comp.actor_ref()));
+            let comp = system.create_and_start(move || TestComp::new());
+            channels.push(Channel::Local(comp.actor_ref()));
             comps.push(comp);
         }
 
-        let mut partitioner: Box<Partitioner<Input>> =
-            Box::new(HashPartitioner::with_default_hasher(parallelism, tasks));
+        let mut partitioner: Box<Partitioner<Input>> = Box::new(
+            HashPartitioner::with_default_hasher(parallelism, channels.clone()),
+        );
 
         let mut rng = rand::thread_rng();
 
@@ -168,13 +176,8 @@ mod tests {
         }
 
         for input in inputs {
-            match partitioner.get_task(input) {
-                Some(Task::Local(actor_ref)) => {
-                    actor_ref.tell(Box::new(input), &actor_ref);
-                }
-                Some(Task::Remote(actor_path)) => {}
-                None => {}
-            }
+            // NOTE: second parameter is a fake channel...
+            let _ = partitioner.output(input, &channels.get(0).unwrap().clone(), None);
         }
 
         std::thread::sleep(std::time::Duration::from_secs(1));

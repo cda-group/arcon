@@ -1,17 +1,14 @@
+use crate::streaming::Channel;
 use kompact::{ActorPath, ActorRef};
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
+use std::sync::Arc;
 
+pub mod broadcast;
+pub mod forward;
 pub mod hash;
 
-#[derive(Clone)]
-pub enum Task {
-    Local(ActorRef),
-    Remote(ActorPath),
-}
-
-pub trait Partitioner<A: Hash> {
-    fn get_task(&mut self, input: A) -> Option<Task>;
-    fn get_task_by_key(&mut self, key: u64) -> Option<Task>;
-    fn remove_task(&mut self, task: Task);
-    fn add_task(&mut self, task: Task);
+pub trait Partitioner<A: 'static + Send + Sync + Copy + Hash> {
+    fn output(&mut self, event: A, source: &Channel, key: Option<u64>) -> crate::error::Result<()>;
+    fn add_channel(&mut self, channel: Channel);
+    fn remove_channel(&mut self, channel: Channel);
 }
