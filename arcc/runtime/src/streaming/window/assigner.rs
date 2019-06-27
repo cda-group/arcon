@@ -25,6 +25,8 @@ use std::{thread, time};
         Tests both tumbling and sliding windows
 
     TOOD:
+        Ensure Window output order
+        Add persistent state with checkpoints
         Handle weld compilation errors
         Use generalized/common message format/objects <- Element is not generic
         More tests
@@ -303,7 +305,7 @@ mod tests {
     }
 
     // helper functions
-    fn window_assigner_test_setup(
+    fn test_setup(
         length: u64,
         slide: u64,
         late: u64,
@@ -366,7 +368,7 @@ mod tests {
     #[test]
     fn discard_late_arrival() {
         // Send 2 messages on time, a watermark and a late arrival which is not allowed
-        let (_, assigner_ref, sink) = window_assigner_test_setup(10, 10, 0);
+        let (_, assigner_ref, sink) = test_setup(10, 10, 0);
         wait(1);
         // Send messages
         let moment = now();
@@ -384,7 +386,7 @@ mod tests {
     #[test]
     fn late_arrival() {
         // Send 2 messages on time, a watermark and a late message which should be allowed
-        let (_, assigner_ref, sink) = window_assigner_test_setup(10, 10, 10);
+        let (_, assigner_ref, sink) = test_setup(10, 10, 10);
         wait(1);
         // Send messages
         let moment = now();
@@ -404,7 +406,7 @@ mod tests {
     #[test]
     fn too_late_late_arrival() {
         // Send 2 messages on time, and then 1 message which is too late
-        let (_, assigner_ref, sink) = window_assigner_test_setup(10, 10, 10);
+        let (_, assigner_ref, sink) = test_setup(10, 10, 10);
         wait(1);
         // Send messages
         let moment = now();
@@ -425,14 +427,14 @@ mod tests {
     #[test]
     fn overlapping_windows() {
         // Use overlapping windows (slide = length/2), check that messages appear correctly
-        let (_, assigner_ref, sink) = window_assigner_test_setup(10, 5, 2);
+        let (_, assigner_ref, sink) = test_setup(10, 5, 2);
         wait(1);
         // Send messages
         let moment = now();
         assigner_ref.tell(timestamped_event(moment), &assigner_ref);
         assigner_ref.tell(timestamped_event(moment + 6), &assigner_ref);
         assigner_ref.tell(timestamped_event(moment + 6), &assigner_ref);
-        assigner_ref.tell(Box::new(watermark(moment + 11)), &assigner_ref);
+        // assigner_ref.tell(Box::new(watermark(moment + 11)), &assigner_ref);
         wait(1);
         assigner_ref.tell(Box::new(watermark(moment + 21)), &assigner_ref);
         wait(1);
@@ -448,7 +450,7 @@ mod tests {
     #[test]
     fn fastforward_windows() {
         // check that we receive correct number windows from fast forwarding
-        let (_, assigner_ref, sink) = window_assigner_test_setup(5, 5, 0);
+        let (_, assigner_ref, sink) = test_setup(5, 5, 0);
         wait(1);
         // Send messages
         let moment = now();
@@ -461,7 +463,7 @@ mod tests {
     #[test]
     fn empty_window() {
         // check that we receive correct number windows from fast forwarding
-        let (_, assigner_ref, sink) = window_assigner_test_setup(5, 5, 0);
+        let (_, assigner_ref, sink) = test_setup(5, 5, 0);
         wait(1);
         assigner_ref.tell(Box::new(watermark(now() + 5)), &assigner_ref);
         wait(1);
