@@ -3,8 +3,8 @@ use kompact::*;
 use std::sync::Arc;
 /*
     CollectionSource:
-    Allows generation of events from a rust Collection.
-    Collection and a subscriber for where to send events.
+    Allows generation of events from a rust Vec.
+    Parameters: The Vec from which it will create events and a subscriber for where to send events.
     Each instance in the collection will be sent as an event.
 */
 
@@ -27,26 +27,6 @@ impl<A: Send + Sync + Clone> CollectionSource<A> {
         for element in &self.collection {
             self.subscriber.tell(Arc::new(element.clone()), &actor_ref);
         }
-        /*
-        if let Ok(f) = File::open(&self.file_path) {
-            let reader = BufReader::new(f);
-
-            for line in reader.lines() {
-                match line {
-                    Ok(l) => {
-                        if let Ok(v) = l.parse::<A>() {
-                            self.subscriber.tell(Box::new(v), &self.actor_ref());
-                        }
-                    }
-                    _ => {
-                        error!(self.ctx.log(), "Unable to read line {}", self.file_path);
-                    }
-                }
-            }
-        } else {
-            error!(self.ctx.log(), "Unable to open file {}", self.file_path);
-        }
-        */
     }
 }
 
@@ -103,7 +83,7 @@ mod tests {
             pub result: Vec<A>,
         }
         impl<A: Send + Clone> Sink<A> {
-            pub fn new(t: A) -> Sink<A> {
+            pub fn new(_t: A) -> Sink<A> {
                 Sink {
                     ctx: ComponentContext::new(),
                     result: Vec::new(),
@@ -204,5 +184,25 @@ mod tests {
         assert_eq!(&sink_inspect.result.len(), &(2 as usize));
         assert_eq!(*r0, 123 as f32);
         assert_eq!(*r1, 321.9 as f32);
+    }
+    #[test]
+    fn collection_tuple() {
+        let (system, sink) = test_setup((1 as f32, 1 as u8));
+        let mut collection = Vec::new();
+        collection.push((123 as f32, 2 as u8));
+        collection.push((123.33 as f32, 3 as u8));
+
+        let file_source: CollectionSource<(f32, u8)> =
+            CollectionSource::new(collection, sink.actor_ref());
+        let (source, _) = system.create_and_register(move || file_source);
+        system.start(&source);
+        wait(1);
+
+        let sink_inspect = sink.definition().lock().unwrap();
+        let r0 = &sink_inspect.result[0];
+        let r1 = &sink_inspect.result[1];
+        assert_eq!(&sink_inspect.result.len(), &(2 as usize));
+        assert_eq!(*r0, (123 as f32, 2 as u8));
+        assert_eq!(*r1, (123.33 as f32, 3 as u8));
     }
 }
