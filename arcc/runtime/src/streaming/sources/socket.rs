@@ -160,9 +160,6 @@ mod tests {
         Arc<kompact::Component<sink::Sink<A>>>,
     ) {
         // Kompact set-up
-        //let mut cfg = KompactConfig::new();
-        //cfg.system_components(DeadletterBox::new, NetworkConfig::default().build());
-        //let system = KompactSystem::new(cfg).expect("KompactSystem");
         let system = KompactConfig::default().build().expect("KompactSystem");
 
         let (sink, _) = system.create_and_register(move || sink::Sink::new(a));
@@ -197,9 +194,7 @@ mod tests {
         let sink_inspect = sink.definition().lock().unwrap();
         assert_eq!(sink_inspect.result.len(), (1 as usize));
         let r0 = sink_inspect.result[0];
-        //let r1 = &sink_inspect.result[1];
         assert_eq!(r0, 77 as u8);
-        //assert_eq!(r1, "hello");
         Ok(())
     }
     #[test]
@@ -218,6 +213,7 @@ mod tests {
             .map_err(|_| {
                 assert!(false);
             });
+
         tokio::run(client);
 
         wait(1);
@@ -227,12 +223,9 @@ mod tests {
         let sink_inspect = sink.definition().lock().unwrap();
         assert_eq!(sink_inspect.result.len(), (1 as usize));
         let r0 = &sink_inspect.result[0];
-        //let r1 = &sink_inspect.result[1];
         assert_eq!(r0, &"the quick \nbrown fox".to_string());
-        //assert_eq!(r1, "hello");
         Ok(())
     }
-    /* // Unimplemented, need to be able to send multiple messages to TcpStream
     #[test]
     fn socket_multiple_f32() -> Result<(), Box<std::error::Error>> {
         let (system, sink) = test_setup(1 as f32);
@@ -244,14 +237,24 @@ mod tests {
         wait(1);
 
         let addr = "127.0.0.1:3000".parse()?;
-        let client = TcpStream::connect(&addr)
+        let client1 = TcpStream::connect(&addr)
             .and_then(|stream| io::write_all(stream, "123").then(|_| Ok(())))
-            //            .and_then(|stream| io::write_all(stream, "4.56").then(|_| Ok(())))
-            //.and_then(|stream| io::write_all(stream, "78.9").then(|_| Ok(())))
             .map_err(|_| {
                 assert!(false);
             });
-        tokio::run(client);
+        let client2 = TcpStream::connect(&addr)
+            .and_then(|stream| io::write_all(stream, "4.56").then(|_| Ok(())))
+            .map_err(|_| {
+                assert!(false);
+            });
+        let client3 = TcpStream::connect(&addr)
+            .and_then(|stream| io::write_all(stream, "78.9").then(|_| Ok(())))
+            .map_err(|_| {
+                assert!(false);
+            });
+        tokio::run(client1);
+        tokio::run(client2);
+        tokio::run(client3);
 
         wait(1);
 
@@ -263,9 +266,9 @@ mod tests {
         let r1 = sink_inspect.result[1];
         let r2 = sink_inspect.result[2];
         assert_eq!(r0, 123 as f32);
-        assert_eq!(r0, 4.56 as f32);
-        assert_eq!(r0, 78.9 as f32);
-        //assert_eq!(r1, "hello");
+        assert_eq!(r1, 4.56 as f32);
+        assert_eq!(r2, 78.9 as f32);
+
         Ok(())
-    } */
+    }
 }
