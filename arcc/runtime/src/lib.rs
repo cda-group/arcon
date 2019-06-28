@@ -4,6 +4,8 @@ extern crate futures;
 extern crate tokio;
 extern crate weld as weld_core;
 #[macro_use]
+extern crate serde;
+#[macro_use]
 extern crate macros;
 
 #[cfg(feature = "http")]
@@ -24,8 +26,10 @@ pub mod prelude {
     pub use kompact::default_components::*;
     pub use kompact::*;
     pub use messages::protobuf::*;
+    pub use serde::{Deserialize, Serialize};
     pub use slog::*;
     pub use state_backend::*;
+
 }
 
 #[cfg(test)]

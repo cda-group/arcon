@@ -1,5 +1,10 @@
+use crate::error::ErrorKind::*;
+use crate::error::*;
+use crate::prelude::Serialize;
 use crate::streaming::partitioner::Partitioner;
 use crate::streaming::Channel;
+use kompact::ComponentDefinition;
+use messages::protobuf::*;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::default::Default;
@@ -10,22 +15,28 @@ use std::marker::PhantomData;
 ///
 /// `HashPartitioner` may be constructed with
 /// either a custom hasher or the default std one
-pub struct HashPartitioner<
-    A: 'static + Send + Sync + Copy + Hash,
-    H = BuildHasherDefault<DefaultHasher>,
-> {
-    builder: H,
+pub struct HashPartitioner<A, B, C = BuildHasherDefault<DefaultHasher>>
+where
+    A: 'static + Serialize + Send + Sync + Copy + Hash,
+    B: ComponentDefinition + Sized + 'static,
+{
+    builder: C,
     parallelism: u32,
-    map: HashMap<usize, Channel, H>,
-    phantom: PhantomData<A>,
+    map: HashMap<usize, Channel, C>,
+    phantom_event: PhantomData<A>,
+    phantom_source: PhantomData<B>,
 }
 
-impl<A: 'static + Send + Sync + Copy + Hash> HashPartitioner<A> {
-    pub fn with_hasher<B: BuildHasher + Default>(
-        builder: B,
+impl<A, B> HashPartitioner<A, B>
+where
+    A: 'static + Serialize + Send + Sync + Copy + Hash,
+    B: ComponentDefinition + Sized + 'static,
+{
+    pub fn with_hasher<H: BuildHasher + Default>(
+        builder: H,
         parallelism: u32,
         channels: Vec<Channel>,
-    ) -> HashPartitioner<A, B> {
+    ) -> HashPartitioner<A, B, H> {
         assert_eq!(channels.len(), parallelism as usize);
         let mut map = HashMap::with_capacity_and_hasher(parallelism as usize, Default::default());
         for i in 0..channels.len() as usize {
@@ -36,16 +47,17 @@ impl<A: 'static + Send + Sync + Copy + Hash> HashPartitioner<A> {
             builder: builder.into(),
             parallelism,
             map,
-            phantom: PhantomData,
+            phantom_event: PhantomData,
+            phantom_source: PhantomData,
         }
     }
 
-    pub fn with_default_hasher<B>(
+    pub fn with_default_hasher<H>(
         parallelism: u32,
         channels: Vec<Channel>,
-    ) -> HashPartitioner<A, BuildHasherDefault<B>>
+    ) -> HashPartitioner<A, B, BuildHasherDefault<H>>
     where
-        B: Hasher + Default,
+        H: Hasher + Default,
     {
         assert_eq!(channels.len(), parallelism as usize);
         let mut map = HashMap::with_capacity_and_hasher(parallelism as usize, Default::default());
@@ -54,16 +66,21 @@ impl<A: 'static + Send + Sync + Copy + Hash> HashPartitioner<A> {
             map.insert(i, channel);
         }
         HashPartitioner {
-            builder: BuildHasherDefault::<B>::default(),
+            builder: BuildHasherDefault::<H>::default(),
             parallelism,
             map,
-            phantom: PhantomData,
+            phantom_event: PhantomData,
+            phantom_source: PhantomData,
         }
     }
 }
 
-impl<A: 'static + Send + Sync + Copy + Hash> Partitioner<A> for HashPartitioner<A> {
-    fn output(&mut self, event: A, source: &Channel, key: Option<u64>) -> crate::error::Result<()> {
+impl<A, B> Partitioner<A, B> for HashPartitioner<A, B>
+where
+    A: 'static + Serialize + Send + Sync + Copy + Hash,
+    B: ComponentDefinition + Sized + 'static,
+{
+    fn output(&mut self, event: A, source: &B, key: Option<u64>) -> crate::error::Result<()> {
         let mut h = self.builder.build_hasher();
         event.hash(&mut h);
         let hash = h.finish() as u32;
@@ -72,26 +89,29 @@ impl<A: 'static + Send + Sync + Copy + Hash> Partitioner<A> for HashPartitioner<
             if let Some(channel) = self.map.get(&(id as usize)) {
                 match channel {
                     Channel::Local(actor_ref) => {
-                        // TODO: extract source and insert as second arg
-                        actor_ref.tell(Box::new(event), actor_ref);
+                        actor_ref.tell(Box::new(event), source);
                     }
                     Channel::Remote(actor_path) => {
+                        let serialised_event: Vec<u8> = bincode::serialize(&event)
+                            .map_err(|e| Error::new(SerializationError(e.to_string())))?;
+
                         if let Some(key) = key {
-                            // KeyedElement
-                            unimplemented!();
+                            let keyed_msg = create_keyed_element(serialised_event, 1, key);
+                            actor_path.tell(keyed_msg, source);
                         } else {
-                            // Element
-                            unimplemented!();
+                            let element_msg = create_element(serialised_event, 1);
+                            actor_path.tell(element_msg, source);
                         }
                     }
                 }
             }
         } else {
-            // ERR
+            // TODO: Fix
+            panic!("Failed to hash to channel properly..");
         }
-
         Ok(())
     }
+
     fn add_channel(&mut self, channel: Channel) {
         unimplemented!();
     }
@@ -136,7 +156,7 @@ mod tests {
 
     #[repr(C)]
     #[key_by(id)]
-    #[derive(Clone, Copy)]
+    #[derive(Clone, Copy, Serialize)]
     pub struct Input {
         id: u32,
         price: u64,
@@ -160,7 +180,7 @@ mod tests {
             comps.push(comp);
         }
 
-        let mut partitioner: Box<Partitioner<Input>> = Box::new(
+        let mut partitioner: Box<Partitioner<Input, TestComp>> = Box::new(
             HashPartitioner::with_default_hasher(parallelism, channels.clone()),
         );
 
@@ -176,8 +196,9 @@ mod tests {
         }
 
         for input in inputs {
-            // NOTE: second parameter is a fake channel...
-            let _ = partitioner.output(input, &channels.get(0).unwrap().clone(), None);
+            // Just assume it is all sent from same comp
+            let comp_def = &comps.get(0 as usize).unwrap().definition().lock().unwrap();
+            let _ = partitioner.output(input, comp_def, None);
         }
 
         std::thread::sleep(std::time::Duration::from_secs(1));

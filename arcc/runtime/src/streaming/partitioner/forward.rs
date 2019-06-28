@@ -1,35 +1,57 @@
+use crate::error::ErrorKind::*;
+use crate::error::*;
+use crate::prelude::Serialize;
 use crate::streaming::partitioner::Partitioner;
 use crate::streaming::Channel;
+use kompact::ComponentDefinition;
+use messages::protobuf::*;
 use std::hash::Hash;
 use std::marker::PhantomData;
 
-pub struct Forward<A: 'static + Send + Sync + Copy + Hash> {
+pub struct Forward<A, B>
+where
+    A: 'static + Serialize + Send + Sync + Copy + Hash,
+    B: ComponentDefinition + Sized + 'static,
+{
     out_channel: Channel,
-    phantom: PhantomData<A>,
+    phantom_event: PhantomData<A>,
+    phantom_source: PhantomData<B>,
 }
-impl<A: 'static + Send + Sync + Copy + Hash> Forward<A> {
-    pub fn new(out_channel: Channel) -> Forward<A> {
+
+impl<A, B> Forward<A, B>
+where
+    A: 'static + Serialize + Send + Sync + Copy + Hash,
+    B: ComponentDefinition + Sized + 'static,
+{
+    pub fn new(out_channel: Channel) -> Forward<A, B> {
         Forward {
             out_channel,
-            phantom: PhantomData,
+            phantom_event: PhantomData,
+            phantom_source: PhantomData,
         }
     }
 }
 
-impl<A: 'static + Send + Sync + Copy + Hash> Partitioner<A> for Forward<A> {
-    fn output(&mut self, event: A, source: &Channel, key: Option<u64>) -> crate::error::Result<()> {
+impl<A, B> Partitioner<A, B> for Forward<A, B>
+where
+    A: 'static + Serialize + Send + Sync + Copy + Hash,
+    B: ComponentDefinition + Sized + 'static,
+{
+    fn output(&mut self, event: A, source: &B, key: Option<u64>) -> crate::error::Result<()> {
         match &self.out_channel {
             Channel::Local(actor_ref) => {
-                // TODO: extract source and insert as second arg
-                actor_ref.tell(Box::new(event), actor_ref);
+                actor_ref.tell(Box::new(event), source);
             }
             Channel::Remote(actor_path) => {
+                let serialised_event: Vec<u8> = bincode::serialize(&event)
+                    .map_err(|e| Error::new(SerializationError(e.to_string())))?;
+
                 if let Some(key) = key {
-                    // KeyedElement
-                    unimplemented!();
+                    let keyed_msg = create_keyed_element(serialised_event, 1, key);
+                    actor_path.tell(keyed_msg, source);
                 } else {
-                    // Element
-                    unimplemented!();
+                    let element_msg = create_element(serialised_event, 1);
+                    actor_path.tell(element_msg, source);
                 }
             }
         }
@@ -46,6 +68,7 @@ impl<A: 'static + Send + Sync + Copy + Hash> Partitioner<A> for Forward<A> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::prelude::Serialize;
     use kompact::default_components::*;
     use kompact::*;
     use rand::Rng;
@@ -78,7 +101,7 @@ mod tests {
     }
 
     #[repr(C)]
-    #[derive(Clone, Copy, Hash)]
+    #[derive(Clone, Copy, Hash, Serialize)]
     pub struct Input {
         id: u32,
     }
@@ -94,13 +117,13 @@ mod tests {
         let comp = system.create_and_start(move || TestComp::new());
         let channel = Channel::Local(comp.actor_ref());
 
-        let mut partitioner: Box<Partitioner<Input>> =
+        let mut partitioner: Box<Partitioner<Input, TestComp>> =
             Box::new(Forward::new(channel.clone()));
 
         for i in 0..total_msgs {
             // NOTE: second parameter is a fake channel...
-            let input = Input {id: 1};
-            let _ = partitioner.output(input, &channel.clone(), None);
+            let input = Input { id: 1 };
+            let _ = partitioner.output(input, &comp.definition().lock().unwrap(), None);
         }
 
         std::thread::sleep(std::time::Duration::from_secs(1));
