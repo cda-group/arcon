@@ -7,6 +7,7 @@ pub enum ErrorKind {
     ModuleRunError(String),
     ContextError(String),
     SerializationError(String),
+    DeserializationError(String),
     BadTaskError(String),
     IOError(String),
 }
@@ -25,6 +26,7 @@ impl fmt::Display for Error {
             ErrorKind::ModuleRunError(ref err) => err,
             ErrorKind::BadTaskError(ref err) => err,
             ErrorKind::SerializationError(ref err) => err,
+            ErrorKind::DeserializationError(ref err) => err,
             ErrorKind::IOError(ref err) => err,
         };
         write!(f, "{}", msg)

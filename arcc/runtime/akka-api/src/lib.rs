@@ -1,3 +1,5 @@
+#![allow(warnings)]
+#![feature(dyn_trait)]
 extern crate kompact;
 extern crate protobuf;
 
