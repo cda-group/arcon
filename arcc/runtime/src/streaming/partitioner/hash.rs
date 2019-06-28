@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use std::default::Default;
 use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
 use std::marker::PhantomData;
+use crate::streaming::partitioner::channel_output;
 
 /// A hash based partitioner
 ///
@@ -87,23 +88,7 @@ where
         let id = (hash % self.parallelism) as i32;
         if id >= 0 && id <= self.parallelism as i32 {
             if let Some(channel) = self.map.get(&(id as usize)) {
-                match channel {
-                    Channel::Local(actor_ref) => {
-                        actor_ref.tell(Box::new(event), source);
-                    }
-                    Channel::Remote(actor_path) => {
-                        let serialised_event: Vec<u8> = bincode::serialize(&event)
-                            .map_err(|e| Error::new(SerializationError(e.to_string())))?;
-
-                        if let Some(key) = key {
-                            let keyed_msg = create_keyed_element(serialised_event, 1, key);
-                            actor_path.tell(keyed_msg, source);
-                        } else {
-                            let element_msg = create_element(serialised_event, 1);
-                            actor_path.tell(element_msg, source);
-                        }
-                    }
-                }
+                let _ = channel_output(channel, event, source, key)?;
             }
         } else {
             // TODO: Fix
@@ -210,6 +195,4 @@ mod tests {
         }
         system.shutdown();
     }
-
-    // TODO: Create tests with both ActorRefs and ActorPaths
 }

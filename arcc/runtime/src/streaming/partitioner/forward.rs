@@ -1,6 +1,7 @@
 use crate::error::ErrorKind::*;
 use crate::error::*;
 use crate::prelude::Serialize;
+use crate::streaming::partitioner::channel_output;
 use crate::streaming::partitioner::Partitioner;
 use crate::streaming::Channel;
 use kompact::ComponentDefinition;
@@ -38,24 +39,7 @@ where
     B: ComponentDefinition + Sized + 'static,
 {
     fn output(&mut self, event: A, source: &B, key: Option<u64>) -> crate::error::Result<()> {
-        match &self.out_channel {
-            Channel::Local(actor_ref) => {
-                actor_ref.tell(Box::new(event), source);
-            }
-            Channel::Remote(actor_path) => {
-                let serialised_event: Vec<u8> = bincode::serialize(&event)
-                    .map_err(|e| Error::new(SerializationError(e.to_string())))?;
-
-                if let Some(key) = key {
-                    let keyed_msg = create_keyed_element(serialised_event, 1, key);
-                    actor_path.tell(keyed_msg, source);
-                } else {
-                    let element_msg = create_element(serialised_event, 1);
-                    actor_path.tell(element_msg, source);
-                }
-            }
-        }
-        Ok(())
+        channel_output(&self.out_channel, event, source, key)
     }
     fn add_channel(&mut self, channel: Channel) {
         // ignore
