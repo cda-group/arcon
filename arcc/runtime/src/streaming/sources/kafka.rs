@@ -1,6 +1,8 @@
 use kompact::*;
 use std::sync::Arc;
 /*
+    * * * Not implemented! * * *
+
     KafkaSource:
     Allows generation of events from a file.
     Takes file path and parameters for how to parse it and target for where to send events.
@@ -11,9 +13,11 @@ use std::sync::Arc;
         Event generation
         Watermark generation
 
-    Questions:
-        Multiple sources
-        Clock-drift between sources, delta.
+    Flink Structure
+        KafkaConsumerThread essentially does:
+            records = KafkaConsumer.poll();
+            handover.produce(records);
+        In an iterated loop, checking partitions etc. between every iteration.
 
 
 */
