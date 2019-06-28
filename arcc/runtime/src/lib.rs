@@ -54,7 +54,8 @@ mod tests {
         assert!(calc_hash(&i1) != calc_hash(&i2));
     }
 
-    fn calc_hash<T: Hash>(t: &T) -> u64 {
+    fn calc_hash<T: std::hash::Hash>(t: &T) -> u64 {
+        use std::hash::Hasher;
         let mut s = DefaultHasher::new();
         t.hash(&mut s);
         s.finish()

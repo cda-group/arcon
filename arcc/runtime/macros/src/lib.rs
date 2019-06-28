@@ -23,11 +23,9 @@ pub fn key_by(key: TokenStream, input: TokenStream) -> TokenStream {
 
     let output: proc_macro2::TokenStream = {
         quote! {
-            use std::hash::Hasher;
-            use std::hash::Hash;
             #item
-            impl Hash for #name {
-                fn hash<H: Hasher>(&self, state: &mut H) {
+            impl ::std::hash::Hash for #name {
+                fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
                     self.#key.hash(state);
                 }
             }
