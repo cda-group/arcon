@@ -38,7 +38,7 @@ where
     A: 'static + Serialize + Send + Sync + Copy + Hash,
     B: ComponentDefinition + Sized + 'static,
 {
-    fn output(&mut self, event: A, source: &B, key: Option<u64>) -> crate::error::Result<()> {
+    fn output(&mut self, event: A, source: *const B, key: Option<u64>) -> crate::error::Result<()> {
         for channel in &self.out_channels {
             let _ = channel_output(channel, event, source, key)?;
         }
@@ -51,6 +51,20 @@ where
     fn remove_channel(&mut self, channel: Channel) {
         self.out_channels.retain(|c| c == &channel);
     }
+}
+
+unsafe impl<A, B> Send for Broadcast<A, B>
+where
+    A: 'static + Serialize + Send + Sync + Copy + Hash,
+    B: ComponentDefinition + Sized + 'static,
+{
+}
+
+unsafe impl<A, B> Sync for Broadcast<A, B>
+where
+    A: 'static + Serialize + Send + Sync + Copy + Hash,
+    B: ComponentDefinition + Sized + 'static,
+{
 }
 
 #[cfg(test)]
@@ -119,7 +133,7 @@ mod tests {
         for i in 0..total_msgs {
             let input = Input { id: 1 };
             // Just assume it is all sent from same comp
-            let comp_def = &comps.get(0 as usize).unwrap().definition().lock().unwrap();
+            let comp_def = &(*comps.get(0 as usize).unwrap().definition().lock().unwrap());
             let _ = partitioner.output(input, comp_def, None);
         }
 
@@ -179,7 +193,7 @@ mod tests {
         for i in 0..total_msgs {
             let input = Input { id: 1 };
             // Just assume it is all sent from same comp
-            let comp_def = &comps.get(0 as usize).unwrap().definition().lock().unwrap();
+            let comp_def = &(*comps.get(0 as usize).unwrap().definition().lock().unwrap());
             let _ = partitioner.output(input, comp_def, None);
         }
 

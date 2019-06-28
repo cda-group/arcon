@@ -14,12 +14,12 @@ pub mod hash;
 ///
 /// A: The Event to be sent
 /// B: Source Component required for the tell method
-pub trait Partitioner<A, B>
+pub trait Partitioner<A, B>: Send + Sync
 where
     A: 'static + Serialize + Send + Sync + Copy + Hash,
     B: ComponentDefinition + Sized + 'static,
 {
-    fn output(&mut self, event: A, source: &B, key: Option<u64>) -> crate::error::Result<()>;
+    fn output(&mut self, event: A, source: *const B, key: Option<u64>) -> crate::error::Result<()>;
     fn add_channel(&mut self, channel: Channel);
     fn remove_channel(&mut self, channel: Channel);
 }
@@ -29,13 +29,16 @@ where
 fn channel_output<A, B>(
     channel: &Channel,
     event: A,
-    source: &B,
+    source: *const B,
     key: Option<u64>,
 ) -> crate::error::Result<()>
 where
     A: 'static + Serialize + Send + Sync + Copy + Hash,
     B: ComponentDefinition + Sized + 'static,
 {
+    // pointer in order to escape the double borrow issue
+    // TODO: find better way...
+    let source = unsafe { &(*source) };
     match &channel {
         Channel::Local(actor_ref) => {
             actor_ref.tell(Box::new(event), source);

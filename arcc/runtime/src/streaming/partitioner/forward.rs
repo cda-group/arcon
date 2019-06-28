@@ -38,7 +38,7 @@ where
     A: 'static + Serialize + Send + Sync + Copy + Hash,
     B: ComponentDefinition + Sized + 'static,
 {
-    fn output(&mut self, event: A, source: &B, key: Option<u64>) -> crate::error::Result<()> {
+    fn output(&mut self, event: A, source: *const B, key: Option<u64>) -> crate::error::Result<()> {
         channel_output(&self.out_channel, event, source, key)
     }
     fn add_channel(&mut self, channel: Channel) {
@@ -47,6 +47,20 @@ where
     fn remove_channel(&mut self, channel: Channel) {
         // ignore
     }
+}
+
+unsafe impl<A, B> Send for Forward<A, B>
+where
+    A: 'static + Serialize + Send + Sync + Copy + Hash,
+    B: ComponentDefinition + Sized + 'static,
+{
+}
+
+unsafe impl<A, B> Sync for Forward<A, B>
+where
+    A: 'static + Serialize + Send + Sync + Copy + Hash,
+    B: ComponentDefinition + Sized + 'static,
+{
 }
 
 #[cfg(test)]
@@ -107,7 +121,7 @@ mod tests {
         for i in 0..total_msgs {
             // NOTE: second parameter is a fake channel...
             let input = Input { id: 1 };
-            let _ = partitioner.output(input, &comp.definition().lock().unwrap(), None);
+            let _ = partitioner.output(input, &*comp.definition().lock().unwrap(), None);
         }
 
         std::thread::sleep(std::time::Duration::from_secs(1));

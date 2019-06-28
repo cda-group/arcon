@@ -81,7 +81,7 @@ where
     A: 'static + Serialize + Send + Sync + Copy + Hash,
     B: ComponentDefinition + Sized + 'static,
 {
-    fn output(&mut self, event: A, source: &B, key: Option<u64>) -> crate::error::Result<()> {
+    fn output(&mut self, event: A, source: *const B, key: Option<u64>) -> crate::error::Result<()> {
         let mut h = self.builder.build_hasher();
         event.hash(&mut h);
         let hash = h.finish() as u32;
@@ -103,6 +103,20 @@ where
     fn remove_channel(&mut self, channel: Channel) {
         unimplemented!();
     }
+}
+
+unsafe impl<A, B> Send for HashPartitioner<A, B>
+where
+    A: 'static + Serialize + Send + Sync + Copy + Hash,
+    B: ComponentDefinition + Sized + 'static,
+{
+}
+
+unsafe impl<A, B> Sync for HashPartitioner<A, B>
+where
+    A: 'static + Serialize + Send + Sync + Copy + Hash,
+    B: ComponentDefinition + Sized + 'static,
+{
 }
 
 #[cfg(test)]
@@ -182,7 +196,7 @@ mod tests {
 
         for input in inputs {
             // Just assume it is all sent from same comp
-            let comp_def = &comps.get(0 as usize).unwrap().definition().lock().unwrap();
+            let comp_def = &*comps.get(0 as usize).unwrap().definition().lock().unwrap();
             let _ = partitioner.output(input, comp_def, None);
         }
 
