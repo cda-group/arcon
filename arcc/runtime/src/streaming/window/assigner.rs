@@ -434,7 +434,7 @@ mod tests {
         assigner_ref.tell(timestamped_event(moment), &assigner_ref);
         assigner_ref.tell(timestamped_event(moment + 6), &assigner_ref);
         assigner_ref.tell(timestamped_event(moment + 6), &assigner_ref);
-        // assigner_ref.tell(Box::new(watermark(moment + 11)), &assigner_ref);
+        assigner_ref.tell(Box::new(watermark(moment + 11)), &assigner_ref);
         wait(1);
         assigner_ref.tell(Box::new(watermark(moment + 21)), &assigner_ref);
         wait(1);

@@ -15,15 +15,15 @@ use std::sync::Arc;
 
 pub struct LocalFileSource<A: 'static + Send + FromStr> {
     ctx: ComponentContext<LocalFileSource<A>>,
-    target_pointer: ActorRef,
+    subscriber: Arc<ActorRef>,
     file_path: String,
 }
 
 impl<A: Send + FromStr> LocalFileSource<A> {
-    pub fn new(file_path: String, target: ActorRef) -> LocalFileSource<A> {
+    pub fn new(file_path: String, subscriber: ActorRef) -> LocalFileSource<A> {
         LocalFileSource {
             ctx: ComponentContext::new(),
-            target_pointer: target.clone(),
+            subscriber: Arc::new(subscriber),
             file_path: file_path,
         }
     }
@@ -35,7 +35,7 @@ impl<A: Send + FromStr> LocalFileSource<A> {
                 match line {
                     Ok(l) => {
                         if let Ok(v) = l.parse::<A>() {
-                            self.target_pointer.tell(Box::new(v), &self.actor_ref());
+                            self.subscriber.tell(Box::new(v), &self.actor_ref());
                         }
                     }
                     _ => {
