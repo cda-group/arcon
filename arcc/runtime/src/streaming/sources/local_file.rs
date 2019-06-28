@@ -81,9 +81,9 @@ impl<A: Send + FromStr> ComponentDefinition for LocalFileSource<A> {
 }
 
 impl<A: Send + FromStr> Actor for LocalFileSource<A> {
-    fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {}
+    fn receive_local(&mut self, _sender: ActorRef, _msg: &Any) {}
 
-    fn receive_message(&mut self, _sender: ActorPath, ser_id: u64, buf: &mut Buf) {}
+    fn receive_message(&mut self, _sender: ActorPath, _ser_id: u64, _buf: &mut Buf) {}
 }
 
 #[cfg(test)]
@@ -102,7 +102,7 @@ mod tests {
             pub result: Vec<A>,
         }
         impl<A: Send + Clone> Sink<A> {
-            pub fn new(t: A) -> Sink<A> {
+            pub fn new(_t: A) -> Sink<A> {
                 Sink {
                     ctx: ComponentContext::new(),
                     result: Vec::new(),
@@ -159,15 +159,13 @@ mod tests {
 
         let (sink, _) = system.create_and_register(move || sink::Sink::new(a));
 
-        let file_source: LocalFileSource<String> =
-            LocalFileSource::new(String::from("/etc/hosts"), sink.actor_ref());
         system.start(&sink);
 
         return (system, sink);
     }
     // Test cases
     #[test]
-    fn local_file_string() {
+    fn local_file_string() -> std::result::Result<(), std::io::Error> {
         let (system, sink) = test_setup(String::new());
         if let Ok(mut file) = File::create("local_file_string.txt") {
             if let Ok(_) = file.write_all(b"test string") {
@@ -188,10 +186,11 @@ mod tests {
         let r0 = &sink_inspect.result[0];
         assert_eq!(&sink_inspect.result.len(), &(1 as usize));
         assert_eq!(r0, "test string");
-        fs::remove_file("local_file_string.txt");
+        fs::remove_file("local_file_string.txt")?;
+        Ok(())
     }
     #[test]
-    fn local_file_multiple_strings() {
+    fn local_file_multiple_strings() -> std::result::Result<(), std::io::Error> {
         let (system, sink) = test_setup(String::new());
         if let Ok(mut file) = File::create("local_file_multiple_strings.txt") {
             if let Ok(_) =
@@ -220,10 +219,11 @@ mod tests {
         assert_eq!(r0, "test string");
         assert_eq!(r1, "simple string");
         assert_eq!(r2, "a much longer string for fun");
-        fs::remove_file("local_file_multiple_strings.txt");
+        fs::remove_file("local_file_multiple_strings.txt")?;
+        Ok(())
     }
     #[test]
-    fn local_file_u64_no_decimal() {
+    fn local_file_u64_no_decimal() -> std::result::Result<(), std::io::Error> {
         let (system, sink) = test_setup(1 as u64);
         if let Ok(mut file) = File::create("local_file_u64_no_decimal.txt") {
             if let Ok(_) = file.write_all(b"123") {
@@ -246,10 +246,11 @@ mod tests {
         assert_eq!(&sink_inspect.result.len(), &(1 as usize));
         let r0 = &sink_inspect.result[0];
         assert_eq!(*r0, 123 as u64);
-        fs::remove_file("local_file_u64_no_decimal.txt");
+        fs::remove_file("local_file_u64_no_decimal.txt")?;
+        Ok(())
     }
     #[test]
-    fn local_file_u64_decimal() {
+    fn local_file_u64_decimal() -> std::result::Result<(), std::io::Error> {
         // Does not work , u64 does not permit decimals
         let (system, sink) = test_setup(1 as u64);
         if let Ok(mut file) = File::create("local_file_u64_decimal.txt") {
@@ -271,10 +272,11 @@ mod tests {
         assert_eq!(&sink_inspect.result.len(), &(0 as usize));
         //let r0 = &sink_inspect.result[0];
         //assert_eq!(*r0, 123.5 as u64);
-        fs::remove_file("local_file_u64_decimal.txt");
+        fs::remove_file("local_file_u64_decimal.txt")?;
+        Ok(())
     }
     #[test]
-    fn local_file_f32_no_decimal() {
+    fn local_file_f32_no_decimal() -> std::result::Result<(), std::io::Error> {
         let (system, sink) = test_setup(1 as f32);
         if let Ok(mut file) = File::create("local_file_f32_no_decimal.txt") {
             if let Ok(_) = file.write_all(b"123") {
@@ -297,10 +299,11 @@ mod tests {
         assert_eq!(&sink_inspect.result.len(), &(1 as usize));
         let r0 = &sink_inspect.result[0];
         assert_eq!(*r0, 123 as f32);
-        fs::remove_file("local_file_f32_no_decimal.txt");
+        fs::remove_file("local_file_f32_no_decimal.txt")?;
+        Ok(())
     }
     #[test]
-    fn local_file_f32_decimal() {
+    fn local_file_f32_decimal() -> std::result::Result<(), std::io::Error> {
         let (system, sink) = test_setup(1 as f32);
         if let Ok(mut file) = File::create("local_file_f32_decimal.txt") {
             if let Ok(_) = file.write_all(b"123.5") {
@@ -321,6 +324,7 @@ mod tests {
         assert_eq!(&sink_inspect.result.len(), &(1 as usize));
         let r0 = &sink_inspect.result[0];
         assert_eq!(*r0, 123.5 as f32);
-        fs::remove_file("local_file_f32_decimal.txt");
+        fs::remove_file("local_file_f32_decimal.txt")?;
+        Ok(())
     }
 }
