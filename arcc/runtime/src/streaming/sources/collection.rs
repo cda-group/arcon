@@ -1,5 +1,4 @@
 use kompact::*;
-//use std::collections;
 use std::sync::Arc;
 /*
     CollectionSource:
@@ -161,7 +160,7 @@ mod tests {
         let sink_inspect = sink.definition().lock().unwrap();
         let r0 = &sink_inspect.result[0];
         let r1 = &sink_inspect.result[1];
-        assert_eq!(&sink_inspect.result.len(), &(2 as usize));
+        assert_eq!(sink_inspect.result.len(), (2 as usize));
         assert_eq!(r0, "hej");
         assert_eq!(r1, "hello");
     }
@@ -179,11 +178,11 @@ mod tests {
         wait(1);
 
         let sink_inspect = sink.definition().lock().unwrap();
-        let r0 = &sink_inspect.result[0];
-        let r1 = &sink_inspect.result[1];
-        assert_eq!(&sink_inspect.result.len(), &(2 as usize));
-        assert_eq!(*r0, 123 as f32);
-        assert_eq!(*r1, 321.9 as f32);
+        let r0 = sink_inspect.result[0];
+        let r1 = sink_inspect.result[1];
+        assert_eq!(sink_inspect.result.len(), (2 as usize));
+        assert_eq!(r0, 123 as f32);
+        assert_eq!(r1, 321.9 as f32);
     }
     #[test]
     fn collection_tuple() {
@@ -199,10 +198,10 @@ mod tests {
         wait(1);
 
         let sink_inspect = sink.definition().lock().unwrap();
-        let r0 = &sink_inspect.result[0];
-        let r1 = &sink_inspect.result[1];
-        assert_eq!(&sink_inspect.result.len(), &(2 as usize));
-        assert_eq!(*r0, (123 as f32, 2 as u8));
-        assert_eq!(*r1, (123.33 as f32, 3 as u8));
+        let r0 = sink_inspect.result[0];
+        let r1 = sink_inspect.result[1];
+        assert_eq!(sink_inspect.result.len(), (2 as usize));
+        assert_eq!(r0, (123 as f32, 2 as u8));
+        assert_eq!(r1, (123.33 as f32, 3 as u8));
     }
 }

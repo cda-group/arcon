@@ -36,6 +36,8 @@ impl<A: Send + FromStr> LocalFileSource<A> {
                     Ok(l) => {
                         if let Ok(v) = l.parse::<A>() {
                             self.subscriber.tell(Box::new(v), &self.actor_ref());
+                        } else {
+                            error!(self.ctx.log(), "Unable to parse line {}", self.file_path);
                         }
                     }
                     _ => {
@@ -193,9 +195,7 @@ mod tests {
     fn local_file_multiple_strings() -> std::result::Result<(), std::io::Error> {
         let (system, sink) = test_setup(String::new());
         if let Ok(mut file) = File::create("local_file_multiple_strings.txt") {
-            if let Ok(_) =
-                file.write_all(b"test string\nsimple string\na much longer string for fun")
-            {
+            if let Ok(_) = file.write_all(b"test string\nsimple string\na longer string for fun") {
             } else {
                 println!("Unable to write file in test case");
             }
@@ -218,7 +218,7 @@ mod tests {
         let r2 = &sink_inspect.result[2];
         assert_eq!(r0, "test string");
         assert_eq!(r1, "simple string");
-        assert_eq!(r2, "a much longer string for fun");
+        assert_eq!(r2, "a longer string for fun");
         fs::remove_file("local_file_multiple_strings.txt")?;
         Ok(())
     }
@@ -251,7 +251,7 @@ mod tests {
     }
     #[test]
     fn local_file_u64_decimal() -> std::result::Result<(), std::io::Error> {
-        // Does not work , u64 does not permit decimals
+        // Should not work, Asserts that nothing is received by sink
         let (system, sink) = test_setup(1 as u64);
         if let Ok(mut file) = File::create("local_file_u64_decimal.txt") {
             if let Ok(_) = file.write_all(b"123.5") {
@@ -270,8 +270,6 @@ mod tests {
 
         let sink_inspect = sink.definition().lock().unwrap();
         assert_eq!(&sink_inspect.result.len(), &(0 as usize));
-        //let r0 = &sink_inspect.result[0];
-        //assert_eq!(*r0, 123.5 as u64);
         fs::remove_file("local_file_u64_decimal.txt")?;
         Ok(())
     }
