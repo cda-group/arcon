@@ -248,6 +248,7 @@ impl<A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync 
                             wp.tell(Box::new(e.clone()), &self.actor_ref());
                         }
                     }
+                    keyed_element(_) => {}
                     watermark(w) => {
                         self.handle_watermark(w.get_timestamp());
                     }
