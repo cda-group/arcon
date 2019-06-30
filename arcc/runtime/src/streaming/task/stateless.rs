@@ -2,7 +2,7 @@ use crate::error::Error;
 use crate::error::ErrorKind::*;
 use crate::prelude::{Deserialize, Serialize};
 use crate::streaming::partitioner::Partitioner;
-use crate::streaming::Channel;
+use crate::streaming::{Channel, ChannelPort};
 use crate::weld::*;
 use kompact::*;
 use messages::protobuf::StreamTaskMessage_oneof_payload::*;
@@ -16,26 +16,28 @@ use weld::*;
 
 /// Stateless Stream Task
 ///
-/// A stream tasks receives elements `A` which it performs a
-/// transformation on through an `udf`. The transformed data `B`
-/// is then pushed out of the stream task using the `Partitioner`
-pub struct StreamTask<A, B>
+/// A: Input Event
+/// B: Port type for Partitioner
+/// C: Output Event
+pub struct StreamTask<A, B, C>
 where
-    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash,
-    B: 'static + Serialize + Send + Sync + Copy + Hash,
+    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash + Debug,
+    B: Port<Request = C> + 'static + Clone,
+    C: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash + Debug,
 {
-    ctx: ComponentContext<StreamTask<A, B>>,
-    in_channels: Vec<Channel>,
-    partitioner: Box<Partitioner<B, StreamTask<A, B>>>,
+    ctx: ComponentContext<Self>,
+    in_channels: Vec<Channel<C, B, Self>>,
+    partitioner: Box<Partitioner<C, B, Self>>,
     udf: Arc<Module>,
     udf_avg: u64,
     udf_executions: u64,
 }
 
-impl<A, B> ComponentDefinition for StreamTask<A, B>
+impl<A, B, C> ComponentDefinition for StreamTask<A, B, C>
 where
-    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash,
-    B: 'static + Serialize + Send + Sync + Copy + Hash,
+    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash + Debug,
+    B: Port<Request = C> + 'static + Clone,
+    C: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash + Debug,
 {
     fn setup(&mut self, self_component: Arc<Component<Self>>) -> () {
         self.ctx_mut().initialise(self_component);
@@ -54,16 +56,17 @@ where
     }
 }
 
-impl<A, B> StreamTask<A, B>
+impl<A, B, C> StreamTask<A, B, C>
 where
-    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash,
-    B: 'static + Serialize + Send + Sync + Copy + Hash,
+    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash + Debug,
+    B: Port<Request = C> + 'static + Clone,
+    C: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash + Debug,
 {
     pub fn new(
         udf: Arc<Module>,
-        in_channels: Vec<Channel>,
-        partitioner: Box<Partitioner<B, StreamTask<A, B>>>,
-    ) -> StreamTask<A, B> {
+        in_channels: Vec<Channel<C, B, Self>>,
+        partitioner: Box<Partitioner<C, B, Self>>,
+    ) -> Self {
         StreamTask {
             ctx: ComponentContext::new(),
             in_channels,
@@ -81,9 +84,7 @@ where
             element(e) => {
                 let event: A = bincode::deserialize(e.get_data())
                     .map_err(|e| Error::new(DeserializationError(e.to_string())))?;
-
-                let result: B = self.run_udf(&event)?;
-                let _ = self.push_out(result)?;
+                let _ = self.handle_event(&event);
             }
             keyed_element(_) => {
                 unimplemented!();
@@ -99,13 +100,23 @@ where
         Ok(())
     }
 
-    fn run_udf(&mut self, event: &A) -> crate::error::Result<B> {
+    fn handle_event(&mut self, event: &A) -> crate::error::Result<()> {
+        if let Ok(result) = self.run_udf(event) {
+            let _ = self.push_out(result);
+        } else {
+            // Just report the error for now...
+            error!(self.ctx.log(), "Failed to execute UDF...",);
+        }
+        Ok(())
+    }
+
+    fn run_udf(&mut self, event: &A) -> crate::error::Result<C> {
         // NOTE: Decide if we want to use new context for each execution, or
         //       reuse the same one over and over...
         let ref mut ctx = WeldContext::new(&self.udf.conf())
             .map_err(|e| Error::new(ContextError(e.message().to_string_lossy().into_owned())))?;
 
-        let run: ModuleRun<B> = self.udf.run(event, ctx)?;
+        let run: ModuleRun<C> = self.udf.run(event, ctx)?;
         let ns = run.1;
         self.update_avg(ns);
         Ok(run.0)
@@ -122,34 +133,31 @@ where
         self.udf_executions += 1;
     }
 
-    fn push_out(&mut self, event: B) -> crate::error::Result<()> {
-        let self_ptr = self as *const StreamTask<A, B>;
+    fn push_out(&mut self, event: C) -> crate::error::Result<()> {
+        let self_ptr = self as *const StreamTask<A, B, C>;
         let _ = self.partitioner.output(event, self_ptr, None)?;
         Ok(())
     }
 }
 
-impl<A, B> Provide<ControlPort> for StreamTask<A, B>
+impl<A, B, C> Provide<ControlPort> for StreamTask<A, B, C>
 where
-    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash,
-    B: 'static + Serialize + Send + Sync + Copy + Hash,
+    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash + Debug,
+    B: Port<Request = C> + 'static + Clone,
+    C: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash + Debug,
 {
     fn handle(&mut self, event: ControlEvent) -> () {}
 }
 
-impl<A, B> Actor for StreamTask<A, B>
+impl<A, B, C> Actor for StreamTask<A, B, C>
 where
-    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash,
-    B: 'static + Serialize + Send + Sync + Copy + Hash,
+    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash + Debug,
+    B: Port<Request = C> + 'static + Clone,
+    C: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash + Debug,
 {
     fn receive_local(&mut self, sender: ActorRef, msg: &Any) {
         if let Some(event) = msg.downcast_ref::<A>() {
-            if let Ok(result) = self.run_udf(event) {
-                let _ = self.push_out(result);
-            } else {
-                // Just report the error for now...
-                error!(self.ctx.log(), "Failed to execute UDF...",);
-            }
+            let _ = self.handle_event(&event);
         }
     }
     fn receive_message(&mut self, sender: ActorPath, ser_id: u64, buf: &mut Buf) {
@@ -166,18 +174,51 @@ where
     }
 }
 
+impl<A, B, C> Require<B> for StreamTask<A, B, C>
+where
+    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash + Debug,
+    B: Port<Request = C> + 'static + Clone,
+    C: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash + Debug,
+{
+    fn handle(&mut self, event: B::Indication) -> () {
+        // ignore
+    }
+}
+
+impl<A, B, C> Provide<ChannelPort<A>> for StreamTask<A, B, C>
+where
+    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash + Debug,
+    B: Port<Request = C> + 'static + Clone,
+    C: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash + Debug,
+{
+    fn handle(&mut self, event: A) -> () {
+        let _ = self.handle_event(&event);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::streaming::partitioner::forward::Forward;
+    use crate::streaming::RequirePortRef;
     use kompact::default_components::*;
     use kompact::*;
     use rand::Rng;
+    use std::cell::RefCell;
+    use std::rc::Rc;
     use std::sync::Arc;
 
     #[repr(C)]
-    #[derive(Clone, Copy, Hash, Serialize, Deserialize)]
+    #[derive(Clone, Copy, Debug, Hash, Serialize, Deserialize)]
     pub struct TaskInput {
+        id: u32,
+        price: u64,
+    }
+
+    // Just to make it clear...
+    #[repr(C)]
+    #[derive(Clone, Copy, Debug, Hash, Serialize, Deserialize)]
+    pub struct TaskOutput {
         id: u32,
         price: u64,
     }
@@ -186,13 +227,15 @@ mod tests {
     #[allow(dead_code)]
     pub struct SinkActor {
         ctx: ComponentContext<SinkActor>,
-        pub result: Option<TaskInput>,
+        in_port: ProvidedPort<ChannelPort<TaskOutput>, SinkActor>,
+        pub result: Option<TaskOutput>,
     }
 
     impl SinkActor {
         pub fn new() -> SinkActor {
             SinkActor {
                 ctx: ComponentContext::new(),
+                in_port: ProvidedPort::new(),
                 result: None,
             }
         }
@@ -203,7 +246,7 @@ mod tests {
 
     impl Actor for SinkActor {
         fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
-            if let Some(input) = msg.downcast_ref::<TaskInput>() {
+            if let Some(input) = msg.downcast_ref::<TaskOutput>() {
                 self.result = Some(*input);
             }
         }
@@ -214,7 +257,7 @@ mod tests {
 
                 match payload {
                     element(e) => {
-                        let event: TaskInput = bincode::deserialize(e.get_data())
+                        let event: TaskOutput = bincode::deserialize(e.get_data())
                             .map_err(|e| Error::new(DeserializationError(e.to_string())))
                             .unwrap();
                         self.result = Some(event);
@@ -234,6 +277,14 @@ mod tests {
             }
         }
     }
+    impl Provide<ChannelPort<TaskOutput>> for SinkActor {
+        fn handle(&mut self, event: TaskOutput) -> () {
+            self.result = Some(event);
+        }
+    }
+    impl Require<ChannelPort<TaskOutput>> for SinkActor {
+        fn handle(&mut self, event: ()) -> () {}
+    }
 
     #[test]
     fn stream_task_local_test() {
@@ -242,9 +293,52 @@ mod tests {
         let system = KompactSystem::new(cfg).expect("KompactSystem");
 
         let sink_comp = system.create_and_start(move || SinkActor::new());
+
         let channel = Channel::Local(sink_comp.actor_ref());
-        let mut partitioner: Box<Partitioner<TaskInput, StreamTask<TaskInput, TaskInput>>> =
-            Box::new(Forward::new(channel.clone()));
+        let mut partitioner: Box<
+            Partitioner<
+                TaskOutput,
+                ChannelPort<TaskOutput>,
+                StreamTask<TaskInput, ChannelPort<TaskOutput>, TaskOutput>,
+            >,
+        > = Box::new(Forward::new(channel));
+
+        let weld_code = String::from("|id: u32, price: u64| {id, price + u64(5)}");
+        let module = Arc::new(Module::new("id".to_string(), weld_code, 0, None).unwrap());
+        let stream_task =
+            system.create_and_start(move || StreamTask::new(module, Vec::new(), partitioner));
+
+        let task_input = TaskInput { id: 10, price: 20 };
+
+        stream_task
+            .actor_ref()
+            .tell(Box::new(task_input), &stream_task);
+
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        let mut comp_inspect = &sink_comp.definition().lock().unwrap();
+        assert_eq!(comp_inspect.result.unwrap().price, 25);
+        system.shutdown();
+    }
+
+    #[test]
+    fn stream_task_port_test() {
+        let mut cfg = KompactConfig::new();
+        cfg.system_components(DeadletterBox::new, NetworkConfig::default().build());
+        let system = KompactSystem::new(cfg).expect("KompactSystem");
+
+        let sink_comp = system.create_and_start(move || SinkActor::new());
+        let target_port = sink_comp.on_definition(|c| c.in_port.share());
+
+        let mut req_port: RequiredPort<
+            ChannelPort<TaskOutput>,
+            StreamTask<TaskInput, ChannelPort<TaskOutput>, TaskOutput>,
+        > = RequiredPort::new();
+        let _ = req_port.connect(target_port);
+
+        let ref_port = RequirePortRef(Rc::new(RefCell::new(req_port)));
+        let channel = Channel::Port(ref_port);
+        let mut partitioner = Box::new(Forward::new(channel));
+
         let weld_code = String::from("|id: u32, price: u64| {id, price + u64(5)}");
         let module = Arc::new(Module::new("id".to_string(), weld_code, 0, None).unwrap());
         let stream_task =
@@ -283,8 +377,13 @@ mod tests {
 
         let remote_channel = Channel::Remote(remote_path);
 
-        let mut partitioner: Box<Partitioner<TaskInput, StreamTask<TaskInput, TaskInput>>> =
-            Box::new(Forward::new(remote_channel.clone()));
+        let mut partitioner: Box<
+            Partitioner<
+                TaskOutput,
+                ChannelPort<TaskOutput>,
+                StreamTask<TaskInput, ChannelPort<TaskOutput>, TaskOutput>,
+            >,
+        > = Box::new(Forward::new(remote_channel));
         let weld_code = String::from("|id: u32, price: u64| {id, price + u64(5)}");
         let module = Arc::new(Module::new("id".to_string(), weld_code, 0, None).unwrap());
         let stream_task =

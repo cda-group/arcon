@@ -1,87 +1,82 @@
 use crate::error::ErrorKind::*;
 use crate::error::*;
-use crate::prelude::Serialize;
+use crate::prelude::{DeserializeOwned, Serialize};
+use crate::streaming::partitioner::channel_output;
 use crate::streaming::partitioner::Partitioner;
 use crate::streaming::Channel;
-use kompact::ComponentDefinition;
+use kompact::{ComponentDefinition, Port, Require};
 use messages::protobuf::*;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::default::Default;
+use std::fmt::Debug;
 use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
-use std::marker::PhantomData;
-use crate::streaming::partitioner::channel_output;
 
 /// A hash based partitioner
 ///
 /// `HashPartitioner` may be constructed with
 /// either a custom hasher or the default std one
-pub struct HashPartitioner<A, B, C = BuildHasherDefault<DefaultHasher>>
+pub struct HashPartitioner<A, B, C, D = BuildHasherDefault<DefaultHasher>>
 where
-    A: 'static + Serialize + Send + Sync + Copy + Hash,
-    B: ComponentDefinition + Sized + 'static,
+    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash + Debug,
+    B: Port<Request = A> + 'static + Clone,
+    C: ComponentDefinition + Sized + 'static + Require<B>,
 {
-    builder: C,
+    builder: D,
     parallelism: u32,
-    map: HashMap<usize, Channel, C>,
-    phantom_event: PhantomData<A>,
-    phantom_source: PhantomData<B>,
+    map: HashMap<usize, Channel<A, B, C>, D>,
 }
 
-impl<A, B> HashPartitioner<A, B>
+impl<A, B, C> HashPartitioner<A, B, C>
 where
-    A: 'static + Serialize + Send + Sync + Copy + Hash,
-    B: ComponentDefinition + Sized + 'static,
+    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash + Debug,
+    B: Port<Request = A> + 'static + Clone,
+    C: ComponentDefinition + Sized + 'static + Require<B>,
 {
     pub fn with_hasher<H: BuildHasher + Default>(
         builder: H,
         parallelism: u32,
-        channels: Vec<Channel>,
-    ) -> HashPartitioner<A, B, H> {
+        channels: Vec<Channel<A, B, C>>,
+    ) -> HashPartitioner<A, B, C, H> {
         assert_eq!(channels.len(), parallelism as usize);
         let mut map = HashMap::with_capacity_and_hasher(parallelism as usize, Default::default());
-        for i in 0..channels.len() as usize {
-            let channel: Channel = channels.get(i).take().unwrap().clone();
+        for (i, channel) in channels.into_iter().enumerate() {
             map.insert(i, channel);
         }
         HashPartitioner {
             builder: builder.into(),
             parallelism,
             map,
-            phantom_event: PhantomData,
-            phantom_source: PhantomData,
         }
     }
 
     pub fn with_default_hasher<H>(
         parallelism: u32,
-        channels: Vec<Channel>,
-    ) -> HashPartitioner<A, B, BuildHasherDefault<H>>
+        channels: Vec<Channel<A, B, C>>,
+    ) -> HashPartitioner<A, B, C, BuildHasherDefault<H>>
     where
         H: Hasher + Default,
     {
         assert_eq!(channels.len(), parallelism as usize);
         let mut map = HashMap::with_capacity_and_hasher(parallelism as usize, Default::default());
-        for i in 0..channels.len() as usize {
-            let channel: Channel = channels.get(i).take().unwrap().clone();
+        for (i, channel) in channels.into_iter().enumerate() {
             map.insert(i, channel);
         }
         HashPartitioner {
             builder: BuildHasherDefault::<H>::default(),
             parallelism,
             map,
-            phantom_event: PhantomData,
-            phantom_source: PhantomData,
         }
     }
 }
 
-impl<A, B> Partitioner<A, B> for HashPartitioner<A, B>
+impl<A, B, C> Partitioner<A, B, C> for HashPartitioner<A, B, C>
 where
-    A: 'static + Serialize + Send + Sync + Copy + Hash,
-    B: ComponentDefinition + Sized + 'static,
+    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash + Debug,
+    B: Port<Request = A> + 'static + Clone,
+    C: ComponentDefinition + Sized + 'static + Require<B>,
 {
-    fn output(&mut self, event: A, source: *const B, key: Option<u64>) -> crate::error::Result<()> {
+    fn output(&mut self, event: A, source: *const C, key: Option<u64>) -> crate::error::Result<()> {
         let mut h = self.builder.build_hasher();
         event.hash(&mut h);
         let hash = h.finish() as u32;
@@ -97,69 +92,40 @@ where
         Ok(())
     }
 
-    fn add_channel(&mut self, channel: Channel) {
+    fn add_channel(&mut self, channel: Channel<A, B, C>) {
         unimplemented!();
     }
-    fn remove_channel(&mut self, channel: Channel) {
+    fn remove_channel(&mut self, channel: Channel<A, B, C>) {
         unimplemented!();
     }
 }
 
-unsafe impl<A, B> Send for HashPartitioner<A, B>
+unsafe impl<A, B, C> Send for HashPartitioner<A, B, C>
 where
-    A: 'static + Serialize + Send + Sync + Copy + Hash,
-    B: ComponentDefinition + Sized + 'static,
+    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash + Debug,
+    B: Port<Request = A> + 'static + Clone,
+    C: ComponentDefinition + Sized + 'static + Require<B>,
 {
 }
 
-unsafe impl<A, B> Sync for HashPartitioner<A, B>
+unsafe impl<A, B, C> Sync for HashPartitioner<A, B, C>
 where
-    A: 'static + Serialize + Send + Sync + Copy + Hash,
-    B: ComponentDefinition + Sized + 'static,
+    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash + Debug,
+    B: Port<Request = A> + 'static + Clone,
+    C: ComponentDefinition + Sized + 'static + Require<B>,
 {
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::prelude::Serialize;
+    use crate::streaming::partitioner::tests::*;
+    use crate::streaming::{ChannelPort, RequirePortRef};
     use kompact::default_components::*;
     use kompact::*;
     use rand::Rng;
     use std::sync::Arc;
-
-    #[derive(ComponentDefinition)]
-    #[allow(dead_code)]
-    pub struct TestComp {
-        ctx: ComponentContext<TestComp>,
-        pub counter: u64,
-    }
-
-    impl TestComp {
-        pub fn new() -> TestComp {
-            TestComp {
-                ctx: ComponentContext::new(),
-                counter: 0,
-            }
-        }
-    }
-    impl Provide<ControlPort> for TestComp {
-        fn handle(&mut self, event: ControlEvent) -> () {}
-    }
-
-    impl Actor for TestComp {
-        fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
-            self.counter += 1;
-        }
-        fn receive_message(&mut self, sender: ActorPath, ser_id: u64, buf: &mut Buf) {}
-    }
-
-    #[repr(C)]
-    #[key_by(id)]
-    #[derive(Clone, Copy, Serialize)]
-    pub struct Input {
-        id: u32,
-        price: u64,
-    }
 
     #[test]
     fn partitioner_parallelism_8_test() {
@@ -170,7 +136,7 @@ mod tests {
         let parallelism: u32 = 8;
         let total_msgs = 1000;
 
-        let mut channels: Vec<Channel> = Vec::new();
+        let mut channels: Vec<Channel<Input, ChannelPort<Input>, TestComp>> = Vec::new();
         let mut comps: Vec<Arc<crate::prelude::Component<TestComp>>> = Vec::new();
 
         for i in 0..parallelism {
@@ -179,9 +145,8 @@ mod tests {
             comps.push(comp);
         }
 
-        let mut partitioner: Box<Partitioner<Input, TestComp>> = Box::new(
-            HashPartitioner::with_default_hasher(parallelism, channels.clone()),
-        );
+        let mut partitioner: Box<Partitioner<Input, ChannelPort<Input>, TestComp>> =
+            Box::new(HashPartitioner::with_default_hasher(parallelism, channels));
 
         let mut rng = rand::thread_rng();
 
@@ -189,7 +154,6 @@ mod tests {
         for i in 0..total_msgs {
             let input = Input {
                 id: rng.gen_range(0, 100),
-                price: 30,
             };
             inputs.push(input);
         }

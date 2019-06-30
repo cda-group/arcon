@@ -26,6 +26,7 @@ pub mod prelude {
     pub use kompact::default_components::*;
     pub use kompact::*;
     pub use messages::protobuf::*;
+    pub use serde::de::DeserializeOwned;
     pub use serde::{Deserialize, Serialize};
     pub use slog::*;
     pub use state_backend::*;
