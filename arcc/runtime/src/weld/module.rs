@@ -1,4 +1,3 @@
-use crate::error::ErrorKind::*;
 use crate::error::*;
 use crate::weld::util::*;
 use std::time::Instant;
@@ -25,7 +24,7 @@ impl Module {
         code: String,
         priority: i32,
         threads: Option<i32>,
-    ) -> Result<Module> {
+    ) -> ArconResult<Module> {
         let mut conf = WeldConf::new();
         if let Some(t) = threads {
             let threads = format!("{}", t);
@@ -33,7 +32,10 @@ impl Module {
         }
 
         let module: WeldModule = WeldModule::compile(code.clone(), &conf).map_err(|e| {
-            Error::new(CompilationError(e.message().to_string_lossy().into_owned()))
+            weld_error!(
+                "Failed to compile WeldModule with err {}",
+                e.message().to_string_lossy().into_owned()
+            )
         })?;
 
         Ok(Module {
@@ -46,18 +48,22 @@ impl Module {
         })
     }
 
-    pub fn add_serializer(&mut self, ser_code: String) -> Result<()> {
+    pub fn add_serializer(&mut self, ser_code: String) -> ArconResult<()> {
         let serializer_str = serialize_module_fmt(ser_code)?;
         let serialize_module: WeldModule = WeldModule::compile(serializer_str, &self.conf)
             .map_err(|e| {
-                Error::new(CompilationError(e.message().to_string_lossy().into_owned()))
+                weld_error!(
+                    "Failed to compile WeldModule with err {}",
+                    e.message().to_string_lossy().into_owned()
+                )
             })?;
 
         // Verify serialize_module actually outputs raw bytes
         if serialize_module.return_type() != ast::Type::Vector(Box::new(Type::Scalar(U8))) {
-            return Err(Error::new(CompilationError(
-                "Serialize module has to output Vec<u8>".to_string(),
-            )));
+            return Err(weld_error!(
+                "{}",
+                "Serialize module has to output Vec<u8>".to_string()
+            ));
         }
 
         self.serialize_module = Some(serialize_module);
@@ -76,31 +82,36 @@ impl Module {
         self.module.param_types()
     }
 
-    pub fn serialize_input<I>(&mut self, ptr: &I, ctx: &mut WeldContext) -> Result<Vec<u8>> {
+    pub fn serialize_input<I>(&mut self, ptr: &I, ctx: &mut WeldContext) -> ArconResult<Vec<u8>> {
         let ref arg = WeldValue::new_from_data(ptr as *const _ as Data);
         let res = unsafe { self.serializer(ctx, arg) };
         if let Ok(raw) = res {
             let bytes = to_rust_vec(raw)?;
             Ok(bytes)
         } else {
-            Err(Error::new(SerializationError(
-                "Failed to serialize input for weld module".to_string(),
-            )))
+            Err(weld_error!(
+                "{}",
+                "Failed to serialize input for weld module".to_string()
+            ))
         }
     }
 
-    pub fn raw_to_mat<O: Clone>(&self, bytes: &Vec<u8>, ctx: &mut WeldContext) -> Result<(O, u64)> {
+    pub fn raw_to_mat<O: Clone>(
+        &self,
+        bytes: &Vec<u8>,
+        ctx: &mut WeldContext,
+    ) -> ArconResult<(O, u64)> {
         let input: WeldVec<u8> = WeldVec::from(bytes);
         self.run(&input, ctx)
     }
 
-    pub fn raw_to_raw(&self, bytes: &Vec<u8>, ctx: &mut WeldContext) -> Result<Vec<u8>> {
+    pub fn raw_to_raw(&self, bytes: &Vec<u8>, ctx: &mut WeldContext) -> ArconResult<Vec<u8>> {
         let input: WeldVec<u8> = WeldVec::from(bytes);
         let (result, _ns) = self.run(&input, ctx)?;
         to_rust_vec(result)
     }
 
-    pub fn run<I, O: Clone>(&self, ptr: &I, ctx: &mut WeldContext) -> Result<(O, u64)> {
+    pub fn run<I, O: Clone>(&self, ptr: &I, ctx: &mut WeldContext) -> ArconResult<(O, u64)> {
         let ref arg = WeldValue::new_from_data(ptr as *const _ as Data);
         let (result, time_ns) = unsafe {
             let (res, ns) = self.mat_runner(ctx, arg)?;
@@ -114,30 +125,37 @@ impl Module {
         &self,
         ctx: &mut WeldContext,
         arg: &WeldValue,
-    ) -> Result<(WeldValue, u64)> {
+    ) -> ArconResult<(WeldValue, u64)> {
         let start = Instant::now();
-        let res = self
-            .module
-            .run(ctx, arg)
-            .map_err(|e| Error::new(ModuleRunError(e.message().to_string_lossy().into_owned())))?;
+        let res = self.module.run(ctx, arg).map_err(|e| {
+            weld_error!(
+                "Failed to run WeldModule with err {}",
+                e.message().to_string_lossy().into_owned()
+            )
+        })?;
         let elapsed = start.elapsed();
         let ns: u64 = elapsed.as_secs() * 1_000_000_000 + u64::from(elapsed.subsec_nanos());
         Ok((res, ns))
     }
 
-    unsafe fn serializer(&mut self, ctx: &mut WeldContext, arg: &WeldValue) -> Result<WeldVec<u8>> {
+    unsafe fn serializer(
+        &mut self,
+        ctx: &mut WeldContext,
+        arg: &WeldValue,
+    ) -> ArconResult<WeldVec<u8>> {
         if let Some(module) = &self.serialize_module {
             let res = module.run(ctx, arg).map_err(|e| {
-                Error::new(ModuleRunError(e.message().to_string_lossy().into_owned()))
+                weld_error!(
+                    "Failed to run WeldModule with err {}",
+                    e.message().to_string_lossy().into_owned()
+                )
             })?;
 
             let data = res.data() as *const WeldVec<u8>;
             let cloned = (*data).clone();
             Ok(cloned)
         } else {
-            Err(Error::new(ModuleRunError(
-                "No serializer module found".to_string(),
-            )))
+            Err(weld_error!("{}", "No serializer module found".to_string()))
         }
     }
 }
@@ -214,13 +232,7 @@ mod tests {
             x: WeldVec::from(&x),
             y: WeldVec::from(&y),
         };
-        let mut module = Module::new(
-            id,
-            code.clone().to_string(),
-            priority,
-            None,
-        )
-        .unwrap();
+        let mut module = Module::new(id, code.clone().to_string(), priority, None).unwrap();
         let ref mut ctx = WeldContext::new(&module.conf).unwrap();
 
         // Serialize our input data

@@ -1,4 +1,3 @@
-use crate::error::ErrorKind::*;
 use crate::error::*;
 use crate::prelude::{DeserializeOwned, Serialize};
 use crate::streaming::Channel;
@@ -27,7 +26,7 @@ where
         event: B::Request,
         source: *const C,
         key: Option<u64>,
-    ) -> crate::error::Result<()>;
+    ) -> ArconResult<()>;
     fn add_channel(&mut self, channel: Channel<A, B, C>);
     fn remove_channel(&mut self, channel: Channel<A, B, C>);
 }
@@ -39,7 +38,7 @@ fn channel_output<A, B, C>(
     event: A,
     source: *const C,
     key: Option<u64>,
-) -> crate::error::Result<()>
+) -> ArconResult<()>
 where
     A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash + Debug,
     B: Port<Request = A> + 'static + Clone,
@@ -53,8 +52,9 @@ where
             actor_ref.tell(Box::new(event), source);
         }
         Channel::Remote(actor_path) => {
-            let serialised_event: Vec<u8> = bincode::serialize(&event)
-                .map_err(|e| Error::new(SerializationError(e.to_string())))?;
+            let serialised_event: Vec<u8> = bincode::serialize(&event).map_err(|e| {
+                arcon_err_kind!("Failed to serialise event with err {}", e.to_string())
+            })?;
 
             // TODO: Handle Timestamps...
             if let Some(key) = key {

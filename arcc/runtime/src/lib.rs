@@ -13,7 +13,7 @@ extern crate http;
 #[cfg(feature = "kafka")]
 extern crate kafka;
 
-// Public Interface
+#[macro_use]
 pub mod error;
 pub mod streaming;
 pub mod util;

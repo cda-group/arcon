@@ -1,4 +1,3 @@
-use crate::error::ErrorKind::*;
 use crate::error::*;
 use crate::prelude::{DeserializeOwned, Serialize};
 use crate::streaming::partitioner::channel_output;
@@ -36,7 +35,7 @@ where
     B: Port<Request = A> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
-    fn output(&mut self, event: A, source: *const C, key: Option<u64>) -> crate::error::Result<()> {
+    fn output(&mut self, event: A, source: *const C, key: Option<u64>) -> ArconResult<()> {
         for channel in &self.out_channels {
             let _ = channel_output(channel, event, source, key)?;
         }
@@ -123,7 +122,7 @@ mod tests {
 
         std::thread::sleep(std::time::Duration::from_secs(1));
 
-        // Each of the 8 components shouldhave same amount of msgs..
+        // Each of the 8 components should havesame amount of msgs..
         for comp in comps {
             let mut comp_inspect = &comp.definition().lock().unwrap();
             assert_eq!(comp_inspect.counter, total_msgs);
@@ -170,6 +169,7 @@ mod tests {
             channels.push(Channel::Remote(remote_path));
             comps.push(comp);
         }
+        std::thread::sleep(std::time::Duration::from_secs(1));
 
         let mut partitioner: Box<Partitioner<Input, ChannelPort<Input>, TestComp>> =
             Box::new(Broadcast::new(channels));
@@ -183,7 +183,7 @@ mod tests {
 
         std::thread::sleep(std::time::Duration::from_secs(1));
 
-        // Each of the 8 components shouldhave same amount of msgs..
+        // Each of the 8 components should have same amount of msgs..
         for comp in comps {
             let mut comp_inspect = &comp.definition().lock().unwrap();
             assert_eq!(comp_inspect.counter, total_msgs);

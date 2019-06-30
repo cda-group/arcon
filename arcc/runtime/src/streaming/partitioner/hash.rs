@@ -1,4 +1,3 @@
-use crate::error::ErrorKind::*;
 use crate::error::*;
 use crate::prelude::{DeserializeOwned, Serialize};
 use crate::streaming::partitioner::channel_output;
@@ -76,7 +75,7 @@ where
     B: Port<Request = A> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
-    fn output(&mut self, event: A, source: *const C, key: Option<u64>) -> crate::error::Result<()> {
+    fn output(&mut self, event: A, source: *const C, key: Option<u64>) -> ArconResult<()> {
         let mut h = self.builder.build_hasher();
         event.hash(&mut h);
         let hash = h.finish() as u32;

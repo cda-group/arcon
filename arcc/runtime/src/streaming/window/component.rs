@@ -77,9 +77,7 @@ impl<A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync 
                     // TODO: Handle elements from remote source
                     //self.add_value(e.data); <- Doesn't work because element isn't generic
                 }
-                keyed_element(_) => {
-
-                }
+                keyed_element(_) => {}
                 trigger(_) => {
                     self.complete = true;
                     self.trigger();

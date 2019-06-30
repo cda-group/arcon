@@ -1,5 +1,4 @@
-use crate::error::Error;
-use crate::error::ErrorKind::*;
+use crate::error::*;
 use crate::prelude::{Deserialize, Serialize};
 use crate::streaming::partitioner::Partitioner;
 use crate::streaming::{Channel, ChannelPort};
@@ -77,13 +76,14 @@ where
         }
     }
 
-    fn handle_remote_msg(&mut self, data: StreamTaskMessage) -> crate::error::Result<()> {
+    fn handle_remote_msg(&mut self, data: StreamTaskMessage) -> ArconResult<()> {
         let payload = data.payload.unwrap();
 
         match payload {
             element(e) => {
-                let event: A = bincode::deserialize(e.get_data())
-                    .map_err(|e| Error::new(DeserializationError(e.to_string())))?;
+                let event: A = bincode::deserialize(e.get_data()).map_err(|e| {
+                    arcon_err_kind!("Failed to deserialise event with err {}", e.to_string())
+                })?;
                 let _ = self.handle_event(&event);
             }
             keyed_element(_) => {
@@ -100,7 +100,7 @@ where
         Ok(())
     }
 
-    fn handle_event(&mut self, event: &A) -> crate::error::Result<()> {
+    fn handle_event(&mut self, event: &A) -> ArconResult<()> {
         if let Ok(result) = self.run_udf(event) {
             let _ = self.push_out(result);
         } else {
@@ -110,11 +110,15 @@ where
         Ok(())
     }
 
-    fn run_udf(&mut self, event: &A) -> crate::error::Result<C> {
+    fn run_udf(&mut self, event: &A) -> ArconResult<C> {
         // NOTE: Decide if we want to use new context for each execution, or
         //       reuse the same one over and over...
-        let ref mut ctx = WeldContext::new(&self.udf.conf())
-            .map_err(|e| Error::new(ContextError(e.message().to_string_lossy().into_owned())))?;
+        let ref mut ctx = WeldContext::new(&self.udf.conf()).map_err(|e| {
+            weld_error!(
+                "Failed to build WeldContext with err {}",
+                e.message().to_string_lossy().into_owned()
+            )
+        })?;
 
         let run: ModuleRun<C> = self.udf.run(event, ctx)?;
         let ns = run.1;
@@ -133,7 +137,7 @@ where
         self.udf_executions += 1;
     }
 
-    fn push_out(&mut self, event: C) -> crate::error::Result<()> {
+    fn push_out(&mut self, event: C) -> ArconResult<()> {
         let self_ptr = self as *const StreamTask<A, B, C>;
         let _ = self.partitioner.output(event, self_ptr, None)?;
         Ok(())
@@ -258,7 +262,12 @@ mod tests {
                 match payload {
                     element(e) => {
                         let event: TaskOutput = bincode::deserialize(e.get_data())
-                            .map_err(|e| Error::new(DeserializationError(e.to_string())))
+                            .map_err(|e| {
+                                arcon_err_kind!(
+                                    "Failed to deserialise event with err {}",
+                                    e.to_string()
+                                )
+                            })
                             .unwrap();
                         self.result = Some(event);
                     }

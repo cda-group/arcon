@@ -1,8 +1,6 @@
-use crate::error::ErrorKind::*;
 use crate::error::*;
 use crate::prelude::{DeserializeOwned, Serialize};
-use crate::streaming::partitioner::channel_output;
-use crate::streaming::partitioner::Partitioner;
+use crate::streaming::partitioner::{channel_output, Partitioner};
 use crate::streaming::Channel;
 use kompact::{ComponentDefinition, Port, Require};
 use messages::protobuf::*;
@@ -35,7 +33,7 @@ where
     B: Port<Request = A> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
-    fn output(&mut self, event: A, source: *const C, key: Option<u64>) -> crate::error::Result<()> {
+    fn output(&mut self, event: A, source: *const C, key: Option<u64>) -> ArconResult<()> {
         channel_output(&self.out_channel, event, source, key)
     }
     fn add_channel(&mut self, channel: Channel<A, B, C>) {
