@@ -21,18 +21,13 @@ where
     B: Port<Request = A> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
-    fn output(
-        &mut self,
-        event: B::Request,
-        source: *const C,
-        key: Option<u64>,
-    ) -> ArconResult<()>;
+    fn output(&mut self, event: B::Request, source: *const C, key: Option<u64>) -> ArconResult<()>;
     fn add_channel(&mut self, channel: Channel<A, B, C>);
     fn remove_channel(&mut self, channel: Channel<A, B, C>);
 }
 
-/// `channel_output` takes an event and sends it to another
-/// component. Either locally through a Port or by ActorRef, or remote (ActorPath)
+/// `channel_output` takes an event and sends it to another component.
+/// Either locally through a Port or by ActorRef, or remote (ActorPath)
 fn channel_output<A, B, C>(
     channel: &Channel<A, B, C>,
     event: A,

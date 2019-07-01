@@ -1,3 +1,5 @@
+use crate::prelude::{DeserializeOwned, Serialize};
+use crate::streaming::partitioner::*;
 use crate::streaming::window::builder::WindowModules;
 use crate::streaming::window::component;
 use crate::weld::module::Module;
@@ -6,8 +8,8 @@ use messages::protobuf::StreamTaskMessage_oneof_payload::*;
 use messages::protobuf::*;
 use std::collections::BTreeMap;
 use std::fmt::Debug;
-use std::fmt::Display;
-use std::sync::Arc;
+use std::hash::Hash;
+use std::sync::{Arc, Mutex};
 use std::time::UNIX_EPOCH;
 use std::{thread, time};
 /*
@@ -54,13 +56,21 @@ pub struct LocalElement<T> {
     pub timestamp: u64,
 }
 
-pub struct EventTimeWindowAssigner<
-    A: 'static + Send + Clone + Sync + Debug + Display,
+/// Window Assigner that manages and triggers `WindowComponent`s
+///
+/// A: Input event
+/// B: ´WindowBuilder`s internal builder type
+/// C: Output of Window
+/// D: Port type for the `Partitioner`
+pub struct EventTimeWindowAssigner<A, B, C, D>
+where
+    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Debug + Hash,
     B: 'static + Clone,
-    C: 'static + Send + Clone + Sync + Display,
-> {
-    ctx: ComponentContext<EventTimeWindowAssigner<A, B, C>>,
-    target_pointer: ActorRef,
+    C: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Debug + Hash,
+    D: Port<Request = C> + 'static + Clone,
+{
+    ctx: ComponentContext<Self>,
+    partitioner: Arc<Mutex<Partitioner<C, D, component::WindowComponent<A, B, C, D>>>>,
     window_count: u64,
     window_length: u64,
     window_slide: u64,
@@ -69,13 +79,16 @@ pub struct EventTimeWindowAssigner<
     max_window_ts: u64,
     max_watermark: u64,
     window_map: BTreeMap<u64, ActorRef>,
-    component_map: BTreeMap<u64, Arc<Component<component::WindowComponent<A, B, C>>>>,
-    window_module: WindowModules,
+    component_map: BTreeMap<u64, Arc<Component<component::WindowComponent<A, B, C, D>>>>,
+    window_modules: WindowModules,
 }
 
-// Implement ComponentDefinition
-impl<A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync + Display>
-    ComponentDefinition for EventTimeWindowAssigner<A, B, C>
+impl<A, B, C, D> ComponentDefinition for EventTimeWindowAssigner<A, B, C, D>
+where
+    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Debug + Hash,
+    B: 'static + Clone,
+    C: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Debug + Hash,
+    D: Port<Request = C> + 'static + Clone,
 {
     fn setup(&mut self, self_component: Arc<Component<Self>>) -> () {
         self.ctx_mut().initialise(self_component);
@@ -94,18 +107,22 @@ impl<A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync 
     }
 }
 
-impl<A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync + Display>
-    EventTimeWindowAssigner<A, B, C>
+impl<A, B, C, D> EventTimeWindowAssigner<A, B, C, D>
+where
+    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Debug + Hash,
+    B: 'static + Clone,
+    C: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Debug + Hash,
+    D: Port<Request = C> + 'static + Clone,
 {
     pub fn new(
-        target: ActorRef,
+        partitioner: Arc<Mutex<Partitioner<C, D, component::WindowComponent<A, B, C, D>>>>,
         init_builder_code: String,
         udf_code: String,
         result_code: String,
         length: u64,
         slide: u64,
         late: u64,
-    ) -> EventTimeWindowAssigner<A, B, C> {
+    ) -> Self {
         let prio = 0;
         let init_builder = Arc::new(
             Module::new("init_builder".to_string(), init_builder_code, prio, None).unwrap(),
@@ -124,7 +141,7 @@ impl<A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync 
 
         EventTimeWindowAssigner {
             ctx: ComponentContext::new(),
-            target_pointer: target.clone(),
+            partitioner,
             window_count: 0,
             window_length: length,
             window_slide: slide,
@@ -134,18 +151,17 @@ impl<A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync 
             max_watermark: 0,
             window_map: BTreeMap::new(),
             component_map: BTreeMap::new(), // Used for direct access to components, for killing
-            window_module: window_modules,
+            window_modules,
         }
     }
     // Creates the next window based on window_start + window_count*window_slide
     fn new_window(&mut self) -> () {
-        // Clone variables so they can spawn new component
-        let target = self.target_pointer.clone();
-        //let new_window_module = self.window_module.clone();
         let ts = self.window_start + (self.window_count * self.window_slide) + self.window_length;
-
-        let wc: component::WindowComponent<A, B, C> =
-            component::WindowComponent::new(target, self.window_module.clone(), ts.clone());
+        let wc = component::WindowComponent::new(
+            self.partitioner.clone(),
+            self.window_modules.clone(),
+            ts.clone(),
+        );
         let (wp, _) = self.ctx.system().create_and_register(move || wc);
         self.ctx.system().start(&wp);
         self.window_map.insert(ts, wp.actor_ref());
@@ -189,8 +205,12 @@ impl<A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync 
     }
 }
 
-impl<A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync + Display>
-    Provide<ControlPort> for EventTimeWindowAssigner<A, B, C>
+impl<A, B, C, D> Provide<ControlPort> for EventTimeWindowAssigner<A, B, C, D>
+where
+    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Debug + Hash,
+    B: 'static + Clone,
+    C: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Debug + Hash,
+    D: Port<Request = C> + 'static + Clone,
 {
     fn handle(&mut self, event: ControlEvent) -> () {
         if let ControlEvent::Start = event {
@@ -219,8 +239,12 @@ impl<A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync 
     }
 }
 
-impl<A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync + Display> Actor
-    for EventTimeWindowAssigner<A, B, C>
+impl<A, B, C, D> Actor for EventTimeWindowAssigner<A, B, C, D>
+where
+    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Debug + Hash,
+    B: 'static + Clone,
+    C: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Debug + Hash,
+    D: Port<Request = C> + 'static + Clone,
 {
     fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
         if let Some(payload) = msg.downcast_ref::<LocalElement<A>>() {
@@ -268,7 +292,12 @@ impl<A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::streaming::partitioner::forward::*;
+    use crate::streaming::partitioner::*;
+    use crate::streaming::{Channel, ChannelPort};
     use kompact::default_components::DeadletterBox;
+    use std::cell::RefCell;
+    use std::rc::Rc;
     use weld::data::Appender;
     use weld::data::WeldVec;
 
@@ -279,12 +308,14 @@ mod tests {
         #[derive(ComponentDefinition)]
         pub struct Sink {
             ctx: ComponentContext<Sink>,
-            pub result: Vec<Option<WeldVec<u8>>>,
+            pub sink_port: ProvidedPort<ChannelPort<WindowOutput>, Self>,
+            pub result: Vec<Option<i64>>,
         }
         impl Sink {
             pub fn new() -> Sink {
                 Sink {
                     ctx: ComponentContext::new(),
+                    sink_port: ProvidedPort::new(),
                     result: Vec::new(),
                 }
             }
@@ -294,13 +325,28 @@ mod tests {
         }
         impl Actor for Sink {
             fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
-                println!("sink received message");
-                if let Some(m) = msg.downcast_ref::<LocalElement<WeldVec<u8>>>() {
-                    self.result.push(Some(m.data.clone()));
+                if let Some(m) = msg.downcast_ref::<WindowOutput>() {
+                    self.result.push(Some(m.len));
                 }
             }
             fn receive_message(&mut self, _sender: ActorPath, _ser_id: u64, _buf: &mut Buf) {}
         }
+        impl Provide<ChannelPort<WindowOutput>> for Sink {
+            fn handle(&mut self, event: WindowOutput) -> () {
+                self.result.push(Some(event.len));
+            }
+        }
+        impl Require<ChannelPort<WindowOutput>> for Sink {
+            fn handle(&mut self, event: ()) -> () {
+                // ignore
+            }
+        }
+    }
+
+    #[repr(C)]
+    #[derive(Clone, Debug, Copy, Hash, Serialize, Deserialize)]
+    pub struct WindowOutput {
+        pub len: i64,
     }
 
     // helper functions
@@ -308,11 +354,7 @@ mod tests {
         length: u64,
         slide: u64,
         late: u64,
-    ) -> (
-        Arc<kompact::Component<EventTimeWindowAssigner<u8, Appender<u8>, WeldVec<u8>>>>,
-        ActorRef,
-        Arc<kompact::Component<sink::Sink>>,
-    ) {
+    ) -> (ActorRef, Arc<kompact::Component<sink::Sink>>) {
         // Kompact set-up
         let mut cfg = KompactConfig::new();
         cfg.system_components(DeadletterBox::new, NetworkConfig::default().build());
@@ -322,25 +364,31 @@ mod tests {
         let (sink, _) = system.create_and_register(move || sink::Sink::new());
         let sink_ref = sink.actor_ref();
 
+        pub type WindowC =
+            component::WindowComponent<u8, Appender<u8>, WindowOutput, ChannelPort<WindowOutput>>;
+
+        let mut partitioner: Arc<Mutex<Forward<WindowOutput, ChannelPort<WindowOutput>, WindowC>>> =
+            Arc::new(Mutex::new(Forward::new(Channel::Local(sink_ref.clone()))));
+
         // Create the window_assigner
         let builder_code = String::from("|| appender[u8]");
         let udf_code = String::from("|x: u8, y: appender[u8]| merge(y, x)");
-        let udf_result = String::from("|y: appender[u8]| result(y)");
-        let window_assigner: EventTimeWindowAssigner<u8, Appender<u8>, WeldVec<u8>> =
-            EventTimeWindowAssigner::new(
-                sink_ref,
-                builder_code,
-                udf_code,
-                udf_result,
-                length,
-                slide,
-                late,
-            );
+        let udf_result = String::from("|y: appender[u8]| len(result(y))");
+        let window_assigner = EventTimeWindowAssigner::new(
+            partitioner,
+            builder_code,
+            udf_code,
+            udf_result,
+            length,
+            slide,
+            late,
+        );
+
         let (assigner, _) = system.create_and_register(move || window_assigner);
         let win_ref = assigner.actor_ref();
         system.start(&sink);
         system.start(&assigner);
-        return (assigner, win_ref, sink);
+        return (win_ref, sink);
     }
     fn now() -> u64 {
         return time::SystemTime::now()
@@ -367,7 +415,7 @@ mod tests {
     #[test]
     fn discard_late_arrival() {
         // Send 2 messages on time, a watermark and a late arrival which is not allowed
-        let (_, assigner_ref, sink) = window_assigner_test_setup(10, 10, 0);
+        let (assigner_ref, sink) = window_assigner_test_setup(10, 10, 0);
         wait(1);
         // Send messages
         let moment = now();
@@ -380,12 +428,12 @@ mod tests {
         // Inspect and assert
         let mut sink_inspect = sink.definition().lock().unwrap();
         let result = &sink_inspect.result[0].take().unwrap();
-        assert_eq!(result.len, 2);
+        assert_eq!(result, &2);
     }
     #[test]
     fn late_arrival() {
         // Send 2 messages on time, a watermark and a late message which should be allowed
-        let (_, assigner_ref, sink) = window_assigner_test_setup(10, 10, 10);
+        let (assigner_ref, sink) = window_assigner_test_setup(10, 10, 10);
         wait(1);
         // Send messages
         let moment = now();
@@ -398,14 +446,14 @@ mod tests {
         // Inspect and assert
         let mut sink_inspect = sink.definition().lock().unwrap();
         let r0 = &sink_inspect.result[0].take().unwrap();
-        assert_eq!(r0.len, 2);
+        assert_eq!(r0, &2);
         let r1 = &sink_inspect.result[1].take().unwrap();
-        assert_eq!(r1.len, 3);
+        assert_eq!(r1, &3);
     }
     #[test]
     fn too_late_late_arrival() {
         // Send 2 messages on time, and then 1 message which is too late
-        let (_, assigner_ref, sink) = window_assigner_test_setup(10, 10, 10);
+        let (assigner_ref, sink) = window_assigner_test_setup(10, 10, 10);
         wait(1);
         // Send messages
         let moment = now();
@@ -419,14 +467,14 @@ mod tests {
         let mut sink_inspect = sink.definition().lock().unwrap();
         let r0 = &sink_inspect.result[0].take().unwrap();
         let r1 = &sink_inspect.result[1].take().unwrap();
-        assert_eq!(r0.len, 2);
-        assert_eq!(r1.len, 0);
+        assert_eq!(r0, &2);
+        assert_eq!(r1, &0);
         assert_eq!(&sink_inspect.result.len(), &(2 as usize));
     }
     #[test]
     fn overlapping_windows() {
         // Use overlapping windows (slide = length/2), check that messages appear correctly
-        let (_, assigner_ref, sink) = window_assigner_test_setup(10, 5, 2);
+        let (assigner_ref, sink) = window_assigner_test_setup(10, 5, 2);
         wait(1);
         // Send messages
         let moment = now();
@@ -442,14 +490,14 @@ mod tests {
         let r0 = &sink_inspect.result[0].take().unwrap();
         let r1 = &sink_inspect.result[1].take().unwrap();
         let r2 = &sink_inspect.result[2].take().unwrap();
-        assert_eq!(r0.len, 3);
-        assert_eq!(r1.len, 2);
-        assert_eq!(r2.len, 0);
+        assert_eq!(r0, &3);
+        assert_eq!(r1, &2);
+        assert_eq!(r2, &0);
     }
     #[test]
     fn fastforward_windows() {
         // check that we receive correct number windows from fast forwarding
-        let (_, assigner_ref, sink) = window_assigner_test_setup(5, 5, 0);
+        let (assigner_ref, sink) = window_assigner_test_setup(5, 5, 0);
         wait(1);
         // Send messages
         let moment = now();
@@ -462,13 +510,77 @@ mod tests {
     #[test]
     fn empty_window() {
         // check that we receive correct number windows from fast forwarding
-        let (_, assigner_ref, sink) = window_assigner_test_setup(5, 5, 0);
+        let (assigner_ref, sink) = window_assigner_test_setup(5, 5, 0);
         wait(1);
         assigner_ref.tell(Box::new(watermark(now() + 5)), &assigner_ref);
         wait(1);
         let mut sink_inspect = sink.definition().lock().unwrap();
         let r0 = &sink_inspect.result[0].take().unwrap();
-        assert_eq!(r0.len, 0);
+        assert_eq!(r0, &0);
         assert_eq!(&sink_inspect.result.len(), &(1 as usize));
+    }
+
+    /// Similar to the above tests. Only major
+    /// difference is that the following test uses
+    /// uses a Port channel to send the window result to.
+    #[test]
+    fn window_port_channel_test() {
+        let length = 5;
+        let slide = 5;
+
+        let mut cfg = KompactConfig::new();
+        cfg.system_components(DeadletterBox::new, NetworkConfig::default().build());
+        let system = KompactSystem::new(cfg).expect("KompactSystem");
+
+        pub type WindowC =
+            component::WindowComponent<u8, Appender<u8>, WindowOutput, ChannelPort<WindowOutput>>;
+
+        // Create a sink and create port channel
+        let (sink, _) = system.create_and_register(move || sink::Sink::new());
+        let target_port = sink.on_definition(|c| c.sink_port.share());
+        use crate::streaming::window::assigner::tests::sink::Sink;
+        let mut req_port: RequiredPort<ChannelPort<WindowOutput>, WindowC> = RequiredPort::new();
+        let _ = req_port.connect(target_port);
+        let ref_port = crate::streaming::RequirePortRef(Rc::new(RefCell::new(req_port)));
+        let comp_channel: Channel<WindowOutput, ChannelPort<WindowOutput>, WindowC> =
+            Channel::Port(ref_port);
+
+        // Define partitioner
+        let mut partitioner: Arc<Mutex<Forward<WindowOutput, ChannelPort<WindowOutput>, WindowC>>> =
+            Arc::new(Mutex::new(Forward::new(comp_channel)));
+
+        // Create the window_assigner
+        let builder_code = String::from("|| appender[u8]");
+        let udf_code = String::from("|x: u8, y: appender[u8]| merge(y, x)");
+        let udf_result = String::from("|y: appender[u8]| len(result(y))");
+        let window_assigner = EventTimeWindowAssigner::new(
+            partitioner,
+            builder_code,
+            udf_code,
+            udf_result,
+            length,
+            slide,
+            0,
+        );
+
+        // Register and start components
+        let (assigner, _) = system.create_and_register(move || window_assigner);
+        let assigner_ref = assigner.actor_ref();
+        system.start(&sink);
+        system.start(&assigner);
+
+        wait(1);
+        // Send messages
+        let moment = now();
+        assigner_ref.tell(timestamped_event(moment), &assigner_ref);
+        assigner_ref.tell(timestamped_event(moment), &assigner_ref);
+        assigner_ref.tell(Box::new(watermark(moment + 10)), &assigner_ref);
+        wait(1);
+        assigner_ref.tell(timestamped_event(moment), &assigner_ref);
+        wait(1);
+        // Inspect and assert
+        let mut sink_inspect = sink.definition().lock().unwrap();
+        let result = &sink_inspect.result[0].take().unwrap();
+        assert_eq!(result, &2);
     }
 }
