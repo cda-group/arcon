@@ -1,28 +1,42 @@
+use crate::data::{ArconElement, ArconType};
+use crate::error::*;
+use crate::prelude::{DeserializeOwned, Serialize};
+use crate::streaming::partitioner::Partitioner;
 use crate::streaming::window::assigner::*;
 use crate::streaming::window::builder::*;
 use kompact::*;
 use messages::protobuf::WindowMessage_oneof_payload::*;
 use messages::protobuf::*;
 use std::fmt::Debug;
-use std::fmt::Display;
-use std::sync::Arc;
-use LocalElement;
+use std::hash::Hash;
+use std::sync::{Arc, Mutex};
 
-pub struct WindowComponent<
-    A: 'static + Send + Clone + Sync + Debug + Display,
+/// For each Streaming window, a WindowComponent is spawned
+///
+/// A: Input event
+/// B: ´WindowBuilder`s internal builder type
+/// C: Output of Window
+/// D: Port type for the `Partitioner`
+pub struct WindowComponent<A, B, C, D>
+where
+    A: 'static + ArconType,
     B: 'static + Clone,
-    C: 'static + Send + Clone + Sync + Display,
-> {
-    ctx: ComponentContext<WindowComponent<A, B, C>>,
+    C: 'static + ArconType,
+    D: Port<Request = ArconElement<C>> + 'static + Clone,
+{
+    ctx: ComponentContext<Self>,
     builder: WindowBuilder<A, B, C>,
-    target_pointer: ActorRef,
+    partitioner: Arc<Mutex<Partitioner<C, D, Self>>>,
     complete: bool,
     timestamp: u64,
 }
 
-// Implement ComponentDefinition
-impl<A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync + Display>
-    ComponentDefinition for WindowComponent<A, B, C>
+impl<A, B, C, D> ComponentDefinition for WindowComponent<A, B, C, D>
+where
+    A: 'static + ArconType,
+    B: 'static + Clone,
+    C: 'static + ArconType,
+    D: Port<Request = ArconElement<C>> + 'static + Clone,
 {
     fn setup(&mut self, self_component: Arc<Component<Self>>) -> () {
         self.ctx_mut().initialise(self_component);
@@ -41,29 +55,33 @@ impl<A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync 
     }
 }
 
-impl<A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync + Display>
-    WindowComponent<A, B, C>
+impl<A, B, C, D> WindowComponent<A, B, C, D>
+where
+    A: 'static + ArconType,
+    B: 'static + Clone,
+    C: 'static + ArconType,
+    D: Port<Request = ArconElement<C>> + 'static + Clone,
 {
     pub fn new(
-        target: ActorRef,
+        partitioner: Arc<Mutex<Partitioner<C, D, Self>>>,
         window_modules: WindowModules,
         ts: u64,
-    ) -> WindowComponent<A, B, C> {
-        let window_builder: WindowBuilder<A, B, C> = WindowBuilder::new(window_modules).unwrap();
+    ) -> Self {
+        let window_builder = WindowBuilder::new(window_modules).unwrap();
 
         WindowComponent {
             ctx: ComponentContext::new(),
             builder: window_builder,
-            target_pointer: target,
+            partitioner: partitioner.clone(),
             complete: false,
             timestamp: ts,
         }
     }
-    fn add_value(&mut self, v: A) -> () {
-        if let Ok(_) = self.builder.on_element(v) {
-        } else {
+    fn add_value(&mut self, v: A) {
+        if let Err(err) = self.builder.on_element(v) {
             error!(self.ctx.log(), "Failed to process element",);
         }
+
         if self.complete {
             debug!(self.ctx.log(), "Late-value, sending new result",);
             self.trigger();
@@ -77,9 +95,7 @@ impl<A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync 
                     // TODO: Handle elements from remote source
                     //self.add_value(e.data); <- Doesn't work because element isn't generic
                 }
-                keyed_element(_) => {
-
-                }
+                keyed_element(_) => {}
                 trigger(_) => {
                     self.complete = true;
                     self.trigger();
@@ -92,32 +108,28 @@ impl<A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync 
             debug!(self.ctx.log(), "Window received empty WindowMessage")
         }
     }
-    fn trigger(&mut self) -> () {
-        // Close the window, only trigger if we weren't already complete
-        if let Ok(result) = self.builder.result() {
-            debug!(
-                self.ctx.log(),
-                "materialized result for window {}", self.timestamp
-            );
-            // Report our result to the target
-            self.target_pointer.tell(
-                Arc::new(LocalElement {
-                    data: result,
-                    timestamp: self.timestamp,
-                }),
-                &self.actor_ref(),
-            );
-        } else {
-            error!(
-                self.ctx.log(),
-                "Window {} failed to materialize result", self.timestamp
-            );
+
+    fn trigger(&mut self) {
+        if let Err(err) = self.output_window() {
+            error!(self.ctx.log(), "Failed to complete window with err {}", err);
         }
+    }
+
+    fn output_window(&mut self) -> ArconResult<()> {
+        let result = self.builder.result()?;
+        let self_ptr = self as *const Self;
+        let mut p = self.partitioner.lock().unwrap();
+        let _ = p.output(ArconElement::new(result), self_ptr, None);
+        Ok(())
     }
 }
 
-impl<A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync + Display>
-    Provide<ControlPort> for WindowComponent<A, B, C>
+impl<A, B, C, D> Provide<ControlPort> for WindowComponent<A, B, C, D>
+where
+    A: 'static + ArconType,
+    B: 'static + Clone,
+    C: 'static + ArconType,
+    D: Port<Request = ArconElement<C>> + 'static + Clone,
 {
     fn handle(&mut self, event: ControlEvent) -> () {
         match event {
@@ -136,11 +148,15 @@ impl<A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync 
     }
 }
 
-impl<A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync + Display> Actor
-    for WindowComponent<A, B, C>
+impl<A, B, C, D> Actor for WindowComponent<A, B, C, D>
+where
+    A: 'static + ArconType,
+    B: 'static + Clone,
+    C: 'static + ArconType,
+    D: Port<Request = ArconElement<C>> + 'static + Clone,
 {
     fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
-        if let Some(payload) = msg.downcast_ref::<LocalElement<A>>() {
+        if let Some(payload) = msg.downcast_ref::<ArconElement<A>>() {
             // "Normal message"
             self.add_value(payload.data.clone());
         } else if let Some(wm) = msg.downcast_ref::<WindowMessage>() {
@@ -166,5 +182,17 @@ impl<A: Send + Clone + Sync + Debug + Display, B: Clone, C: Send + Clone + Sync 
                 "Window {} bad remote message from {}", self.timestamp, sender
             );
         }
+    }
+}
+
+impl<A, B, C, D> Require<D> for WindowComponent<A, B, C, D>
+where
+    A: 'static + ArconType,
+    B: 'static + Clone,
+    C: 'static + ArconType,
+    D: Port<Request = ArconElement<C>> + 'static + Clone,
+{
+    fn handle(&mut self, event: D::Indication) -> () {
+        // ignore
     }
 }

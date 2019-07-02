@@ -1,10 +1,9 @@
-use crate::error::ErrorKind::*;
 use crate::error::*;
 use weld_core::data::*;
 
 // TODO: There is probably a better way to do this.
 //       Getting double free with other approaches..
-pub fn to_rust_vec(input: WeldVec<u8>) -> Result<Vec<u8>> {
+pub fn to_rust_vec(input: WeldVec<u8>) -> ArconResult<Vec<u8>> {
     let boxed: Box<[u8]> = unsafe {
         Vec::from_raw_parts(
             input.data as *mut u8,
@@ -19,7 +18,7 @@ pub fn to_rust_vec(input: WeldVec<u8>) -> Result<Vec<u8>> {
 }
 
 /// Helper for creating a input serializer module
-pub fn serialize_module_fmt(code: String) -> Result<String> {
+pub fn serialize_module_fmt(code: String) -> ArconResult<String> {
     let re = regex::Regex::new(r"\|(.*?)\|").unwrap();
     if let Some(caps) = re.captures(&code) {
         let args = caps.get(1).map_or("", |m| m.as_str());
@@ -38,9 +37,7 @@ pub fn serialize_module_fmt(code: String) -> Result<String> {
                     serialize_fn += ",";
                 }
             } else {
-                return Err(Error::new(IOError(
-                    "Failed to format module args".to_string(),
-                )));
+                return arcon_err!("{}", "Failed to format module args".to_string());
             }
         }
 
@@ -51,15 +48,13 @@ pub fn serialize_module_fmt(code: String) -> Result<String> {
         final_output += &serialize_fn;
         Ok(final_output)
     } else {
-        Err(Error::new(IOError(
-            "Failed to match regex for args".to_string(),
-        )))
+        return arcon_err!("{}", "Failed to match regex for args".to_string());
     }
 }
 
 // Converts a "normal" Weld module to accept raw bytes instead
 // i.e., vec[u8]
-pub fn generate_raw_module(code: String, serialize_ouput: bool) -> Result<String> {
+pub fn generate_raw_module(code: String, serialize_ouput: bool) -> ArconResult<String> {
     let mut module_code = String::new();
     module_code += "|raw: vec[u8]| ";
     let re = regex::Regex::new(r"\|(.*?)\|(.*)").unwrap();
@@ -76,9 +71,7 @@ pub fn generate_raw_module(code: String, serialize_ouput: bool) -> Result<String
             if name.len() > 1 {
                 args_info.push((name[0].to_string(), name[1].to_string()));
             } else {
-                return Err(Error::new(IOError(
-                    "Failed to format module args".to_string(),
-                )));
+                return arcon_err!("{}", "Failed to format module args".to_string());
             }
         }
 
@@ -113,7 +106,7 @@ pub fn generate_raw_module(code: String, serialize_ouput: bool) -> Result<String
                 module_code += output.trim();
                 module_code += ")";
             } else {
-                return Err(Error::new(IOError("Failed to catch regex".to_string())));
+                return arcon_err!("{}", "Failed to catch regex".to_string());
             }
         } else {
             module_code += rest.trim();
@@ -147,7 +140,7 @@ mod tests {
         };
         let module = Module::new(id, result, priority, None).unwrap();
         let ref mut ctx = WeldContext::new(&module.conf()).unwrap();
-        let serialized_input: Result<ModuleRun<WeldVec<u8>>> = module.run(input_data, ctx);
+        let serialized_input: ArconResult<ModuleRun<WeldVec<u8>>> = module.run(input_data, ctx);
         assert_eq!(serialized_input.is_ok(), true);
     }
 

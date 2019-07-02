@@ -1,65 +1,68 @@
-use crate::error::ErrorKind::*;
+use crate::data::{ArconElement, ArconType};
 use crate::error::*;
-use crate::prelude::Serialize;
-use crate::streaming::partitioner::channel_output;
-use crate::streaming::partitioner::Partitioner;
+use crate::prelude::{DeserializeOwned, Serialize};
+use crate::streaming::partitioner::{channel_output, Partitioner};
 use crate::streaming::Channel;
-use kompact::ComponentDefinition;
+use kompact::{ComponentDefinition, Port, Require};
 use messages::protobuf::*;
+use std::fmt::Debug;
 use std::hash::Hash;
-use std::marker::PhantomData;
 
-pub struct Forward<A, B>
+pub struct Forward<A, B, C>
 where
-    A: 'static + Serialize + Send + Sync + Copy + Hash,
-    B: ComponentDefinition + Sized + 'static,
+    A: 'static + ArconType,
+    B: Port<Request = ArconElement<A>> + 'static + Clone,
+    C: ComponentDefinition + Sized + 'static + Require<B>,
 {
-    out_channel: Channel,
-    phantom_event: PhantomData<A>,
-    phantom_source: PhantomData<B>,
+    out_channel: Channel<A, B, C>,
 }
 
-impl<A, B> Forward<A, B>
+impl<A, B, C> Forward<A, B, C>
 where
-    A: 'static + Serialize + Send + Sync + Copy + Hash,
-    B: ComponentDefinition + Sized + 'static,
+    A: 'static + ArconType,
+    B: Port<Request = ArconElement<A>> + 'static + Clone,
+    C: ComponentDefinition + Sized + 'static + Require<B>,
 {
-    pub fn new(out_channel: Channel) -> Forward<A, B> {
-        Forward {
-            out_channel,
-            phantom_event: PhantomData,
-            phantom_source: PhantomData,
-        }
+    pub fn new(out_channel: Channel<A, B, C>) -> Forward<A, B, C> {
+        Forward { out_channel }
     }
 }
 
-impl<A, B> Partitioner<A, B> for Forward<A, B>
+impl<A, B, C> Partitioner<A, B, C> for Forward<A, B, C>
 where
-    A: 'static + Serialize + Send + Sync + Copy + Hash,
-    B: ComponentDefinition + Sized + 'static,
+    A: 'static + ArconType,
+    B: Port<Request = ArconElement<A>> + 'static + Clone,
+    C: ComponentDefinition + Sized + 'static + Require<B>,
 {
-    fn output(&mut self, event: A, source: *const B, key: Option<u64>) -> crate::error::Result<()> {
+    fn output(
+        &mut self,
+        event: ArconElement<A>,
+        source: *const C,
+        key: Option<u64>,
+    ) -> ArconResult<()> {
         channel_output(&self.out_channel, event, source, key)
     }
-    fn add_channel(&mut self, channel: Channel) {
+    fn add_channel(&mut self, channel: Channel<A, B, C>) {
         // ignore
     }
-    fn remove_channel(&mut self, channel: Channel) {
+    fn remove_channel(&mut self, channel: Channel<A, B, C>) {
         // ignore
     }
 }
 
-unsafe impl<A, B> Send for Forward<A, B>
+unsafe impl<A, B, C> Send for Forward<A, B, C>
 where
-    A: 'static + Serialize + Send + Sync + Copy + Hash,
-    B: ComponentDefinition + Sized + 'static,
+    A: 'static + ArconType,
+    B: Port<Request = ArconElement<A>> + 'static + Clone,
+    C: ComponentDefinition + Sized + 'static + Require<B>,
 {
 }
 
-unsafe impl<A, B> Sync for Forward<A, B>
+unsafe impl<A, B, C> Sync for Forward<A, B, C>
 where
-    A: 'static + Serialize + Send + Sync + Copy + Hash,
-    B: ComponentDefinition + Sized + 'static,
+    A: 'static + ArconType,
+    B: Port<Request = ArconElement<A>> + 'static + Clone,
+    C: ComponentDefinition + Sized + 'static + Require<B>,
 {
 }
 
@@ -67,42 +70,14 @@ where
 mod tests {
     use super::*;
     use crate::prelude::Serialize;
+    use crate::streaming::partitioner::tests::*;
+    use crate::streaming::{ChannelPort, RequirePortRef};
     use kompact::default_components::*;
     use kompact::*;
     use rand::Rng;
+    use std::cell::RefCell;
+    use std::rc::Rc;
     use std::sync::Arc;
-
-    #[derive(ComponentDefinition)]
-    #[allow(dead_code)]
-    pub struct TestComp {
-        ctx: ComponentContext<TestComp>,
-        pub counter: u64,
-    }
-
-    impl TestComp {
-        pub fn new() -> TestComp {
-            TestComp {
-                ctx: ComponentContext::new(),
-                counter: 0,
-            }
-        }
-    }
-    impl Provide<ControlPort> for TestComp {
-        fn handle(&mut self, event: ControlEvent) -> () {}
-    }
-
-    impl Actor for TestComp {
-        fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
-            self.counter += 1;
-        }
-        fn receive_message(&mut self, sender: ActorPath, ser_id: u64, buf: &mut Buf) {}
-    }
-
-    #[repr(C)]
-    #[derive(Clone, Copy, Hash, Serialize)]
-    pub struct Input {
-        id: u32,
-    }
 
     #[test]
     fn forward_test() {
@@ -113,14 +88,20 @@ mod tests {
         let components: u32 = 8;
         let total_msgs = 10;
         let comp = system.create_and_start(move || TestComp::new());
-        let channel = Channel::Local(comp.actor_ref());
+        let target_port = comp.on_definition(|c| c.prov_port.share());
 
-        let mut partitioner: Box<Partitioner<Input, TestComp>> =
-            Box::new(Forward::new(channel.clone()));
+        let mut req_port: RequiredPort<ChannelPort<Input>, TestComp> = RequiredPort::new();
+        let _ = req_port.connect(target_port);
+
+        let ref_port = RequirePortRef(Rc::new(RefCell::new(req_port)));
+        let comp_channel: Channel<Input, ChannelPort<Input>, TestComp> = Channel::Port(ref_port);
+
+        let mut partitioner: Box<Partitioner<Input, ChannelPort<Input>, TestComp>> =
+            Box::new(Forward::new(comp_channel));
 
         for i in 0..total_msgs {
             // NOTE: second parameter is a fake channel...
-            let input = Input { id: 1 };
+            let input = ArconElement::new(Input { id: 1 });
             let _ = partitioner.output(input, &*comp.definition().lock().unwrap(), None);
         }
 

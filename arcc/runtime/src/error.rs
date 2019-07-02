@@ -1,15 +1,31 @@
 use std::error::Error as StdError;
 use std::fmt;
 
-#[derive(Debug, Eq, PartialEq)]
+#[macro_export]
+macro_rules! arcon_err {
+    ( $($arg:tt)* ) => ({
+        ::std::result::Result::Err($crate::error::Error::new_arcon(format!($($arg)*)))
+    })
+}
+
+/// Internal helper macro for generating ErrorKin
+macro_rules! arcon_err_kind {
+    ( $($arg:tt)* ) => ({
+        $crate::error::Error::new_arcon(format!($($arg)*))
+    })
+}
+
+/// Internal helper macro for defining Weld errors
+macro_rules! weld_error {
+    ( $($arg:tt)* ) => ({
+        $crate::error::Error::new_weld(format!($($arg)*))
+    })
+}
+
+#[derive(Debug)]
 pub enum ErrorKind {
-    CompilationError(String),
-    ModuleRunError(String),
-    ContextError(String),
-    SerializationError(String),
-    DeserializationError(String),
-    BadTaskError(String),
-    IOError(String),
+    WeldError(String),
+    ArconError(String),
 }
 
 #[derive(Debug)]
@@ -21,13 +37,8 @@ pub struct Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let msg = match self.kind {
-            ErrorKind::CompilationError(ref err) => err,
-            ErrorKind::ContextError(ref err) => err,
-            ErrorKind::ModuleRunError(ref err) => err,
-            ErrorKind::BadTaskError(ref err) => err,
-            ErrorKind::SerializationError(ref err) => err,
-            ErrorKind::DeserializationError(ref err) => err,
-            ErrorKind::IOError(ref err) => err,
+            ErrorKind::ArconError(ref err) => err,
+            ErrorKind::WeldError(ref err) => err,
         };
         write!(f, "{}", msg)
     }
@@ -46,20 +57,21 @@ impl Error {
     pub fn new(kind: ErrorKind) -> Self {
         Self { kind, cause: None }
     }
-
-    pub fn with_cause<E>(kind: ErrorKind, cause: E) -> Self
-    where
-        E: 'static + Send + StdError,
-    {
+    pub fn new_weld(err_msg: String) -> Self {
         Self {
-            kind,
-            cause: Some(Box::new(cause)),
+            kind: ErrorKind::WeldError(err_msg),
+            cause: None,
         }
     }
-
+    pub fn new_arcon(err_msg: String) -> Self {
+        Self {
+            kind: ErrorKind::ArconError(err_msg),
+            cause: None,
+        }
+    }
     pub fn kind(&self) -> &ErrorKind {
         &self.kind
     }
 }
 
-pub type Result<T> = ::std::result::Result<T, Error>;
+pub type ArconResult<T> = ::std::result::Result<T, crate::error::Error>;

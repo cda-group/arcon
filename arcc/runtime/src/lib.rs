@@ -4,6 +4,8 @@ extern crate futures;
 extern crate tokio;
 extern crate weld as weld_core;
 #[macro_use]
+extern crate keyby;
+#[macro_use]
 extern crate serde;
 #[macro_use]
 extern crate macros;
@@ -13,8 +15,9 @@ extern crate http;
 #[cfg(feature = "kafka")]
 extern crate kafka;
 
-// Public Interface
+#[macro_use]
 pub mod error;
+pub mod data;
 pub mod streaming;
 pub mod util;
 pub mod weld;
@@ -26,6 +29,7 @@ pub mod prelude {
     pub use kompact::default_components::*;
     pub use kompact::*;
     pub use messages::protobuf::*;
+    pub use serde::de::DeserializeOwned;
     pub use serde::{Deserialize, Serialize};
     pub use slog::*;
     pub use state_backend::*;
@@ -35,10 +39,11 @@ pub mod prelude {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::prelude::*;
     use std::collections::hash_map::DefaultHasher;
 
-    #[repr(C)]
     #[key_by(id)]
+    #[arcon]
     pub struct Item {
         id: u64,
         price: u32,

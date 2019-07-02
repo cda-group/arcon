@@ -1216,6 +1216,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "keyby"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "proc-macro2 0.4.30 (registry+https://github.com/rust-lang/crates.io-index)",
+ "quote 0.6.12 (registry+https://github.com/rust-lang/crates.io-index)",
+ "syn 0.15.38 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "kompact"
 version = "0.6.0"
 source = "git+https://github.com/kompics/kompact#e0422f635133be13a35cb4433224f487c14ea941"
@@ -2086,6 +2096,7 @@ dependencies = [
  "futures 0.1.27 (registry+https://github.com/rust-lang/crates.io-index)",
  "http 0.1.0",
  "kafka 0.1.0",
+ "keyby 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "kompact 0.6.0 (git+https://github.com/kompics/kompact)",
  "macros 0.1.0",
  "messages 0.1.0",
@@ -3268,6 +3279,7 @@ dependencies = [
 "checksum itoa 0.4.4 (registry+https://github.com/rust-lang/crates.io-index)" = "501266b7edd0174f8530248f87f99c88fbe60ca4ef3dd486835b8d8d53136f7f"
 "checksum jobserver 0.1.13 (registry+https://github.com/rust-lang/crates.io-index)" = "b3d51e24009d966c8285d524dbaf6d60926636b2a89caee9ce0bd612494ddc16"
 "checksum kernel32-sys 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)" = "7507624b29483431c0ba2d82aece8ca6cdba9382bff4ddd0f7490560c056098d"
+"checksum keyby 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "a79829f7fb4a72a381605aacdd9d5fbe6cd66e3f43c340094aff17f4aa54161a"
 "checksum kompact 0.6.0 (git+https://github.com/kompics/kompact)" = "<none>"
 "checksum kompact-actor-derive 0.6.0 (git+https://github.com/kompics/kompact)" = "<none>"
 "checksum kompact-component-derive 0.6.0 (git+https://github.com/kompics/kompact)" = "<none>"

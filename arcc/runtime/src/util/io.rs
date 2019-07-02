@@ -9,8 +9,8 @@ use tokio::net::TcpListener;
 use tokio::prelude::*;
 use tokio_codec::BytesCodec;
 
-use bytes::BytesMut;
 use crate::tokio::prelude::Future;
+use bytes::BytesMut;
 
 pub enum IOKind {
     Http,

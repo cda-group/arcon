@@ -1,113 +1,88 @@
-use crate::error::ErrorKind::*;
+use crate::data::{ArconElement, ArconType};
 use crate::error::*;
-use crate::prelude::Serialize;
+use crate::prelude::{DeserializeOwned, Serialize};
 use crate::streaming::partitioner::channel_output;
 use crate::streaming::partitioner::Partitioner;
 use crate::streaming::Channel;
-use kompact::ComponentDefinition;
+use kompact::{ComponentDefinition, Port, Require};
 use messages::protobuf::*;
+use std::fmt::Debug;
 use std::hash::Hash;
 use std::marker::PhantomData;
 
-pub struct Broadcast<A, B>
+pub struct Broadcast<A, B, C>
 where
-    A: 'static + Serialize + Send + Sync + Copy + Hash,
-    B: ComponentDefinition + Sized + 'static,
+    A: 'static + ArconType,
+    B: Port<Request = ArconElement<A>> + 'static + Clone,
+    C: ComponentDefinition + Sized + 'static + Require<B>,
 {
-    out_channels: Vec<Channel>,
-    phantom_event: PhantomData<A>,
-    phantom_source: PhantomData<B>,
+    out_channels: Vec<Channel<A, B, C>>,
 }
 
-impl<A, B> Broadcast<A, B>
+impl<A, B, C> Broadcast<A, B, C>
 where
-    A: 'static + Serialize + Send + Sync + Copy + Hash,
-    B: ComponentDefinition + Sized + 'static,
+    A: 'static + ArconType,
+    B: Port<Request = ArconElement<A>> + 'static + Clone,
+    C: ComponentDefinition + Sized + 'static + Require<B>,
 {
-    pub fn new(out_channels: Vec<Channel>) -> Broadcast<A, B> {
-        Broadcast {
-            out_channels,
-            phantom_event: PhantomData,
-            phantom_source: PhantomData,
-        }
+    pub fn new(out_channels: Vec<Channel<A, B, C>>) -> Broadcast<A, B, C> {
+        Broadcast { out_channels }
     }
 }
 
-impl<A, B> Partitioner<A, B> for Broadcast<A, B>
+impl<A, B, C> Partitioner<A, B, C> for Broadcast<A, B, C>
 where
-    A: 'static + Serialize + Send + Sync + Copy + Hash,
-    B: ComponentDefinition + Sized + 'static,
+    A: 'static + ArconType,
+    B: Port<Request = ArconElement<A>> + 'static + Clone,
+    C: ComponentDefinition + Sized + 'static + Require<B>,
 {
-    fn output(&mut self, event: A, source: *const B, key: Option<u64>) -> crate::error::Result<()> {
+    fn output(
+        &mut self,
+        element: ArconElement<A>,
+        source: *const C,
+        key: Option<u64>,
+    ) -> ArconResult<()> {
         for channel in &self.out_channels {
-            let _ = channel_output(channel, event, source, key)?;
+            let _ = channel_output(channel, element, source, key)?;
         }
         Ok(())
     }
 
-    fn add_channel(&mut self, channel: Channel) {
+    fn add_channel(&mut self, channel: Channel<A, B, C>) {
         self.out_channels.push(channel);
     }
-    fn remove_channel(&mut self, channel: Channel) {
-        self.out_channels.retain(|c| c == &channel);
+    fn remove_channel(&mut self, channel: Channel<A, B, C>) {
+        //self.out_channels.retain(|c| c == &channel);
     }
 }
 
-unsafe impl<A, B> Send for Broadcast<A, B>
+unsafe impl<A, B, C> Send for Broadcast<A, B, C>
 where
-    A: 'static + Serialize + Send + Sync + Copy + Hash,
-    B: ComponentDefinition + Sized + 'static,
+    A: 'static + ArconType,
+    B: Port<Request = ArconElement<A>> + 'static + Clone,
+    C: ComponentDefinition + Sized + 'static + Require<B>,
 {
 }
 
-unsafe impl<A, B> Sync for Broadcast<A, B>
+unsafe impl<A, B, C> Sync for Broadcast<A, B, C>
 where
-    A: 'static + Serialize + Send + Sync + Copy + Hash,
-    B: ComponentDefinition + Sized + 'static,
+    A: 'static + ArconType,
+    B: Port<Request = ArconElement<A>> + 'static + Clone,
+    C: ComponentDefinition + Sized + 'static + Require<B>,
 {
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::streaming::partitioner::tests::*;
+    use crate::streaming::{ChannelPort, RequirePortRef};
     use kompact::default_components::*;
     use kompact::*;
     use rand::Rng;
+    use std::cell::RefCell;
+    use std::rc::Rc;
     use std::sync::Arc;
-
-    #[derive(ComponentDefinition)]
-    #[allow(dead_code)]
-    pub struct TestComp {
-        ctx: ComponentContext<TestComp>,
-        pub counter: u64,
-    }
-
-    impl TestComp {
-        pub fn new() -> TestComp {
-            TestComp {
-                ctx: ComponentContext::new(),
-                counter: 0,
-            }
-        }
-    }
-    impl Provide<ControlPort> for TestComp {
-        fn handle(&mut self, event: ControlEvent) -> () {}
-    }
-
-    impl Actor for TestComp {
-        fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
-            self.counter += 1;
-        }
-        fn receive_message(&mut self, sender: ActorPath, ser_id: u64, buf: &mut Buf) {
-            self.counter += 1;
-        }
-    }
-
-    #[repr(C)]
-    #[derive(Clone, Copy, Hash, Serialize)]
-    pub struct Input {
-        id: u32,
-    }
 
     #[test]
     fn broadcast_local_test() {
@@ -118,20 +93,34 @@ mod tests {
         let components: u32 = 8;
         let total_msgs: u64 = 10;
 
-        let mut channels: Vec<Channel> = Vec::new();
+        let mut channels: Vec<Channel<Input, ChannelPort<Input>, TestComp>> = Vec::new();
         let mut comps: Vec<Arc<crate::prelude::Component<TestComp>>> = Vec::new();
 
-        for i in 0..components {
+        // Create half of the channels using ActorRefs
+        for i in 0..components / 2 {
             let comp = system.create_and_start(move || TestComp::new());
             channels.push(Channel::Local(comp.actor_ref()));
             comps.push(comp);
         }
 
-        let mut partitioner: Box<Partitioner<Input, TestComp>> =
-            Box::new(Broadcast::new(channels.clone()));
+        // Create half of the channels using Ports
+        for i in 0..components / 2 {
+            let comp = system.create_and_start(move || TestComp::new());
+            let target_port = comp.on_definition(|c| c.prov_port.share());
+            let mut req_port: RequiredPort<ChannelPort<Input>, TestComp> = RequiredPort::new();
+            let _ = req_port.connect(target_port);
+
+            let ref_port = RequirePortRef(Rc::new(RefCell::new(req_port)));
+            let comp_channel: Channel<Input, ChannelPort<Input>, TestComp> =
+                Channel::Port(ref_port);
+            channels.push(comp_channel);
+            comps.push(comp);
+        }
+        let mut partitioner: Box<Partitioner<Input, ChannelPort<Input>, TestComp>> =
+            Box::new(Broadcast::new(channels));
 
         for i in 0..total_msgs {
-            let input = Input { id: 1 };
+            let input = ArconElement::new(Input { id: 1 });
             // Just assume it is all sent from same comp
             let comp_def = &(*comps.get(0 as usize).unwrap().definition().lock().unwrap());
             let _ = partitioner.output(input, comp_def, None);
@@ -139,7 +128,7 @@ mod tests {
 
         std::thread::sleep(std::time::Duration::from_secs(1));
 
-        // Each of the 8 components shouldhave same amount of msgs..
+        // Each of the 8 components should havesame amount of msgs..
         for comp in comps {
             let mut comp_inspect = &comp.definition().lock().unwrap();
             assert_eq!(comp_inspect.counter, total_msgs);
@@ -162,7 +151,7 @@ mod tests {
         let remote_components: u32 = 4;
         let total_msgs: u64 = 5;
 
-        let mut channels: Vec<Channel> = Vec::new();
+        let mut channels: Vec<Channel<Input, ChannelPort<Input>, TestComp>> = Vec::new();
         let mut comps: Vec<Arc<crate::prelude::Component<TestComp>>> = Vec::new();
 
         // Create local components
@@ -186,12 +175,13 @@ mod tests {
             channels.push(Channel::Remote(remote_path));
             comps.push(comp);
         }
+        std::thread::sleep(std::time::Duration::from_secs(1));
 
-        let mut partitioner: Box<Partitioner<Input, TestComp>> =
-            Box::new(Broadcast::new(channels.clone()));
+        let mut partitioner: Box<Partitioner<Input, ChannelPort<Input>, TestComp>> =
+            Box::new(Broadcast::new(channels));
 
         for i in 0..total_msgs {
-            let input = Input { id: 1 };
+            let input = ArconElement::new(Input { id: 1 });
             // Just assume it is all sent from same comp
             let comp_def = &(*comps.get(0 as usize).unwrap().definition().lock().unwrap());
             let _ = partitioner.output(input, comp_def, None);
@@ -199,7 +189,7 @@ mod tests {
 
         std::thread::sleep(std::time::Duration::from_secs(1));
 
-        // Each of the 8 components shouldhave same amount of msgs..
+        // Each of the 8 components should have same amount of msgs..
         for comp in comps {
             let mut comp_inspect = &comp.definition().lock().unwrap();
             assert_eq!(comp_inspect.counter, total_msgs);
