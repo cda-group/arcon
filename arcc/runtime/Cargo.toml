@@ -18,6 +18,7 @@ kompact = { git = "https://github.com/kompics/kompact", branch = "master", featu
 
 futures = "0.1"
 regex = "1"
+keyby = "0.1.0"
 fnv = "1.0.3"
 tokio = "0.1"
 tokio-codec = "0.1"

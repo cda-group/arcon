@@ -1,3 +1,4 @@
+use crate::data::{ArconElement, ArconType};
 use crate::error::*;
 use crate::prelude::{DeserializeOwned, Serialize};
 use crate::streaming::Channel;
@@ -17,11 +18,16 @@ pub mod hash;
 /// C: Source Component required for the tell method
 pub trait Partitioner<A, B, C>: Send + Sync
 where
-    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash + Debug,
-    B: Port<Request = A> + 'static + Clone,
+    A: 'static + ArconType,
+    B: Port<Request = ArconElement<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
-    fn output(&mut self, event: B::Request, source: *const C, key: Option<u64>) -> ArconResult<()>;
+    fn output(
+        &mut self,
+        element: B::Request,
+        source: *const C,
+        key: Option<u64>,
+    ) -> ArconResult<()>;
     fn add_channel(&mut self, channel: Channel<A, B, C>);
     fn remove_channel(&mut self, channel: Channel<A, B, C>);
 }
@@ -30,13 +36,13 @@ where
 /// Either locally through a Port or by ActorRef, or remote (ActorPath)
 fn channel_output<A, B, C>(
     channel: &Channel<A, B, C>,
-    event: A,
+    element: ArconElement<A>,
     source: *const C,
     key: Option<u64>,
 ) -> ArconResult<()>
 where
-    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash + Debug,
-    B: Port<Request = A> + 'static + Clone,
+    A: 'static + ArconType,
+    B: Port<Request = ArconElement<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
     // pointer in order to escape the double borrow issue
@@ -44,24 +50,24 @@ where
     let source = unsafe { &(*source) };
     match &channel {
         Channel::Local(actor_ref) => {
-            actor_ref.tell(Box::new(event), source);
+            actor_ref.tell(Box::new(element), source);
         }
         Channel::Remote(actor_path) => {
-            let serialised_event: Vec<u8> = bincode::serialize(&event).map_err(|e| {
+            let serialised_event: Vec<u8> = bincode::serialize(&element.data).map_err(|e| {
                 arcon_err_kind!("Failed to serialise event with err {}", e.to_string())
             })?;
 
-            // TODO: Handle Timestamps...
+            let timestamp = element.timestamp.unwrap_or(0);
             if let Some(key) = key {
-                let keyed_msg = create_keyed_element(serialised_event, 1, key);
+                let keyed_msg = create_keyed_element(serialised_event, timestamp, key);
                 actor_path.tell(keyed_msg, source);
             } else {
-                let element_msg = create_element(serialised_event, 1);
+                let element_msg = create_element(serialised_event, timestamp);
                 actor_path.tell(element_msg, source);
             }
         }
         Channel::Port(port_ref) => {
-            (*port_ref.0).borrow_mut().trigger(event);
+            (*port_ref.0).borrow_mut().trigger(element);
         }
     }
     Ok(())
@@ -114,14 +120,13 @@ pub mod tests {
         }
     }
     impl Provide<ChannelPort<Input>> for TestComp {
-        fn handle(&mut self, event: Input) -> () {
+        fn handle(&mut self, event: ArconElement<Input>) -> () {
             self.counter += 1;
         }
     }
 
-    #[repr(C)]
     #[key_by(id)]
-    #[derive(Clone, Debug, Copy, Serialize, Deserialize)]
+    #[arcon]
     pub struct Input {
         pub id: u32,
     }

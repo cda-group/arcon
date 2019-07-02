@@ -1,3 +1,4 @@
+use crate::data::{ArconElement, ArconType};
 use crate::prelude::{DeserializeOwned, Serialize};
 use kompact::{ActorPath, ActorRef, ComponentDefinition, Port, Require, RequiredPort};
 use std::cell::RefCell;
@@ -11,23 +12,21 @@ pub mod task;
 pub mod window;
 
 #[derive(Clone)]
-pub struct ChannelPort<A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash>(
-    PhantomData<A>,
-);
+pub struct ChannelPort<A: 'static + ArconType>(PhantomData<A>);
 
 impl<A> Port for ChannelPort<A>
 where
-    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Debug + Hash,
+    A: 'static + ArconType,
 {
     type Indication = ();
-    type Request = A;
+    type Request = ArconElement<A>;
 }
 
 #[derive(Clone)]
 pub enum Channel<A, B, C>
 where
-    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Debug + Hash,
-    B: Port<Request = A> + 'static + Clone,
+    A: 'static + ArconType,
+    B: Port<Request = ArconElement<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
     Local(ActorRef),
@@ -38,22 +37,22 @@ where
 #[derive(Clone)]
 pub struct RequirePortRef<A, B, C>(Rc<RefCell<RequiredPort<B, C>>>)
 where
-    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Debug + Hash,
-    B: Port<Request = A> + 'static + Clone,
+    A: 'static + ArconType,
+    B: Port<Request = ArconElement<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>;
 
 unsafe impl<A, B, C> Send for RequirePortRef<A, B, C>
 where
-    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Debug + Hash,
-    B: Port<Request = A> + 'static + Clone,
+    A: 'static + ArconType,
+    B: Port<Request = ArconElement<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
 }
 
 unsafe impl<A, B, C> Sync for RequirePortRef<A, B, C>
 where
-    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Debug + Hash,
-    B: Port<Request = A> + 'static + Clone,
+    A: 'static + ArconType,
+    B: Port<Request = ArconElement<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
 }

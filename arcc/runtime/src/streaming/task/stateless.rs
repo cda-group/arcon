@@ -1,3 +1,4 @@
+use crate::data::{ArconElement, ArconType};
 use crate::error::*;
 use crate::prelude::{Deserialize, Serialize};
 use crate::streaming::partitioner::Partitioner;
@@ -20,9 +21,9 @@ use weld::*;
 /// C: Output Event
 pub struct StreamTask<A, B, C>
 where
-    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash + Debug,
-    B: Port<Request = C> + 'static + Clone,
-    C: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash + Debug,
+    A: 'static + ArconType,
+    B: Port<Request = ArconElement<C>> + 'static + Clone,
+    C: 'static + ArconType,
 {
     ctx: ComponentContext<Self>,
     in_channels: Vec<Channel<C, B, Self>>,
@@ -34,9 +35,9 @@ where
 
 impl<A, B, C> ComponentDefinition for StreamTask<A, B, C>
 where
-    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash + Debug,
-    B: Port<Request = C> + 'static + Clone,
-    C: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash + Debug,
+    A: 'static + ArconType,
+    B: Port<Request = ArconElement<C>> + 'static + Clone,
+    C: 'static + ArconType,
 {
     fn setup(&mut self, self_component: Arc<Component<Self>>) -> () {
         self.ctx_mut().initialise(self_component);
@@ -57,9 +58,9 @@ where
 
 impl<A, B, C> StreamTask<A, B, C>
 where
-    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash + Debug,
-    B: Port<Request = C> + 'static + Clone,
-    C: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash + Debug,
+    A: 'static + ArconType,
+    B: Port<Request = ArconElement<C>> + 'static + Clone,
+    C: 'static + ArconType,
 {
     pub fn new(
         udf: Arc<Module>,
@@ -84,7 +85,8 @@ where
                 let event: A = bincode::deserialize(e.get_data()).map_err(|e| {
                     arcon_err_kind!("Failed to deserialise event with err {}", e.to_string())
                 })?;
-                let _ = self.handle_event(&event);
+                let arcon_element = ArconElement::with_timestamp(event, e.get_timestamp());
+                let _ = self.handle_event(&arcon_element);
             }
             keyed_element(_) => {
                 unimplemented!();
@@ -100,9 +102,9 @@ where
         Ok(())
     }
 
-    fn handle_event(&mut self, event: &A) -> ArconResult<()> {
-        if let Ok(result) = self.run_udf(event) {
-            let _ = self.push_out(result);
+    fn handle_event(&mut self, event: &ArconElement<A>) -> ArconResult<()> {
+        if let Ok(result) = self.run_udf(&(event.data)) {
+            let _ = self.push_out(ArconElement::new(result));
         } else {
             // Just report the error for now...
             error!(self.ctx.log(), "Failed to execute UDF...",);
@@ -137,7 +139,7 @@ where
         self.udf_executions += 1;
     }
 
-    fn push_out(&mut self, event: C) -> ArconResult<()> {
+    fn push_out(&mut self, event: ArconElement<C>) -> ArconResult<()> {
         let self_ptr = self as *const StreamTask<A, B, C>;
         let _ = self.partitioner.output(event, self_ptr, None)?;
         Ok(())
@@ -146,22 +148,22 @@ where
 
 impl<A, B, C> Provide<ControlPort> for StreamTask<A, B, C>
 where
-    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash + Debug,
-    B: Port<Request = C> + 'static + Clone,
-    C: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash + Debug,
+    A: 'static + ArconType,
+    B: Port<Request = ArconElement<C>> + 'static + Clone,
+    C: 'static + ArconType,
 {
     fn handle(&mut self, event: ControlEvent) -> () {}
 }
 
 impl<A, B, C> Actor for StreamTask<A, B, C>
 where
-    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash + Debug,
-    B: Port<Request = C> + 'static + Clone,
-    C: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash + Debug,
+    A: 'static + ArconType,
+    B: Port<Request = ArconElement<C>> + 'static + Clone,
+    C: 'static + ArconType,
 {
     fn receive_local(&mut self, sender: ActorRef, msg: &Any) {
-        if let Some(event) = msg.downcast_ref::<A>() {
-            let _ = self.handle_event(&event);
+        if let Some(event) = msg.downcast_ref::<ArconElement<A>>() {
+            let _ = self.handle_event(event);
         }
     }
     fn receive_message(&mut self, sender: ActorPath, ser_id: u64, buf: &mut Buf) {
@@ -180,9 +182,9 @@ where
 
 impl<A, B, C> Require<B> for StreamTask<A, B, C>
 where
-    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash + Debug,
-    B: Port<Request = C> + 'static + Clone,
-    C: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash + Debug,
+    A: 'static + ArconType,
+    B: Port<Request = ArconElement<C>> + 'static + Clone,
+    C: 'static + ArconType,
 {
     fn handle(&mut self, event: B::Indication) -> () {
         // ignore
@@ -191,11 +193,11 @@ where
 
 impl<A, B, C> Provide<ChannelPort<A>> for StreamTask<A, B, C>
 where
-    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash + Debug,
-    B: Port<Request = C> + 'static + Clone,
-    C: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash + Debug,
+    A: 'static + ArconType,
+    B: Port<Request = ArconElement<C>> + 'static + Clone,
+    C: 'static + ArconType,
 {
-    fn handle(&mut self, event: A) -> () {
+    fn handle(&mut self, event: ArconElement<A>) -> () {
         let _ = self.handle_event(&event);
     }
 }
@@ -212,16 +214,16 @@ mod tests {
     use std::rc::Rc;
     use std::sync::Arc;
 
-    #[repr(C)]
-    #[derive(Clone, Copy, Debug, Hash, Serialize, Deserialize)]
+    #[arcon]
+    #[derive(Hash)]
     pub struct TaskInput {
         id: u32,
         price: u64,
     }
 
     // Just to make it clear...
-    #[repr(C)]
-    #[derive(Clone, Copy, Debug, Hash, Serialize, Deserialize)]
+    #[arcon]
+    #[derive(Hash)]
     pub struct TaskOutput {
         id: u32,
         price: u64,
@@ -250,8 +252,8 @@ mod tests {
 
     impl Actor for SinkActor {
         fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
-            if let Some(input) = msg.downcast_ref::<TaskOutput>() {
-                self.result = Some(*input);
+            if let Some(input) = msg.downcast_ref::<ArconElement<TaskOutput>>() {
+                self.result = Some((input.data).clone());
             }
         }
         fn receive_message(&mut self, sender: ActorPath, ser_id: u64, buf: &mut Buf) {
@@ -287,8 +289,8 @@ mod tests {
         }
     }
     impl Provide<ChannelPort<TaskOutput>> for SinkActor {
-        fn handle(&mut self, event: TaskOutput) -> () {
-            self.result = Some(event);
+        fn handle(&mut self, event: ArconElement<TaskOutput>) -> () {
+            self.result = Some(event.data);
         }
     }
     impl Require<ChannelPort<TaskOutput>> for SinkActor {
@@ -317,7 +319,7 @@ mod tests {
         let stream_task =
             system.create_and_start(move || StreamTask::new(module, Vec::new(), partitioner));
 
-        let task_input = TaskInput { id: 10, price: 20 };
+        let task_input = ArconElement::new(TaskInput { id: 10, price: 20 });
 
         stream_task
             .actor_ref()
@@ -353,7 +355,7 @@ mod tests {
         let stream_task =
             system.create_and_start(move || StreamTask::new(module, Vec::new(), partitioner));
 
-        let task_input = TaskInput { id: 10, price: 20 };
+        let task_input = ArconElement::new(TaskInput { id: 10, price: 20 });
 
         stream_task
             .actor_ref()
@@ -398,7 +400,7 @@ mod tests {
         let stream_task =
             system.create_and_start(move || StreamTask::new(module, Vec::new(), partitioner));
 
-        let task_input = TaskInput { id: 10, price: 20 };
+        let task_input = ArconElement::new(TaskInput { id: 10, price: 20 });
 
         stream_task
             .actor_ref()

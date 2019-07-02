@@ -1,3 +1,4 @@
+use crate::data::{ArconElement, ArconType};
 use crate::error::*;
 use crate::prelude::{DeserializeOwned, Serialize};
 use crate::streaming::partitioner::channel_output;
@@ -17,8 +18,8 @@ use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
 /// either a custom hasher or the default std one
 pub struct HashPartitioner<A, B, C, D = BuildHasherDefault<DefaultHasher>>
 where
-    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash + Debug,
-    B: Port<Request = A> + 'static + Clone,
+    A: 'static + ArconType,
+    B: Port<Request = ArconElement<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
     builder: D,
@@ -28,8 +29,8 @@ where
 
 impl<A, B, C> HashPartitioner<A, B, C>
 where
-    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash + Debug,
-    B: Port<Request = A> + 'static + Clone,
+    A: 'static + ArconType,
+    B: Port<Request = ArconElement<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
     pub fn with_hasher<H: BuildHasher + Default>(
@@ -71,18 +72,23 @@ where
 
 impl<A, B, C> Partitioner<A, B, C> for HashPartitioner<A, B, C>
 where
-    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash + Debug,
-    B: Port<Request = A> + 'static + Clone,
+    A: 'static + ArconType,
+    B: Port<Request = ArconElement<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
-    fn output(&mut self, event: A, source: *const C, key: Option<u64>) -> ArconResult<()> {
+    fn output(
+        &mut self,
+        element: ArconElement<A>,
+        source: *const C,
+        key: Option<u64>,
+    ) -> ArconResult<()> {
         let mut h = self.builder.build_hasher();
-        event.hash(&mut h);
+        element.data.hash(&mut h);
         let hash = h.finish() as u32;
         let id = (hash % self.parallelism) as i32;
         if id >= 0 && id <= self.parallelism as i32 {
             if let Some(channel) = self.map.get(&(id as usize)) {
-                let _ = channel_output(channel, event, source, key)?;
+                let _ = channel_output(channel, element, source, key)?;
             }
         } else {
             // TODO: Fix
@@ -101,16 +107,16 @@ where
 
 unsafe impl<A, B, C> Send for HashPartitioner<A, B, C>
 where
-    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash + Debug,
-    B: Port<Request = A> + 'static + Clone,
+    A: 'static + ArconType,
+    B: Port<Request = ArconElement<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
 }
 
 unsafe impl<A, B, C> Sync for HashPartitioner<A, B, C>
 where
-    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash + Debug,
-    B: Port<Request = A> + 'static + Clone,
+    A: 'static + ArconType,
+    B: Port<Request = ArconElement<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
 }
@@ -149,12 +155,12 @@ mod tests {
 
         let mut rng = rand::thread_rng();
 
-        let mut inputs: Vec<Input> = Vec::new();
+        let mut inputs: Vec<ArconElement<Input>> = Vec::new();
         for i in 0..total_msgs {
             let input = Input {
                 id: rng.gen_range(0, 100),
             };
-            inputs.push(input);
+            inputs.push(ArconElement::new(input));
         }
 
         for input in inputs {

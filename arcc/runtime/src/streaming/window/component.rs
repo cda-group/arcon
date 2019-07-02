@@ -1,3 +1,4 @@
+use crate::data::{ArconElement, ArconType};
 use crate::error::*;
 use crate::prelude::{DeserializeOwned, Serialize};
 use crate::streaming::partitioner::Partitioner;
@@ -9,7 +10,6 @@ use messages::protobuf::*;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::sync::{Arc, Mutex};
-use LocalElement;
 
 /// For each Streaming window, a WindowComponent is spawned
 ///
@@ -19,10 +19,10 @@ use LocalElement;
 /// D: Port type for the `Partitioner`
 pub struct WindowComponent<A, B, C, D>
 where
-    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Debug + Hash,
+    A: 'static + ArconType,
     B: 'static + Clone,
-    C: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Debug + Hash,
-    D: Port<Request = C> + 'static + Clone,
+    C: 'static + ArconType,
+    D: Port<Request = ArconElement<C>> + 'static + Clone,
 {
     ctx: ComponentContext<Self>,
     builder: WindowBuilder<A, B, C>,
@@ -33,10 +33,10 @@ where
 
 impl<A, B, C, D> ComponentDefinition for WindowComponent<A, B, C, D>
 where
-    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Debug + Hash,
+    A: 'static + ArconType,
     B: 'static + Clone,
-    C: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Debug + Hash,
-    D: Port<Request = C> + 'static + Clone,
+    C: 'static + ArconType,
+    D: Port<Request = ArconElement<C>> + 'static + Clone,
 {
     fn setup(&mut self, self_component: Arc<Component<Self>>) -> () {
         self.ctx_mut().initialise(self_component);
@@ -57,10 +57,10 @@ where
 
 impl<A, B, C, D> WindowComponent<A, B, C, D>
 where
-    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Debug + Hash,
+    A: 'static + ArconType,
     B: 'static + Clone,
-    C: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Debug + Hash,
-    D: Port<Request = C> + 'static + Clone,
+    C: 'static + ArconType,
+    D: Port<Request = ArconElement<C>> + 'static + Clone,
 {
     pub fn new(
         partitioner: Arc<Mutex<Partitioner<C, D, Self>>>,
@@ -119,17 +119,17 @@ where
         let result = self.builder.result()?;
         let self_ptr = self as *const Self;
         let mut p = self.partitioner.lock().unwrap();
-        let _ = p.output(result, self_ptr, None);
+        let _ = p.output(ArconElement::new(result), self_ptr, None);
         Ok(())
     }
 }
 
 impl<A, B, C, D> Provide<ControlPort> for WindowComponent<A, B, C, D>
 where
-    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Debug + Hash,
+    A: 'static + ArconType,
     B: 'static + Clone,
-    C: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Debug + Hash,
-    D: Port<Request = C> + 'static + Clone,
+    C: 'static + ArconType,
+    D: Port<Request = ArconElement<C>> + 'static + Clone,
 {
     fn handle(&mut self, event: ControlEvent) -> () {
         match event {
@@ -150,13 +150,13 @@ where
 
 impl<A, B, C, D> Actor for WindowComponent<A, B, C, D>
 where
-    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Debug + Hash,
+    A: 'static + ArconType,
     B: 'static + Clone,
-    C: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Debug + Hash,
-    D: Port<Request = C> + 'static + Clone,
+    C: 'static + ArconType,
+    D: Port<Request = ArconElement<C>> + 'static + Clone,
 {
     fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
-        if let Some(payload) = msg.downcast_ref::<LocalElement<A>>() {
+        if let Some(payload) = msg.downcast_ref::<ArconElement<A>>() {
             // "Normal message"
             self.add_value(payload.data.clone());
         } else if let Some(wm) = msg.downcast_ref::<WindowMessage>() {
@@ -187,10 +187,10 @@ where
 
 impl<A, B, C, D> Require<D> for WindowComponent<A, B, C, D>
 where
-    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Debug + Hash,
+    A: 'static + ArconType,
     B: 'static + Clone,
-    C: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Debug + Hash,
-    D: Port<Request = C> + 'static + Clone,
+    C: 'static + ArconType,
+    D: Port<Request = ArconElement<C>> + 'static + Clone,
 {
     fn handle(&mut self, event: D::Indication) -> () {
         // ignore

@@ -1,3 +1,4 @@
+use crate::data::{ArconElement, ArconType};
 use crate::prelude::{DeserializeOwned, Serialize};
 use crate::streaming::partitioner::*;
 use crate::streaming::window::builder::WindowModules;
@@ -49,13 +50,6 @@ use std::{thread, time};
             See test case overlapping_windows for the "determinism issue" (late arrivals)
 */
 
-// Used to avoid serialization/deserialization of data in local sends
-#[derive(Clone, Debug)]
-pub struct LocalElement<T> {
-    pub data: T,
-    pub timestamp: u64,
-}
-
 /// Window Assigner that manages and triggers `WindowComponent`s
 ///
 /// A: Input event
@@ -64,10 +58,10 @@ pub struct LocalElement<T> {
 /// D: Port type for the `Partitioner`
 pub struct EventTimeWindowAssigner<A, B, C, D>
 where
-    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Debug + Hash,
+    A: 'static + ArconType,
     B: 'static + Clone,
-    C: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Debug + Hash,
-    D: Port<Request = C> + 'static + Clone,
+    C: 'static + ArconType,
+    D: Port<Request = ArconElement<C>> + 'static + Clone,
 {
     ctx: ComponentContext<Self>,
     partitioner: Arc<Mutex<Partitioner<C, D, component::WindowComponent<A, B, C, D>>>>,
@@ -85,10 +79,10 @@ where
 
 impl<A, B, C, D> ComponentDefinition for EventTimeWindowAssigner<A, B, C, D>
 where
-    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Debug + Hash,
+    A: 'static + ArconType,
     B: 'static + Clone,
-    C: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Debug + Hash,
-    D: Port<Request = C> + 'static + Clone,
+    C: 'static + ArconType,
+    D: Port<Request = ArconElement<C>> + 'static + Clone,
 {
     fn setup(&mut self, self_component: Arc<Component<Self>>) -> () {
         self.ctx_mut().initialise(self_component);
@@ -109,10 +103,10 @@ where
 
 impl<A, B, C, D> EventTimeWindowAssigner<A, B, C, D>
 where
-    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Debug + Hash,
+    A: 'static + ArconType,
     B: 'static + Clone,
-    C: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Debug + Hash,
-    D: Port<Request = C> + 'static + Clone,
+    C: 'static + ArconType,
+    D: Port<Request = ArconElement<C>> + 'static + Clone,
 {
     pub fn new(
         partitioner: Arc<Mutex<Partitioner<C, D, component::WindowComponent<A, B, C, D>>>>,
@@ -207,10 +201,10 @@ where
 
 impl<A, B, C, D> Provide<ControlPort> for EventTimeWindowAssigner<A, B, C, D>
 where
-    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Debug + Hash,
+    A: 'static + ArconType,
     B: 'static + Clone,
-    C: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Debug + Hash,
-    D: Port<Request = C> + 'static + Clone,
+    C: 'static + ArconType,
+    D: Port<Request = ArconElement<C>> + 'static + Clone,
 {
     fn handle(&mut self, event: ControlEvent) -> () {
         if let ControlEvent::Start = event {
@@ -241,15 +235,15 @@ where
 
 impl<A, B, C, D> Actor for EventTimeWindowAssigner<A, B, C, D>
 where
-    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Debug + Hash,
+    A: 'static + ArconType,
     B: 'static + Clone,
-    C: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Debug + Hash,
-    D: Port<Request = C> + 'static + Clone,
+    C: 'static + ArconType,
+    D: Port<Request = ArconElement<C>> + 'static + Clone,
 {
     fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
-        if let Some(payload) = msg.downcast_ref::<LocalElement<A>>() {
+        if let Some(payload) = msg.downcast_ref::<ArconElement<A>>() {
             // Send to all relevant windows
-            let ts = payload.timestamp;
+            let ts = payload.timestamp.unwrap_or(0);
             for (_, wp) in self.window_map.range(ts..ts + self.window_length) {
                 wp.tell(Box::new(payload.clone()), &self.actor_ref());
             }
@@ -325,15 +319,15 @@ mod tests {
         }
         impl Actor for Sink {
             fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
-                if let Some(m) = msg.downcast_ref::<WindowOutput>() {
-                    self.result.push(Some(m.len));
+                if let Some(m) = msg.downcast_ref::<ArconElement<WindowOutput>>() {
+                    self.result.push(Some(m.data.len));
                 }
             }
             fn receive_message(&mut self, _sender: ActorPath, _ser_id: u64, _buf: &mut Buf) {}
         }
         impl Provide<ChannelPort<WindowOutput>> for Sink {
-            fn handle(&mut self, event: WindowOutput) -> () {
-                self.result.push(Some(event.len));
+            fn handle(&mut self, event: ArconElement<WindowOutput>) -> () {
+                self.result.push(Some(event.data.len));
             }
         }
         impl Require<ChannelPort<WindowOutput>> for Sink {
@@ -343,8 +337,8 @@ mod tests {
         }
     }
 
-    #[repr(C)]
-    #[derive(Clone, Debug, Copy, Hash, Serialize, Deserialize)]
+    #[arcon]
+    #[derive(Hash)]
     pub struct WindowOutput {
         pub len: i64,
     }
@@ -404,10 +398,10 @@ mod tests {
         w.set_timestamp(time);
         return w;
     }
-    fn timestamped_event(ts: u64) -> Box<LocalElement<u8>> {
-        return Box::new(LocalElement {
+    fn timestamped_event(ts: u64) -> Box<ArconElement<u8>> {
+        return Box::new(ArconElement {
             data: 1 as u8,
-            timestamp: ts,
+            timestamp: Some(ts),
         });
     }
 

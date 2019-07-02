@@ -1,3 +1,4 @@
+use crate::data::{ArconElement, ArconType};
 use crate::error::*;
 use crate::prelude::{DeserializeOwned, Serialize};
 use crate::streaming::partitioner::channel_output;
@@ -11,8 +12,8 @@ use std::marker::PhantomData;
 
 pub struct Broadcast<A, B, C>
 where
-    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash + Debug,
-    B: Port<Request = A> + 'static + Clone,
+    A: 'static + ArconType,
+    B: Port<Request = ArconElement<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
     out_channels: Vec<Channel<A, B, C>>,
@@ -20,8 +21,8 @@ where
 
 impl<A, B, C> Broadcast<A, B, C>
 where
-    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash + Debug,
-    B: Port<Request = A> + 'static + Clone,
+    A: 'static + ArconType,
+    B: Port<Request = ArconElement<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
     pub fn new(out_channels: Vec<Channel<A, B, C>>) -> Broadcast<A, B, C> {
@@ -31,13 +32,18 @@ where
 
 impl<A, B, C> Partitioner<A, B, C> for Broadcast<A, B, C>
 where
-    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash + Debug,
-    B: Port<Request = A> + 'static + Clone,
+    A: 'static + ArconType,
+    B: Port<Request = ArconElement<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
-    fn output(&mut self, event: A, source: *const C, key: Option<u64>) -> ArconResult<()> {
+    fn output(
+        &mut self,
+        element: ArconElement<A>,
+        source: *const C,
+        key: Option<u64>,
+    ) -> ArconResult<()> {
         for channel in &self.out_channels {
-            let _ = channel_output(channel, event, source, key)?;
+            let _ = channel_output(channel, element, source, key)?;
         }
         Ok(())
     }
@@ -52,16 +58,16 @@ where
 
 unsafe impl<A, B, C> Send for Broadcast<A, B, C>
 where
-    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash + Debug,
-    B: Port<Request = A> + 'static + Clone,
+    A: 'static + ArconType,
+    B: Port<Request = ArconElement<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
 }
 
 unsafe impl<A, B, C> Sync for Broadcast<A, B, C>
 where
-    A: 'static + Serialize + DeserializeOwned + Send + Sync + Copy + Hash + Debug,
-    B: Port<Request = A> + 'static + Clone,
+    A: 'static + ArconType,
+    B: Port<Request = ArconElement<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
 }
@@ -114,7 +120,7 @@ mod tests {
             Box::new(Broadcast::new(channels));
 
         for i in 0..total_msgs {
-            let input = Input { id: 1 };
+            let input = ArconElement::new(Input { id: 1 });
             // Just assume it is all sent from same comp
             let comp_def = &(*comps.get(0 as usize).unwrap().definition().lock().unwrap());
             let _ = partitioner.output(input, comp_def, None);
@@ -175,7 +181,7 @@ mod tests {
             Box::new(Broadcast::new(channels));
 
         for i in 0..total_msgs {
-            let input = Input { id: 1 };
+            let input = ArconElement::new(Input { id: 1 });
             // Just assume it is all sent from same comp
             let comp_def = &(*comps.get(0 as usize).unwrap().definition().lock().unwrap());
             let _ = partitioner.output(input, comp_def, None);
