@@ -1,4 +1,3 @@
-use crate::error::ErrorKind::*;
 use crate::error::*;
 use crate::weld::module::Module;
 use crate::weld::module::ModuleRun;
@@ -23,11 +22,11 @@ pub struct WindowModules {
 /// B: Weld Builder type (e.g., Appender<u32>)
 /// C: Expected output type of the Window
 pub trait WindowFn<A, B: Clone, C: Clone> {
-    fn new(modules: WindowModules) -> Result<Self>
+    fn new(modules: WindowModules) -> ArconResult<Self>
     where
         Self: Sized;
-    fn on_element(&mut self, element: A) -> Result<()>;
-    fn result(&mut self) -> Result<C>;
+    fn on_element(&mut self, element: A) -> ArconResult<()>;
+    fn result(&mut self) -> ArconResult<C>;
 }
 
 /// Input struct for the `WindowBuilder` UDF
@@ -59,9 +58,13 @@ pub struct WindowBuilder<A, B, C> {
 }
 
 impl<A, B: Clone, C: Clone> WindowFn<A, B, C> for WindowBuilder<A, B, C> {
-    fn new(modules: WindowModules) -> Result<WindowBuilder<A, B, C>> {
-        let mut ctx = WeldContext::new(modules.udf.conf())
-            .map_err(|e| Error::new(ContextError(e.message().to_string_lossy().into_owned())))?;
+    fn new(modules: WindowModules) -> ArconResult<WindowBuilder<A, B, C>> {
+        let mut ctx = WeldContext::new(modules.udf.conf()).map_err(|e| {
+            weld_error!(
+                "Failed to create WeldContext with err {}",
+                e.message().to_string_lossy().into_owned()
+            )
+        })?;
         let run: ModuleRun<B> = modules.init_builder.run(&1, &mut ctx)?;
 
         Ok(WindowBuilder {
@@ -73,7 +76,7 @@ impl<A, B: Clone, C: Clone> WindowFn<A, B, C> for WindowBuilder<A, B, C> {
             _output: PhantomData,
         })
     }
-    fn on_element(&mut self, element: A) -> Result<()> {
+    fn on_element(&mut self, element: A) -> ArconResult<()> {
         let ref input = WindowBuilderInput {
             element: element,
             builder: unsafe { (*self.builder.get()).clone() },
@@ -86,7 +89,7 @@ impl<A, B: Clone, C: Clone> WindowFn<A, B, C> for WindowBuilder<A, B, C> {
         Ok(())
     }
 
-    fn result(&mut self) -> Result<C> {
+    fn result(&mut self) -> ArconResult<C> {
         let run: ModuleRun<C> = self
             .materializer
             .run(&self.builder, &mut self.builder_ctx)?;

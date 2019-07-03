@@ -1,5 +1,5 @@
-use akka_api::messages::*;
 use akka_api::messages::KompactAkkaMsg_oneof_payload::*;
+use akka_api::messages::*;
 use akka_api::AkkaConnection;
 use fnv::FnvHashMap;
 use kompact::*;
@@ -42,7 +42,7 @@ impl Manager {
         }
     }
 
-    fn handle_msg(&mut self, envelope: KompactAkkaEnvelope) -> crate::error::Result<()> {
+    fn handle_msg(&mut self, envelope: KompactAkkaEnvelope) -> crate::error::ArconResult<()> {
         let payload = envelope.msg.unwrap().payload.unwrap();
 
         match payload {

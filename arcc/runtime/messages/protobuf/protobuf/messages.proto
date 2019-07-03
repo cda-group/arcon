@@ -1,5 +1,13 @@
 syntax = "proto3";
 
+message KeyedElement {
+  uint64 timestamp = 1;
+  uint64 key = 2;
+  bytes data = 3;
+  // Id to help identify correct Weld module
+  string task_id = 4;
+}
+
 message Element {
   uint64 timestamp = 1;
   bytes data = 2;
@@ -16,6 +24,7 @@ message WindowMessage {
     WindowTrigger trigger = 1;
     WindowComplete complete = 2;
     Element element = 3;
+    KeyedElement keyed_element = 4;
   }
 }
 
@@ -28,7 +37,8 @@ message Watermark {
 message StreamTaskMessage {
   oneof payload {
     Element element = 1;
-    Watermark watermark = 2;
-    Checkpoint checkpoint = 3;
+    KeyedElement keyed_element = 2;
+    Watermark watermark = 3;
+    Checkpoint checkpoint = 4;
   }
 }
