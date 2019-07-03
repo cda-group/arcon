@@ -1,3 +1,4 @@
+#![allow(bare_trait_objects)]
 #![recursion_limit = "128"]
 #[macro_use]
 extern crate quote;
@@ -43,9 +44,9 @@ pub fn to_file(input: String, path: String) -> std::result::Result<(), std::io::
 /// Generates the main file of the Operator process
 pub fn generate_main(stream: TokenStream) -> TokenStream {
     quote! {
-        extern crate runtime;
-        use runtime::prelude::*;
-        use runtime::weld::module::*;
+        extern crate arcon;
+        use arcon::prelude::*;
+        use arcon::weld::module::*;
 
         fn main() {
             #stream
