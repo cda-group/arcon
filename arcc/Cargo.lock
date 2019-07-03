@@ -2109,6 +2109,7 @@ dependencies = [
  "state-backend 0.1.0",
  "tokio 0.1.20 (registry+https://github.com/rust-lang/crates.io-index)",
  "tokio-codec 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "uuid 0.7.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "weld 0.3.0 (git+https://github.com/weld-project/weld)",
 ]
 

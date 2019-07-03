@@ -1,9 +1,13 @@
 use crate::data::{ArconElement, ArconType};
 use crate::prelude::{DeserializeOwned, Serialize};
-use crate::streaming::partitioner::*;
+use crate::streaming::partitioner::Partitioner;
+use crate::streaming::window::builder::WindowBuilder;
+use crate::streaming::window::builder::WindowFn;
 use crate::streaming::window::builder::WindowModules;
 use crate::streaming::window::component;
+use crate::util::event_timer::EventTimer;
 use crate::weld::module::Module;
+use kompact::timer::Timer;
 use kompact::*;
 use messages::protobuf::StreamTaskMessage_oneof_payload::*;
 use messages::protobuf::*;
@@ -13,6 +17,7 @@ use std::hash::Hash;
 use std::sync::{Arc, Mutex};
 use std::time::UNIX_EPOCH;
 use std::{thread, time};
+use uuid::Uuid;
 /*
     EventTimeWindowAssigner
         * Assigns messages to windows based on event timestamp
@@ -66,7 +71,7 @@ where
     D: Port<Request = ArconElement<C>> + 'static + Clone,
 {
     ctx: ComponentContext<Self>,
-    partitioner: Arc<Mutex<Partitioner<C, D, component::WindowComponent<A, B, C, D>>>>,
+    partitioner: Box<Partitioner<C, D, Self>>,
     window_count: u64,
     window_length: u64,
     window_slide: u64,
@@ -74,9 +79,10 @@ where
     late_arrival_time: u64,
     max_window_ts: u64,
     max_watermark: u64,
-    window_map: BTreeMap<u64, ActorRef>,
-    component_map: BTreeMap<u64, Arc<Component<component::WindowComponent<A, B, C, D>>>>,
+    window_map: BTreeMap<u64, Arc<Mutex<WindowBuilder<A, B, C>>>>,
     window_modules: WindowModules,
+    timer: EventTimer,
+    buffer: Vec<ArconElement<A>>,
 }
 
 impl<A, B, C, D> ComponentDefinition for EventTimeWindowAssigner<A, B, C, D>
@@ -111,7 +117,7 @@ where
     D: Port<Request = ArconElement<C>> + 'static + Clone,
 {
     pub fn new(
-        partitioner: Arc<Mutex<Partitioner<C, D, component::WindowComponent<A, B, C, D>>>>,
+        partitioner: Box<Partitioner<C, D, Self>>,
         init_builder_code: String,
         udf_code: String,
         result_code: String,
@@ -146,31 +152,49 @@ where
             max_window_ts: 0,
             max_watermark: 0,
             window_map: BTreeMap::new(),
-            component_map: BTreeMap::new(), // Used for direct access to components, for killing
             window_modules,
+            timer: EventTimer::new(),
+            buffer: Vec::new(),
         }
     }
     // Creates the next window based on window_start + window_count*window_slide
     fn new_window(&mut self) -> () {
         let ts = self.window_start + (self.window_count * self.window_slide) + self.window_length;
-        let wc = component::WindowComponent::new(
-            self.partitioner.clone(),
-            self.window_modules.clone(),
-            ts.clone(),
-        );
-        let (wp, _) = self.ctx.system().create_and_register(move || wc);
-        self.ctx.system().start(&wp);
-        self.window_map.insert(ts, wp.actor_ref());
-        self.component_map.insert(ts, wp);
+
+        //self.window_map.insert(ts, wp.actor_ref());
+
         self.max_window_ts = ts;
         self.window_count = self.window_count + 1;
+
+        let mut window_builder = WindowBuilder::new(self.window_modules.clone()).unwrap();
+        let mut wb = Arc::new(Mutex::new(window_builder));
+        self.window_map.insert(ts, wb.clone());
+        //        let target = self.partitioner.clone();
+
+        // Schedule trigger
+        self.timer.schedule_at(Uuid::new_v4(), ts, move |_| {
+            //self.trigger_window(ts);
+            let result = wb.lock().unwrap().result();
+            let self_ptr = self as *const Self;
+            match result {
+                Ok(e) => {
+                    target.output(ArconElement::new(e), self_ptr, None);
+                }
+                _ => {}
+            }
+            //println!("hej");
+        });
+    }
+    fn handle_element(&mut self, e: ArconElement<A>) -> () {
+        if (self.max_watermark == 0) {
+            // Buffer elements until we have received a watermark
+
+        }
     }
     fn handle_watermark(&mut self, w: u64) -> () {
-        // Only deal with watermark if it's a higher watermark than we've previously seen
-        if w > self.max_watermark {
-            self.max_watermark = w;
-        } else {
-            return;
+        if (self.max_watermark == 0) {
+            // Flush the buffer
+
         }
 
         // Spawn new windows if we are behind, "fastforward"
@@ -183,21 +207,32 @@ where
         }
 
         // Check for windows to trigger
-        for (_, wp) in self.window_map.range(0..w) {
-            wp.tell(Box::new(create_window_trigger()), &self.actor_ref());
-        }
-
-        // Check for windows to kill
-        let new_map = self.window_map.split_off(&(w - self.late_arrival_time));
-        for (ts, _) in &self.window_map {
-            if let Some(comp) = self.component_map.remove(ts) {
-                debug!(self.ctx.log(), "WindowAssigner killing window {}", ts);
-                self.ctx.system().kill(comp);
+    }
+    /*
+    pub fn trigger_window(&mut self, ts: u64) {
+        if let Some(locked_window) = self.window_map.get_mut(&ts) {
+            match locked_window.lock().unwrap().result() {
+                Ok(res) => {
+                    let self_ptr = self as *const Self;
+                    self.partitioner
+                        .output(ArconElement::new(res), self_ptr, None);
+                }
+                Err(_) => {}
             }
         }
+    }
+    */
+}
 
-        // Update the window map
-        self.window_map = new_map;
+impl<A, B, C, D> Require<D> for EventTimeWindowAssigner<A, B, C, D>
+where
+    A: 'static + ArconType,
+    B: 'static + Clone,
+    C: 'static + ArconType,
+    D: Port<Request = ArconElement<C>> + 'static + Clone,
+{
+    fn handle(&mut self, event: D::Indication) -> () {
+        // ignore
     }
 }
 
@@ -219,18 +254,16 @@ where
                 self.ctx.log(),
                 "WindowAssigner starting at time {}", self.window_start
             );
-            // Create two windows to cover early arrivals and set-up time for the components
-            self.new_window();
-            self.new_window();
+            self.timer.set_time(self.window_start);
 
-            // Schedule regular creation of new windows
-            self.schedule_periodic(
+            /* Schedule regular creation of new windows
+            self.timer.schedule_periodic(
                 time::Duration::from_secs(self.window_slide),
                 time::Duration::from_secs(self.window_slide),
                 |self_c, _| {
                     self_c.new_window();
                 },
-            );
+            );*/
         }
     }
 }
@@ -246,9 +279,7 @@ where
         if let Some(payload) = msg.downcast_ref::<ArconElement<A>>() {
             // Send to all relevant windows
             let ts = payload.timestamp.unwrap_or(0);
-            for (_, wp) in self.window_map.range(ts..ts + self.window_length) {
-                wp.tell(Box::new(payload.clone()), &self.actor_ref());
-            }
+            for (_, wb) in self.window_map.range(ts..ts + self.window_length) {}
         } else if let Some(w) = msg.downcast_ref::<Watermark>() {
             self.handle_watermark(w.get_timestamp());
         } else {
@@ -264,9 +295,7 @@ where
                     element(e) => {
                         // Send to all relevant windows
                         let ts = e.get_timestamp();
-                        for (_, wp) in self.window_map.range(ts..ts + self.window_length) {
-                            wp.tell(Box::new(e.clone()), &self.actor_ref());
-                        }
+                        for (_, wp) in self.window_map.range(ts..ts + self.window_length) {}
                     }
                     keyed_element(_) => {}
                     watermark(w) => {
@@ -360,11 +389,11 @@ mod tests {
         let (sink, _) = system.create_and_register(move || sink::Sink::new());
         let sink_ref = sink.actor_ref();
 
-        pub type WindowC =
-            component::WindowComponent<u8, Appender<u8>, WindowOutput, ChannelPort<WindowOutput>>;
+        pub type Assigner =
+            EventTimeWindowAssigner<u8, Appender<u8>, WindowOutput, ChannelPort<WindowOutput>>;
 
-        let mut partitioner: Arc<Mutex<Forward<WindowOutput, ChannelPort<WindowOutput>, WindowC>>> =
-            Arc::new(Mutex::new(Forward::new(Channel::Local(sink_ref.clone()))));
+        let mut partitioner: Box<Forward<WindowOutput, ChannelPort<WindowOutput>, Assigner>> =
+            Box::new(Forward::new(Channel::Local(sink_ref.clone())));
 
         // Create the window_assigner
         let builder_code = String::from("|| appender[u8]");
@@ -529,22 +558,21 @@ mod tests {
         cfg.system_components(DeadletterBox::new, NetworkConfig::default().build());
         let system = KompactSystem::new(cfg).expect("KompactSystem");
 
-        pub type WindowC =
-            component::WindowComponent<u8, Appender<u8>, WindowOutput, ChannelPort<WindowOutput>>;
-
         // Create a sink and create port channel
         let (sink, _) = system.create_and_register(move || sink::Sink::new());
         let target_port = sink.on_definition(|c| c.sink_port.share());
         use crate::streaming::window::assigner::tests::sink::Sink;
-        let mut req_port: RequiredPort<ChannelPort<WindowOutput>, WindowC> = RequiredPort::new();
+
+        pub type Assigner =
+            EventTimeWindowAssigner<u8, Appender<u8>, WindowOutput, ChannelPort<WindowOutput>>;
+        let mut req_port: RequiredPort<ChannelPort<WindowOutput>, Assigner> = RequiredPort::new();
         let _ = req_port.connect(target_port);
         let ref_port = crate::streaming::RequirePortRef(Rc::new(RefCell::new(req_port)));
-        let comp_channel: Channel<WindowOutput, ChannelPort<WindowOutput>, WindowC> =
+        let comp_channel: Channel<WindowOutput, ChannelPort<WindowOutput>, Assigner> =
             Channel::Port(ref_port);
 
-        // Define partitioner
-        let mut partitioner: Arc<Mutex<Forward<WindowOutput, ChannelPort<WindowOutput>, WindowC>>> =
-            Arc::new(Mutex::new(Forward::new(comp_channel)));
+        let mut partitioner: Box<Forward<WindowOutput, ChannelPort<WindowOutput>, Assigner>> =
+            Box::new(Forward::new(Channel::Local(sink.actor_ref().clone())));
 
         // Create the window_assigner
         let builder_code = String::from("|| appender[u8]");
