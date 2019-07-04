@@ -5,7 +5,7 @@ use crate::streaming::window::builder::WindowBuilder;
 use crate::streaming::window::builder::WindowFn;
 use crate::streaming::window::builder::WindowModules;
 use crate::streaming::window::component;
-use crate::util::event_timer::EventTimer;
+use crate::util::event_timer::{EventTimer, ExecuteAction};
 use crate::weld::module::Module;
 use kompact::timer::Timer;
 use kompact::*;
@@ -219,8 +219,43 @@ where
         // Spawn new windows if necessary
         debug!(self.ctx.log(), "handling watermark with timestamp: {}", w);
         self.new_windows_to(w);
-
-        self.timer.tick_to(w);
+        // timer returns a set of executable actions
+        let actions = self.timer.tick_to(w);
+        for a in actions {
+            println!("handling action!!");
+            match a {
+                ExecuteAction::Once(id, action) => {
+                    println!("execute once called!!");
+                    action(self, id);
+                }
+                ExecuteAction::Periodic(id, action) => {
+                    action(self, id);
+                }
+                ExecuteAction::None => break,
+            }
+        }
+        /*
+        match self.definition().lock() {
+            Ok(mut guard) => {
+                let c = guard.deref_mut();
+                for a in actions {
+                    match a {
+                        ExecuteAction::Once(id, action) => {
+                            println!("execute once called here!!");
+                            action(c, id);
+                        }
+                        ExecuteAction::Periodic(id, action) => {
+                            action(c, id);
+                        }
+                        ExecuteAction::None => break,
+                    }
+                }
+            }
+            _ => {
+                panic!("Component {} can't execute!");
+            }
+        }
+        */
     }
 }
 

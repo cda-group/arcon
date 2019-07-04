@@ -105,14 +105,16 @@ impl<C: ComponentDefinition> EventTimer<C> {
         self.schedule_once(Duration::from_secs(time - self.time), action)
     }
     #[inline(always)]
-    fn tick(&mut self) -> () {
+    fn tick(&mut self) -> Vec<ExecuteAction<C>> {
         self.time = self.time + 1;
+        let mut vec = Vec::new();
         for _ in 0..1000 {
             let mut res = self.timer.tick();
             for e in res.drain(..) {
-                self.execute(e);
+                vec.push(self.execute(e));
             }
         }
+        return vec;
     }
     #[inline(always)]
     pub fn set_time(&mut self, ts: u64) -> () {
@@ -120,14 +122,21 @@ impl<C: ComponentDefinition> EventTimer<C> {
         println!("\nevent_timer set time to {}\n", self.time);
     }
     #[inline(always)]
-    pub fn tick_to(&mut self, ts: u64) -> () {
+    pub fn tick_to(&mut self, ts: u64) -> Vec<ExecuteAction<C>> {
+        let mut vec = Vec::new();
         for e in self.time..ts {
-            self.tick();
+            vec.append(&mut self.tick());
         }
+        println!("\n{} actions returning from timer!!", vec.len());
+        return vec;
     }
     #[inline(always)]
-    fn execute(&mut self, e: TimerEntry) -> () {
+    fn execute(&mut self, e: TimerEntry) -> ExecuteAction<C> {
         println!("\nevent_timer trying to execute!\n");
+        // Execute the Action
+        let id = e.id();
+        let res = self.handles.remove(&id);
+        // Reschedule the event? Is this necessary?
         match e.execute() {
             Some(re_e) => match self.timer.insert(re_e) {
                 Ok(_) => (), // great
@@ -138,6 +147,16 @@ impl<C: ComponentDefinition> EventTimer<C> {
                 Err(f) => panic!("Could not insert timer entry! {:?}", f),
             },
             None => (), // great
+        }
+        match res {
+            Some(TimerHandle::OneShot { action, .. }) => ExecuteAction::Once(id, action),
+            Some(TimerHandle::Periodic { action, .. }) => {
+                let action2 = action.clone();
+                self.handles
+                    .insert(id, TimerHandle::Periodic { _id: id, action });
+                ExecuteAction::Periodic(id, action2)
+            }
+            _ => ExecuteAction::None,
         }
     }
 }
@@ -171,4 +190,10 @@ pub(crate) enum TimerHandle<C: ComponentDefinition> {
         _id: Uuid, // not used atm
         action: Rc<Fn(&mut C, Uuid) + Send + 'static>,
     },
+}
+
+pub enum ExecuteAction<C: ComponentDefinition> {
+    None,
+    Periodic(Uuid, Rc<Fn(&mut C, Uuid)>),
+    Once(Uuid, Box<dyn FnOnce(&mut C, Uuid)>),
 }
