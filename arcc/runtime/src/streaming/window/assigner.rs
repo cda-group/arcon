@@ -81,7 +81,7 @@ where
     max_watermark: u64,
     window_map: BTreeMap<u64, Arc<Mutex<WindowBuilder<A, B, C>>>>,
     window_modules: WindowModules,
-    timer: EventTimer,
+    timer: Box<EventTimer<Self>>,
     buffer: Vec<ArconElement<A>>,
 }
 
@@ -153,12 +153,13 @@ where
             max_watermark: 0,
             window_map: BTreeMap::new(),
             window_modules,
-            timer: EventTimer::new(),
+            timer: Box::new(EventTimer::new()),
             buffer: Vec::new(),
         }
     }
     // Creates the next window based on window_start + window_count*window_slide
     fn new_window(&mut self) -> () {
+        debug!(self.ctx.log(), "creating new window");
         let ts = self.window_start + (self.window_count * self.window_slide) + self.window_length;
 
         //self.window_map.insert(ts, wp.actor_ref());
@@ -169,59 +170,58 @@ where
         let mut window_builder = WindowBuilder::new(self.window_modules.clone()).unwrap();
         let mut wb = Arc::new(Mutex::new(window_builder));
         self.window_map.insert(ts, wb.clone());
-        //        let target = self.partitioner.clone();
 
         // Schedule trigger
-        self.timer.schedule_at(Uuid::new_v4(), ts, move |_| {
-            //self.trigger_window(ts);
-            let result = wb.lock().unwrap().result();
-            let self_ptr = self as *const Self;
-            match result {
-                Ok(e) => {
-                    target.output(ArconElement::new(e), self_ptr, None);
+        self.timer
+            .schedule_at(ts + self.late_arrival_time, move |self_c, _| {
+                debug!(self_c.ctx.log(), "closing window!");
+                let result = wb.lock().unwrap().result();
+                let self_ptr = self_c as *const Self;
+                match result {
+                    Ok(e) => {
+                        self_c
+                            .partitioner
+                            .output(ArconElement::new(e), self_ptr, None);
+                    }
+                    _ => {}
                 }
-                _ => {}
-            }
-            //println!("hej");
-        });
+            });
+    }
+    fn new_windows_to(&mut self, ts: u64) -> () {
+        if (self.window_start == 0) {
+            // First time starting windows
+            self.window_start = ts;
+            self.timer.set_time(ts);
+            self.new_window();
+        }
+        while (self.max_window_ts - self.window_length < ts) {
+            self.new_window();
+        }
     }
     fn handle_element(&mut self, e: ArconElement<A>) -> () {
-        if (self.max_watermark == 0) {
-            // Buffer elements until we have received a watermark
-
+        let ts = e.timestamp.unwrap_or(0);
+        debug!(self.ctx.log(), "handling element with timestamp: {}", ts);
+        // Always make sure we have all windows open
+        self.new_windows_to(ts);
+        // Insert in all relevant windows
+        for (_, wb) in self.window_map.range(ts..ts + self.window_length) {
+            match wb.lock() {
+                Ok(mut builder) => {
+                    builder.on_element(e.data);
+                }
+                Err(_) => {
+                    error!(self.ctx.log(), "Failed to get lock while inserting element");
+                }
+            }
         }
     }
     fn handle_watermark(&mut self, w: u64) -> () {
-        if (self.max_watermark == 0) {
-            // Flush the buffer
+        // Spawn new windows if necessary
+        debug!(self.ctx.log(), "handling watermark with timestamp: {}", w);
+        self.new_windows_to(w);
 
-        }
-
-        // Spawn new windows if we are behind, "fastforward"
-        while self.max_window_ts < w + self.window_length {
-            debug!(
-                self.ctx.log(),
-                "WindowAssigner received a future watermark {} fast-forwarding window creation", w
-            );
-            self.new_window();
-        }
-
-        // Check for windows to trigger
+        self.timer.tick_to(w);
     }
-    /*
-    pub fn trigger_window(&mut self, ts: u64) {
-        if let Some(locked_window) = self.window_map.get_mut(&ts) {
-            match locked_window.lock().unwrap().result() {
-                Ok(res) => {
-                    let self_ptr = self as *const Self;
-                    self.partitioner
-                        .output(ArconElement::new(res), self_ptr, None);
-                }
-                Err(_) => {}
-            }
-        }
-    }
-    */
 }
 
 impl<A, B, C, D> Require<D> for EventTimeWindowAssigner<A, B, C, D>
@@ -246,7 +246,7 @@ where
     fn handle(&mut self, event: ControlEvent) -> () {
         if let ControlEvent::Start = event {
             // Register windowing start time
-            self.window_start = time::SystemTime::now()
+            /*self.window_start = time::SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .expect("error")
                 .as_secs();
@@ -256,7 +256,7 @@ where
             );
             self.timer.set_time(self.window_start);
 
-            /* Schedule regular creation of new windows
+            Schedule regular creation of new windows
             self.timer.schedule_periodic(
                 time::Duration::from_secs(self.window_slide),
                 time::Duration::from_secs(self.window_slide),
@@ -276,10 +276,8 @@ where
     D: Port<Request = ArconElement<C>> + 'static + Clone,
 {
     fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
-        if let Some(payload) = msg.downcast_ref::<ArconElement<A>>() {
-            // Send to all relevant windows
-            let ts = payload.timestamp.unwrap_or(0);
-            for (_, wb) in self.window_map.range(ts..ts + self.window_length) {}
+        if let Some(e) = msg.downcast_ref::<ArconElement<A>>() {
+            self.handle_element(*e);
         } else if let Some(w) = msg.downcast_ref::<Watermark>() {
             self.handle_watermark(w.get_timestamp());
         } else {
@@ -538,12 +536,13 @@ mod tests {
         // check that we receive correct number windows from fast forwarding
         let (assigner_ref, sink) = window_assigner_test_setup(5, 5, 0);
         wait(1);
-        assigner_ref.tell(Box::new(watermark(now() + 5)), &assigner_ref);
+        assigner_ref.tell(Box::new(watermark(now() + 1)), &assigner_ref);
+        assigner_ref.tell(Box::new(watermark(now() + 7)), &assigner_ref);
         wait(1);
         let mut sink_inspect = sink.definition().lock().unwrap();
+        assert_eq!(&sink_inspect.result.len(), &(1 as usize));
         let r0 = &sink_inspect.result[0].take().unwrap();
         assert_eq!(r0, &0);
-        assert_eq!(&sink_inspect.result.len(), &(1 as usize));
     }
 
     /// Similar to the above tests. Only major
