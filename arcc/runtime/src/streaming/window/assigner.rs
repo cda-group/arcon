@@ -156,22 +156,16 @@ where
     }
     // Creates the next window based on window_start + window_count*window_slide
     fn new_window(&mut self) -> () {
-        debug!(self.ctx.log(), "creating new window");
         let ts = self.window_start + (self.window_count * self.window_slide) + self.window_length;
-
-        //self.window_map.insert(ts, wp.actor_ref());
-
+        debug!(self.ctx.log(), "creating new window, timestamp {}", ts);
         self.max_window_ts = ts;
         self.window_count = self.window_count + 1;
-
         let mut window_builder = WindowBuilder::new(self.window_modules.clone()).unwrap();
-        //let mut wb = Arc::new(Mutex::new(window_builder));
         self.window_map.insert(ts, window_builder);
+
         // Schedule trigger
         self.timer
             .schedule_at(ts + self.late_arrival_time, move |self_c, _| {
-                //debug!(self_c.ctx.log(), "closing window {}");
-                //let result = wb.lock().unwrap().result();
                 let self_ptr = self_c as *const Self;
                 if let Some(mut window) = self_c.window_map.remove(&ts) {
                     match window.result() {
@@ -210,19 +204,23 @@ where
     fn handle_element(&mut self, e: ArconElement<A>) -> () {
         let ts = e.timestamp.unwrap_or(0);
         //debug!(self.ctx.log(), "handling element with timestamp: {}", ts);
+
         // Always make sure we have all windows open
         self.new_windows_to(ts);
+
         // Insert in all relevant windows (inclusive range)
         for (t, builder) in self.window_map.range_mut(ts..=ts + self.window_length) {
             builder.on_element(e.data);
         }
     }
-    fn handle_watermark(&mut self, w: u64) -> () {
+    fn handle_watermark(&mut self, w: &Watermark) -> () {
+        //debug!(self.ctx.log(), "handling watermark with timestamp: {}", w);
+        let ts = w.get_timestamp();
         // Spawn new windows if necessary
-        debug!(self.ctx.log(), "handling watermark with timestamp: {}", w);
-        self.new_windows_to(w);
+        self.new_windows_to(ts);
+
         // timer returns a set of executable actions
-        let actions = self.timer.tick_to(w);
+        let actions = self.timer.advance_to(ts);
         for a in actions {
             match a {
                 ExecuteAction::Once(id, action) => {
@@ -231,9 +229,11 @@ where
                 ExecuteAction::Periodic(id, action) => {
                     action(self, id);
                 }
-                ExecuteAction::None => break,
+                ExecuteAction::None => {}
             }
         }
+        // TODO: fwd watermark
+        // self.partitioner.output(w, self as *const Self, Some(ts));
     }
 }
 
@@ -257,27 +257,7 @@ where
     D: Port<Request = ArconElement<C>> + 'static + Clone,
 {
     fn handle(&mut self, event: ControlEvent) -> () {
-        if let ControlEvent::Start = event {
-            // Register windowing start time
-            /*self.window_start = time::SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("error")
-                .as_secs();
-            debug!(
-                self.ctx.log(),
-                "WindowAssigner starting at time {}", self.window_start
-            );
-            self.timer.set_time(self.window_start);
-
-            Schedule regular creation of new windows
-            self.timer.schedule_periodic(
-                time::Duration::from_secs(self.window_slide),
-                time::Duration::from_secs(self.window_slide),
-                |self_c, _| {
-                    self_c.new_window();
-                },
-            );*/
-        }
+        if let ControlEvent::Start = event {}
     }
 }
 
@@ -292,12 +272,13 @@ where
         if let Some(e) = msg.downcast_ref::<ArconElement<A>>() {
             self.handle_element(*e);
         } else if let Some(w) = msg.downcast_ref::<Watermark>() {
-            self.handle_watermark(w.get_timestamp());
+            self.handle_watermark(w);
         } else {
             error!(self.ctx.log(), "Unrecognized message from {:?}", _sender);
         }
     }
     fn receive_message(&mut self, _sender: ActorPath, ser_id: u64, buf: &mut Buf) {
+        // This remote message receiver is untested and probably doesn't work
         if ser_id == serialisation_ids::PBUF {
             let r: Result<StreamTaskMessage, SerError> = ProtoSer::deserialise(buf);
             if let Ok(msg) = r {
@@ -310,7 +291,7 @@ where
                     }
                     keyed_element(_) => {}
                     watermark(w) => {
-                        self.handle_watermark(w.get_timestamp());
+                        self.handle_watermark(&w);
                     }
                     checkpoint(_) => {
                         // TODO: Persistant State
@@ -511,7 +492,7 @@ mod tests {
     }
     #[test]
     fn window_very_long_windows_1() {
-        // Use long windows to check for timer not going out of alignment
+        // Use long windows to check for timer not going out of sync in ms conversion
         let (assigner_ref, sink) = window_assigner_test_setup(10000, 10000, 0);
         wait(1);
         let moment = now();

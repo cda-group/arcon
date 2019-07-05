@@ -56,7 +56,6 @@ impl<C: ComponentDefinition> Timer<C> for EventTimer<C> {
     where
         F: Fn(&mut C, Uuid) + Send + 'static,
     {
-        println!("event_timer trying to schedule_periodic!");
         let id = Uuid::new_v4();
         let handle = TimerHandle::Periodic {
             _id: id,
@@ -97,13 +96,19 @@ impl<C: ComponentDefinition> EventTimer<C> {
             _c: PhantomData,
         }
     }
+    // Our "unique" schedule function
     pub fn schedule_at<F>(&mut self, time: u64, action: F) -> ()
     where
         F: FnOnce(&mut C, Uuid) + Send + 'static,
     {
-        self.schedule_once(Duration::from_secs(time - self.time), action)
+        // Check for bad target time
+        if (time < self.time) {
+            eprintln!("tried to schedule event which has already happened");
+        } else {
+            self.schedule_once(Duration::from_secs(time - self.time), action);
+        }
     }
-    /* use tick_to
+    /* use advance_to
     #[inline(always)]
     fn tick(&mut self) -> Vec<ExecuteAction<C>> {
         self.time = self.time + 1;
@@ -117,15 +122,17 @@ impl<C: ComponentDefinition> EventTimer<C> {
         return vec;
     }
     */
+    // Should be called before scheduling anything
     #[inline(always)]
     pub fn set_time(&mut self, ts: u64) -> () {
         self.time = ts;
     }
+    // Complex loop to skip in the wheel and always advance even number of seconds
     #[inline(always)]
-    pub fn tick_to(&mut self, ts: u64) -> Vec<ExecuteAction<C>> {
+    pub fn advance_to(&mut self, ts: u64) -> Vec<ExecuteAction<C>> {
         let mut vec = Vec::new();
         if (ts <= self.time) {
-            eprintln!("tick_to called with lower timestamp than current time");
+            eprintln!("advance_to called with lower timestamp than current time");
             return vec;
         }
 
@@ -218,7 +225,7 @@ pub trait Timer<C: ComponentDefinition> {
         F: Fn(&mut C, Uuid) + Send + 'static;
 }
 
-// Please don't share the EventTimer between threads, its not safe
+// Allows the EventTimer to be scheduled on different threads, but should never be used concurrently
 unsafe impl<C: ComponentDefinition> Send for EventTimer<C> {}
 unsafe impl<C: ComponentDefinition> Sync for EventTimer<C> {}
 
@@ -237,4 +244,10 @@ pub enum ExecuteAction<C: ComponentDefinition> {
     None,
     Periodic(Uuid, Rc<Fn(&mut C, Uuid)>),
     Once(Uuid, Box<dyn FnOnce(&mut C, Uuid)>),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
 }
