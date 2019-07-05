@@ -1,11 +1,11 @@
 use core::time::Duration;
+use kompact::timer::*;
 use kompact::ScheduledTimer;
 use std::collections::HashMap;
 use std::rc::Rc;
-//use kompact::timer::Timer;
-use kompact::timer::*;
 
 use kompact::ComponentDefinition;
+use std::convert::TryInto;
 use std::fmt;
 use std::fmt::Debug;
 use std::marker::PhantomData;
@@ -31,7 +31,6 @@ impl<C: ComponentDefinition> Timer<C> for EventTimer<C> {
     where
         F: FnOnce(&mut C, Uuid) + Send + 'static,
     {
-        println!("event_timer trying schedule_once!");
         let id = Uuid::new_v4();
         let handle = TimerHandle::OneShot {
             _id: id,
@@ -79,7 +78,7 @@ impl<C: ComponentDefinition> Timer<C> for EventTimer<C> {
             Err(f) => panic!("Could not insert timer entry! {:?}", f),
         }
     }
-    /*
+    /* We don't implement cancel yet
     fn cancel(&mut self, id: Uuid) {
         match self.timer.cancel(id) {
             Ok(_) => (),                     // ok
@@ -104,6 +103,7 @@ impl<C: ComponentDefinition> EventTimer<C> {
     {
         self.schedule_once(Duration::from_secs(time - self.time), action)
     }
+    /* use tick_to
     #[inline(always)]
     fn tick(&mut self) -> Vec<ExecuteAction<C>> {
         self.time = self.time + 1;
@@ -116,27 +116,66 @@ impl<C: ComponentDefinition> EventTimer<C> {
         }
         return vec;
     }
+    */
     #[inline(always)]
     pub fn set_time(&mut self, ts: u64) -> () {
         self.time = ts;
-        println!("\nevent_timer set time to {}\n", self.time);
     }
     #[inline(always)]
     pub fn tick_to(&mut self, ts: u64) -> Vec<ExecuteAction<C>> {
         let mut vec = Vec::new();
-        for e in self.time..ts {
-            vec.append(&mut self.tick());
+        if (ts <= self.time) {
+            eprintln!("tick_to called with lower timestamp than current time");
+            return vec;
         }
-        println!("\n{} actions returning from timer!!", vec.len());
+
+        let mut time_left = ts - self.time;
+
+        while (time_left > 0) {
+            if let Skip::Millis(skip_ms) = self.timer.can_skip() {
+                // Only skip full-seconds
+                let skip_seconds = skip_ms / 1000;
+                if (skip_seconds as u64 >= time_left) {
+                    // No more ops to gather, jump forward and return
+                    self.timer.skip((time_left * 1000).try_into().unwrap());
+                    self.time = self.time + time_left;
+                    return vec;
+                } else {
+                    // Need to make sure we move forward full seconds
+                    let skip_remainder = 1000 - (skip_ms % 1000);
+                    self.timer.skip(skip_ms);
+                    self.time = self.time + (skip_seconds as u64);
+                    time_left = time_left - (skip_seconds as u64);
+                    for _ in 0..skip_remainder {
+                        let mut res = self.timer.tick();
+                        for e in res.drain(..) {
+                            vec.push(self.execute(e));
+                        }
+                    }
+                    self.time = self.time + 1;
+                    time_left = time_left - 1;
+                }
+            } else {
+                // Can't skip, tick the full second
+                for _ in 0..1000 {
+                    let mut res = self.timer.tick();
+                    for e in res.drain(..) {
+                        vec.push(self.execute(e));
+                    }
+                }
+                self.time = self.time + 1;
+                time_left = time_left - 1;
+            }
+        }
         return vec;
     }
+    // Takes TimerEntry, reschedules it if necessary and returns Executable actions
     #[inline(always)]
     fn execute(&mut self, e: TimerEntry) -> ExecuteAction<C> {
-        println!("\nevent_timer trying to execute!\n");
-        // Execute the Action
         let id = e.id();
         let res = self.handles.remove(&id);
-        // Reschedule the event? Is this necessary?
+
+        // Reschedule the event
         match e.execute() {
             Some(re_e) => match self.timer.insert(re_e) {
                 Ok(_) => (), // great
@@ -148,9 +187,11 @@ impl<C: ComponentDefinition> EventTimer<C> {
             },
             None => (), // great
         }
+
         match res {
             Some(TimerHandle::OneShot { action, .. }) => ExecuteAction::Once(id, action),
             Some(TimerHandle::Periodic { action, .. }) => {
+                // Re-add the handle if it's periodic
                 let action2 = action.clone();
                 self.handles
                     .insert(id, TimerHandle::Periodic { _id: id, action });
