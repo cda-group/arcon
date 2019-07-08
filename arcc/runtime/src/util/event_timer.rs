@@ -11,6 +11,27 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::time::Instant;
 use uuid::Uuid;
+/*
+    EventTimer: Abstraction of timer with underlying QuadWheel scheduling
+        Has no relation to system time and does not use any threads.
+        Useful for guaranteed sequentiality while still allowing scheduling semantics.
+
+    EventTimer.set_time(timestamp) sets the timers time to timestamp, must be called before
+        schedule at to function properly.
+    EventTimer.schedule_at(timestamp, Function) schedules a function to "occur" at timestamp
+    EventTimer.advance_to(timestamp) returns the ordered set of functions that are scheduled
+        between now and timestamp, skipping forward efficiently
+
+    The set_time, schedule_at and advance_to uses u64 timestamps as UNIX timestamps in Seconds
+    schedule_once, schedule_periodic and the underlying QuadWheel allows usage of milliseconds.
+
+    QuadWheel stores placeholder functions while the handles HashMap stores the real functions
+    (this allows usage of self within scheduled functions while still utilizing the kompact wheels.rs)
+    execute() method in this implementation is the translation between placeholder and real function.
+
+    Usage is thus to store the timer within a component, schedule events on it and using
+        advance_to to return ordered set of actions to perform.
+*/
 
 #[derive(Debug)]
 enum TimerMsg {
