@@ -8,9 +8,10 @@ use kompact::timer::Timer;
 use kompact::*;
 use messages::protobuf::StreamTaskMessage_oneof_payload::*;
 use messages::protobuf::*;
-use std::collections::BTreeMap;
+use std::collections::hash_map::DefaultHasher;
+use std::collections::HashMap;
 use std::fmt::Debug;
-use std::hash::Hash;
+use std::hash::{BuildHasher, BuildHasherDefault, Hasher};
 use std::sync::{Arc, Mutex};
 use std::time::UNIX_EPOCH;
 use std::{thread, time};
@@ -56,38 +57,36 @@ use uuid::Uuid;
 
 /// Window Assigner that manages and triggers `WindowComponent`s
 ///
-/// A: Input event
-/// B: ´WindowBuilder`s internal builder type
-/// C: Output of Window
-/// D: Port type for the `Partitioner`
-pub struct EventTimeWindowAssigner<A, B, C, D>
+/// IN: Input event
+/// FUNC: ´WindowBuilder`s internal builder type
+/// OUT: Output of Window
+/// P: Port type for the `Partitioner`
+pub struct EventTimeWindowAssigner<IN, FUNC, OUT, P>
 where
-    A: 'static + ArconType,
-    B: 'static + Clone,
-    C: 'static + ArconType,
-    D: Port<Request = ArconElement<C>> + 'static + Clone,
+    IN: 'static + ArconType,
+    FUNC: 'static + Clone,
+    OUT: 'static + ArconType,
+    P: Port<Request = ArconElement<OUT>> + 'static + Clone,
 {
     ctx: ComponentContext<Self>,
-    partitioner: Box<Partitioner<C, D, Self>>,
-    window_count: u64,
+    partitioner: Box<Partitioner<OUT, P, Self>>,
     window_length: u64,
     window_slide: u64,
-    window_start: u64,
     late_arrival_time: u64,
-    max_window_ts: u64,
     max_watermark: u64,
-    window_map: BTreeMap<u64, WindowBuilder<A, B, C>>,
+    window_start: HashMap<u64, u64>,
+    window_maps: HashMap<u64, HashMap<u64, WindowBuilder<IN, FUNC, OUT>>>,
     window_modules: WindowModules,
     timer: Box<EventTimer<Self>>,
-    buffer: Vec<ArconElement<A>>,
+    hasher: BuildHasherDefault<DefaultHasher>,
 }
 
-impl<A, B, C, D> ComponentDefinition for EventTimeWindowAssigner<A, B, C, D>
+impl<IN, FUNC, OUT, P> ComponentDefinition for EventTimeWindowAssigner<IN, FUNC, OUT, P>
 where
-    A: 'static + ArconType,
-    B: 'static + Clone,
-    C: 'static + ArconType,
-    D: Port<Request = ArconElement<C>> + 'static + Clone,
+    IN: 'static + ArconType,
+    FUNC: 'static + Clone,
+    OUT: 'static + ArconType,
+    P: Port<Request = ArconElement<OUT>> + 'static + Clone,
 {
     fn setup(&mut self, self_component: Arc<Component<Self>>) -> () {
         self.ctx_mut().initialise(self_component);
@@ -106,15 +105,15 @@ where
     }
 }
 
-impl<A, B, C, D> EventTimeWindowAssigner<A, B, C, D>
+impl<IN, FUNC, OUT, P> EventTimeWindowAssigner<IN, FUNC, OUT, P>
 where
-    A: 'static + ArconType,
-    B: 'static + Clone,
-    C: 'static + ArconType,
-    D: Port<Request = ArconElement<C>> + 'static + Clone,
+    IN: 'static + ArconType,
+    FUNC: 'static + Clone,
+    OUT: 'static + ArconType,
+    P: Port<Request = ArconElement<OUT>> + 'static + Clone,
 {
     pub fn new(
-        partitioner: Box<Partitioner<C, D, Self>>,
+        partitioner: Box<Partitioner<OUT, P, Self>>,
         init_builder_code: String,
         udf_code: String,
         result_code: String,
@@ -138,86 +137,157 @@ where
 
         // TODO: Should handle weld compilation errors here
 
+        // Sanity check on slide and length
+        if length < slide {
+            panic!("Window Length lower than slide!");
+        }
+        if length % slide != 0 {
+            panic!("Window Length not divisible by slide!");
+        }
+
         EventTimeWindowAssigner {
             ctx: ComponentContext::new(),
             partitioner,
-            window_count: 0,
             window_length: length,
             window_slide: slide,
-            window_start: 0,
             late_arrival_time: late,
-            max_window_ts: 0,
             max_watermark: 0,
-            window_map: BTreeMap::new(),
+            window_start: HashMap::new(),
+            window_maps: HashMap::new(),
             window_modules,
             timer: Box::new(EventTimer::new()),
-            buffer: Vec::new(),
+            hasher: BuildHasherDefault::<DefaultHasher>::default(),
         }
     }
-    // Creates the next window based on window_start + window_count*window_slide
-    fn new_window(&mut self) -> () {
-        let ts = self.window_start + (self.window_count * self.window_slide) + self.window_length;
-        debug!(self.ctx.log(), "creating new window, timestamp {}", ts);
-        self.max_window_ts = ts;
-        self.window_count = self.window_count + 1;
-        let mut window_builder = WindowBuilder::new(self.window_modules.clone()).unwrap();
-        self.window_map.insert(ts, window_builder);
+    // Creates the window trigger for a key and "window index"
+    fn new_window_trigger(&mut self, key: u64, index: u64) -> () {
+        let w_start = match self.window_start.get(&key) {
+            Some(start) => start,
+            None => {
+                panic!("tried to schedule window_trigger for key which hasn't started");
+            }
+        };
+        let ts = w_start + (index * self.window_slide) + self.window_length;
+        debug!(
+            self.ctx.log(),
+            "creating new window for key {}, timestamp {}", key, ts
+        );
 
         // Schedule trigger
         self.timer
             .schedule_at(ts + self.late_arrival_time, move |self_c, _| {
                 let self_ptr = self_c as *const Self;
-                if let Some(mut window) = self_c.window_map.remove(&ts) {
-                    match window.result() {
-                        Ok(e) => {
-                            debug!(self_c.ctx.log(), "Window {} result materialized!", ts);
-                            self_c
-                                .partitioner
-                                .output(ArconElement::new(e), self_ptr, Some(ts));
+
+                if let Some(mut w_map) = self_c.window_maps.get_mut(&key) {
+                    match w_map.remove(&index) {
+                        Some(mut window) => {
+                            match window.result() {
+                                Ok(e) => {
+                                    debug!(self_c.ctx.log(), "Window {} result materialized!", ts);
+                                    self_c
+                                        .partitioner
+                                        .output(ArconElement::new(e), self_ptr, Some(ts));
+                                }
+                                _ => {
+                                    error!(
+                                        self_c.ctx.log(),
+                                        "failed to get result, couldn't materialize from window_builder"
+                                    );
+                                }
+                            }
                         }
-                        _ => {
-                            error!(
-                                self_c.ctx.log(),
-                                "failed to get result, couldn't materialize from window_builder"
-                            );
+                        None => {
+                            error!(self_c.ctx.log(), "No window found for key {} and timestamp {}", key, ts);
                         }
                     }
                 } else {
                     error!(
                         self_c.ctx.log(),
-                        "failed to get result, couldn't find the window in window_map"
+                        "failed to get result, couldn't find the w_map for key {}", key
                     );
                 }
             });
     }
+    /*
+     */
+    /*
     fn new_windows_to(&mut self, ts: u64) -> () {
-        if (self.window_start == 0) {
-            // First time starting windows
-            self.window_start = ts;
-            self.timer.set_time(self.window_start);
-            self.new_window();
-        }
-        while (self.max_window_ts - self.window_length < ts) {
-            self.new_window();
-        }
+
+      if (self.window_start == 0) {
+          // First time starting windows
+          self.window_start = ts;
+          self.new_window();
+      }
+      while (self.max_window_ts - self.window_length < ts) {
+          self.new_window();
+      }
     }
-    fn handle_element(&mut self, e: ArconElement<A>) -> () {
+    */
+    fn get_key(&mut self, e: ArconElement<IN>) -> u64 {
+        let mut h = self.hasher.build_hasher();
+        e.data.hash(&mut h);
+        return h.finish();
+    }
+    fn handle_element(&mut self, e: ArconElement<IN>) -> () {
         let ts = e.timestamp.unwrap_or(0);
-        //debug!(self.ctx.log(), "handling element with timestamp: {}", ts);
-
-        // Always make sure we have all windows open
-        self.new_windows_to(ts);
-
-        // Insert in all relevant windows (inclusive range)
-        for (t, builder) in self.window_map.range_mut(ts..=ts + self.window_length) {
-            builder.on_element(e.data);
+        if (self.window_start.is_empty()) {
+            // First element received, set the internal timer
+            self.timer.set_time(ts);
         }
+        if (ts < self.timer.get_time() - self.late_arrival_time) {
+            // Discard late arrival
+            return;
+        }
+
+        let key = self.get_key(e);
+        debug!(
+            self.ctx.log(),
+            "handling element with timestamp: {}, key: {}", ts, key
+        );
+
+        // Will store the index of the highest and lowest window it should go into
+        let mut floor = 0;
+        let mut ceil = 0;
+        if let Some(start) = self.window_start.get(&key) {
+            // Get the highest window the element goes into
+            ceil = (ts - start) / self.window_slide;
+            if ceil >= (self.window_length / self.window_slide) {
+                floor = ceil - (self.window_length / self.window_slide) + 1;
+            }
+        } else {
+            // Window starting now, first element only goes into the first window
+            self.window_start.insert(key, ts);
+        }
+
+        // Take the w_map or make a new one and insert when we're done
+        let mut w_map = match self.window_maps.remove(&key) {
+            Some(mut map) => map,
+            None => HashMap::new(),
+        };
+
+        // Insert the element into all windows and create new where necassery
+        for i in floor..=ceil {
+            match w_map.get_mut(&i) {
+                Some(mut window) => {
+                    // default case, insert element and we're done
+                    window.on_element(e.data);
+                }
+                None => {
+                    // Need to create new window,
+                    let mut window: WindowBuilder<IN, FUNC, OUT> =
+                        WindowBuilder::new(self.window_modules.clone()).unwrap();
+                    window.on_element(e.data);
+                    w_map.insert(i, window);
+                    // Create the window trigger
+                    self.new_window_trigger(key, i);
+                }
+            }
+        }
+        self.window_maps.insert(key, w_map);
     }
     fn handle_watermark(&mut self, w: &Watermark) -> () {
         //debug!(self.ctx.log(), "handling watermark with timestamp: {}", w);
         let ts = w.get_timestamp();
-        // Spawn new windows if necessary
-        self.new_windows_to(ts);
 
         // timer returns a set of executable actions
         let actions = self.timer.advance_to(ts);
@@ -237,39 +307,39 @@ where
     }
 }
 
-impl<A, B, C, D> Require<D> for EventTimeWindowAssigner<A, B, C, D>
+impl<IN, FUNC, OUT, P> Require<P> for EventTimeWindowAssigner<IN, FUNC, OUT, P>
 where
-    A: 'static + ArconType,
-    B: 'static + Clone,
-    C: 'static + ArconType,
-    D: Port<Request = ArconElement<C>> + 'static + Clone,
+    IN: 'static + ArconType,
+    FUNC: 'static + Clone,
+    OUT: 'static + ArconType,
+    P: Port<Request = ArconElement<OUT>> + 'static + Clone,
 {
-    fn handle(&mut self, event: D::Indication) -> () {
+    fn handle(&mut self, event: P::Indication) -> () {
         // ignore
     }
 }
 
-impl<A, B, C, D> Provide<ControlPort> for EventTimeWindowAssigner<A, B, C, D>
+impl<IN, FUNC, OUT, P> Provide<ControlPort> for EventTimeWindowAssigner<IN, FUNC, OUT, P>
 where
-    A: 'static + ArconType,
-    B: 'static + Clone,
-    C: 'static + ArconType,
-    D: Port<Request = ArconElement<C>> + 'static + Clone,
+    IN: 'static + ArconType,
+    FUNC: 'static + Clone,
+    OUT: 'static + ArconType,
+    P: Port<Request = ArconElement<OUT>> + 'static + Clone,
 {
     fn handle(&mut self, event: ControlEvent) -> () {
         if let ControlEvent::Start = event {}
     }
 }
 
-impl<A, B, C, D> Actor for EventTimeWindowAssigner<A, B, C, D>
+impl<IN, FUNC, OUT, P> Actor for EventTimeWindowAssigner<IN, FUNC, OUT, P>
 where
-    A: 'static + ArconType,
-    B: 'static + Clone,
-    C: 'static + ArconType,
-    D: Port<Request = ArconElement<C>> + 'static + Clone,
+    IN: 'static + ArconType,
+    FUNC: 'static + Clone,
+    OUT: 'static + ArconType,
+    P: Port<Request = ArconElement<OUT>> + 'static + Clone,
 {
     fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
-        if let Some(e) = msg.downcast_ref::<ArconElement<A>>() {
+        if let Some(e) = msg.downcast_ref::<ArconElement<IN>>() {
             self.handle_element(*e);
         } else if let Some(w) = msg.downcast_ref::<Watermark>() {
             self.handle_watermark(w);
@@ -285,9 +355,8 @@ where
                 let payload = msg.payload.unwrap();
                 match payload {
                     element(e) => {
-                        // Send to all relevant windows
-                        let ts = e.get_timestamp();
-                        for (_, wp) in self.window_map.range(ts..ts + self.window_length) {}
+                        // todo: convert from protobuff to ArconElement
+                        //self.handle_element(e);
                     }
                     keyed_element(_) => {}
                     watermark(w) => {
@@ -383,15 +452,15 @@ mod tests {
         let sink_ref = sink.actor_ref();
 
         pub type Assigner =
-            EventTimeWindowAssigner<u8, Appender<u8>, WindowOutput, ChannelPort<WindowOutput>>;
+            EventTimeWindowAssigner<Item, Appender<u32>, WindowOutput, ChannelPort<WindowOutput>>;
 
         let mut partitioner: Box<Forward<WindowOutput, ChannelPort<WindowOutput>, Assigner>> =
             Box::new(Forward::new(Channel::Local(sink_ref.clone())));
 
         // Create the window_assigner
-        let builder_code = String::from("|| appender[u8]");
-        let udf_code = String::from("|x: u8, y: appender[u8]| merge(y, x)");
-        let udf_result = String::from("|y: appender[u8]| len(result(y))");
+        let builder_code = String::from("|| appender[u32]");
+        let udf_code = String::from("|x: {u64, u32}, y: appender[u32]| merge(y, x.$1)");
+        let udf_result = String::from("|y: appender[u32]| len(result(y))");
         let window_assigner = EventTimeWindowAssigner::new(
             partitioner,
             builder_code,
@@ -422,14 +491,53 @@ mod tests {
         w.set_timestamp(time);
         return w;
     }
-    fn timestamped_event(ts: u64) -> Box<ArconElement<u8>> {
+    fn timestamped_event(ts: u64) -> Box<ArconElement<Item>> {
         return Box::new(ArconElement {
-            data: 1 as u8,
+            data: Item { id: 1, price: 1 },
             timestamp: Some(ts),
         });
     }
+    fn timestamped_keyed_event(ts: u64, id: u64) -> Box<ArconElement<Item>> {
+        return Box::new(ArconElement {
+            data: Item { id, price: 1 },
+            timestamp: Some(ts),
+        });
+    }
+    #[key_by(id)]
+    #[arcon]
+    pub struct Item {
+        id: u64,
+        price: u32,
+    }
 
     // Tests:
+    #[test]
+    fn window_by_key() {
+        let (assigner_ref, sink) = window_assigner_test_setup(10, 5, 0);
+        wait(1);
+        let moment = now();
+        assigner_ref.tell(timestamped_keyed_event(moment, 1), &assigner_ref);
+        assigner_ref.tell(timestamped_keyed_event(moment + 1, 2), &assigner_ref);
+        assigner_ref.tell(timestamped_keyed_event(moment + 2, 3), &assigner_ref);
+        assigner_ref.tell(timestamped_keyed_event(moment + 3, 2), &assigner_ref);
+        assigner_ref.tell(timestamped_keyed_event(moment + 5, 2), &assigner_ref);
+        assigner_ref.tell(timestamped_keyed_event(moment + 4, 1), &assigner_ref);
+
+        wait(1);
+        assigner_ref.tell(Box::new(watermark(moment + 12)), &assigner_ref);
+        wait(1);
+        let mut sink_inspect = sink.definition().lock().unwrap();
+
+        let r1 = &sink_inspect.result.len();
+        assert_eq!(r1, &3); // 3 windows received
+        let r2 = &sink_inspect.result[0].take().unwrap();
+        assert_eq!(r2, &2); // 1st window for key 1 has 2 elements
+        let r3 = &sink_inspect.result[1].take().unwrap();
+        assert_eq!(r3, &3); // 2nd window receieved, key 2, has 3 elements
+        let r4 = &sink_inspect.result[2].take().unwrap();
+        assert_eq!(r2, &2); // 3rd window receieved, for key 3, has 1 elements
+    }
+
     #[test]
     fn window_discard_late_arrival() {
         // Send 2 messages on time, a watermark and a late arrival which is not allowed
@@ -446,8 +554,10 @@ mod tests {
         wait(1);
         // Inspect and assert
         let mut sink_inspect = sink.definition().lock().unwrap();
-        let result = &sink_inspect.result[0].take().unwrap();
-        assert_eq!(result, &2);
+        let r1 = &sink_inspect.result[0].take().unwrap();
+        assert_eq!(r1, &2);
+        let r2 = &sink_inspect.result.len();
+        assert_eq!(r2, &1);
     }
     /* #[test] How should we handle late arrivals?
     fn window_late_arrival() {
@@ -485,10 +595,8 @@ mod tests {
         // Inspect and assert
         let mut sink_inspect = sink.definition().lock().unwrap();
         let r0 = &sink_inspect.result[0].take().unwrap();
-        let r1 = &sink_inspect.result[1].take().unwrap();
+        assert_eq!(&sink_inspect.result.len(), &(1 as usize));
         assert_eq!(r0, &2);
-        assert_eq!(r1, &0);
-        assert_eq!(&sink_inspect.result.len(), &(2 as usize));
     }
     #[test]
     fn window_very_long_windows_1() {
@@ -550,27 +658,12 @@ mod tests {
         //wait(1);
         // Inspect and assert
         let mut sink_inspect = sink.definition().lock().unwrap();
+        let r2 = &sink_inspect.result.len();
+        assert_eq!(r2, &2);
         let r0 = &sink_inspect.result[0].take().unwrap();
         assert_eq!(r0, &3);
         let r1 = &sink_inspect.result[1].take().unwrap();
         assert_eq!(r1, &2);
-        let r2 = &sink_inspect.result[2].take().unwrap();
-        assert_eq!(r2, &0);
-    }
-    #[test]
-    fn window_fastforward() {
-        // check that we receive correct number windows from fast forwarding
-        let (assigner_ref, sink) = window_assigner_test_setup(5, 5, 0);
-        wait(1);
-        // Send messages
-        let moment = now();
-        assigner_ref.tell(Box::new(watermark(moment)), &assigner_ref);
-        assigner_ref.tell(Box::new(watermark(moment + 26)), &assigner_ref);
-        wait(1);
-        // Inspect and assert
-        let sink_inspect = sink.definition().lock().unwrap();
-        // Should be at least 5 windows created from this sequence
-        assert!(&sink_inspect.result.len() > &(5 as usize));
     }
     #[test]
     fn window_empty() {
@@ -584,7 +677,7 @@ mod tests {
         // The number of windows is hard to assert with dynamic window starts
         //assert_eq!(&sink_inspect.result.len(), &(1 as usize));
         // We should've receieved at least one window which is empty
-        let r0 = &sink_inspect.result[0].take().unwrap();
+        let r0 = &sink_inspect.result.len();
         assert_eq!(r0, &0);
     }
 
@@ -606,7 +699,7 @@ mod tests {
         use crate::streaming::window::assigner::tests::sink::Sink;
 
         pub type Assigner =
-            EventTimeWindowAssigner<u8, Appender<u8>, WindowOutput, ChannelPort<WindowOutput>>;
+            EventTimeWindowAssigner<Item, Appender<u32>, WindowOutput, ChannelPort<WindowOutput>>;
         let mut req_port: RequiredPort<ChannelPort<WindowOutput>, Assigner> = RequiredPort::new();
         let _ = req_port.connect(target_port);
         let ref_port = crate::streaming::RequirePortRef(Rc::new(RefCell::new(req_port)));
@@ -617,9 +710,10 @@ mod tests {
             Box::new(Forward::new(Channel::Local(sink.actor_ref().clone())));
 
         // Create the window_assigner
-        let builder_code = String::from("|| appender[u8]");
-        let udf_code = String::from("|x: u8, y: appender[u8]| merge(y, x)");
-        let udf_result = String::from("|y: appender[u8]| len(result(y))");
+
+        let builder_code = String::from("|| appender[u32]");
+        let udf_code = String::from("|x: {u64, u32}, y: appender[u32]| merge(y, x.$1)");
+        let udf_result = String::from("|y: appender[u32]| len(result(y))");
         let window_assigner = EventTimeWindowAssigner::new(
             partitioner,
             builder_code,

@@ -148,6 +148,9 @@ impl<C: ComponentDefinition> EventTimer<C> {
     pub fn set_time(&mut self, ts: u64) -> () {
         self.time = ts;
     }
+    pub fn get_time(&mut self) -> u64 {
+        self.time
+    }
     // Complex loop to skip in the wheel and always advance even number of seconds
     #[inline(always)]
     pub fn advance_to(&mut self, ts: u64) -> Vec<ExecuteAction<C>> {
