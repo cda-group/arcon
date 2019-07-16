@@ -2,12 +2,11 @@
 
 extern crate test;
 
-extern crate runtime;
+extern crate arcon;
 extern crate weld;
 
+use arcon::prelude::*;
 use rand::Rng;
-use runtime::prelude::*;
-use runtime::weld::WeldVec;
 use std::sync::Arc;
 use weld::*;
 
@@ -29,7 +28,7 @@ pub fn item_gen() -> Item {
     }
 }
 
-fn weld_mapper(module: Arc<Module>, ctx: &mut WeldContext, items: Vec<Item>) {
+fn weld_mapper(module: &Module, ctx: &mut WeldContext, items: Vec<Item>) {
     let _ = items.iter().map(|i| {
         let run: ModuleRun<Item> = module.run(&i, ctx).unwrap();
         assert_eq!(i.price, run.0.price + 5);
@@ -48,9 +47,9 @@ fn rust_mapper(items: Vec<Item>) {
     });
 }
 
-fn weld_map_reducer(module: Arc<Module>, ctx: &mut WeldContext, nums: Vec<i32>) {
-    let weld_vec = WeldVec::from(&nums);
-    let _run: ModuleRun<i32> = module.run(&weld_vec, ctx).unwrap();
+fn weld_map_reducer(module: &Module, ctx: &mut WeldContext, nums: Vec<i32>) {
+    let vec = ArconVec::new(nums);
+    let _run: ModuleRun<i32> = module.run(&vec, ctx).unwrap();
 }
 
 fn rust_map_reducer(nums: Vec<i32>) {
@@ -65,12 +64,11 @@ mod tests {
     #[bench]
     fn weld_map_bench(b: &mut Bencher) {
         let code = "|x: u64, y: u32| {x, y + u32(5)}";
-        let module =
-            Arc::new(Module::new("mapper".to_string(), code.to_string(), 0, None).unwrap());
+        let module = Module::new(code.to_string()).unwrap();
         let items: Vec<Item> = (0..ITER_SIZE).map(|_| item_gen()).collect();
         let ref mut ctx = WeldContext::new(&module.conf()).unwrap();
         b.iter(|| {
-            weld_mapper(module.clone(), ctx, items.clone());
+            weld_mapper(&module, ctx, items.clone());
         });
     }
 
@@ -85,20 +83,14 @@ mod tests {
     #[bench]
     fn weld_map_reducer_bench(b: &mut Bencher) {
         let code = "|x:vec[i32]|
-            result(
-                for(
-                    map(x, |e| e * 4),
-                    merger[i32,+],
-                    |b,i,e| merge(b, e)
-                    )
-                )";
-        let module =
-            Arc::new(Module::new("map_reduce".to_string(), code.to_string(), 0, None).unwrap());
+                    let m = merger[i32, +];
+                    result(for(x, m, |b: merger[i32, +], i, e| merge(b, e * 4)))";
+        let module = Module::new(code.to_string()).unwrap();
 
         let mut rng = rand::thread_rng();
         let values: Vec<i32> = (0..ITER_SIZE).map(|_| rng.gen_range(1, 500)).collect();
         let ref mut ctx = WeldContext::new(&module.conf()).unwrap();
-        b.iter(|| weld_map_reducer(module.clone(), ctx, values.clone()));
+        b.iter(|| weld_map_reducer(&module, ctx, values.clone()));
     }
 
     #[bench]
