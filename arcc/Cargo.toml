@@ -18,7 +18,7 @@ name = "arcc"
 members = [
     "compiler",
     "codegen",
-    "runtime",
+    "arcon",
     "spec",
     "grpc",
 ]
