@@ -2,12 +2,13 @@
 extern crate futures;
 extern crate tokio;
 extern crate weld as weld_core;
-#[macro_use]
-extern crate keyby;
-#[macro_use]
-extern crate serde;
-#[macro_use]
+
+#[cfg_attr(test, macro_use)]
 extern crate arcon_macros;
+#[cfg_attr(test, macro_use)]
+extern crate keyby;
+#[cfg_attr(test, macro_use)]
+extern crate serde;
 #[cfg(feature = "capnproto")]
 #[macro_use]
 extern crate derivative;
