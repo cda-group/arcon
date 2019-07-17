@@ -39,16 +39,16 @@ pub mod macros {
 }
 
 pub mod prelude {
-    pub use crate::streaming::partitioner::{
-        broadcast::Broadcast, forward::Forward, hash::HashPartitioner, round_robin::RoundRobin,
-        shuffle::Shuffle, Partitioner,
+    pub use crate::streaming::channel::strategy::{
+        broadcast::Broadcast, forward::Forward, key_by::KeyBy, round_robin::RoundRobin,
+        shuffle::Shuffle, ChannelStrategy,
     };
+    pub use crate::streaming::channel::{Channel, ChannelPort, RequirePortRef};
     pub use crate::streaming::task::stateless::StreamTask;
     pub use crate::streaming::window::{
         assigner::EventTimeWindowAssigner, builder::WindowBuilder, builder::WindowFn,
         builder::WindowModules,
     };
-    pub use crate::streaming::{Channel, ChannelPort, RequirePortRef};
 
     pub use crate::data::{ArconElement, ArconType, ArconVec};
     pub use crate::weld::module::{Module, ModuleRun};

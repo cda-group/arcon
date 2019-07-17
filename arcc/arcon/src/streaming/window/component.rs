@@ -1,10 +1,10 @@
 use crate::data::{ArconElement, ArconType};
 use crate::error::*;
-use crate::streaming::partitioner::Partitioner;
-use crate::streaming::window::builder::*;
-use kompact::*;
 use crate::messages::protobuf::WindowMessage_oneof_payload::*;
 use crate::messages::protobuf::*;
+use crate::streaming::channel::strategy::ChannelStrategy;
+use crate::streaming::window::builder::*;
+use kompact::*;
 use std::sync::{Arc, Mutex};
 
 /// For each Streaming window, a WindowComponent is spawned
@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex};
 /// A: Input event
 /// B: ´WindowBuilder`s internal builder type
 /// C: Output of Window
-/// D: Port type for the `Partitioner`
+/// D: Port type for the `ChannelStrategy`
 pub struct WindowComponent<A, B, C, D>
 where
     A: 'static + ArconType,
@@ -22,7 +22,7 @@ where
 {
     ctx: ComponentContext<Self>,
     builder: WindowBuilder<A, B, C>,
-    partitioner: Arc<Mutex<Partitioner<C, D, Self>>>,
+    channel_strategy: Arc<Mutex<ChannelStrategy<C, D, Self>>>,
     complete: bool,
     timestamp: u64,
 }
@@ -59,7 +59,7 @@ where
     D: Port<Request = ArconElement<C>> + 'static + Clone,
 {
     pub fn new(
-        partitioner: Arc<Mutex<Partitioner<C, D, Self>>>,
+        channel_strategy: Arc<Mutex<ChannelStrategy<C, D, Self>>>,
         window_modules: WindowModules,
         ts: u64,
     ) -> Self {
@@ -68,7 +68,7 @@ where
         WindowComponent {
             ctx: ComponentContext::new(),
             builder: window_builder,
-            partitioner: partitioner.clone(),
+            channel_strategy: channel_strategy.clone(),
             complete: false,
             timestamp: ts,
         }
@@ -114,7 +114,7 @@ where
     fn output_window(&mut self) -> ArconResult<()> {
         let result = self.builder.result()?;
         let self_ptr = self as *const Self;
-        let mut p = self.partitioner.lock().unwrap();
+        let mut p = self.channel_strategy.lock().unwrap();
         let _ = p.output(ArconElement::new(result), self_ptr, None);
         Ok(())
     }

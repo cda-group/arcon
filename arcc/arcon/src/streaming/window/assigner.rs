@@ -1,15 +1,15 @@
 use crate::data::{ArconElement, ArconType};
-use crate::streaming::partitioner::*;
+use crate::messages::protobuf::StreamTaskMessage_oneof_payload::*;
+use crate::messages::protobuf::*;
+use crate::streaming::channel::strategy::*;
 use crate::streaming::window::builder::WindowModules;
 use crate::streaming::window::component;
 use crate::weld::module::Module;
 use kompact::*;
-use crate::messages::protobuf::StreamTaskMessage_oneof_payload::*;
-use crate::messages::protobuf::*;
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
-use std::time::UNIX_EPOCH;
 use std::time;
+use std::time::UNIX_EPOCH;
 
 /*
     EventTimeWindowAssigner
@@ -53,7 +53,7 @@ use std::time;
 /// A: Input event
 /// B: ´WindowBuilder`s internal builder type
 /// C: Output of Window
-/// D: Port type for the `Partitioner`
+/// D: Port type for the `ChannelStrategy`
 #[derive(ComponentDefinition)]
 pub struct EventTimeWindowAssigner<A, B, C, D>
 where
@@ -63,7 +63,7 @@ where
     D: Port<Request = ArconElement<C>> + 'static + Clone,
 {
     ctx: ComponentContext<Self>,
-    partitioner: Arc<Mutex<Partitioner<C, D, component::WindowComponent<A, B, C, D>>>>,
+    channel_strategy: Arc<Mutex<ChannelStrategy<C, D, component::WindowComponent<A, B, C, D>>>>,
     window_count: u64,
     window_length: u64,
     window_slide: u64,
@@ -84,7 +84,7 @@ where
     D: Port<Request = ArconElement<C>> + 'static + Clone,
 {
     pub fn new(
-        partitioner: Arc<Mutex<Partitioner<C, D, component::WindowComponent<A, B, C, D>>>>,
+        channel_strategy: Arc<Mutex<ChannelStrategy<C, D, component::WindowComponent<A, B, C, D>>>>,
         init_builder_code: String,
         udf_code: String,
         result_code: String,
@@ -106,7 +106,7 @@ where
 
         EventTimeWindowAssigner {
             ctx: ComponentContext::new(),
-            partitioner,
+            channel_strategy,
             window_count: 0,
             window_length: length,
             window_slide: slide,
@@ -123,7 +123,7 @@ where
     fn new_window(&mut self) -> () {
         let ts = self.window_start + (self.window_count * self.window_slide) + self.window_length;
         let wc = component::WindowComponent::new(
-            self.partitioner.clone(),
+            self.channel_strategy.clone(),
             self.window_modules.clone(),
             ts.clone(),
         );
@@ -257,8 +257,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::streaming::partitioner::forward::*;
-    use crate::streaming::{Channel, ChannelPort};
+    use crate::streaming::channel::strategy::forward::*;
+    use crate::streaming::channel::{Channel, ChannelPort};
     use kompact::default_components::DeadletterBox;
     use std::cell::UnsafeCell;
     use std::rc::Rc;
@@ -503,20 +503,22 @@ mod tests {
         let target_port = sink.on_definition(|c| c.sink_port.share());
         let mut req_port: RequiredPort<ChannelPort<WindowOutput>, WindowC> = RequiredPort::new();
         let _ = req_port.connect(target_port);
-        let ref_port = crate::streaming::RequirePortRef(Rc::new(UnsafeCell::new(req_port)));
+        let ref_port =
+            crate::streaming::channel::RequirePortRef(Rc::new(UnsafeCell::new(req_port)));
         let comp_channel: Channel<WindowOutput, ChannelPort<WindowOutput>, WindowC> =
             Channel::Port(ref_port);
 
         // Define partitioner
-        let partitioner: Arc<Mutex<Forward<WindowOutput, ChannelPort<WindowOutput>, WindowC>>> =
-            Arc::new(Mutex::new(Forward::new(comp_channel)));
+        let channel_strategy: Arc<
+            Mutex<Forward<WindowOutput, ChannelPort<WindowOutput>, WindowC>>,
+        > = Arc::new(Mutex::new(Forward::new(comp_channel)));
 
         // Create the window_assigner
         let builder_code = String::from("|| appender[u8]");
         let udf_code = String::from("|x: u8, y: appender[u8]| merge(y, x)");
         let udf_result = String::from("|y: appender[u8]| len(result(y))");
         let window_assigner = EventTimeWindowAssigner::new(
-            partitioner,
+            channel_strategy,
             builder_code,
             udf_code,
             udf_result,

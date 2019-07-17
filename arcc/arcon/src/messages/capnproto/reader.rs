@@ -1,5 +1,5 @@
-use crate::messages_capnp::*;
 use crate::messages::capnproto::*;
+use crate::messages_capnp::*;
 use std::error;
 
 pub fn deserialize_task_msg(bytes: Vec<u8>) -> Result<TypedTaskReader, Box<error::Error>> {

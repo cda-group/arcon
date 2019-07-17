@@ -1,21 +1,21 @@
 use crate::data::{ArconElement, ArconType};
 use crate::error::*;
 use crate::messages::protobuf::*;
-use crate::streaming::Channel;
+use crate::streaming::channel::Channel;
 use kompact::{ComponentDefinition, Port, Require};
 
 pub mod broadcast;
 pub mod forward;
-pub mod hash;
+pub mod key_by;
 pub mod round_robin;
 pub mod shuffle;
 
-/// `Partitioner` is used to output events to one or more channels
+/// `ChannelStrategy` is used to output events to one or more channels
 ///
 /// A: The Event to be sent
 /// B: Which Port that is used for Partitioner
 /// C: Source Component required for the tell method
-pub trait Partitioner<A, B, C>: Send + Sync
+pub trait ChannelStrategy<A, B, C>: Send + Sync
 where
     A: 'static + ArconType,
     B: Port<Request = ArconElement<A>> + 'static + Clone,
@@ -78,7 +78,7 @@ where
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::streaming::ChannelPort;
+    use crate::streaming::channel::ChannelPort;
     use kompact::*;
 
     #[derive(ComponentDefinition)]

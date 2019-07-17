@@ -2,8 +2,8 @@ use crate::data::{ArconElement, ArconType};
 use crate::error::*;
 use crate::messages::protobuf::StreamTaskMessage_oneof_payload::*;
 use crate::messages::protobuf::*;
-use crate::streaming::partitioner::Partitioner;
-use crate::streaming::{Channel, ChannelPort};
+use crate::streaming::channel::strategy::ChannelStrategy;
+use crate::streaming::channel::{Channel, ChannelPort};
 use crate::weld::*;
 use kompact::*;
 use std::sync::Arc;
@@ -12,7 +12,7 @@ use weld::*;
 /// Stateless Stream Task
 ///
 /// A: Input Event
-/// B: Port type for Partitioner
+/// B: Port type for ChannelStrategy
 /// C: Output Event
 #[derive(ComponentDefinition)]
 pub struct StreamTask<A, B, C>
@@ -23,7 +23,7 @@ where
 {
     ctx: ComponentContext<Self>,
     _in_channels: Vec<Channel<C, B, Self>>,
-    partitioner: Box<Partitioner<C, B, Self>>,
+    out_channels: Box<ChannelStrategy<C, B, Self>>,
     pub event_port: ProvidedPort<ChannelPort<A>, Self>,
     udf: Arc<Module>,
     udf_ctx: WeldContext,
@@ -40,14 +40,14 @@ where
     pub fn new(
         udf: Arc<Module>,
         in_channels: Vec<Channel<C, B, Self>>,
-        partitioner: Box<Partitioner<C, B, Self>>,
+        out_channels: Box<ChannelStrategy<C, B, Self>>,
     ) -> Self {
         let ctx = WeldContext::new(&udf.conf()).unwrap();
         StreamTask {
             ctx: ComponentContext::new(),
             event_port: ProvidedPort::new(),
             _in_channels: in_channels,
-            partitioner: partitioner,
+            out_channels,
             udf: udf.clone(),
             udf_ctx: ctx,
             udf_avg: 0,
@@ -110,7 +110,7 @@ where
 
     fn push_out(&mut self, event: ArconElement<C>) -> ArconResult<()> {
         let self_ptr = self as *const StreamTask<A, B, C>;
-        let _ = self.partitioner.output(event, self_ptr, None)?;
+        let _ = self.out_channels.output(event, self_ptr, None)?;
         Ok(())
     }
 }
@@ -190,8 +190,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::streaming::partitioner::forward::Forward;
-    use crate::streaming::RequirePortRef;
+    use crate::streaming::channel::strategy::forward::Forward;
+    use crate::streaming::channel::RequirePortRef;
     use kompact::default_components::*;
     use std::cell::UnsafeCell;
     use std::rc::Rc;
@@ -288,8 +288,8 @@ mod tests {
         let sink_comp = system.create_and_start(move || SinkActor::new());
 
         let channel = Channel::Local(sink_comp.actor_ref());
-        let partitioner: Box<
-            Partitioner<
+        let channel_strategy: Box<
+            ChannelStrategy<
                 TaskOutput,
                 ChannelPort<TaskOutput>,
                 StreamTask<TaskInput, ChannelPort<TaskOutput>, TaskOutput>,
@@ -299,7 +299,7 @@ mod tests {
         let weld_code = String::from("|id: u32, price: u64| {id, price + u64(5)}");
         let module = Arc::new(Module::new(weld_code).unwrap());
         let stream_task =
-            system.create_and_start(move || StreamTask::new(module, Vec::new(), partitioner));
+            system.create_and_start(move || StreamTask::new(module, Vec::new(), channel_strategy));
 
         let task_input = ArconElement::new(TaskInput { id: 10, price: 20 });
 
@@ -328,12 +328,12 @@ mod tests {
 
         let ref_port = RequirePortRef(Rc::new(UnsafeCell::new(req_port)));
         let channel = Channel::Port(ref_port);
-        let partitioner = Box::new(Forward::new(channel));
+        let channel_strategy = Box::new(Forward::new(channel));
 
         let weld_code = String::from("|id: u32, price: u64| {id, price + u64(5)}");
         let module = Arc::new(Module::new(weld_code).unwrap());
         let stream_task =
-            system.create_and_start(move || StreamTask::new(module, Vec::new(), partitioner));
+            system.create_and_start(move || StreamTask::new(module, Vec::new(), channel_strategy));
 
         let task_input = ArconElement::new(TaskInput { id: 10, price: 20 });
 
@@ -368,8 +368,8 @@ mod tests {
 
         let remote_channel = Channel::Remote(remote_path);
 
-        let partitioner: Box<
-            Partitioner<
+        let channel_strategy: Box<
+            ChannelStrategy<
                 TaskOutput,
                 ChannelPort<TaskOutput>,
                 StreamTask<TaskInput, ChannelPort<TaskOutput>, TaskOutput>,
@@ -378,7 +378,7 @@ mod tests {
         let weld_code = String::from("|id: u32, price: u64| {id, price + u64(5)}");
         let module = Arc::new(Module::new(weld_code).unwrap());
         let stream_task =
-            system.create_and_start(move || StreamTask::new(module, Vec::new(), partitioner));
+            system.create_and_start(move || StreamTask::new(module, Vec::new(), channel_strategy));
 
         let task_input = ArconElement::new(TaskInput { id: 10, price: 20 });
 

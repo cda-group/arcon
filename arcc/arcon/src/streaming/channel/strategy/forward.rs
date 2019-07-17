@@ -1,7 +1,7 @@
 use crate::data::{ArconElement, ArconType};
 use crate::error::*;
-use crate::streaming::partitioner::{channel_output, Partitioner};
-use crate::streaming::Channel;
+use crate::streaming::channel::strategy::{channel_output, ChannelStrategy};
+use crate::streaming::channel::Channel;
 use kompact::{ComponentDefinition, Port, Require};
 
 pub struct Forward<A, B, C>
@@ -24,7 +24,7 @@ where
     }
 }
 
-impl<A, B, C> Partitioner<A, B, C> for Forward<A, B, C>
+impl<A, B, C> ChannelStrategy<A, B, C> for Forward<A, B, C>
 where
     A: 'static + ArconType,
     B: Port<Request = ArconElement<A>> + 'static + Clone,
@@ -65,8 +65,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::streaming::partitioner::tests::*;
-    use crate::streaming::{ChannelPort, RequirePortRef};
+    use crate::streaming::channel::strategy::tests::*;
+    use crate::streaming::channel::{ChannelPort, RequirePortRef};
     use kompact::*;
     use std::cell::UnsafeCell;
     use std::rc::Rc;
@@ -86,13 +86,13 @@ mod tests {
         let ref_port = RequirePortRef(Rc::new(UnsafeCell::new(req_port)));
         let comp_channel: Channel<Input, ChannelPort<Input>, TestComp> = Channel::Port(ref_port);
 
-        let mut partitioner: Box<Partitioner<Input, ChannelPort<Input>, TestComp>> =
+        let mut channel_strategy: Box<ChannelStrategy<Input, ChannelPort<Input>, TestComp>> =
             Box::new(Forward::new(comp_channel));
 
         for _i in 0..total_msgs {
             // NOTE: second parameter is a fake channel...
             let input = ArconElement::new(Input { id: 1 });
-            let _ = partitioner.output(input, &*comp.definition().lock().unwrap(), None);
+            let _ = channel_strategy.output(input, &*comp.definition().lock().unwrap(), None);
         }
 
         std::thread::sleep(std::time::Duration::from_secs(1));

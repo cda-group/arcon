@@ -1,8 +1,7 @@
 use crate::data::{ArconElement, ArconType};
 use crate::error::*;
-use crate::streaming::partitioner::channel_output;
-use crate::streaming::partitioner::Partitioner;
-use crate::streaming::Channel;
+use crate::streaming::channel::strategy::{channel_output, ChannelStrategy};
+use crate::streaming::channel::Channel;
 use kompact::{ComponentDefinition, Port, Require};
 
 pub struct Broadcast<A, B, C>
@@ -25,7 +24,7 @@ where
     }
 }
 
-impl<A, B, C> Partitioner<A, B, C> for Broadcast<A, B, C>
+impl<A, B, C> ChannelStrategy<A, B, C> for Broadcast<A, B, C>
 where
     A: 'static + ArconType,
     B: Port<Request = ArconElement<A>> + 'static + Clone,
@@ -70,10 +69,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::streaming::partitioner::tests::*;
-    use crate::streaming::{ChannelPort, RequirePortRef};
-    use kompact::*;
+    use crate::streaming::channel::strategy::tests::*;
+    use crate::streaming::channel::{ChannelPort, RequirePortRef};
     use kompact::default_components::*;
+    use kompact::*;
     use std::cell::UnsafeCell;
     use std::rc::Rc;
     use std::sync::Arc;
@@ -109,14 +108,14 @@ mod tests {
             channels.push(comp_channel);
             comps.push(comp);
         }
-        let mut partitioner: Box<Partitioner<Input, ChannelPort<Input>, TestComp>> =
+        let mut channel_strategy: Box<ChannelStrategy<Input, ChannelPort<Input>, TestComp>> =
             Box::new(Broadcast::new(channels));
 
         for _i in 0..total_msgs {
             let input = ArconElement::new(Input { id: 1 });
             // Just assume it is all sent from same comp
             let comp_def = &(*comps.get(0 as usize).unwrap().definition().lock().unwrap());
-            let _ = partitioner.output(input, comp_def, None);
+            let _ = channel_strategy.output(input, comp_def, None);
         }
 
         std::thread::sleep(std::time::Duration::from_secs(1));
@@ -170,14 +169,14 @@ mod tests {
         }
         std::thread::sleep(std::time::Duration::from_secs(1));
 
-        let mut partitioner: Box<Partitioner<Input, ChannelPort<Input>, TestComp>> =
+        let mut channel_strategy: Box<ChannelStrategy<Input, ChannelPort<Input>, TestComp>> =
             Box::new(Broadcast::new(channels));
 
         for _i in 0..total_msgs {
             let input = ArconElement::new(Input { id: 1 });
             // Just assume it is all sent from same comp
             let comp_def = &(*comps.get(0 as usize).unwrap().definition().lock().unwrap());
-            let _ = partitioner.output(input, comp_def, None);
+            let _ = channel_strategy.output(input, comp_def, None);
         }
 
         std::thread::sleep(std::time::Duration::from_secs(1));

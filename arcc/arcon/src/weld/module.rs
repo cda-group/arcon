@@ -137,9 +137,9 @@ impl Module {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::data::ArconVec;
     use std::sync::Arc;
     use std::thread;
-    use crate::data::ArconVec;
 
     #[test]
     fn addition_module() {
