@@ -2,7 +2,6 @@
 extern crate clap;
 #[macro_use]
 extern crate log;
-#[macro_use]
 extern crate failure;
 #[macro_use]
 extern crate lazy_static;
@@ -98,7 +97,7 @@ fn main() {
                 .setting(AppSettings::ColoredHelp)
                 .arg(&spec_arg)
                 .arg(&build_dir_arg)
-                .about("Compile Arc IR"),
+                .about("Compile Arc Specification"),
         )
         .subcommand(
             SubCommand::with_name("server")
@@ -153,15 +152,15 @@ fn main() {
                 error!("Error: {} ", err.to_string());
             }
         }
-        ("repl", Some(arg_matches)) => {
+        ("repl", Some(_)) => {
             if let Err(err) = repl(mode) {
                 error!("Error: {} ", err.to_string());
             }
         }
-        ("targets", Some(arg_matches)) => {
+        ("targets", Some(_)) => {
             eprintln!("{:#?}", *TARGETS);
         }
-        ("rustc", Some(arg_matches)) => {
+        ("rustc", Some(_)) => {
             eprintln!("{}", *RUSTC_VERSION);
         }
         _ => eprintln!("Command did not match!"),
@@ -176,23 +175,27 @@ fn compile(
     spec_path: &str,
     build_dir: &str,
     daemonize: bool,
-    mode: CompilerMode,
+    _mode: CompilerMode,
 ) -> Result<(), failure::Error> {
     greeting("Wait while I compile for you");
 
     let spec_file = &(spec_path.to_owned() + "/" + DEFAULT_ARC_INPUT);
-    let spec = ArcSpec::load(spec_file)?;
+    let _spec = ArcSpec::load(spec_file)?;
 
-    // TODO: Send to Arc
-    debug!("input: {}", spec.ir);
-    let _compiler = Compiler::new(build_dir.to_string());
+    if daemonize {
+        unimplemented!();
+    } else {
+        // TODO: Send to Arc
+        //debug!("input: {}", spec.ir);
+        let _compiler = Compiler::new(build_dir.to_string());
 
-    let pb = ProgressBar::new(524);
-    for _ in 0..524 {
-        pb.inc(1);
-        std::thread::sleep(std::time::Duration::from_millis(2));
+        let pb = ProgressBar::new(524);
+        for _ in 0..524 {
+            pb.inc(1);
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        pb.finish_with_message("done");
     }
-    pb.finish_with_message("done");
 
     Ok(())
 }
@@ -201,8 +204,8 @@ fn server(
     host: &str,
     port: i32,
     build_dir: &str,
-    daemonize: bool,
-    mode: CompilerMode,
+    _daemonize: bool,
+    _mode: CompilerMode,
 ) -> Result<(), failure::Error> {
     // TODO: start up gRPC server
     greeting("Server is coming soon!");
@@ -211,7 +214,7 @@ fn server(
     Ok(())
 }
 
-fn repl(mode: CompilerMode) -> Result<(), failure::Error> {
+fn repl(_mode: CompilerMode) -> Result<(), failure::Error> {
     // TODO: start up REPL
     greeting("REPL is coming soon!");
     Ok(())

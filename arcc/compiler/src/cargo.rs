@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use cargo::core::{compiler::CompileMode, Workspace};
 use cargo::ops::{self, CompileOptions};
 use cargo::util::{config::Config};
@@ -14,7 +16,7 @@ pub fn compile(path: &str) -> Result<(), failure::Error> {
     let config = Config::default()?;
     let ws = Workspace::new(&path, &config)?;
     let compile_options = CompileOptions::new(&config, CompileMode::Build)?;
-    let result = ops::compile(&ws, &compile_options).map(|_| ()).unwrap_err();
+    let _result = ops::compile(&ws, &compile_options).map(|_| ()).unwrap_err();
     Ok(())
 }
 

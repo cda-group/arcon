@@ -13,7 +13,7 @@ use spec::ArcSpec;
 struct CompilerService;
 
 impl Compiler for CompilerService {
-    fn compile(&mut self, ctx: RpcContext, req: CompileRequest, sink: UnarySink<CompileReply>) {
+    fn compile(&mut self, _ctx: RpcContext, req: CompileRequest, _sink: UnarySink<CompileReply>) {
         let spec = ArcSpec::from_bytes(&req.spec);
         info!("Received Compilation Request {:?}", spec);
     }

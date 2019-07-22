@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use failure::Fail;
 use serde::{Deserialize, Serialize};
 use std::fs;

@@ -18,12 +18,56 @@ pub struct SpecError {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ArcSpec {
-    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub id: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub target: String,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub ir: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub nodes: Vec<Node>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Node {
+    pub id: u32,
+    pub node_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub weld_code: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_type: Option<String>,
+    #[serde(default = "parallelism")]
+    pub parallelism: u32,
+    #[serde(default = "forward")]
+    pub channel_strategy: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_channels: Option<Vec<Channel>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_channels: Option<Vec<Channel>>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Channel {
+    pub id: u32,
+    /// Kompact Port or Actorpath
+    pub channel_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub actor_path: Option<ActorPath>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ActorPath {
+    pub id: String,
+    /// 127.0.0.1:2000
+    pub addr: String,
+}
+
+/// Default Serde Implementations for `ArcSpec`
+fn forward() -> String {
+    String::from("Forward")
+}
+
+fn parallelism() -> u32 {
+    1
 }
 
 impl ArcSpec {
@@ -45,14 +89,63 @@ impl ArcSpec {
 mod tests {
     use super::*;
     use serde_json::Result;
+    use std::io::Write;
     use tempfile::NamedTempFile;
-    use std::io::{self, Write};
 
     static ARC_SPEC_JSON: &str = r#"
         {
             "id": "some_id",
             "target": "x86-64-unknown-linux-gnu",
-            "ir": "|x: i32, y: i32| x + y"
+            "nodes": [
+                {
+                    "id": 1,
+                    "node_type": "Source",
+                    "input_type": "i64",
+                    "output_type": "i64",
+                    "parallelism": 1,
+                    "channel_strategy": "forward",
+                    "output_channels": [
+                        {
+                            "id": 2,
+                            "channel_type": "port"
+                        }
+                    ]
+                },
+                {
+                    "id": 2,
+                    "node_type": "StreamTask",
+                    "weld_code": "|x: i64| x + 5",
+                    "input_type": "i64",
+                    "output_type": "i64",
+                    "parallelism": 1,
+                    "channel_strategy": "forward",
+                    "input_channels": [
+                        {
+                            "id": 1,
+                            "channel_type": "port"
+                        }
+                    ],
+                    "output_channels": [
+                        {
+                            "id": 3,
+                            "channel_type": "port"
+                        }
+                    ]
+                },
+                {
+                    "id": 3,
+                    "node_type": "Sink",
+                    "input_type": "i64",
+                    "parallelism": 1,
+                    "channel_strategy": "forward",
+                    "input_channels": [
+                        {
+                            "id": 2,
+                            "channel_type": "port"
+                        }
+                    ]
+                }
+            ]
         }"#;
 
     #[test]
