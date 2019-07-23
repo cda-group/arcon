@@ -10,5 +10,5 @@ rustc --version
 ./ci/install_llvm.sh
 export RUST_BACKTRACE=1
 cd arcc && cargo +nightly test --all
-cd ../ && ./ci/install_sbt.sh
-cd operational-plane && sbt test
+#cd ../ && ./ci/install_sbt.sh
+#cd operational-plane && sbt test

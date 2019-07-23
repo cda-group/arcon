@@ -1,6 +1,6 @@
 extern crate codegen;
 extern crate compiletest_rs as compiletest;
-extern crate runtime;
+extern crate arcon;
 
 use codegen::*;
 use std::fs;

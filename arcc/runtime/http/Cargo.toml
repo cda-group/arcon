@@ -1,9 +1,0 @@
-[package]
-name = "http"
-version = "0.1.0"
-authors = ["Max Meldrum <mmeldrum@kth.se>"]
-edition = "2018"
-
-[dependencies]
-hyper = "0.12"
-hyper-tls = "0.3.1"

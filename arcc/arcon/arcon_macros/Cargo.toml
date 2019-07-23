@@ -1,0 +1,20 @@
+[package]
+name = "arcon_macros"
+version = "0.1.0"
+authors = ["Max Meldrum <mmeldrum@kth.se>"]
+readme = "README.md"
+license = "MIT"
+repository = "https://github.com/cda-group/arcon"
+homepage = "https://github.com/cda-group/arcon"
+description = """
+Macros for Arcon
+"""
+edition = "2018"
+
+[dependencies]
+syn = "0.15.38"
+quote = "0.6.3"
+proc-macro2 = "0.4"
+
+[lib]
+proc-macro = true

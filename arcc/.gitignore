@@ -7,7 +7,6 @@
 *.rs.swp
 *.proto.swp
 target/
-messages.rs
 spec.json
 run-pass/
 

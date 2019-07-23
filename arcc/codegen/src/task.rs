@@ -4,11 +4,9 @@ pub fn task(name: &str) -> TokenStream {
     let task_name = Ident::new(&name, Span::call_site());
 
     let imports = quote! {
-        extern crate runtime;
-        use runtime::components::task_manager::*;
-        use runtime::components::*;
-        use runtime::prelude::*;
-        use runtime::weld::module::*;
+        extern crate arcon;
+        use arcon::prelude::*;
+        use arcon::weld::module::*;
     };
 
     let struct_def = quote! {
