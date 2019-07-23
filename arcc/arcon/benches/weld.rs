@@ -16,6 +16,18 @@ pub struct Item {
     pub price: u32,
 }
 
+#[derive(Clone)]
+pub struct SensorData {
+    id: u64,
+    vec: ArconVec<i32>,
+}
+
+#[derive(Clone)]
+pub struct EnrichedSensor {
+    id: u64,
+    total: i32,
+}
+
 static ITER_SIZE: usize = 100000;
 
 pub fn item_gen() -> Item {
@@ -25,6 +37,17 @@ pub fn item_gen() -> Item {
     Item {
         id: id as u64,
         price: price as u32,
+    }
+}
+
+fn sensor_data() -> SensorData {
+    let mut rng = rand::thread_rng();
+    let id = rng.gen_range(1, 100);
+    let mut values = || (0..ITER_SIZE).map(|_| rng.gen_range(1, 100)).collect();
+    let vec: Vec<i32> = values();
+    SensorData {
+        id: id as u64,
+        vec: ArconVec::new(vec),
     }
 }
 
@@ -47,13 +70,20 @@ fn rust_mapper(items: Vec<Item>) {
     });
 }
 
-fn weld_map_reducer(module: &Module, ctx: &mut WeldContext, nums: Vec<i32>) {
-    let vec = ArconVec::new(nums);
-    let _run: ModuleRun<i32> = module.run(&vec, ctx).unwrap();
+fn weld_map_filter_reduce(module: &Module, ctx: &mut WeldContext, sensor: &SensorData) {
+    let run: ModuleRun<EnrichedSensor> = module.run(sensor, ctx).unwrap();
+    assert_eq!(run.0.id, sensor.id);
+    assert!(run.0.total > 0);
 }
 
-fn rust_map_reducer(nums: Vec<i32>) {
-    let _run: i32 = nums.iter().map(|i| i * 4).sum();
+fn rust_map_filter_reduce(sensor: &SensorData) {
+    let run: EnrichedSensor = EnrichedSensor {
+        id: sensor.id,
+        total: sensor.vec.iter().map(|i| i + 5).filter(|x| x > &50).sum(),
+    };
+    assert_eq!(run.id, sensor.id);
+    // To make the compiler not just skip the calculation...
+    assert!(run.total > 0);
 }
 
 #[cfg(test)]
@@ -81,24 +111,23 @@ mod tests {
     }
 
     #[bench]
-    fn weld_map_reducer_bench(b: &mut Bencher) {
-        let code = "|x:vec[i32]|
-                    let m = merger[i32, +];
-                    result(for(x, m, |b: merger[i32, +], i, e| merge(b, e * 4)))";
+    fn weld_map_filter_reduce_bench(b: &mut Bencher) {
+        let code = "|id: u64, x:vec[i32]|
+                let m = merger[i32, +];
+                let op = for(x, m, |b: merger[i32, +], i, e|  let mapped = e + 5;
+                    if(mapped > 50, merge(b, mapped), b));
+                {id, result(op)}";
         let module = Module::new(code.to_string()).unwrap();
-
-        let mut rng = rand::thread_rng();
-        let values: Vec<i32> = (0..ITER_SIZE).map(|_| rng.gen_range(1, 500)).collect();
+        let sensor_data = sensor_data();
         let ref mut ctx = WeldContext::new(&module.conf()).unwrap();
-        b.iter(|| weld_map_reducer(&module, ctx, values.clone()));
+        b.iter(|| weld_map_filter_reduce(&module, ctx, &sensor_data));
     }
 
     #[bench]
-    fn rust_map_reducer_bench(b: &mut Bencher) {
-        let mut rng = rand::thread_rng();
-        let values: Vec<i32> = (0..ITER_SIZE).map(|_| rng.gen_range(1, 500)).collect();
+    fn rust_map_filter_reduce_bench(b: &mut Bencher) {
+        let sensor_data = sensor_data();
         b.iter(|| {
-            rust_map_reducer(values.clone());
+            rust_map_filter_reduce(&sensor_data);
         });
     }
 
