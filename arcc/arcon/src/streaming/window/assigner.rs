@@ -23,6 +23,7 @@ use std::sync::Arc;
 /// FUNC: ´WindowBuilder`s internal builder type
 /// OUT: Output of Window
 /// P: Port type for the `Partitioner`
+#[derive(ComponentDefinition)]
 pub struct EventTimeWindowAssigner<IN, FUNC, OUT, P>
 where
     IN: 'static + ArconType + Hash,
@@ -40,30 +41,6 @@ where
     window_modules: WindowModules,
     timer: Box<EventTimer<Self>>,
     hasher: BuildHasherDefault<DefaultHasher>,
-}
-
-impl<IN, FUNC, OUT, P> ComponentDefinition for EventTimeWindowAssigner<IN, FUNC, OUT, P>
-where
-    IN: 'static + ArconType + Hash,
-    FUNC: 'static + Clone,
-    OUT: 'static + ArconType,
-    P: Port<Request = ArconElement<OUT>> + 'static + Clone,
-{
-    fn setup(&mut self, self_component: Arc<Component<Self>>) -> () {
-        self.ctx_mut().initialise(self_component);
-    }
-    fn execute(&mut self, _max_events: usize, skip: usize) -> ExecuteResult {
-        ExecuteResult::new(skip, skip)
-    }
-    fn ctx(&self) -> &ComponentContext<Self> {
-        &self.ctx
-    }
-    fn ctx_mut(&mut self) -> &mut ComponentContext<Self> {
-        &mut self.ctx
-    }
-    fn type_name() -> &'static str {
-        "EventTimeWindowAssigner"
-    }
 }
 
 impl<IN, FUNC, OUT, P> EventTimeWindowAssigner<IN, FUNC, OUT, P>

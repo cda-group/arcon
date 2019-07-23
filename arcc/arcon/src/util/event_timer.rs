@@ -34,7 +34,6 @@ pub struct EventTimer<C: ComponentDefinition> {
     timer: QuadWheelWithOverflow,
     time: u64,
     handles: HashMap<Uuid, TimerHandle<C>>,
-    _c: PhantomData<C>,
 }
 
 impl<C: ComponentDefinition> Timer<C> for EventTimer<C> {
@@ -104,7 +103,6 @@ impl<C: ComponentDefinition> EventTimer<C> {
             timer: QuadWheelWithOverflow::new(),
             time: 0u64,
             handles: HashMap::new(),
-            _c: PhantomData,
         }
     }
     // Our "unique" schedule function

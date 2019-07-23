@@ -167,23 +167,19 @@ mod tests {
 
     #[test]
     fn tcp_io() -> Result<(), Box<std::error::Error>> {
-        println!("tcp_io test starting");
         let system = KompactConfig::default().build().expect("KompactSystem");
         let (tcp_source, _t) = system.create_and_register(move || TcpSource::new());
         system.start(&tcp_source);
 
         // Make sure IO::TCP is started
         std::thread::sleep(std::time::Duration::from_millis(100));
-        println!("Tokio test about to create client");
         let addr = "127.0.0.1:3000".parse()?;
         let client = TcpStream::connect(&addr)
             .and_then(|stream| io::write_all(stream, "hello\n").then(|_| Ok(())))
             .map_err(|_| {
                 assert!(false);
             });
-        println!("Tokio client about to start");
         tokio::run(client);
-        println!("Tokio client started");
         std::thread::sleep(std::time::Duration::from_millis(50));
 
         // Our TcpSource should have received 1 msg, that is, "hello"

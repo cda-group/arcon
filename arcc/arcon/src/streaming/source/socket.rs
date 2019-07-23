@@ -1,3 +1,4 @@
+use crate::data::ArconType;
 use crate::util::io::*;
 use kompact::*;
 use std::str::from_utf8;
@@ -9,15 +10,15 @@ use std::sync::Arc;
     Attempts to cast the bytes as string to type A
     Causes Error! if it's unable to cast from string
 */
-
-pub struct SocketSource<A: 'static + Send + Sync + Clone + FromStr> {
+#[derive(ComponentDefinition)]
+pub struct SocketSource<A: 'static + ArconType + FromStr> {
     ctx: ComponentContext<SocketSource<A>>,
     subscriber: Arc<ActorRef>,
     port: usize,
     received: u8,
 }
 
-impl<A: Send + Sync + Clone + FromStr> SocketSource<A> {
+impl<A: ArconType + FromStr> SocketSource<A> {
     pub fn new(port: usize, subscriber: ActorRef) -> SocketSource<A> {
         SocketSource {
             ctx: ComponentContext::new(),
@@ -28,7 +29,7 @@ impl<A: Send + Sync + Clone + FromStr> SocketSource<A> {
     }
 }
 
-impl<A: Send + Sync + Clone + FromStr> Provide<ControlPort> for SocketSource<A> {
+impl<A: ArconType + FromStr> Provide<ControlPort> for SocketSource<A> {
     fn handle(&mut self, event: ControlEvent) -> () {
         match event {
             ControlEvent::Start => {
@@ -44,29 +45,10 @@ impl<A: Send + Sync + Clone + FromStr> Provide<ControlPort> for SocketSource<A> 
     }
 }
 
-impl<A: Send + Sync + Clone + FromStr> ComponentDefinition for SocketSource<A> {
-    fn setup(&mut self, self_component: Arc<Component<Self>>) -> () {
-        self.ctx_mut().initialise(self_component);
-    }
-    fn execute(&mut self, _max_events: usize, skip: usize) -> ExecuteResult {
-        ExecuteResult::new(skip, skip)
-    }
-    fn ctx(&self) -> &ComponentContext<Self> {
-        &self.ctx
-    }
-    fn ctx_mut(&mut self) -> &mut ComponentContext<Self> {
-        &mut self.ctx
-    }
-    fn type_name() -> &'static str {
-        "SocketSource"
-    }
-}
-
-impl<A: Send + Sync + Clone + FromStr> Actor for SocketSource<A> {
+impl<A: ArconType + FromStr> Actor for SocketSource<A> {
     fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
-        info!(self.ctx.log(), "RECEIVED ANY");
         if let Some(ref recv) = msg.downcast_ref::<TcpRecv>() {
-            info!(self.ctx.log(), "{:?}", recv.bytes);
+            debug!(self.ctx.log(), "{:?}", recv.bytes);
             // Try to cast into our type from bytes
             if let Ok(byte_string) = from_utf8(&recv.bytes) {
                 if let Ok(element) = byte_string.parse::<A>() {
@@ -121,12 +103,9 @@ mod tests {
         }
         impl<A: Send + Clone> Actor for Sink<A> {
             fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
-                println!("sink received message");
                 if let Some(m) = msg.downcast_ref::<A>() {
-                    println!("trying to push");
                     self.result.push((*m).clone());
                 } else {
-                    println!("unrecognized message");
                 }
             }
             fn receive_message(&mut self, _sender: ActorPath, _ser_id: u64, _buf: &mut Buf) {}
@@ -197,35 +176,7 @@ mod tests {
         assert_eq!(r0, 77 as u8);
         Ok(())
     }
-    #[test]
-    fn socket_string_with_newline() -> Result<(), Box<std::error::Error>> {
-        let (system, sink) = test_setup(String::new());
 
-        let file_source: SocketSource<String> = SocketSource::new(4001, sink.actor_ref());
-        let (source, _) = system.create_and_register(move || file_source);
-        system.start(&source);
-
-        wait(1);
-
-        let addr = "127.0.0.1:4001".parse()?;
-        let client = TcpStream::connect(&addr)
-            .and_then(|stream| io::write_all(stream, "the quick \nbrown fox").then(|_| Ok(())))
-            .map_err(|_| {
-                assert!(false);
-            });
-
-        tokio::run(client);
-
-        wait(1);
-
-        let source_inspect = source.definition().lock().unwrap();
-        assert_eq!(source_inspect.received, 1);
-        let sink_inspect = sink.definition().lock().unwrap();
-        assert_eq!(sink_inspect.result.len(), (1 as usize));
-        let r0 = &sink_inspect.result[0];
-        assert_eq!(r0, &"the quick \nbrown fox".to_string());
-        Ok(())
-    }
     #[test]
     fn socket_multiple_f32() -> Result<(), Box<std::error::Error>> {
         let (system, sink) = test_setup(1 as f32);

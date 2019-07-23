@@ -1,3 +1,4 @@
+use crate::data::ArconType;
 use kompact::*;
 use std::fs::File;
 use std::io::BufRead;
@@ -11,14 +12,14 @@ use std::sync::Arc;
 
     Each line of the file should contain just one value of type A which supports FromStr
 */
-
-pub struct LocalFileSource<A: 'static + Send + FromStr> {
+#[derive(ComponentDefinition)]
+pub struct LocalFileSource<A: 'static + ArconType + FromStr> {
     ctx: ComponentContext<LocalFileSource<A>>,
     subscriber: Arc<ActorRef>,
     file_path: String,
 }
 
-impl<A: Send + FromStr> LocalFileSource<A> {
+impl<A: ArconType + FromStr> LocalFileSource<A> {
     pub fn new(file_path: String, subscriber: ActorRef) -> LocalFileSource<A> {
         LocalFileSource {
             ctx: ComponentContext::new(),
@@ -50,7 +51,7 @@ impl<A: Send + FromStr> LocalFileSource<A> {
     }
 }
 
-impl<A: Send + FromStr> Provide<ControlPort> for LocalFileSource<A> {
+impl<A: ArconType + FromStr> Provide<ControlPort> for LocalFileSource<A> {
     fn handle(&mut self, event: ControlEvent) -> () {
         match event {
             ControlEvent::Start => {
@@ -63,25 +64,7 @@ impl<A: Send + FromStr> Provide<ControlPort> for LocalFileSource<A> {
     }
 }
 
-impl<A: Send + FromStr> ComponentDefinition for LocalFileSource<A> {
-    fn setup(&mut self, self_component: Arc<Component<Self>>) -> () {
-        self.ctx_mut().initialise(self_component);
-    }
-    fn execute(&mut self, _max_events: usize, skip: usize) -> ExecuteResult {
-        ExecuteResult::new(skip, skip)
-    }
-    fn ctx(&self) -> &ComponentContext<Self> {
-        &self.ctx
-    }
-    fn ctx_mut(&mut self) -> &mut ComponentContext<Self> {
-        &mut self.ctx
-    }
-    fn type_name() -> &'static str {
-        "LocalFileSource"
-    }
-}
-
-impl<A: Send + FromStr> Actor for LocalFileSource<A> {
+impl<A: ArconType + FromStr> Actor for LocalFileSource<A> {
     fn receive_local(&mut self, _sender: ActorRef, _msg: &Any) {}
 
     fn receive_message(&mut self, _sender: ActorPath, _ser_id: u64, _buf: &mut Buf) {}
@@ -98,11 +81,11 @@ mod tests {
     mod sink {
         use super::*;
 
-        pub struct Sink<A: 'static + Send + Clone> {
+        pub struct Sink<A: 'static + ArconType> {
             ctx: ComponentContext<Sink<A>>,
             pub result: Vec<A>,
         }
-        impl<A: Send + Clone> Sink<A> {
+        impl<A: ArconType> Sink<A> {
             pub fn new(_t: A) -> Sink<A> {
                 Sink {
                     ctx: ComponentContext::new(),
@@ -110,10 +93,10 @@ mod tests {
                 }
             }
         }
-        impl<A: Send + Clone> Provide<ControlPort> for Sink<A> {
+        impl<A: ArconType> Provide<ControlPort> for Sink<A> {
             fn handle(&mut self, _event: ControlEvent) -> () {}
         }
-        impl<A: Send + Clone> Actor for Sink<A> {
+        impl<A: ArconType> Actor for Sink<A> {
             fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
                 println!("sink received message");
                 if let Some(m) = msg.downcast_ref::<A>() {
@@ -125,7 +108,7 @@ mod tests {
             }
             fn receive_message(&mut self, _sender: ActorPath, _ser_id: u64, _buf: &mut Buf) {}
         }
-        impl<A: Send + Clone> ComponentDefinition for Sink<A> {
+        impl<A: ArconType> ComponentDefinition for Sink<A> {
             fn setup(&mut self, self_component: Arc<Component<Self>>) -> () {
                 self.ctx_mut().initialise(self_component);
             }
@@ -147,7 +130,7 @@ mod tests {
     fn wait(time: u64) -> () {
         thread::sleep(time::Duration::from_secs(time));
     }
-    fn test_setup<A: Send + Clone>(
+    fn test_setup<A: ArconType>(
         a: A,
     ) -> (
         kompact::KompactSystem,
@@ -165,62 +148,6 @@ mod tests {
         return (system, sink);
     }
     // Test cases
-    #[test]
-    fn local_file_string() -> std::result::Result<(), std::io::Error> {
-        let (system, sink) = test_setup(String::new());
-        if let Ok(mut file) = File::create("local_file_string.txt") {
-            if let Ok(_) = file.write_all(b"test string") {
-            } else {
-                println!("Unable to write file in test case");
-            }
-        } else {
-            println!("Unable to create file in test case");
-        }
-
-        let file_source: LocalFileSource<String> =
-            LocalFileSource::new(String::from("local_file_string.txt"), sink.actor_ref());
-        let (source, _) = system.create_and_register(move || file_source);
-        system.start(&source);
-        wait(1);
-
-        let sink_inspect = sink.definition().lock().unwrap();
-        let r0 = &sink_inspect.result[0];
-        assert_eq!(&sink_inspect.result.len(), &(1 as usize));
-        assert_eq!(r0, "test string");
-        fs::remove_file("local_file_string.txt")?;
-        Ok(())
-    }
-    #[test]
-    fn local_file_multiple_strings() -> std::result::Result<(), std::io::Error> {
-        let (system, sink) = test_setup(String::new());
-        if let Ok(mut file) = File::create("local_file_multiple_strings.txt") {
-            if let Ok(_) = file.write_all(b"test string\nsimple string\na longer string for fun") {
-            } else {
-                println!("Unable to write file in test case");
-            }
-        } else {
-            println!("Unable to create file in test case");
-        }
-
-        let file_source: LocalFileSource<String> = LocalFileSource::new(
-            String::from("local_file_multiple_strings.txt"),
-            sink.actor_ref(),
-        );
-        let (source, _) = system.create_and_register(move || file_source);
-        system.start(&source);
-        wait(1);
-
-        let sink_inspect = sink.definition().lock().unwrap();
-        assert_eq!(&sink_inspect.result.len(), &(3 as usize));
-        let r0 = &sink_inspect.result[0];
-        let r1 = &sink_inspect.result[1];
-        let r2 = &sink_inspect.result[2];
-        assert_eq!(r0, "test string");
-        assert_eq!(r1, "simple string");
-        assert_eq!(r2, "a longer string for fun");
-        fs::remove_file("local_file_multiple_strings.txt")?;
-        Ok(())
-    }
     #[test]
     fn local_file_u64_no_decimal() -> std::result::Result<(), std::io::Error> {
         let (system, sink) = test_setup(1 as u64);
