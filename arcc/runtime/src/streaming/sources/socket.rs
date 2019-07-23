@@ -201,13 +201,13 @@ mod tests {
     fn socket_string_with_newline() -> Result<(), Box<std::error::Error>> {
         let (system, sink) = test_setup(String::new());
 
-        let file_source: SocketSource<String> = SocketSource::new(3000, sink.actor_ref());
+        let file_source: SocketSource<String> = SocketSource::new(3001, sink.actor_ref());
         let (source, _) = system.create_and_register(move || file_source);
         system.start(&source);
 
         wait(1);
 
-        let addr = "127.0.0.1:3000".parse()?;
+        let addr = "127.0.0.1:3001".parse()?;
         let client = TcpStream::connect(&addr)
             .and_then(|stream| io::write_all(stream, "the quick \nbrown fox").then(|_| Ok(())))
             .map_err(|_| {
@@ -230,13 +230,13 @@ mod tests {
     fn socket_multiple_f32() -> Result<(), Box<std::error::Error>> {
         let (system, sink) = test_setup(1 as f32);
 
-        let file_source: SocketSource<f32> = SocketSource::new(3000, sink.actor_ref());
+        let file_source: SocketSource<f32> = SocketSource::new(3002, sink.actor_ref());
         let (source, _) = system.create_and_register(move || file_source);
         system.start(&source);
 
         wait(1);
 
-        let addr = "127.0.0.1:3000".parse()?;
+        let addr = "127.0.0.1:3002".parse()?;
         let client1 = TcpStream::connect(&addr)
             .and_then(|stream| io::write_all(stream, "123").then(|_| Ok(())))
             .map_err(|_| {
