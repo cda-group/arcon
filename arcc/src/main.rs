@@ -1,3 +1,4 @@
+#![feature(vec_remove_item)]
 #[macro_use]
 extern crate clap;
 #[macro_use]
@@ -7,13 +8,14 @@ extern crate failure;
 extern crate lazy_static;
 
 use clap::{App, AppSettings, Arg, SubCommand};
-use compiler::*;
 use ferris_says::say;
 use indicatif::ProgressBar;
 use spec::ArcSpec;
 use std::io::{stdout, BufWriter};
 use std::str::FromStr;
 
+mod cargo;
+mod env;
 mod repl;
 mod server;
 mod util;
@@ -173,7 +175,7 @@ fn fetch_args() -> Vec<String> {
 
 fn compile(
     spec_path: &str,
-    build_dir: &str,
+    _build_dir: &str,
     daemonize: bool,
     _mode: CompilerMode,
 ) -> Result<(), failure::Error> {
@@ -185,10 +187,6 @@ fn compile(
     if daemonize {
         unimplemented!();
     } else {
-        // TODO: Send to Arc
-        //debug!("input: {}", spec.ir);
-        let _compiler = Compiler::new(build_dir.to_string());
-
         let pb = ProgressBar::new(524);
         for _ in 0..524 {
             pb.inc(1);
@@ -203,13 +201,12 @@ fn compile(
 fn server(
     host: &str,
     port: i32,
-    build_dir: &str,
+    _build_dir: &str,
     _daemonize: bool,
     _mode: CompilerMode,
 ) -> Result<(), failure::Error> {
     // TODO: start up gRPC server
     greeting("Server is coming soon!");
-    let _compiler = Compiler::new(build_dir.to_string())?;
     server::start_server(host, port);
     Ok(())
 }
