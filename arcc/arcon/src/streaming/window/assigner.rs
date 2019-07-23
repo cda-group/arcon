@@ -344,7 +344,6 @@ mod tests {
         impl Actor for Sink {
             fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
                 if let Some(m) = msg.downcast_ref::<ArconElement<WindowOutput>>() {
-                    println!("Sink got msg {}", m.data.len);
                     self.result.push(Some(m.data.len));
                 }
             }

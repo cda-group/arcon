@@ -142,10 +142,10 @@ mod tests {
     impl Actor for TcpSource {
         fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
             if let Some(ref recv) = msg.downcast_ref::<TcpRecv>() {
-                info!(self.ctx.log(), "{:?}", recv.bytes);
+                debug!(self.ctx.log(), "{:?}", recv.bytes);
                 self.received += 1;
             } else if let Some(ref _close) = msg.downcast_ref::<TcpClosed>() {
-                info!(self.ctx.log(), "TCP connection closed");
+                debug!(self.ctx.log(), "TCP connection closed");
             } else if let Some(ref _err) = msg.downcast_ref::<TcpErr>() {
                 error!(self.ctx.log(), "TCP IO Error");
             }
