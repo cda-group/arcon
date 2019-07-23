@@ -1,15 +1,12 @@
 use core::time::Duration;
 use kompact::timer::*;
-use kompact::ScheduledTimer;
-use std::collections::HashMap;
-use std::rc::Rc;
-
 use kompact::ComponentDefinition;
+use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt;
 use std::fmt::Debug;
 use std::marker::PhantomData;
-use std::time::Instant;
+use std::rc::Rc;
 use uuid::Uuid;
 /*
     EventTimer: Abstraction of timer with underlying QuadWheel scheduling
@@ -32,13 +29,6 @@ use uuid::Uuid;
     Usage is thus to store the timer within a component, schedule events on it and using
         advance_to to return ordered set of actions to perform.
 */
-
-#[derive(Debug)]
-enum TimerMsg {
-    Schedule(TimerEntry),
-    Cancel(Uuid),
-    Stop,
-}
 
 pub struct EventTimer<C: ComponentDefinition> {
     timer: QuadWheelWithOverflow,
@@ -123,7 +113,7 @@ impl<C: ComponentDefinition> EventTimer<C> {
         F: FnOnce(&mut C, Uuid) + Send + 'static,
     {
         // Check for bad target time
-        if (time < self.time) {
+        if time < self.time {
             eprintln!("tried to schedule event which has already happened");
         } else {
             self.schedule_once(Duration::from_secs(time - self.time), action);
@@ -155,18 +145,18 @@ impl<C: ComponentDefinition> EventTimer<C> {
     #[inline(always)]
     pub fn advance_to(&mut self, ts: u64) -> Vec<ExecuteAction<C>> {
         let mut vec = Vec::new();
-        if (ts <= self.time) {
+        if ts <= self.time {
             eprintln!("advance_to called with lower timestamp than current time");
             return vec;
         }
 
         let mut time_left = ts - self.time;
 
-        while (time_left > 0) {
+        while time_left > 0 {
             if let Skip::Millis(skip_ms) = self.timer.can_skip() {
                 // Only skip full-seconds
                 let skip_seconds = skip_ms / 1000;
-                if (skip_seconds as u64 >= time_left) {
+                if skip_seconds as u64 >= time_left {
                     // No more ops to gather, jump forward and return
                     self.timer.skip((time_left * 1000).try_into().unwrap());
                     self.time = self.time + time_left;

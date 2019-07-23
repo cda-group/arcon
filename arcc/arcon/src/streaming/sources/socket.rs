@@ -1,16 +1,13 @@
-use crate::tokio::prelude::Future;
 use crate::util::io::*;
-use bytes::BytesMut;
 use kompact::*;
 use std::str::from_utf8;
 use std::str::FromStr;
 use std::sync::Arc;
-use tokio::io;
-use tokio::net::TcpStream;
 /*
     SocketSource:
     Generates events of type A from bytes received by a socket
-
+    Attempts to cast the bytes as string to type A
+    Causes Error! if it's unable to cast from string
 */
 
 pub struct SocketSource<A: 'static + Send + Sync + Clone + FromStr> {
@@ -37,7 +34,7 @@ impl<A: Send + Sync + Clone + FromStr> Provide<ControlPort> for SocketSource<A> 
             ControlEvent::Start => {
                 let port = self.port.clone();
                 let system = self.ctx.system();
-                let server =
+                let _server =
                     system.create_and_start(move || IO::new(port, self.actor_ref(), IOKind::Tcp));
             }
             _ => {
@@ -66,7 +63,7 @@ impl<A: Send + Sync + Clone + FromStr> ComponentDefinition for SocketSource<A> {
 }
 
 impl<A: Send + Sync + Clone + FromStr> Actor for SocketSource<A> {
-    fn receive_local(&mut self, sender: ActorRef, msg: &Any) {
+    fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
         info!(self.ctx.log(), "RECEIVED ANY");
         if let Some(ref recv) = msg.downcast_ref::<TcpRecv>() {
             info!(self.ctx.log(), "{:?}", recv.bytes);
@@ -97,8 +94,11 @@ impl<A: Send + Sync + Clone + FromStr> Actor for SocketSource<A> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tokio::prelude::Future;
     use kompact::default_components::DeadletterBox;
     use std::{thread, time};
+    use tokio::io;
+    use tokio::net::TcpStream;
 
     // Stub for window-results
     mod sink {
