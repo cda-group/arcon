@@ -1,23 +1,30 @@
 #![allow(bare_trait_objects)]
-#![recursion_limit = "128"]
+#![recursion_limit = "256"]
 #[macro_use]
 extern crate quote;
+extern crate failure;
 extern crate proc_macro2;
 extern crate rustfmt_nightly;
 
 // Public interface
-pub mod error;
+pub mod sink;
+pub mod source;
+pub mod stream_task;
 pub mod system;
-pub mod task;
 
-use error::ErrorKind::*;
-use error::*;
+use failure::Fail;
 use proc_macro2::TokenStream;
 use rustfmt_nightly::*;
 use std::fs;
 
+#[derive(Debug, Fail)]
+#[fail(display = "Codegen err: `{}`", msg)]
+pub struct CodegenError {
+    msg: String,
+}
+
 /// Rustfmt the generated code to make it readable
-pub fn format_code(code: String) -> crate::error::Result<String> {
+pub fn format_code(code: String) -> Result<String, CodegenError> {
     let input = Input::Text(code);
     let mut config = Config::default();
     config.set().newline_style(NewlineStyle::Unix);
@@ -30,10 +37,10 @@ pub fn format_code(code: String) -> crate::error::Result<String> {
         let mut session = Session::new(config, Some(&mut buf));
         let _ = session
             .format(input)
-            .map_err(|e| Error::new(CodeFmtError(e.to_string())))?;
+            .map_err(|e| CodegenError { msg: e.to_string() })?;
     }
 
-    String::from_utf8(buf).map_err(|e| Error::new(CodeFmtError(e.to_string())))
+    String::from_utf8(buf).map_err(|e| CodegenError { msg: e.to_string() })
 }
 
 /// Save generated code to file
@@ -46,11 +53,16 @@ pub fn generate_main(stream: TokenStream) -> TokenStream {
     quote! {
         extern crate arcon;
         use arcon::prelude::*;
-        use arcon::weld::module::*;
 
         fn main() {
             #stream
         }
+    }
+}
+
+pub fn combine_streams(s1: TokenStream, s2: TokenStream) -> TokenStream {
+    quote! {
+        #s1 #s2
     }
 }
 

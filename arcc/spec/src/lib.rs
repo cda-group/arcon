@@ -27,8 +27,8 @@ pub struct ArcSpec {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Node {
-    pub id: u32,
-    pub node_type: String,
+    pub id: String,
+    pub node_type: NodeType,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub weld_code: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -38,32 +38,57 @@ pub struct Node {
     #[serde(default = "parallelism")]
     pub parallelism: u32,
     #[serde(default = "forward")]
-    pub channel_strategy: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub output_channels: Option<Vec<Channel>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub input_channels: Option<Vec<Channel>>,
+    pub channel_strategy: ChannelStrategy,
+    pub predecessor: Option<Channel>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum NodeType {
+    Source(SourceType),
+    Sink(SinkType),
+    StreamTask,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum SourceType {
+    Socket { host: String, port: u32 },
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum SinkType {
+    Socket {
+        host: String,
+        port: u32,
+    },
+    /// A debug Sink that simply prints out received elements
+    Debug,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+pub enum ChannelStrategy {
+    Forward,
+    Broadcast,
+    Shuffle,
+    RoundRobin,
+    KeyBy,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Channel {
-    pub id: u32,
-    /// Kompact Port or Actorpath
-    pub channel_type: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub actor_path: Option<ActorPath>,
+    pub id: String,
+    pub channel_type: ChannelType,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ActorPath {
-    pub id: String,
-    /// 127.0.0.1:2000
-    pub addr: String,
+pub enum ChannelType {
+    Local,
+    Remote { id: String, addr: String },
 }
 
 /// Default Serde Implementations for `ArcSpec`
-fn forward() -> String {
-    String::from("Forward")
+
+fn forward() -> ChannelStrategy {
+    ChannelStrategy::Forward
 }
 
 fn parallelism() -> u32 {
@@ -88,7 +113,6 @@ impl ArcSpec {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::Result;
     use std::io::Write;
     use tempfile::NamedTempFile;
 
@@ -98,60 +122,50 @@ mod tests {
             "target": "x86-64-unknown-linux-gnu",
             "nodes": [
                 {
-                    "id": 1,
-                    "node_type": "Source",
+                    "id": "node_1",
+                    "node_type": {
+                        "Source": {
+                            "Socket": { "host": "localhost", "port": 1337}
+                        }
+                    },
                     "input_type": "i64",
                     "output_type": "i64",
                     "parallelism": 1,
-                    "channel_strategy": "forward",
-                    "output_channels": [
-                        {
-                            "id": 2,
-                            "channel_type": "port"
-                        }
-                    ]
+                    "channel_strategy": "Forward"
                 },
                 {
-                    "id": 2,
+                    "id": "node_2",
                     "node_type": "StreamTask",
                     "weld_code": "|x: i64| x + 5",
                     "input_type": "i64",
                     "output_type": "i64",
                     "parallelism": 1,
-                    "channel_strategy": "forward",
-                    "input_channels": [
-                        {
-                            "id": 1,
-                            "channel_type": "port"
-                        }
-                    ],
-                    "output_channels": [
-                        {
-                            "id": 3,
-                            "channel_type": "port"
-                        }
-                    ]
+                    "channel_strategy": "Forward",
+                    "predecessor": {
+                            "id": "node_1",
+                            "channel_type": "Local"
+                    }
                 },
                 {
-                    "id": 3,
-                    "node_type": "Sink",
+                    "id": "node_3",
+                    "node_type": {
+                        "Sink": "Debug"
+                    },
                     "input_type": "i64",
                     "parallelism": 1,
-                    "channel_strategy": "forward",
-                    "input_channels": [
-                        {
-                            "id": 2,
-                            "channel_type": "port"
-                        }
-                    ]
+                    "channel_strategy": "Forward",
+                    "predecessor": {
+                            "id": "node_2",
+                            "channel_type": "Local"
+                    }
                 }
             ]
         }"#;
 
     #[test]
     fn arc_spec_string_test() {
-        let arc_spec: Result<ArcSpec> = serde_json::from_str(ARC_SPEC_JSON);
-        assert_eq!(arc_spec.is_ok(), true);
+        let arc_spec: ArcSpec = serde_json::from_str(ARC_SPEC_JSON).unwrap();
+        assert_eq!(arc_spec.id, "some_id");
     }
 
     #[test]

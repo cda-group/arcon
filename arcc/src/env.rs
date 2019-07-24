@@ -11,7 +11,7 @@ pub struct CompileEnvError {
 }
 
 /// Sets up a virtual cargo workspace in order to
-/// share dependencies between compiled Arc binaries
+/// share dependencies between compiled Arcon binaries
 pub struct CompilerEnv {
     root: String,
     config: Config,

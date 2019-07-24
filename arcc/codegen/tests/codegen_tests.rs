@@ -1,6 +1,6 @@
+extern crate arcon;
 extern crate codegen;
 extern crate compiletest_rs as compiletest;
-extern crate arcon;
 
 use codegen::*;
 use std::fs;
@@ -43,7 +43,7 @@ fn codegen_test() {
     fs::create_dir_all(RUN_PASS_PATH).unwrap();
 
     basic_system();
-    //basic_task();
+    basic_source_map_sink();
 
     // TODO: Add more complex tests
 
@@ -60,10 +60,26 @@ fn basic_system() {
     let _ = to_file(main_fmt, sys_path.to_string());
 }
 
-fn _basic_task() {
-    let task = task::task("Basic");
-    let task_fmt = format_code(task.to_string()).unwrap();
-    let task_path = format!("{}/basic_task.rs", RUN_PASS_PATH);
-    let _ = to_file(task_fmt, task_path.to_string());
-    add_empty_main(&task_path);
+fn basic_source_map_sink() {
+    let sink = crate::sink::sink("sink", "i32", &spec::SinkType::Debug);
+    let map = crate::stream_task::stream_task("map", "sink", "|x: i32| x + 5", "i32", "i32");
+    let source = crate::source::source(
+        "source",
+        "map",
+        "i32",
+        &spec::SourceType::Socket {
+            host: "127.0.0.1".to_string(),
+            port: 3000,
+        },
+    );
+
+    let s1 = combine_streams(sink, map);
+    let final_stream = combine_streams(s1, source);
+
+    let system = crate::system::system("127.0.0.1:2000", None, Some(final_stream), None);
+
+    let main = generate_main(system);
+    let fmt = format_code(main.to_string()).unwrap();
+    let sys_path = format!("{}/basic_source_map_sink.rs", RUN_PASS_PATH);
+    let _ = to_file(fmt, sys_path.to_string());
 }

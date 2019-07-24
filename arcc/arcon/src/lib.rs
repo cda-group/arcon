@@ -50,6 +50,12 @@ pub mod prelude {
         builder::WindowModules,
     };
 
+    pub use crate::streaming::source::{
+        collection::CollectionSource, local_file::LocalFileSource, socket::SocketSource,
+    };
+
+    pub use crate::streaming::sink::debug::DebugSink;
+
     pub use crate::data::{ArconElement, ArconType, ArconVec};
     pub use crate::weld::module::{Module, ModuleRun};
 
