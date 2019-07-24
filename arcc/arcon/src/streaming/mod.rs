@@ -5,6 +5,7 @@ use std::marker::PhantomData;
 use std::rc::Rc;
 
 pub mod partitioner;
+pub mod source;
 pub mod task;
 pub mod window;
 

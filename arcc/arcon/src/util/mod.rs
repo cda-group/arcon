@@ -1,3 +1,4 @@
+pub mod event_timer;
 pub mod io;
 
 use std::time::{SystemTime, UNIX_EPOCH};
