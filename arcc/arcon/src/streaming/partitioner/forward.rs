@@ -1,4 +1,4 @@
-use crate::data::{ArconElement, ArconType};
+use crate::data::{ArconEvent, ArconType};
 use crate::error::*;
 use crate::streaming::partitioner::{channel_output, Partitioner};
 use crate::streaming::Channel;
@@ -7,7 +7,7 @@ use kompact::{ComponentDefinition, Port, Require};
 pub struct Forward<A, B, C>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconElement<A>> + 'static + Clone,
+    B: Port<Request = ArconEvent<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
     out_channel: Channel<A, B, C>,
@@ -16,7 +16,7 @@ where
 impl<A, B, C> Forward<A, B, C>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconElement<A>> + 'static + Clone,
+    B: Port<Request = ArconEvent<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
     pub fn new(out_channel: Channel<A, B, C>) -> Forward<A, B, C> {
@@ -27,16 +27,11 @@ where
 impl<A, B, C> Partitioner<A, B, C> for Forward<A, B, C>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconElement<A>> + 'static + Clone,
+    B: Port<Request = ArconEvent<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
-    fn output(
-        &mut self,
-        event: ArconElement<A>,
-        source: *const C,
-        key: Option<u64>,
-    ) -> ArconResult<()> {
-        channel_output(&self.out_channel, event, source, key)
+    fn output(&mut self, event: ArconEvent<A>, source: *const C) -> ArconResult<()> {
+        channel_output(&self.out_channel, event, source)
     }
     fn add_channel(&mut self, _channel: Channel<A, B, C>) {
         // ignore
@@ -49,7 +44,7 @@ where
 unsafe impl<A, B, C> Send for Forward<A, B, C>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconElement<A>> + 'static + Clone,
+    B: Port<Request = ArconEvent<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
 }
@@ -57,7 +52,7 @@ where
 unsafe impl<A, B, C> Sync for Forward<A, B, C>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconElement<A>> + 'static + Clone,
+    B: Port<Request = ArconEvent<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
 }
@@ -65,6 +60,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::data::ArconElement;
     use crate::streaming::partitioner::tests::*;
     use crate::streaming::{ChannelPort, RequirePortRef};
     use kompact::*;
@@ -91,8 +87,8 @@ mod tests {
 
         for _i in 0..total_msgs {
             // NOTE: second parameter is a fake channel...
-            let input = ArconElement::new(Input { id: 1 });
-            let _ = partitioner.output(input, &*comp.definition().lock().unwrap(), None);
+            let input = ArconEvent::Element(ArconElement::new(Input { id: 1 }));
+            let _ = partitioner.output(input, &*comp.definition().lock().unwrap());
         }
 
         std::thread::sleep(std::time::Duration::from_secs(1));

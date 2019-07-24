@@ -53,8 +53,7 @@ impl<A: ArconType> Actor for CollectionSource<A> {
 mod tests {
     use super::*;
     use kompact::default_components::DeadletterBox;
-    use std::io::prelude::*;
-    use std::{fs, thread, time};
+    use std::{thread, time};
 
     // Stub for window-results
     mod sink {
@@ -77,9 +76,7 @@ mod tests {
         }
         impl<A: ArconType> Actor for Sink<A> {
             fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
-                println!("sink received message");
                 if let Some(m) = msg.downcast_ref::<A>() {
-                    println!("trying to push");
                     self.result.push((*m).clone());
                 } else {
                     println!("unrecognized message");

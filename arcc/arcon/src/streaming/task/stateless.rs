@@ -1,6 +1,5 @@
-use crate::data::{ArconElement, ArconType};
+use crate::data::{ArconElement, ArconEvent, ArconType, Watermark};
 use crate::error::*;
-use crate::messages::protobuf::StreamTaskMessage_oneof_payload::*;
 use crate::messages::protobuf::*;
 use crate::streaming::partitioner::Partitioner;
 use crate::streaming::{Channel, ChannelPort};
@@ -18,7 +17,7 @@ use weld::*;
 pub struct StreamTask<A, B, C>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconElement<C>> + 'static + Clone,
+    B: Port<Request = ArconEvent<C>> + 'static + Clone,
     C: 'static + ArconType,
 {
     ctx: ComponentContext<Self>,
@@ -34,7 +33,7 @@ where
 impl<A, B, C> StreamTask<A, B, C>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconElement<C>> + 'static + Clone,
+    B: Port<Request = ArconEvent<C>> + 'static + Clone,
     C: 'static + ArconType,
 {
     pub fn new(
@@ -55,39 +54,30 @@ where
         }
     }
 
-    fn handle_remote_msg(&mut self, data: StreamTaskMessage) -> ArconResult<()> {
-        let payload = data.payload.unwrap();
-
-        match payload {
-            element(e) => {
-                let event: A = bincode::deserialize(e.get_data()).map_err(|e| {
-                    arcon_err_kind!("Failed to deserialise event with err {}", e.to_string())
-                })?;
-                let arcon_element = ArconElement::with_timestamp(event, e.get_timestamp());
-                let _ = self.handle_event(&arcon_element);
+    fn handle_event(&mut self, event: &ArconEvent<A>) -> ArconResult<()> {
+        match event {
+            ArconEvent::Element(e) => {
+                self.handle_element(e)?;
             }
-            keyed_element(_) => {
-                unimplemented!();
-            }
-            watermark(_) => {
-                unimplemented!();
-            }
-            checkpoint(_) => {
-                unimplemented!();
+            ArconEvent::Watermark(w) => {
+                self.handle_watermark(*w)?;
             }
         }
-
         Ok(())
     }
 
-    fn handle_event(&mut self, event: &ArconElement<A>) -> ArconResult<()> {
-        if let Ok(result) = self.run_udf(&(event.data)) {
-            let _ = self.push_out(ArconElement::new(result));
+    fn handle_element(&mut self, e: &ArconElement<A>) -> ArconResult<()> {
+        if let Ok(result) = self.run_udf(&(e.data)) {
+            let _ = self.push_out(ArconEvent::Element(ArconElement::new(result)))?;
         } else {
             // Just report the error for now...
             error!(self.ctx.log(), "Failed to execute UDF...",);
         }
         Ok(())
+    }
+
+    fn handle_watermark(&mut self, _w: Watermark) -> ArconResult<()> {
+        unimplemented!();
     }
 
     fn run_udf(&mut self, event: &A) -> ArconResult<C> {
@@ -108,9 +98,9 @@ where
         self.udf_executions += 1;
     }
 
-    fn push_out(&mut self, event: ArconElement<C>) -> ArconResult<()> {
+    fn push_out(&mut self, event: ArconEvent<C>) -> ArconResult<()> {
         let self_ptr = self as *const StreamTask<A, B, C>;
-        let _ = self.partitioner.output(event, self_ptr, None)?;
+        let _ = self.partitioner.output(event, self_ptr)?;
         Ok(())
     }
 }
@@ -118,7 +108,7 @@ where
 impl<A, B, C> Provide<ControlPort> for StreamTask<A, B, C>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconElement<C>> + 'static + Clone,
+    B: Port<Request = ArconEvent<C>> + 'static + Clone,
     C: 'static + ArconType,
 {
     fn handle(&mut self, _event: ControlEvent) -> () {}
@@ -127,11 +117,11 @@ where
 impl<A, B, C> Actor for StreamTask<A, B, C>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconElement<C>> + 'static + Clone,
+    B: Port<Request = ArconEvent<C>> + 'static + Clone,
     C: 'static + ArconType,
 {
     fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
-        if let Some(event) = msg.downcast_ref::<ArconElement<A>>() {
+        if let Some(event) = msg.downcast_ref::<ArconEvent<A>>() {
             let _ = self.handle_event(event);
         }
     }
@@ -139,7 +129,13 @@ where
         if ser_id == serialisation_ids::PBUF {
             let r: Result<StreamTaskMessage, SerError> = ProtoSer::deserialise(buf);
             if let Ok(msg) = r {
-                let _ = self.handle_remote_msg(msg);
+                if let Ok(event) = ArconEvent::from_remote(msg) {
+                    if let Err(err) = self.handle_event(&event) {
+                        error!(self.ctx.log(), "Unable to handle event, error {}", err);
+                    }
+                } else {
+                    error!(self.ctx.log(), "Failed to convert remote message to local");
+                }
             } else {
                 error!(self.ctx.log(), "Failed to deserialise StreamTaskMessage",);
             }
@@ -152,7 +148,7 @@ where
 impl<A, B, C> Require<B> for StreamTask<A, B, C>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconElement<C>> + 'static + Clone,
+    B: Port<Request = ArconEvent<C>> + 'static + Clone,
     C: 'static + ArconType,
 {
     fn handle(&mut self, _event: B::Indication) -> () {
@@ -163,10 +159,10 @@ where
 impl<A, B, C> Provide<ChannelPort<A>> for StreamTask<A, B, C>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconElement<C>> + 'static + Clone,
+    B: Port<Request = ArconEvent<C>> + 'static + Clone,
     C: 'static + ArconType,
 {
-    fn handle(&mut self, event: ArconElement<A>) -> () {
+    fn handle(&mut self, event: ArconEvent<A>) -> () {
         let _ = self.handle_event(&event);
     }
 }
@@ -174,7 +170,7 @@ where
 unsafe impl<A, B, C> Send for StreamTask<A, B, C>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconElement<C>> + 'static + Clone,
+    B: Port<Request = ArconEvent<C>> + 'static + Clone,
     C: 'static + ArconType,
 {
 }
@@ -182,7 +178,7 @@ where
 unsafe impl<A, B, C> Sync for StreamTask<A, B, C>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconElement<C>> + 'static + Clone,
+    B: Port<Request = ArconEvent<C>> + 'static + Clone,
     C: 'static + ArconType,
 {
 }
@@ -235,36 +231,31 @@ mod tests {
 
     impl Actor for SinkActor {
         fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
-            if let Some(input) = msg.downcast_ref::<ArconElement<TaskOutput>>() {
-                self.result = Some((input.data).clone());
+            if let Some(event) = msg.downcast_ref::<ArconEvent<TaskOutput>>() {
+                match event {
+                    ArconEvent::Element(e) => {
+                        self.result = Some(e.data);
+                    }
+                    _ => {}
+                }
             }
         }
         fn receive_message(&mut self, sender: ActorPath, ser_id: u64, buf: &mut Buf) {
             if ser_id == serialisation_ids::PBUF {
                 let r: Result<StreamTaskMessage, SerError> = ProtoSer::deserialise(buf);
-                let payload = r.unwrap().payload.unwrap();
-
-                match payload {
-                    element(e) => {
-                        let event: TaskOutput = bincode::deserialize(e.get_data())
-                            .map_err(|e| {
-                                arcon_err_kind!(
-                                    "Failed to deserialise event with err {}",
-                                    e.to_string()
-                                )
-                            })
-                            .unwrap();
-                        self.result = Some(event);
+                if let Ok(msg) = r {
+                    if let Ok(event) = ArconEvent::from_remote(msg) {
+                        match event {
+                            ArconEvent::Element(e) => {
+                                self.result = Some(e.data);
+                            }
+                            _ => {}
+                        }
+                    } else {
+                        error!(self.ctx.log(), "Failed to convert remote message");
                     }
-                    keyed_element(_) => {
-                        unimplemented!();
-                    }
-                    watermark(_) => {
-                        unimplemented!();
-                    }
-                    checkpoint(_) => {
-                        unimplemented!();
-                    }
+                } else {
+                    error!(self.ctx.log(), "Failed to deserialise StreamTaskMessage",);
                 }
             } else {
                 error!(self.ctx.log(), "Got unexpected message from {}", sender);
@@ -272,8 +263,13 @@ mod tests {
         }
     }
     impl Provide<ChannelPort<TaskOutput>> for SinkActor {
-        fn handle(&mut self, event: ArconElement<TaskOutput>) -> () {
-            self.result = Some(event.data);
+        fn handle(&mut self, event: ArconEvent<TaskOutput>) -> () {
+            match event {
+                ArconEvent::Element(e) => {
+                    self.result = Some(e.data);
+                }
+                _ => {}
+            }
         }
     }
     impl Require<ChannelPort<TaskOutput>> for SinkActor {
@@ -304,8 +300,7 @@ mod tests {
         let task_input = ArconElement::new(TaskInput { id: 10, price: 20 });
 
         let event_port = stream_task.on_definition(|c| c.event_port.share());
-        system.trigger_r(task_input, &event_port);
-
+        system.trigger_r(ArconEvent::Element(task_input), &event_port);
         std::thread::sleep(std::time::Duration::from_secs(1));
         let comp_inspect = &sink_comp.definition().lock().unwrap();
         assert_eq!(comp_inspect.result.unwrap().price, 25);
@@ -339,7 +334,7 @@ mod tests {
 
         stream_task
             .actor_ref()
-            .tell(Box::new(task_input), &stream_task);
+            .tell(Box::new(ArconEvent::Element(task_input)), &stream_task);
 
         std::thread::sleep(std::time::Duration::from_secs(1));
         let comp_inspect = &sink_comp.definition().lock().unwrap();
@@ -384,7 +379,7 @@ mod tests {
 
         stream_task
             .actor_ref()
-            .tell(Box::new(task_input), &stream_task);
+            .tell(Box::new(ArconEvent::Element(task_input)), &stream_task);
 
         std::thread::sleep(std::time::Duration::from_secs(1));
         let comp_inspect = &sink_comp.definition().lock().unwrap();

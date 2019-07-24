@@ -1,6 +1,5 @@
-use crate::data::{ArconElement, ArconType};
+use crate::data::*;
 use crate::error::*;
-use crate::messages::protobuf::*;
 use crate::streaming::Channel;
 use kompact::{ComponentDefinition, Port, Require};
 
@@ -18,15 +17,10 @@ pub mod shuffle;
 pub trait Partitioner<A, B, C>: Send + Sync
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconElement<A>> + 'static + Clone,
+    B: Port<Request = ArconEvent<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
-    fn output(
-        &mut self,
-        element: B::Request,
-        source: *const C,
-        key: Option<u64>,
-    ) -> ArconResult<()>;
+    fn output(&mut self, element: B::Request, source: *const C) -> ArconResult<()>;
     fn add_channel(&mut self, channel: Channel<A, B, C>);
     fn remove_channel(&mut self, channel: Channel<A, B, C>);
 }
@@ -35,13 +29,12 @@ where
 /// Either locally through a Port or by ActorRef, or remote (ActorPath)
 fn channel_output<A, B, C>(
     channel: &Channel<A, B, C>,
-    element: ArconElement<A>,
+    event: ArconEvent<A>,
     source: *const C,
-    key: Option<u64>,
 ) -> ArconResult<()>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconElement<A>> + 'static + Clone,
+    B: Port<Request = ArconEvent<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
     // pointer in order to escape the double borrow issue
@@ -49,26 +42,20 @@ where
     let source = unsafe { &(*source) };
     match &channel {
         Channel::Local(actor_ref) => {
-            actor_ref.tell(Box::new(element), source);
+            actor_ref.tell(Box::new(event), source);
         }
-        Channel::Remote(actor_path) => {
-            let serialised_event: Vec<u8> = bincode::serialize(&element.data).map_err(|e| {
-                arcon_err_kind!("Failed to serialise event with err {}", e.to_string())
-            })?;
-
-            let timestamp = element.timestamp.unwrap_or(0);
-            if let Some(key) = key {
-                let keyed_msg = create_keyed_element(serialised_event, timestamp, key);
-                actor_path.tell(keyed_msg, source);
-            } else {
-                let element_msg = create_element(serialised_event, timestamp);
-                actor_path.tell(element_msg, source);
+        Channel::Remote(actor_path) => match event.to_remote() {
+            Ok(msg) => {
+                actor_path.tell(msg, source);
             }
-        }
+            _ => {
+                eprintln!("Failed to convert local message to remote message");
+            }
+        },
         Channel::Port(port_ref) => {
             let required_port = (*port_ref.0).get();
             unsafe {
-                (*required_port).trigger(element);
+                (*required_port).trigger(event);
             }
         }
     }
@@ -116,7 +103,7 @@ pub mod tests {
         }
     }
     impl Provide<ChannelPort<Input>> for TestComp {
-        fn handle(&mut self, _event: ArconElement<Input>) -> () {
+        fn handle(&mut self, _event: ArconEvent<Input>) -> () {
             self.counter += 1;
         }
     }

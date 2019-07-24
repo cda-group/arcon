@@ -77,7 +77,6 @@ impl<A: ArconType + FromStr> Actor for SocketSource<A> {
 mod tests {
     use super::*;
     use crate::tokio::prelude::Future;
-    use kompact::default_components::DeadletterBox;
     use std::{thread, time};
     use tokio::io;
     use tokio::net::TcpStream;

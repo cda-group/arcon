@@ -1,4 +1,4 @@
-use crate::data::{ArconElement, ArconType};
+use crate::data::{ArconEvent, ArconType};
 use crate::error::*;
 use crate::streaming::partitioner::channel_output;
 use crate::streaming::partitioner::Partitioner;
@@ -8,7 +8,7 @@ use kompact::{ComponentDefinition, Port, Require};
 pub struct RoundRobin<A, B, C>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconElement<A>> + 'static + Clone,
+    B: Port<Request = ArconEvent<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
     out_channels: Vec<Channel<A, B, C>>,
@@ -18,7 +18,7 @@ where
 impl<A, B, C> RoundRobin<A, B, C>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconElement<A>> + 'static + Clone,
+    B: Port<Request = ArconEvent<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
     pub fn new(out_channels: Vec<Channel<A, B, C>>) -> RoundRobin<A, B, C> {
@@ -32,21 +32,16 @@ where
 impl<A, B, C> Partitioner<A, B, C> for RoundRobin<A, B, C>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconElement<A>> + 'static + Clone,
+    B: Port<Request = ArconEvent<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
-    fn output(
-        &mut self,
-        element: ArconElement<A>,
-        source: *const C,
-        key: Option<u64>,
-    ) -> ArconResult<()> {
+    fn output(&mut self, element: ArconEvent<A>, source: *const C) -> ArconResult<()> {
         if self.out_channels.is_empty() {
             return arcon_err!("{}", "Vector of Channels is empty");
         }
 
         let channel = &(*self.out_channels.get(self.curr_index).unwrap());
-        let _ = channel_output(channel, element, source, key)?;
+        let _ = channel_output(channel, element, source)?;
         self.curr_index += 1;
 
         if self.curr_index >= self.out_channels.len() {
@@ -67,7 +62,7 @@ where
 unsafe impl<A, B, C> Send for RoundRobin<A, B, C>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconElement<A>> + 'static + Clone,
+    B: Port<Request = ArconEvent<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
 }
@@ -75,7 +70,7 @@ where
 unsafe impl<A, B, C> Sync for RoundRobin<A, B, C>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconElement<A>> + 'static + Clone,
+    B: Port<Request = ArconEvent<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
 }
@@ -83,6 +78,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::data::ArconElement;
     use crate::streaming::partitioner::tests::*;
     use crate::streaming::{ChannelPort, RequirePortRef};
     use kompact::*;
@@ -126,10 +122,10 @@ mod tests {
             Box::new(RoundRobin::new(channels));
 
         for _i in 0..total_msgs {
-            let input = ArconElement::new(Input { id: 1 });
+            let input = ArconEvent::Element(ArconElement::new(Input { id: 1 }));
             // Just assume it is all sent from same comp
             let comp_def = &(*comps.get(0 as usize).unwrap().definition().lock().unwrap());
-            let _ = partitioner.output(input, comp_def, None);
+            let _ = partitioner.output(input, comp_def);
         }
 
         std::thread::sleep(std::time::Duration::from_secs(1));

@@ -1,4 +1,5 @@
-use crate::data::{ArconElement, ArconType};
+use crate::data::{ArconElement, ArconEvent, ArconType, Watermark};
+use crate::messages::protobuf::messages::StreamTaskMessage;
 use crate::messages::protobuf::*;
 use crate::streaming::partitioner::Partitioner;
 use crate::streaming::window::builder::{WindowBuilder, WindowFn, WindowModules};
@@ -29,7 +30,7 @@ where
     IN: 'static + ArconType + Hash,
     FUNC: 'static + Clone,
     OUT: 'static + ArconType,
-    P: Port<Request = ArconElement<OUT>> + 'static + Clone,
+    P: Port<Request = ArconEvent<OUT>> + 'static + Clone,
 {
     ctx: ComponentContext<Self>,
     partitioner: Box<Partitioner<OUT, P, Self>>,
@@ -48,7 +49,7 @@ where
     IN: 'static + ArconType + Hash,
     FUNC: 'static + Clone,
     OUT: 'static + ArconType,
-    P: Port<Request = ArconElement<OUT>> + 'static + Clone,
+    P: Port<Request = ArconEvent<OUT>> + 'static + Clone,
 {
     pub fn new(
         partitioner: Box<Partitioner<OUT, P, Self>>,
@@ -92,6 +93,17 @@ where
             hasher: BuildHasherDefault::<DefaultHasher>::default(),
         }
     }
+
+    fn handle_event(&mut self, event: ArconEvent<IN>) -> () {
+        match event {
+            ArconEvent::Element(e) => {
+                self.handle_element(e);
+            }
+            ArconEvent::Watermark(w) => {
+                self.handle_watermark(w);
+            }
+        }
+    }
     // Creates the window trigger for a key and "window index"
     fn new_window_trigger(&mut self, key: u64, index: u64) -> () {
         let w_start = match self.window_start.get(&key) {
@@ -119,7 +131,7 @@ where
                                     debug!(self_c.ctx.log(), "Window {} result materialized!", ts);
                                     if let Err(_err) = self_c
                                         .partitioner
-                                        .output(ArconElement::new(e), self_ptr, Some(ts)) {
+                                        .output(ArconEvent::Element(ArconElement::new(e)), self_ptr) {
                                             error!(
                                                 self_c.ctx.log(),
                                                 "Failed to send window result"
@@ -213,9 +225,12 @@ where
         }
         self.window_maps.insert(key, w_map);
     }
-    fn handle_watermark(&mut self, w: &Watermark) -> () {
-        //debug!(self.ctx.log(), "handling watermark with timestamp: {}", w);
-        let ts = w.get_timestamp();
+    fn handle_watermark(&mut self, w: Watermark) -> () {
+        debug!(
+            self.ctx.log(),
+            "handling watermark with timestamp: {}", w.timestamp
+        );
+        let ts = w.timestamp;
 
         // timer returns a set of executable actions
         let actions = self.timer.advance_to(ts);
@@ -230,8 +245,16 @@ where
                 ExecuteAction::None => {}
             }
         }
-        // TODO: fwd watermark
-        // self.partitioner.output(w, self as *const Self, Some(ts));
+        // fwd watermark
+        if let Err(err) = self
+            .partitioner
+            .output(ArconEvent::Watermark(w), self as *const Self)
+        {
+            error!(
+                self.ctx.log(),
+                "Unable to forward Watermark, error: {}", err
+            );
+        }
     }
 }
 
@@ -240,10 +263,10 @@ where
     IN: 'static + ArconType + Hash,
     FUNC: 'static + Clone,
     OUT: 'static + ArconType,
-    P: Port<Request = ArconElement<OUT>> + 'static + Clone,
+    P: Port<Request = ArconEvent<OUT>> + 'static + Clone,
 {
     fn handle(&mut self, _event: P::Indication) -> () {
-        // ignore
+        // Up-stream messages, do nothing
     }
 }
 
@@ -252,7 +275,7 @@ where
     IN: 'static + ArconType + Hash,
     FUNC: 'static + Clone,
     OUT: 'static + ArconType,
-    P: Port<Request = ArconElement<OUT>> + 'static + Clone,
+    P: Port<Request = ArconEvent<OUT>> + 'static + Clone,
 {
     fn handle(&mut self, event: ControlEvent) -> () {
         if let ControlEvent::Start = event {}
@@ -264,44 +287,31 @@ where
     IN: 'static + ArconType + Hash,
     FUNC: 'static + Clone,
     OUT: 'static + ArconType,
-    P: Port<Request = ArconElement<OUT>> + 'static + Clone,
+    P: Port<Request = ArconEvent<OUT>> + 'static + Clone,
 {
     fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
-        if let Some(e) = msg.downcast_ref::<ArconElement<IN>>() {
-            self.handle_element(*e);
-        } else if let Some(w) = msg.downcast_ref::<Watermark>() {
-            self.handle_watermark(w);
+        if let Some(event) = msg.downcast_ref::<ArconEvent<IN>>() {
+            let _ = self.handle_event(*event);
         } else {
             error!(self.ctx.log(), "Unrecognized message from {:?}", _sender);
         }
     }
-    fn receive_message(&mut self, _sender: ActorPath, _ser_id: u64, _buf: &mut Buf) {
-        // This remote message receiver is untested and probably doesn't work
-        /*
+    fn receive_message(&mut self, sender: ActorPath, ser_id: u64, buf: &mut Buf) {
+        // This remote message receiver is untested
         if ser_id == serialisation_ids::PBUF {
             let r: Result<StreamTaskMessage, SerError> = ProtoSer::deserialise(buf);
             if let Ok(msg) = r {
-                let payload = msg.payload.unwrap();
-                match payload {
-                    element(e) => {
-                        // todo: convert from protobuff to ArconElement
-                        //self.handle_element(e);
-                    }
-                    keyed_element(_) => {}
-                    watermark(w) => {
-                        self.handle_watermark(&w);
-                    }
-                    checkpoint(_) => {
-                        // TODO: Persistant State
-                    }
+                if let Ok(event) = ArconEvent::from_remote(msg) {
+                    self.handle_event(event);
+                } else {
+                    error!(self.ctx.log(), "Failed to convert remote message to local");
                 }
             } else {
-                error!(self.ctx.log(), "Failed to deserialize StreamTaskMessage",);
+                error!(self.ctx.log(), "Failed to deserialise StreamTaskMessage",);
             }
         } else {
-            debug!(self.ctx.log(), "Unrecognized remote message",);
+            error!(self.ctx.log(), "Got unexpected message from {}", sender);
         }
-        */
     }
 }
 
@@ -309,15 +319,11 @@ where
 mod tests {
     use super::*;
     use crate::streaming::partitioner::forward::*;
-    use crate::streaming::partitioner::*;
     use crate::streaming::{Channel, ChannelPort};
     use kompact::default_components::DeadletterBox;
-    use std::cell::UnsafeCell;
-    use std::rc::Rc;
     use std::time::UNIX_EPOCH;
     use std::{thread, time};
     use weld::data::Appender;
-    use weld::data::WeldVec;
 
     // Stub for window-results
     mod sink {
@@ -328,6 +334,7 @@ mod tests {
             ctx: ComponentContext<Sink>,
             pub sink_port: ProvidedPort<ChannelPort<WindowOutput>, Self>,
             pub result: Vec<Option<i64>>,
+            pub watermarks: Vec<Option<u64>>,
         }
         impl Sink {
             pub fn new() -> Sink {
@@ -335,6 +342,7 @@ mod tests {
                     ctx: ComponentContext::new(),
                     sink_port: ProvidedPort::new(),
                     result: Vec::new(),
+                    watermarks: Vec::new(),
                 }
             }
         }
@@ -343,19 +351,33 @@ mod tests {
         }
         impl Actor for Sink {
             fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
-                if let Some(m) = msg.downcast_ref::<ArconElement<WindowOutput>>() {
-                    self.result.push(Some(m.data.len));
+                if let Some(event) = msg.downcast_ref::<ArconEvent<WindowOutput>>() {
+                    match event {
+                        ArconEvent::Element(e) => {
+                            self.result.push(Some(e.data.len));
+                        }
+                        ArconEvent::Watermark(w) => {
+                            self.watermarks.push(Some(w.timestamp));
+                        }
+                    }
                 }
             }
             fn receive_message(&mut self, _sender: ActorPath, _ser_id: u64, _buf: &mut Buf) {}
         }
         impl Provide<ChannelPort<WindowOutput>> for Sink {
-            fn handle(&mut self, event: ArconElement<WindowOutput>) -> () {
-                self.result.push(Some(event.data.len));
+            fn handle(&mut self, event: ArconEvent<WindowOutput>) -> () {
+                match event {
+                    ArconEvent::Element(e) => {
+                        self.result.push(Some(e.data.len));
+                    }
+                    ArconEvent::Watermark(w) => {
+                        self.watermarks.push(Some(w.timestamp));
+                    }
+                }
             }
         }
         impl Require<ChannelPort<WindowOutput>> for Sink {
-            fn handle(&mut self, event: ()) -> () {
+            fn handle(&mut self, _event: ()) -> () {
                 // ignore
             }
         }
@@ -384,7 +406,7 @@ mod tests {
         pub type Assigner =
             EventTimeWindowAssigner<Item, Appender<u32>, WindowOutput, ChannelPort<WindowOutput>>;
 
-        let mut partitioner: Box<Forward<WindowOutput, ChannelPort<WindowOutput>, Assigner>> =
+        let partitioner: Box<Forward<WindowOutput, ChannelPort<WindowOutput>, Assigner>> =
             Box::new(Forward::new(Channel::Local(sink_ref.clone())));
 
         // Create the window_assigner
@@ -416,22 +438,20 @@ mod tests {
     fn wait(time: u64) -> () {
         thread::sleep(time::Duration::from_secs(time));
     }
-    fn watermark(time: u64) -> Watermark {
-        let mut w = Watermark::new();
-        w.set_timestamp(time);
-        return w;
+    fn watermark(time: u64) -> ArconEvent<Item> {
+        ArconEvent::Watermark(Watermark::new(time))
     }
-    fn timestamped_event(ts: u64) -> Box<ArconElement<Item>> {
-        return Box::new(ArconElement {
+    fn timestamped_event(ts: u64) -> Box<ArconEvent<Item>> {
+        return Box::new(ArconEvent::Element(ArconElement {
             data: Item { id: 1, price: 1 },
             timestamp: Some(ts),
-        });
+        }));
     }
-    fn timestamped_keyed_event(ts: u64, id: u64) -> Box<ArconElement<Item>> {
-        return Box::new(ArconElement {
+    fn timestamped_keyed_event(ts: u64, id: u64) -> Box<ArconEvent<Item>> {
+        return Box::new(ArconEvent::Element(ArconElement {
             data: Item { id, price: 1 },
             timestamp: Some(ts),
-        });
+        }));
     }
     #[key_by(id)]
     #[arcon]
@@ -465,7 +485,7 @@ mod tests {
         let r3 = &sink_inspect.result[1].take().unwrap();
         assert_eq!(r3, &3); // 2nd window receieved, key 2, has 3 elements
         let r4 = &sink_inspect.result[2].take().unwrap();
-        assert_eq!(r2, &2); // 3rd window receieved, for key 3, has 1 elements
+        assert_eq!(r4, &1); // 3rd window receieved, for key 3, has 1 elements
     }
 
     #[test]
@@ -583,7 +603,7 @@ mod tests {
         assigner_ref.tell(Box::new(watermark(now() + 1)), &assigner_ref);
         assigner_ref.tell(Box::new(watermark(now() + 7)), &assigner_ref);
         wait(1);
-        let mut sink_inspect = sink.definition().lock().unwrap();
+        let sink_inspect = sink.definition().lock().unwrap();
         // The number of windows is hard to assert with dynamic window starts
         //assert_eq!(&sink_inspect.result.len(), &(1 as usize));
         // We should've receieved at least one window which is empty
@@ -606,15 +626,11 @@ mod tests {
         // Create a sink and create port channel
         let (sink, _) = system.create_and_register(move || sink::Sink::new());
         let target_port = sink.on_definition(|c| c.sink_port.share());
-        use crate::streaming::window::assigner::tests::sink::Sink;
 
         pub type Assigner =
             EventTimeWindowAssigner<Item, Appender<u32>, WindowOutput, ChannelPort<WindowOutput>>;
         let mut req_port: RequiredPort<ChannelPort<WindowOutput>, Assigner> = RequiredPort::new();
         let _ = req_port.connect(target_port);
-        let ref_port = crate::streaming::RequirePortRef(Rc::new(UnsafeCell::new(req_port)));
-        let comp_channel: Channel<WindowOutput, ChannelPort<WindowOutput>, Assigner> =
-            Channel::Port(ref_port);
 
         let partitioner: Box<Forward<WindowOutput, ChannelPort<WindowOutput>, Assigner>> =
             Box::new(Forward::new(Channel::Local(sink.actor_ref().clone())));
