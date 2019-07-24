@@ -30,6 +30,7 @@ fnv = "1.0.3"
 tokio = "0.1"
 tokio-codec = "0.1"
 bytes = "0.4"
+uuid = "0.7"
 
 # Logging
 slog = "2.2"
