@@ -13,10 +13,6 @@ pub fn stream_task(
     let target_name = Ident::new(&target_name, Span::call_site());
 
     quote! {
-        use std::sync::Arc;
-        use std::rc::Rc;
-        use std::cell::UnsafeCell;
-
         let target_port = #target_name.on_definition(|c| c.in_port.share());
         let mut req_port: RequiredPort<
             ChannelPort<#output_type>,
@@ -24,12 +20,12 @@ pub fn stream_task(
         > = RequiredPort::new();
         let _ = req_port.connect(target_port);
 
-        let ref_port = RequirePortRef(Rc::new(UnsafeCell::new(req_port)));
+        let ref_port = RequirePortRef(std::rc::Rc::new(std::cell::UnsafeCell::new(req_port)));
         let channel = Channel::Port(ref_port);
         let channel_strategy = Box::new(Forward::new(channel));
 
         let code = String::from(#weld_code);
-        let module = Arc::new(Module::new(code).unwrap());
+        let module = std::sync::Arc::new(Module::new(code).unwrap());
         let #node_name = system.create_and_start(move || StreamTask::new(module, Vec::new(), channel_strategy));
     }
 }

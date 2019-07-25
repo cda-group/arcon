@@ -3,11 +3,13 @@ extern crate codegen;
 extern crate compiletest_rs as compiletest;
 
 use codegen::*;
+use spec::*;
 use std::fs;
 use std::path::PathBuf;
 
 pub const RUN_PASS_MODE: &str = "run-pass";
 pub const RUN_PASS_PATH: &str = "tests/run-pass";
+pub const SPECIFICATION_PATH: &str = "tests/specifications";
 
 fn run_mode(mode: &str) {
     let mut config = compiletest::Config::default().tempdir();
@@ -43,7 +45,7 @@ fn codegen_test() {
     fs::create_dir_all(RUN_PASS_PATH).unwrap();
 
     basic_system();
-    basic_source_map_sink();
+    basic_dataflow();
 
     // TODO: Add more complex tests
 
@@ -54,32 +56,16 @@ fn codegen_test() {
 
 fn basic_system() {
     let sys = system::system("127.0.0.1:3000", None, None, None);
-    let main = generate_main(sys);
+    let main = generate_main(sys, None);
     let main_fmt = format_code(main.to_string()).unwrap();
     let sys_path = format!("{}/basic_system.rs", RUN_PASS_PATH);
     let _ = to_file(main_fmt, sys_path.to_string());
 }
 
-fn basic_source_map_sink() {
-    let sink = crate::sink::sink("sink", "i32", &spec::SinkType::Debug);
-    let map = crate::stream_task::stream_task("map", "sink", "|x: i32| x + 5", "i32", "i32");
-    let source = crate::source::source(
-        "source",
-        "map",
-        "i32",
-        &spec::SourceType::Socket {
-            host: "127.0.0.1".to_string(),
-            port: 3000,
-        },
-    );
-
-    let s1 = combine_streams(sink, map);
-    let final_stream = combine_streams(s1, source);
-
-    let system = crate::system::system("127.0.0.1:2000", None, Some(final_stream), None);
-
-    let main = generate_main(system);
-    let fmt = format_code(main.to_string()).unwrap();
-    let sys_path = format!("{}/basic_source_map_sink.rs", RUN_PASS_PATH);
-    let _ = to_file(fmt, sys_path.to_string());
+fn basic_dataflow() {
+    let json_path = format!("{}/basic_dataflow.json", SPECIFICATION_PATH);
+    let spec = ArcSpec::load(&json_path).unwrap();
+    let generated_code = generate(&spec).unwrap();
+    let path = format!("{}/basic_dataflow.rs", RUN_PASS_PATH);
+    let _ = to_file(generated_code, path.to_string());
 }

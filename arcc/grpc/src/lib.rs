@@ -1,3 +1,4 @@
+#![allow(bare_trait_objects)]
 extern crate futures;
 extern crate grpcio;
 extern crate protobuf;

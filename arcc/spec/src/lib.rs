@@ -96,17 +96,16 @@ fn parallelism() -> u32 {
 }
 
 impl ArcSpec {
-    pub fn load(path: &str) -> Result<ArcSpec, failure::Error> {
+    pub fn load(path: &str) -> Result<ArcSpec, SpecError> {
         let file = File::open(path).map_err(|e| SpecError { msg: e.to_string() })?;
-
-        let spec: ArcSpec =
-            serde_json::from_reader(file).map_err(|e| SpecError { msg: e.to_string() })?;
-        Ok(spec)
+        serde_json::from_reader(file).map_err(|e| SpecError { msg: e.to_string() })
     }
-    pub fn from_bytes(bytes: &[u8]) -> Result<ArcSpec, failure::Error> {
-        let spec: ArcSpec =
-            serde_json::from_slice(bytes).map_err(|e| SpecError { msg: e.to_string() })?;
-        Ok(spec)
+    pub fn from_bytes(bytes: &[u8]) -> Result<ArcSpec, SpecError> {
+        serde_json::from_slice(bytes).map_err(|e| SpecError { msg: e.to_string() })
+    }
+
+    pub fn from_string(input: &str) -> Result<ArcSpec, SpecError> {
+        serde_json::from_str(input).map_err(|e| SpecError { msg: e.to_string() })
     }
 }
 

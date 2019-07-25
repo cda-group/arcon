@@ -6,12 +6,14 @@ pub fn source(name: &str, target: &str, input_type: &str, source_type: &SourceTy
     let target = Ident::new(&target, Span::call_site());
     let input_type = Ident::new(&input_type, Span::call_site());
 
-    match source_type {
+    let source_stream = match source_type {
         SourceType::Socket { host, port } => {
             socket_source(&source_name, &target, &input_type, host, *port as usize)
         }
         _ => panic!("Undefined source type!"),
-    }
+    };
+
+    source_stream
 }
 
 fn socket_source(

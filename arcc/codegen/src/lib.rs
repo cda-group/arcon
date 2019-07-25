@@ -17,6 +17,8 @@ use proc_macro2::TokenStream;
 use rustfmt_nightly::*;
 use std::fs;
 
+use spec::{ArcSpec, NodeType::Sink, NodeType::Source, NodeType::StreamTask};
+
 #[derive(Debug, Fail)]
 #[fail(display = "Codegen err: `{}`", msg)]
 pub struct CodegenError {
@@ -48,21 +50,75 @@ pub fn to_file(input: String, path: String) -> std::result::Result<(), std::io::
     fs::write(&path, input)
 }
 
+
+/// Generates a main.rs by parsing an `ArcSpec`
+pub fn generate(spec: &ArcSpec) -> Result<String, CodegenError> {
+    let mut nodes = spec.nodes.clone();
+    let mut stream: Vec<TokenStream> = Vec::new();
+    let mut previous_node: String = String::new();
+
+    // NOTE: We go backwards while generating the code
+    //       i.e. Sink to Source
+    while !nodes.is_empty() {
+        let node = nodes.pop().unwrap();
+
+        match node.node_type {
+            Source(source) => {
+                stream.push(source::source(
+                    &node.id,
+                    &previous_node,
+                    &node.input_type.unwrap(),
+                    &source,
+                ));
+            }
+            Sink(sink) => {
+                stream.push(sink::sink(&node.id, &node.input_type.unwrap(), &sink));
+            }
+            StreamTask => {
+                stream.push(stream_task::stream_task(
+                    &node.id,
+                    &previous_node,
+                    &node.weld_code.unwrap(),
+                    &node.input_type.unwrap(),
+                    &node.output_type.unwrap(),
+                ));
+            }
+        }
+
+        previous_node = node.id.clone();
+    }
+
+    let final_stream = stream
+        .into_iter()
+        .fold(quote! {}, |f, s| combine_token_streams(f, s));
+
+    let system = system::system("127.0.0.1:2000", None, Some(final_stream), None);
+
+    let main = generate_main(system, None);
+    let formatted_main = format_code(main.to_string())?;
+
+    Ok(formatted_main.to_string())
+}
+
+/// Helper function for merging two `TokenStream`s
+pub fn combine_token_streams(s1: TokenStream, s2: TokenStream) -> TokenStream {
+    quote! {
+        #s1 #s2
+    }
+}
+
 /// Generates the main file of the Operator process
-pub fn generate_main(stream: TokenStream) -> TokenStream {
+pub fn generate_main(stream: TokenStream, messages: Option<TokenStream>) -> TokenStream {
     quote! {
         extern crate arcon;
         use arcon::prelude::*;
+        use arcon::macros::*;
+
+        #messages
 
         fn main() {
             #stream
         }
-    }
-}
-
-pub fn combine_streams(s1: TokenStream, s2: TokenStream) -> TokenStream {
-    quote! {
-        #s1 #s2
     }
 }
 
