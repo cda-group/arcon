@@ -18,7 +18,7 @@ use std::sync::Arc;
         * Events need to implement Hash, use "KeyBy" macro when setting up the pipeline
 */
 
-/// Window Assigner that manages and triggers `WindowComponent`s
+/// Window Assigner that manages and triggers `WindowBuilders`s
 ///
 /// IN: Input event
 /// FUNC: ´WindowBuilder`s internal builder type

@@ -258,7 +258,4 @@ pub enum ExecuteAction<C: ComponentDefinition> {
 }
 
 #[cfg(test)]
-mod tests {
-    //use super::*;
-
-}
+mod tests {}
