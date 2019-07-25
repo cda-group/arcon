@@ -22,7 +22,7 @@ fn run_mode(mode: &str) {
     compiletest::run_tests(&config);
 }
 
-fn add_empty_main(path: &str) {
+fn _add_empty_main(path: &str) {
     let main = "fn main() {}";
     use std::fs::OpenOptions;
     use std::io::Write;

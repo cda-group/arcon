@@ -1,16 +1,15 @@
 use proc_macro2::{Ident, Span, TokenStream};
-use spec::SourceType;
+use spec::SourceKind;
 
-pub fn source(name: &str, target: &str, input_type: &str, source_type: &SourceType) -> TokenStream {
+pub fn source(name: &str, target: &str, input_type: &str, source_type: &SourceKind) -> TokenStream {
     let source_name = Ident::new(&name, Span::call_site());
     let target = Ident::new(&target, Span::call_site());
     let input_type = Ident::new(&input_type, Span::call_site());
 
     let source_stream = match source_type {
-        SourceType::Socket { host, port } => {
+        SourceKind::Socket { host, port } => {
             socket_source(&source_name, &target, &input_type, host, *port as usize)
         }
-        _ => panic!("Undefined source type!"),
     };
 
     source_stream

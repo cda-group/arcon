@@ -28,40 +28,63 @@ pub struct ArcSpec {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Node {
     pub id: String,
-    pub node_type: NodeType,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub weld_code: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub input_type: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub output_type: Option<String>,
     #[serde(default = "parallelism")]
     pub parallelism: u32,
+    pub kind: NodeKind,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum NodeKind {
+    Source(Source),
+    Sink(Sink),
+    Task(Task),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Source {
+    pub source_type: String,
     #[serde(default = "forward")]
     pub channel_strategy: ChannelStrategy,
-    pub predecessor: Option<Channel>,
+    pub kind: SourceKind,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum NodeType {
-    Source(SourceType),
-    Sink(SinkType),
-    StreamTask,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum SourceType {
+pub enum SourceKind {
     Socket { host: String, port: u32 },
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum SinkType {
+pub struct Sink {
+    pub sink_type: String,
+    pub predecessor: Channel,
+    pub kind: SinkKind,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum SinkKind {
     Socket {
         host: String,
         port: u32,
     },
     /// A debug Sink that simply prints out received elements
     Debug,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Task {
+    pub input_type: String,
+    pub output_type: String,
+    pub weld_code: String,
+    pub predecessor: Channel,
+    pub channel_strategy: ChannelStrategy,
+    pub kind: TaskKind,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum TaskKind {
+    Flatmap,
+    Filter,
+    Map,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
@@ -122,40 +145,46 @@ mod tests {
             "nodes": [
                 {
                     "id": "node_1",
-                    "node_type": {
-                        "Source": {
-                            "Socket": { "host": "localhost", "port": 1337}
-                        }
-                    },
-                    "input_type": "i64",
-                    "output_type": "i64",
                     "parallelism": 1,
-                    "channel_strategy": "Forward"
+                    "kind": {
+                        "Source": {
+                            "source_type": "i64",
+                            "channel_strategy": "Forward",
+                            "kind": {
+                                "Socket": { "host": "localhost", "port": 1337}
+                            }
+                        }
+                    }
                 },
                 {
                     "id": "node_2",
-                    "node_type": "StreamTask",
-                    "weld_code": "|x: i64| x + 5",
-                    "input_type": "i64",
-                    "output_type": "i64",
                     "parallelism": 1,
-                    "channel_strategy": "Forward",
-                    "predecessor": {
-                            "id": "node_1",
-                            "channel_type": "Local"
+                    "kind": {
+                        "Task": {
+                            "input_type": "i64",
+                            "output_type": "i64",
+                            "weld_code": "|x: i64| x + i64(5)",
+                            "channel_strategy": "Forward",
+                            "predecessor": {
+                                "id": "node_1",
+                                "channel_type": "Local"
+                            },
+                            "kind": "Map"
+                        }
                     }
                 },
                 {
                     "id": "node_3",
-                    "node_type": {
-                        "Sink": "Debug"
-                    },
-                    "input_type": "i64",
                     "parallelism": 1,
-                    "channel_strategy": "Forward",
-                    "predecessor": {
-                            "id": "node_2",
-                            "channel_type": "Local"
+                    "kind": {
+                        "Sink": {
+                            "sink_type": "i64",
+                            "predecessor": {
+                                "id": "node_2",
+                                "channel_type": "Local"
+                            },
+                            "kind": "Debug"
+                        }
                     }
                 }
             ]

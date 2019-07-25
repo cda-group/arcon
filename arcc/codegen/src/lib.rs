@@ -17,7 +17,7 @@ use proc_macro2::TokenStream;
 use rustfmt_nightly::*;
 use std::fs;
 
-use spec::{ArcSpec, NodeType::Sink, NodeType::Source, NodeType::StreamTask};
+use spec::{ArcSpec, NodeKind::Sink, NodeKind::Source, NodeKind::Task};
 
 #[derive(Debug, Fail)]
 #[fail(display = "Codegen err: `{}`", msg)]
@@ -50,7 +50,6 @@ pub fn to_file(input: String, path: String) -> std::result::Result<(), std::io::
     fs::write(&path, input)
 }
 
-
 /// Generates a main.rs by parsing an `ArcSpec`
 pub fn generate(spec: &ArcSpec) -> Result<String, CodegenError> {
     let mut nodes = spec.nodes.clone();
@@ -62,25 +61,25 @@ pub fn generate(spec: &ArcSpec) -> Result<String, CodegenError> {
     while !nodes.is_empty() {
         let node = nodes.pop().unwrap();
 
-        match node.node_type {
+        match node.kind {
             Source(source) => {
                 stream.push(source::source(
                     &node.id,
                     &previous_node,
-                    &node.input_type.unwrap(),
-                    &source,
+                    &source.source_type,
+                    &source.kind,
                 ));
             }
             Sink(sink) => {
-                stream.push(sink::sink(&node.id, &node.input_type.unwrap(), &sink));
+                stream.push(sink::sink(&node.id, &sink.sink_type, &sink.kind));
             }
-            StreamTask => {
+            Task(task) => {
                 stream.push(stream_task::stream_task(
                     &node.id,
                     &previous_node,
-                    &node.weld_code.unwrap(),
-                    &node.input_type.unwrap(),
-                    &node.output_type.unwrap(),
+                    &task.weld_code,
+                    &task.input_type,
+                    &task.output_type,
                 ));
             }
         }
@@ -92,6 +91,8 @@ pub fn generate(spec: &ArcSpec) -> Result<String, CodegenError> {
         .into_iter()
         .fold(quote! {}, |f, s| combine_token_streams(f, s));
 
+    // TODO: Add option for defining addr and port
+    //       + other Kompact settings..
     let system = system::system("127.0.0.1:2000", None, Some(final_stream), None);
 
     let main = generate_main(system, None);

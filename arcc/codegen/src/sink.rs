@@ -1,13 +1,16 @@
 use proc_macro2::{Ident, Span, TokenStream};
-use spec::SinkType;
+use spec::SinkKind;
 
-pub fn sink(name: &str, input_type: &str, sink_type: &SinkType) -> TokenStream {
+pub fn sink(name: &str, input_type: &str, sink_type: &SinkKind) -> TokenStream {
     let sink_name = Ident::new(&name, Span::call_site());
     let input_type = Ident::new(&input_type, Span::call_site());
 
     let sink_stream = match sink_type {
-        SinkType::Debug => debug_sink(&sink_name, &input_type),
-        _ => panic!("Undefined sink type!"),
+        SinkKind::Debug => debug_sink(&sink_name, &input_type),
+        SinkKind::Socket {
+            host: _,
+            port: _,
+        } => unimplemented!(),
     };
 
     sink_stream
