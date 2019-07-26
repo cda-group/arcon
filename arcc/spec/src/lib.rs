@@ -38,6 +38,51 @@ pub enum NodeKind {
     Source(Source),
     Sink(Sink),
     Task(Task),
+    Window(Window),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Window {
+    pub channel_strategy: ChannelStrategy,
+    pub predecessor: Channel,
+    pub assigner: WindowAssigner,
+    pub window_kind: WindowKind,
+    pub window_function: WindowFunction,
+    pub time_kind: TimeKind,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum WindowKind {
+    Keyed { kind: KeyKind },
+    All,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum WindowAssigner {
+    Tumbling { length: u64 },
+    Sliding { length: u64, slide: u64 },
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct WindowFunction {
+    pub input_type: String,
+    pub output_type: String,
+    pub builder: String,
+    pub udf: String,
+    pub materialiser: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum TimeKind {
+    Event { slack: u64 },
+    Processing,
+    Ingestion,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum KeyKind {
+    Struct { id: String },
+    Primitive,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -177,10 +222,37 @@ mod tests {
                     "id": "node_3",
                     "parallelism": 1,
                     "kind": {
+                        "Window": {
+                            "predecessor": {
+                                "id": "node_2",
+                                "channel_type": "Local"
+                            },
+                            "channel_strategy": "Forward",
+                            "window_function": {
+                                "input_type": "i64",
+                                "output_type": "i64",
+                                "builder": "|| appender[u32]",
+                                "udf": "|x: u32, y: appender[u32]| merge(y, x)",
+                                "materialiser": "|y: appender[u32]| map(result(y), |a:u32| a + u32(5))"
+                            },
+                            "window_kind": "All",
+                            "time_kind": "Processing",
+                            "assigner": {
+                                "Tumbling" : {
+                                    "length": 2000
+                                }
+                            }
+                        }
+                    }
+                },
+                {
+                    "id": "node_4",
+                    "parallelism": 1,
+                    "kind": {
                         "Sink": {
                             "sink_type": "i64",
                             "predecessor": {
-                                "id": "node_2",
+                                "id": "node_3",
                                 "channel_type": "Local"
                             },
                             "kind": "Debug"
