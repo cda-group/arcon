@@ -19,7 +19,7 @@ pub struct SpecError {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ArcSpec {
     pub id: String,
-    #[serde(default = "compile_mode")]
+    #[serde(default = "release")]
     pub mode: CompileMode,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub features: Option<Vec<String>>,
@@ -154,7 +154,6 @@ pub enum ChannelKind {
     Remote { id: String, addr: String },
 }
 
-
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum CompileMode {
     Debug,
@@ -167,7 +166,7 @@ fn forward() -> ChannelStrategy {
     ChannelStrategy::Forward
 }
 
-fn compile_mode() -> CompileMode {
+fn release() -> CompileMode {
     CompileMode::Release
 }
 

@@ -1,4 +1,4 @@
-use proc_macro2::TokenStream;
+use proc_macro2::{Ident, Span, TokenStream};
 
 pub fn system(
     addr: &str,
@@ -21,17 +21,16 @@ pub fn system(
         #kompact_connections
 
         // enable optional termination for testing
-        #termination 
+        #termination
     }
 }
 
 pub fn await_termination(system_name: &str) -> TokenStream {
+    let system = Ident::new(&system_name, Span::call_site());
     quote! {
-        #system_name.await_termination();
+        #system.await_termination();
     }
 }
 
 #[cfg(test)]
-mod tests {
-
-}
+mod tests {}

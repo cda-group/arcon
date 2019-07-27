@@ -18,18 +18,27 @@ pub struct CompilerEnv {
 }
 
 impl CompilerEnv {
-    pub fn build(root: String) -> Result<CompilerEnv, failure::Error> {
-        let _ = fs::create_dir_all(&root)?;
-
-        let default_manifest = r#"
-            [workspace]
-            members = []
-        "#;
-
+    pub fn load(root: String) -> Result<CompilerEnv, failure::Error> {
         let manifest_file = format!("{}/Cargo.toml", root);
-        std::fs::write(&manifest_file, default_manifest)?;
+        let exists = std::path::Path::new(&manifest_file).exists();
 
-        let config: Config = toml::from_str(default_manifest)?;
+        let config = {
+            if exists {
+                let data = fs::read_to_string(&manifest_file)?;
+                let config = toml::from_str(&data)?;
+                config
+            } else {
+                fs::create_dir_all(&root)?;
+                let default_manifest = r#"
+                    [workspace]
+                    members = []
+                "#;
+                std::fs::write(&manifest_file, default_manifest)?;
+                let config = toml::from_str(default_manifest)?;
+                config
+            }
+        };
+
         Ok(CompilerEnv { root, config })
     }
 
@@ -79,7 +88,7 @@ mod tests {
 
     #[test]
     fn simple_compiler_env_test() {
-        let mut env = CompilerEnv::build("testenv".to_string()).unwrap();
+        let mut env = CompilerEnv::load("testenv".to_string()).unwrap();
         assert_eq!(env.get_projects().len(), 0);
         env.add_project("hej".to_string()).unwrap();
         assert_eq!(env.get_projects().len(), 1);

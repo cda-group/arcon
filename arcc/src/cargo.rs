@@ -13,6 +13,8 @@ pub fn is_workspace(path: &str) -> bool {
 /// Naive compilation
 pub fn compile(path: &str) -> Result<(), failure::Error> {
     let path = Path::new(path);
+    assert!(std::env::set_current_dir(&path).is_ok());
+    let path = Path::new(path);
     let config = Config::default()?;
     let ws = Workspace::new(&path, &config)?;
     let compile_options = CompileOptions::new(&config, CompileMode::Build)?;

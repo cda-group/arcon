@@ -65,7 +65,7 @@ fn basic_system() {
 fn basic_dataflow() {
     let json_path = format!("{}/basic_dataflow.json", SPECIFICATION_PATH);
     let spec = ArcSpec::load(&json_path).unwrap();
-    let generated_code = generate(&spec).unwrap();
+    let generated_code = generate(&spec, true).unwrap();
     let path = format!("{}/basic_dataflow.rs", RUN_PASS_PATH);
     let _ = to_file(generated_code, path.to_string());
 }

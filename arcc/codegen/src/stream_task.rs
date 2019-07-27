@@ -47,8 +47,8 @@ pub fn stream_task(
                     let module = std::sync::Arc::new(Module::new(code).unwrap());
                     let #node_name = system.create_and_start(move || #task_ident::new(module, Vec::new(), channel_strategy));
                 }
-            },
-            Remote { id: _, addr: _} => {
+            }
+            Remote { id: _, addr: _ } => {
                 unimplemented!();
             }
         }

@@ -1,4 +1,4 @@
-use crate::data::{ArconType, ArconElement};
+use crate::data::{ArconElement, ArconType};
 use crate::util::io::*;
 use kompact::*;
 use std::str::from_utf8;
@@ -53,7 +53,8 @@ impl<A: ArconType + FromStr> Actor for SocketSource<A> {
             if let Ok(byte_string) = from_utf8(&recv.bytes) {
                 if let Ok(element) = byte_string.trim().parse::<A>() {
                     self.received += 1;
-                    self.subscriber.tell(Box::new(ArconElement::new(element)), &self.actor_ref());
+                    self.subscriber
+                        .tell(Box::new(ArconElement::new(element)), &self.actor_ref());
                 } else {
                     error!(self.ctx.log(), "Unable to parse string {}", byte_string);
                 }
@@ -86,7 +87,7 @@ mod tests {
         use super::*;
 
         #[derive(ComponentDefinition)]
-        pub struct Sink<A: ArconType + 'static > {
+        pub struct Sink<A: ArconType + 'static> {
             ctx: ComponentContext<Sink<A>>,
             pub result: Vec<A>,
         }

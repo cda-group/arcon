@@ -7,10 +7,7 @@ pub fn sink(name: &str, input_type: &str, sink_type: &SinkKind) -> TokenStream {
 
     let sink_stream = match sink_type {
         SinkKind::Debug => debug_sink(&sink_name, &input_type),
-        SinkKind::Socket {
-            host: _,
-            port: _,
-        } => unimplemented!(),
+        SinkKind::Socket { host: _, port: _ } => unimplemented!(),
     };
 
     sink_stream
