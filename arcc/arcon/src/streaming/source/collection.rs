@@ -78,7 +78,7 @@ mod tests {
             fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
                 if let Some(m) = msg.downcast_ref::<A>() {
                     self.result.push((*m).clone());
-                } 
+                }
             }
             fn receive_message(&mut self, _sender: ActorPath, _ser_id: u64, _buf: &mut Buf) {}
         }

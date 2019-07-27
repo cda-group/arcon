@@ -45,6 +45,7 @@ pub mod prelude {
     };
     pub use crate::streaming::channel::{Channel, ChannelPort, RequirePortRef};
     pub use crate::streaming::task::stateless::StreamTask;
+    pub use crate::streaming::task::{filter::Filter, flatmap::FlatMap, map::Map};
     pub use crate::streaming::window::{
         assigner::EventTimeWindowAssigner, builder::WindowBuilder, builder::WindowFn,
         builder::WindowModules,

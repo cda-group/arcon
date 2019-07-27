@@ -7,7 +7,7 @@ pub fn system(
     termination: Option<TokenStream>,
 ) -> TokenStream {
     quote! {
-        let mut cfg = KompactConfig::new();
+        let mut cfg = KompactConfig::default();
         let sock_addr = #addr.parse().expect("Failed to parse SocketAddr");
         cfg.system_components(DeadletterBox::new, NetworkConfig::new(sock_addr).build());
 
@@ -22,6 +22,12 @@ pub fn system(
 
         // enable optional termination for testing
         #termination 
+    }
+}
+
+pub fn await_termination(system_name: &str) -> TokenStream {
+    quote! {
+        #system_name.await_termination();
     }
 }
 

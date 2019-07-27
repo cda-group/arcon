@@ -17,7 +17,8 @@ use proc_macro2::TokenStream;
 use rustfmt_nightly::*;
 use std::fs;
 
-use spec::{ArcSpec, NodeKind::Sink, NodeKind::Source, NodeKind::Task};
+use spec::ArcSpec;
+use spec::NodeKind::{Sink, Source, Task, Window};
 
 #[derive(Debug, Fail)]
 #[fail(display = "Codegen err: `{}`", msg)]
@@ -51,7 +52,7 @@ pub fn to_file(input: String, path: String) -> std::result::Result<(), std::io::
 }
 
 /// Generates a main.rs by parsing an `ArcSpec`
-pub fn generate(spec: &ArcSpec) -> Result<String, CodegenError> {
+pub fn generate(spec: &ArcSpec, is_terminated: bool) -> Result<String, CodegenError> {
     let mut nodes = spec.nodes.clone();
     let mut stream: Vec<TokenStream> = Vec::new();
     let mut previous_node: String = String::new();
@@ -77,10 +78,12 @@ pub fn generate(spec: &ArcSpec) -> Result<String, CodegenError> {
                 stream.push(stream_task::stream_task(
                     &node.id,
                     &previous_node,
-                    &task.weld_code,
-                    &task.input_type,
-                    &task.output_type,
+                    &node.parallelism,
+                    &task,
                 ));
+            }
+            Window(_window) => {
+                unimplemented!();
             }
         }
 
@@ -91,9 +94,16 @@ pub fn generate(spec: &ArcSpec) -> Result<String, CodegenError> {
         .into_iter()
         .fold(quote! {}, |f, s| combine_token_streams(f, s));
 
-    // TODO: Add option for defining addr and port
-    //       + other Kompact settings..
-    let system = system::system("127.0.0.1:2000", None, Some(final_stream), None);
+    let termination = {
+        if is_terminated {
+            None
+        } else {
+            Some(system::await_termination("system"))
+        }
+    };
+
+    // NOTE: Currently just assumes there is a single KompactSystem
+    let system = system::system(&spec.system_addr, None, Some(final_stream), termination);
 
     let main = generate_main(system, None);
     let formatted_main = format_code(main.to_string())?;

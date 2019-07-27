@@ -175,14 +175,14 @@ fn fetch_args() -> Vec<String> {
 
 fn compile(
     spec_path: &str,
-    _build_dir: &str,
+    build_dir: &str,
     daemonize: bool,
     _mode: CompilerMode,
 ) -> Result<(), failure::Error> {
     greeting("Wait while I compile for you");
 
     let spec_file = &(spec_path.to_owned() + "/" + DEFAULT_ARC_INPUT);
-    let _spec = ArcSpec::load(spec_file)?;
+    let spec = ArcSpec::load(spec_file)?;
 
     if daemonize {
         unimplemented!();
@@ -193,6 +193,13 @@ fn compile(
             std::thread::sleep(std::time::Duration::from_millis(2));
         }
         pb.finish_with_message("done");
+        let mut env = env::CompilerEnv::build(build_dir.to_string()).unwrap();
+        let _ = env.add_project(spec.id.clone());
+        let s = cargo::create_workspace_member(build_dir, &spec.id);
+        let code = codegen::generate(&spec, false).unwrap();
+        let path = format!("{}/{}/src/main.rs", build_dir, spec.id);
+        println!("generated following code\n{}", code);
+        let _ = codegen::to_file(code, path);
     }
 
     Ok(())

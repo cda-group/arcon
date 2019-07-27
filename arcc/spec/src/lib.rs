@@ -19,8 +19,14 @@ pub struct SpecError {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ArcSpec {
     pub id: String,
+    #[serde(default = "compile_mode")]
+    pub mode: CompileMode,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub features: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub target: String,
+    #[serde(default = "system_addr")]
+    pub system_addr: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub nodes: Vec<Node>,
 }
@@ -44,7 +50,7 @@ pub enum NodeKind {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Window {
     pub channel_strategy: ChannelStrategy,
-    pub predecessor: Channel,
+    pub predecessor: String,
     pub assigner: WindowAssigner,
     pub window_kind: WindowKind,
     pub window_function: WindowFunction,
@@ -101,7 +107,7 @@ pub enum SourceKind {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Sink {
     pub sink_type: String,
-    pub predecessor: Channel,
+    pub predecessor: String,
     pub kind: SinkKind,
 }
 
@@ -120,14 +126,15 @@ pub struct Task {
     pub input_type: String,
     pub output_type: String,
     pub weld_code: String,
-    pub predecessor: Channel,
+    pub predecessor: String,
     pub channel_strategy: ChannelStrategy,
+    pub channels: Vec<ChannelKind>,
     pub kind: TaskKind,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum TaskKind {
-    Flatmap,
+    FlatMap,
     Filter,
     Map,
 }
@@ -142,21 +149,30 @@ pub enum ChannelStrategy {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Channel {
-    pub id: String,
-    pub channel_type: ChannelType,
+pub enum ChannelKind {
+    Local { id: String },
+    Remote { id: String, addr: String },
 }
 
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum ChannelType {
-    Local,
-    Remote { id: String, addr: String },
+pub enum CompileMode {
+    Debug,
+    Release,
 }
 
 /// Default Serde Implementations for `ArcSpec`
 
 fn forward() -> ChannelStrategy {
     ChannelStrategy::Forward
+}
+
+fn compile_mode() -> CompileMode {
+    CompileMode::Release
+}
+
+fn system_addr() -> String {
+    String::from("127.0.0.1:2000")
 }
 
 fn parallelism() -> u32 {
@@ -193,7 +209,7 @@ mod tests {
                     "parallelism": 1,
                     "kind": {
                         "Source": {
-                            "source_type": "i64",
+                            "source_type": "u32",
                             "channel_strategy": "Forward",
                             "kind": {
                                 "Socket": { "host": "localhost", "port": 1337}
@@ -206,14 +222,18 @@ mod tests {
                     "parallelism": 1,
                     "kind": {
                         "Task": {
-                            "input_type": "i64",
-                            "output_type": "i64",
-                            "weld_code": "|x: i64| x + i64(5)",
+                            "input_type": "u32",
+                            "output_type": "u32",
+                            "weld_code": "|x: u32| x + u32(5)",
                             "channel_strategy": "Forward",
-                            "predecessor": {
-                                "id": "node_1",
-                                "channel_type": "Local"
-                            },
+                            "predecessor": "node_1",
+                            "channels": [
+                                {
+                                    "Local": {
+                                        "id": "node_3"
+                                    }
+                                }
+                            ],
                             "kind": "Map"
                         }
                     }
@@ -223,17 +243,14 @@ mod tests {
                     "parallelism": 1,
                     "kind": {
                         "Window": {
-                            "predecessor": {
-                                "id": "node_2",
-                                "channel_type": "Local"
-                            },
+                            "predecessor": "node_2",
                             "channel_strategy": "Forward",
                             "window_function": {
-                                "input_type": "i64",
+                                "input_type": "u32",
                                 "output_type": "i64",
                                 "builder": "|| appender[u32]",
                                 "udf": "|x: u32, y: appender[u32]| merge(y, x)",
-                                "materialiser": "|y: appender[u32]| map(result(y), |a:u32| a + u32(5))"
+                                "materialiser": "|y: appender[u32]| len(result(y))"
                             },
                             "window_kind": "All",
                             "time_kind": "Processing",
@@ -251,10 +268,7 @@ mod tests {
                     "kind": {
                         "Sink": {
                             "sink_type": "i64",
-                            "predecessor": {
-                                "id": "node_3",
-                                "channel_type": "Local"
-                            },
+                            "predecessor": "node_3",
                             "kind": "Debug"
                         }
                     }
