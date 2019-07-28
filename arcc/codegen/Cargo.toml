@@ -10,6 +10,8 @@ publish = false
 quote = "0.6"
 proc-macro2 = "0.4"
 rustfmt-nightly = "1.2.2"
+spec = { path = "../spec" }
+failure = "0.1.5"
 
 [dev-dependencies]
 compiletest_rs = { version = "*", features = ["tmp"] }

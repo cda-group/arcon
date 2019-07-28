@@ -1,4 +1,4 @@
-use proc_macro2::TokenStream;
+use proc_macro2::{Ident, Span, TokenStream};
 
 pub fn system(
     addr: &str,
@@ -7,7 +7,7 @@ pub fn system(
     termination: Option<TokenStream>,
 ) -> TokenStream {
     quote! {
-        let mut cfg = KompactConfig::new();
+        let mut cfg = KompactConfig::default();
         let sock_addr = #addr.parse().expect("Failed to parse SocketAddr");
         cfg.system_components(DeadletterBox::new, NetworkConfig::new(sock_addr).build());
 
@@ -21,11 +21,16 @@ pub fn system(
         #kompact_connections
 
         // enable optional termination for testing
-        #termination 
+        #termination
+    }
+}
+
+pub fn await_termination(system_name: &str) -> TokenStream {
+    let system = Ident::new(&system_name, Span::call_site());
+    quote! {
+        #system.await_termination();
     }
 }
 
 #[cfg(test)]
-mod tests {
-
-}
+mod tests {}

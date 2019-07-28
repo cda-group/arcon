@@ -1,4 +1,4 @@
-use crate::data::ArconType;
+use crate::data::{ArconElement, ArconType};
 use crate::util::io::*;
 use kompact::*;
 use std::str::from_utf8;
@@ -51,9 +51,10 @@ impl<A: ArconType + FromStr> Actor for SocketSource<A> {
             debug!(self.ctx.log(), "{:?}", recv.bytes);
             // Try to cast into our type from bytes
             if let Ok(byte_string) = from_utf8(&recv.bytes) {
-                if let Ok(element) = byte_string.parse::<A>() {
+                if let Ok(element) = byte_string.trim().parse::<A>() {
                     self.received += 1;
-                    self.subscriber.tell(Box::new(element), &self.actor_ref());
+                    self.subscriber
+                        .tell(Box::new(ArconElement::new(element)), &self.actor_ref());
                 } else {
                     error!(self.ctx.log(), "Unable to parse string {}", byte_string);
                 }
@@ -77,7 +78,6 @@ impl<A: ArconType + FromStr> Actor for SocketSource<A> {
 mod tests {
     use super::*;
     use crate::tokio::prelude::Future;
-    use kompact::default_components::DeadletterBox;
     use std::{thread, time};
     use tokio::io;
     use tokio::net::TcpStream;
@@ -86,11 +86,12 @@ mod tests {
     mod sink {
         use super::*;
 
-        pub struct Sink<A: 'static + Send + Clone> {
+        #[derive(ComponentDefinition)]
+        pub struct Sink<A: ArconType + 'static> {
             ctx: ComponentContext<Sink<A>>,
             pub result: Vec<A>,
         }
-        impl<A: Send + Clone> Sink<A> {
+        impl<A: ArconType + 'static> Sink<A> {
             pub fn new(_t: A) -> Sink<A> {
                 Sink {
                     ctx: ComponentContext::new(),
@@ -98,41 +99,23 @@ mod tests {
                 }
             }
         }
-        impl<A: Send + Clone> Provide<ControlPort> for Sink<A> {
+        impl<A: ArconType> Provide<ControlPort> for Sink<A> {
             fn handle(&mut self, _event: ControlEvent) -> () {}
         }
-        impl<A: Send + Clone> Actor for Sink<A> {
+        impl<A: ArconType> Actor for Sink<A> {
             fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
-                if let Some(m) = msg.downcast_ref::<A>() {
-                    self.result.push((*m).clone());
-                } else {
+                if let Some(m) = msg.downcast_ref::<ArconElement<A>>() {
+                    self.result.push((m.data).clone());
                 }
             }
             fn receive_message(&mut self, _sender: ActorPath, _ser_id: u64, _buf: &mut Buf) {}
-        }
-        impl<A: Send + Clone> ComponentDefinition for Sink<A> {
-            fn setup(&mut self, self_component: Arc<Component<Self>>) -> () {
-                self.ctx_mut().initialise(self_component);
-            }
-            fn execute(&mut self, _max_events: usize, skip: usize) -> ExecuteResult {
-                ExecuteResult::new(skip, skip)
-            }
-            fn ctx(&self) -> &ComponentContext<Self> {
-                &self.ctx
-            }
-            fn ctx_mut(&mut self) -> &mut ComponentContext<Self> {
-                &mut self.ctx
-            }
-            fn type_name() -> &'static str {
-                "EventTimeWindowAssigner"
-            }
         }
     }
     // Shared methods for test cases
     fn wait(time: u64) -> () {
         thread::sleep(time::Duration::from_secs(time));
     }
-    fn test_setup<A: Send + Clone>(
+    fn test_setup<A: ArconType>(
         a: A,
     ) -> (
         kompact::KompactSystem,

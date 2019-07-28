@@ -1,6 +1,6 @@
 use crate::data::{ArconElement, ArconType};
 use crate::messages::protobuf::*;
-use crate::streaming::partitioner::Partitioner;
+use crate::streaming::channel::strategy::*;
 use crate::streaming::window::builder::{WindowBuilder, WindowFn, WindowModules};
 use crate::util::event_timer::{EventTimer, ExecuteAction};
 use crate::weld::module::Module;
@@ -9,6 +9,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
 use std::sync::Arc;
+
 /*
     EventTimeWindowAssigner
         * Assigns messages to windows based on event timestamp
@@ -22,7 +23,7 @@ use std::sync::Arc;
 /// IN: Input event
 /// FUNC: ´WindowBuilder`s internal builder type
 /// OUT: Output of Window
-/// P: Port type for the `Partitioner`
+/// P: Port type for the `ChannelStrategy`
 #[derive(ComponentDefinition)]
 pub struct EventTimeWindowAssigner<IN, FUNC, OUT, P>
 where
@@ -32,7 +33,7 @@ where
     P: Port<Request = ArconElement<OUT>> + 'static + Clone,
 {
     ctx: ComponentContext<Self>,
-    partitioner: Box<Partitioner<OUT, P, Self>>,
+    channel_strategy: Box<ChannelStrategy<OUT, P, Self>>,
     window_length: u64,
     window_slide: u64,
     late_arrival_time: u64,
@@ -51,7 +52,7 @@ where
     P: Port<Request = ArconElement<OUT>> + 'static + Clone,
 {
     pub fn new(
-        partitioner: Box<Partitioner<OUT, P, Self>>,
+        channel_strategy: Box<ChannelStrategy<OUT, P, Self>>,
         init_builder_code: String,
         udf_code: String,
         result_code: String,
@@ -81,7 +82,7 @@ where
 
         EventTimeWindowAssigner {
             ctx: ComponentContext::new(),
-            partitioner,
+            channel_strategy,
             window_length: length,
             window_slide: slide,
             late_arrival_time: late,
@@ -92,6 +93,7 @@ where
             hasher: BuildHasherDefault::<DefaultHasher>::default(),
         }
     }
+
     // Creates the window trigger for a key and "window index"
     fn new_window_trigger(&mut self, key: u64, index: u64) -> () {
         let w_start = match self.window_start.get(&key) {
@@ -118,7 +120,7 @@ where
                                 Ok(e) => {
                                     debug!(self_c.ctx.log(), "Window {} result materialized!", ts);
                                     if let Err(_err) = self_c
-                                        .partitioner
+                                        .channel_strategy
                                         .output(ArconElement::new(e), self_ptr, Some(ts)) {
                                             error!(
                                                 self_c.ctx.log(),
@@ -231,7 +233,7 @@ where
             }
         }
         // TODO: fwd watermark
-        // self.partitioner.output(w, self as *const Self, Some(ts));
+        // self.channel_strategy.output(w, self as *const Self, Some(ts));
     }
 }
 
@@ -308,16 +310,14 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::streaming::partitioner::forward::*;
-    use crate::streaming::partitioner::*;
-    use crate::streaming::{Channel, ChannelPort};
+    use crate::streaming::channel::strategy::forward::*;
+    use crate::streaming::channel::{Channel, ChannelPort};
     use kompact::default_components::DeadletterBox;
     use std::cell::UnsafeCell;
     use std::rc::Rc;
     use std::time::UNIX_EPOCH;
     use std::{thread, time};
     use weld::data::Appender;
-    use weld::data::WeldVec;
 
     // Stub for window-results
     mod sink {
@@ -355,7 +355,7 @@ mod tests {
             }
         }
         impl Require<ChannelPort<WindowOutput>> for Sink {
-            fn handle(&mut self, event: ()) -> () {
+            fn handle(&mut self, _event: ()) -> () {
                 // ignore
             }
         }
@@ -384,7 +384,7 @@ mod tests {
         pub type Assigner =
             EventTimeWindowAssigner<Item, Appender<u32>, WindowOutput, ChannelPort<WindowOutput>>;
 
-        let mut partitioner: Box<Forward<WindowOutput, ChannelPort<WindowOutput>, Assigner>> =
+        let channel_strategy: Box<Forward<WindowOutput, ChannelPort<WindowOutput>, Assigner>> =
             Box::new(Forward::new(Channel::Local(sink_ref.clone())));
 
         // Create the window_assigner
@@ -392,7 +392,7 @@ mod tests {
         let udf_code = String::from("|x: {u64, u32}, y: appender[u32]| merge(y, x.$1)");
         let udf_result = String::from("|y: appender[u32]| len(result(y))");
         let window_assigner = EventTimeWindowAssigner::new(
-            partitioner,
+            channel_strategy,
             builder_code,
             udf_code,
             udf_result,
@@ -465,7 +465,7 @@ mod tests {
         let r3 = &sink_inspect.result[1].take().unwrap();
         assert_eq!(r3, &3); // 2nd window receieved, key 2, has 3 elements
         let r4 = &sink_inspect.result[2].take().unwrap();
-        assert_eq!(r2, &2); // 3rd window receieved, for key 3, has 1 elements
+        assert_eq!(r4, &1); // 3rd window receieved, for key 3, has 1 elements
     }
 
     #[test]
@@ -583,7 +583,7 @@ mod tests {
         assigner_ref.tell(Box::new(watermark(now() + 1)), &assigner_ref);
         assigner_ref.tell(Box::new(watermark(now() + 7)), &assigner_ref);
         wait(1);
-        let mut sink_inspect = sink.definition().lock().unwrap();
+        let sink_inspect = sink.definition().lock().unwrap();
         // The number of windows is hard to assert with dynamic window starts
         //assert_eq!(&sink_inspect.result.len(), &(1 as usize));
         // We should've receieved at least one window which is empty
@@ -606,18 +606,19 @@ mod tests {
         // Create a sink and create port channel
         let (sink, _) = system.create_and_register(move || sink::Sink::new());
         let target_port = sink.on_definition(|c| c.sink_port.share());
-        use crate::streaming::window::assigner::tests::sink::Sink;
 
         pub type Assigner =
             EventTimeWindowAssigner<Item, Appender<u32>, WindowOutput, ChannelPort<WindowOutput>>;
         let mut req_port: RequiredPort<ChannelPort<WindowOutput>, Assigner> = RequiredPort::new();
         let _ = req_port.connect(target_port);
-        let ref_port = crate::streaming::RequirePortRef(Rc::new(UnsafeCell::new(req_port)));
+        let ref_port =
+            crate::streaming::channel::RequirePortRef(Rc::new(UnsafeCell::new(req_port)));
         let comp_channel: Channel<WindowOutput, ChannelPort<WindowOutput>, Assigner> =
             Channel::Port(ref_port);
 
-        let partitioner: Box<Forward<WindowOutput, ChannelPort<WindowOutput>, Assigner>> =
-            Box::new(Forward::new(Channel::Local(sink.actor_ref().clone())));
+        // Define strategy
+        let channel_strategy: Box<Forward<WindowOutput, ChannelPort<WindowOutput>, Assigner>> =
+            Box::new(Forward::new(comp_channel));
 
         // Create the window_assigner
 
@@ -625,7 +626,7 @@ mod tests {
         let udf_code = String::from("|x: {u64, u32}, y: appender[u32]| merge(y, x.$1)");
         let udf_result = String::from("|y: appender[u32]| len(result(y))");
         let window_assigner = EventTimeWindowAssigner::new(
-            partitioner,
+            channel_strategy,
             builder_code,
             udf_code,
             udf_result,

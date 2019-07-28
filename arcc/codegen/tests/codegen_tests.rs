@@ -1,13 +1,15 @@
+extern crate arcon;
 extern crate codegen;
 extern crate compiletest_rs as compiletest;
-extern crate arcon;
 
 use codegen::*;
+use spec::*;
 use std::fs;
 use std::path::PathBuf;
 
 pub const RUN_PASS_MODE: &str = "run-pass";
 pub const RUN_PASS_PATH: &str = "tests/run-pass";
+pub const SPECIFICATION_PATH: &str = "tests/specifications";
 
 fn run_mode(mode: &str) {
     let mut config = compiletest::Config::default().tempdir();
@@ -20,7 +22,7 @@ fn run_mode(mode: &str) {
     compiletest::run_tests(&config);
 }
 
-fn add_empty_main(path: &str) {
+fn _add_empty_main(path: &str) {
     let main = "fn main() {}";
     use std::fs::OpenOptions;
     use std::io::Write;
@@ -43,7 +45,7 @@ fn codegen_test() {
     fs::create_dir_all(RUN_PASS_PATH).unwrap();
 
     basic_system();
-    //basic_task();
+    basic_dataflow();
 
     // TODO: Add more complex tests
 
@@ -54,16 +56,16 @@ fn codegen_test() {
 
 fn basic_system() {
     let sys = system::system("127.0.0.1:3000", None, None, None);
-    let main = generate_main(sys);
+    let main = generate_main(sys, None);
     let main_fmt = format_code(main.to_string()).unwrap();
     let sys_path = format!("{}/basic_system.rs", RUN_PASS_PATH);
     let _ = to_file(main_fmt, sys_path.to_string());
 }
 
-fn _basic_task() {
-    let task = task::task("Basic");
-    let task_fmt = format_code(task.to_string()).unwrap();
-    let task_path = format!("{}/basic_task.rs", RUN_PASS_PATH);
-    let _ = to_file(task_fmt, task_path.to_string());
-    add_empty_main(&task_path);
+fn basic_dataflow() {
+    let json_path = format!("{}/basic_dataflow.json", SPECIFICATION_PATH);
+    let spec = ArcSpec::load(&json_path).unwrap();
+    let generated_code = generate(&spec, true).unwrap();
+    let path = format!("{}/basic_dataflow.rs", RUN_PASS_PATH);
+    let _ = to_file(generated_code, path.to_string());
 }

@@ -1,0 +1,51 @@
+{
+"id": "basic_dataflow",
+"target": "x86-64-unknown-linux-gnu",
+"nodes": [
+    {
+        "id": "node_1",
+        "parallelism": 1,
+        "kind": {
+            "Source": {
+                "source_type": "u32",
+                "channel_strategy": "Forward",
+                "kind": {
+                    "Socket": { "host": "localhost", "port": 1337}
+                }
+            }
+        }
+    },
+    {
+        "id": "node_2",
+        "parallelism": 1,
+        "kind": {
+            "Task": {
+                "input_type": "u32",
+                "output_type": "u32",
+                "weld_code": "|x: u32| x + u32(5)",
+                "channel_strategy": "Forward",
+                "predecessor": "node_1",
+                "channels": [
+                    {
+                        "Local": {
+                            "id": "node_3"
+                        }
+                    }
+                ],
+                "kind": "Map"
+            }
+        }
+    },
+    {
+        "id": "node_3",
+        "parallelism": 1,
+        "kind": {
+            "Sink": {
+                "sink_type": "u32",
+                "predecessor": "node_2",
+                "kind": "Debug"
+            }
+        }
+    }
+]
+}

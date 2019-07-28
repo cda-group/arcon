@@ -1,5 +1,7 @@
 # arcc
 
+arcc is the Arc backend compiler targeting the Arcon runtime.
+
 Install Rust (Requires Nightly):
 
 
@@ -50,10 +52,19 @@ Install Protobuf:
 $ cargo build --release
 ```
 
-## Running
+## Running an Example
 
+Compile and start binary:
+
+```bash
+$ ./target/release/arcc compile -s codegen/tests/specifications/basic_dataflow.json
+$ ./build/target/release/basic_dataflow
 ```
-$ ./target/release/arcc help
+
+Connect to Socket Source and enter valid unsigned integers:
+
+```bash
+$ nc localhost 1337
 ```
 
 ## Testing

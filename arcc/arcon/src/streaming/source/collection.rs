@@ -52,14 +52,13 @@ impl<A: ArconType> Actor for CollectionSource<A> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kompact::default_components::DeadletterBox;
-    use std::io::prelude::*;
-    use std::{fs, thread, time};
+    use std::{thread, time};
 
     // Stub for window-results
     mod sink {
         use super::*;
 
+        #[derive(ComponentDefinition)]
         pub struct Sink<A: 'static + ArconType> {
             ctx: ComponentContext<Sink<A>>,
             pub result: Vec<A>,
@@ -77,34 +76,14 @@ mod tests {
         }
         impl<A: ArconType> Actor for Sink<A> {
             fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
-                println!("sink received message");
                 if let Some(m) = msg.downcast_ref::<A>() {
-                    println!("trying to push");
                     self.result.push((*m).clone());
-                } else {
-                    println!("unrecognized message");
                 }
             }
             fn receive_message(&mut self, _sender: ActorPath, _ser_id: u64, _buf: &mut Buf) {}
         }
-        impl<A: ArconType> ComponentDefinition for Sink<A> {
-            fn setup(&mut self, self_component: Arc<Component<Self>>) -> () {
-                self.ctx_mut().initialise(self_component);
-            }
-            fn execute(&mut self, _max_events: usize, skip: usize) -> ExecuteResult {
-                ExecuteResult::new(skip, skip)
-            }
-            fn ctx(&self) -> &ComponentContext<Self> {
-                &self.ctx
-            }
-            fn ctx_mut(&mut self) -> &mut ComponentContext<Self> {
-                &mut self.ctx
-            }
-            fn type_name() -> &'static str {
-                "EventTimeWindowAssigner"
-            }
-        }
     }
+
     // Shared methods for test cases
     fn wait(time: u64) -> () {
         thread::sleep(time::Duration::from_secs(time));
@@ -116,8 +95,7 @@ mod tests {
         Arc<kompact::Component<sink::Sink<A>>>,
     ) {
         // Kompact set-up
-        let mut cfg = KompactConfig::new();
-        cfg.system_components(DeadletterBox::new, NetworkConfig::default().build());
+        let cfg = KompactConfig::new();
         let system = KompactSystem::new(cfg).expect("KompactSystem");
 
         let (sink, _) = system.create_and_register(move || sink::Sink::new(a));

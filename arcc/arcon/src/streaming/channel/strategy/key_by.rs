@@ -1,8 +1,7 @@
 use crate::data::{ArconElement, ArconType};
 use crate::error::*;
-use crate::streaming::partitioner::channel_output;
-use crate::streaming::partitioner::Partitioner;
-use crate::streaming::Channel;
+use crate::streaming::channel::strategy::{channel_output, ChannelStrategy};
+use crate::streaming::channel::Channel;
 use fnv::FnvHasher;
 use kompact::{ComponentDefinition, Port, Require};
 use std::collections::HashMap;
@@ -11,9 +10,9 @@ use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
 
 /// A hash based partitioner
 ///
-/// `HashPartitioner` may be constructed with
+/// `KeyBy` may be constructed with
 /// either a custom hasher or the default `FnvHasher`
-pub struct HashPartitioner<A, B, C, D = BuildHasherDefault<FnvHasher>>
+pub struct KeyBy<A, B, C, D = BuildHasherDefault<FnvHasher>>
 where
     A: 'static + ArconType + Hash,
     B: Port<Request = ArconElement<A>> + 'static + Clone,
@@ -24,7 +23,7 @@ where
     map: HashMap<usize, Channel<A, B, C>, D>,
 }
 
-impl<A, B, C> HashPartitioner<A, B, C>
+impl<A, B, C> KeyBy<A, B, C>
 where
     A: 'static + ArconType + Hash,
     B: Port<Request = ArconElement<A>> + 'static + Clone,
@@ -34,13 +33,13 @@ where
         builder: H,
         parallelism: u32,
         channels: Vec<Channel<A, B, C>>,
-    ) -> HashPartitioner<A, B, C, H> {
+    ) -> KeyBy<A, B, C, H> {
         assert_eq!(channels.len(), parallelism as usize);
         let mut map = HashMap::with_capacity_and_hasher(parallelism as usize, Default::default());
         for (i, channel) in channels.into_iter().enumerate() {
             map.insert(i, channel);
         }
-        HashPartitioner {
+        KeyBy {
             builder: builder.into(),
             parallelism,
             map,
@@ -53,7 +52,7 @@ where
         for (i, channel) in channels.into_iter().enumerate() {
             map.insert(i, channel);
         }
-        HashPartitioner {
+        KeyBy {
             builder: BuildHasherDefault::<FnvHasher>::default(),
             parallelism,
             map,
@@ -61,7 +60,7 @@ where
     }
 }
 
-impl<A, B, C> Partitioner<A, B, C> for HashPartitioner<A, B, C>
+impl<A, B, C> ChannelStrategy<A, B, C> for KeyBy<A, B, C>
 where
     A: 'static + ArconType + Hash,
     B: Port<Request = ArconElement<A>> + 'static + Clone,
@@ -96,7 +95,7 @@ where
     }
 }
 
-unsafe impl<A, B, C> Send for HashPartitioner<A, B, C>
+unsafe impl<A, B, C> Send for KeyBy<A, B, C>
 where
     A: 'static + ArconType + Hash,
     B: Port<Request = ArconElement<A>> + 'static + Clone,
@@ -104,7 +103,7 @@ where
 {
 }
 
-unsafe impl<A, B, C> Sync for HashPartitioner<A, B, C>
+unsafe impl<A, B, C> Sync for KeyBy<A, B, C>
 where
     A: 'static + ArconType + Hash,
     B: Port<Request = ArconElement<A>> + 'static + Clone,
@@ -115,8 +114,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::streaming::partitioner::tests::*;
-    use crate::streaming::ChannelPort;
+    use crate::streaming::channel::strategy::tests::*;
+    use crate::streaming::channel::ChannelPort;
     use kompact::*;
     use rand::Rng;
     use std::sync::Arc;
@@ -138,8 +137,8 @@ mod tests {
             comps.push(comp);
         }
 
-        let mut partitioner: Box<Partitioner<Input, ChannelPort<Input>, TestComp>> =
-            Box::new(HashPartitioner::with_default_hasher(parallelism, channels));
+        let mut channel_strategy: Box<ChannelStrategy<Input, ChannelPort<Input>, TestComp>> =
+            Box::new(KeyBy::with_default_hasher(parallelism, channels));
 
         let mut rng = rand::thread_rng();
 
@@ -154,7 +153,7 @@ mod tests {
         for input in inputs {
             // Just assume it is all sent from same comp
             let comp_def = &*comps.get(0 as usize).unwrap().definition().lock().unwrap();
-            let _ = partitioner.output(input, comp_def, None);
+            let _ = channel_strategy.output(input, comp_def, None);
         }
 
         std::thread::sleep(std::time::Duration::from_secs(1));

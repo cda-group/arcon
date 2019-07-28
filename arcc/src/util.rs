@@ -1,4 +1,4 @@
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 pub fn target_list() -> Result<String, failure::Error> {
     let output = Command::new("rustc")
@@ -17,6 +17,22 @@ pub fn rustc_version() -> Result<String, failure::Error> {
         .unwrap_or_else(|e| panic!("failed to execute process: {}", e));
 
     Ok(cmd_output(output))
+}
+
+pub fn cargo_build(release: bool) -> Result<(), failure::Error> {
+    let mut args: Vec<&str> = vec!["+nightly", "build"];
+    if release {
+        args.push("--release")
+    }
+    let mut cmd = Command::new("cargo")
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .args(args)
+        .spawn()
+        .unwrap_or_else(|e| panic!("failed to execute process: {}", e));
+
+    cmd.wait()?;
+    Ok(())
 }
 
 fn cmd_output(output: std::process::Output) -> String {
