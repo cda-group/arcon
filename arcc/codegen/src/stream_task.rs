@@ -5,14 +5,13 @@ use spec::TaskKind::{Filter, FlatMap, Map};
 
 pub fn stream_task(
     node_name: &str,
-    target_name: &str,
+    _target_name: &str,
     parallelism: &u32,
     task: &Task,
 ) -> TokenStream {
     let node_name = Ident::new(&node_name, Span::call_site());
     let input_type = Ident::new(&task.input_type, Span::call_site());
     let output_type = Ident::new(&task.output_type, Span::call_site());
-    let target_name = Ident::new(&target_name, Span::call_site());
 
     let task_ident_str = match &task.kind {
         FlatMap => "FlatMap",

@@ -14,7 +14,6 @@ use std::fs::metadata;
 use std::io::{stdout, BufWriter};
 use std::str::FromStr;
 
-mod cargo;
 mod env;
 mod repl;
 mod server;
