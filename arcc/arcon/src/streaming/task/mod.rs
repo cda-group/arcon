@@ -4,11 +4,6 @@ pub mod manager;
 pub mod map;
 pub mod stateless;
 
-use crate::data::{ArconElement, ArconType};
-use crate::error::*;
-use crate::messages::protobuf::StreamTaskMessage;
-use crate::messages::protobuf::StreamTaskMessage_oneof_payload::*;
-
 pub struct TaskMetric {
     avg: u64,
     executions: u64,
@@ -37,37 +32,11 @@ impl TaskMetric {
     }
 }
 
-// TODO: Change ArconElement return type to ArconEvent...
-pub fn get_remote_msg<A: ArconType>(data: StreamTaskMessage) -> ArconResult<ArconElement<A>> {
-    let payload = data.payload.unwrap();
-
-    let msg = match payload {
-        element(e) => {
-            let event: A = bincode::deserialize(e.get_data()).map_err(|e| {
-                arcon_err_kind!("Failed to deserialise event with err {}", e.to_string())
-            })?;
-            Ok(ArconElement::with_timestamp(event, e.get_timestamp()))
-        }
-        keyed_element(_) => {
-            unimplemented!();
-        }
-        watermark(_) => {
-            unimplemented!();
-        }
-        checkpoint(_) => {
-            unimplemented!();
-        }
-    };
-
-    msg
-}
-
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::data::{ArconEvent, ArconType, Watermark};
     use crate::streaming::channel::ChannelPort;
     use kompact::*;
-
     /// A component that is used during testing of Tasks..
     #[derive(ComponentDefinition)]
     #[allow(dead_code)]
@@ -78,6 +47,7 @@ mod tests {
         ctx: ComponentContext<Self>,
         in_port: ProvidedPort<ChannelPort<A>, Self>,
         pub result: Vec<A>,
+        pub watermarks: Vec<Watermark>,
     }
 
     impl<A> TaskSink<A>
@@ -89,6 +59,7 @@ mod tests {
                 ctx: ComponentContext::new(),
                 in_port: ProvidedPort::new(),
                 result: Vec::new(),
+                watermarks: Vec::new(),
             }
         }
     }
@@ -105,8 +76,15 @@ mod tests {
         A: 'static + ArconType,
     {
         fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
-            if let Some(msg) = msg.downcast_ref::<ArconElement<A>>() {
-                self.result.push(msg.data);
+            if let Some(event) = msg.downcast_ref::<ArconEvent<A>>() {
+                match event {
+                    ArconEvent::Element(e) => {
+                        self.result.push(e.data);
+                    }
+                    ArconEvent::Watermark(w) => {
+                        self.watermarks.push(*w);
+                    }
+                }
             }
         }
         fn receive_message(&mut self, _sender: ActorPath, _ser_id: u64, _buf: &mut Buf) {}
@@ -116,8 +94,13 @@ mod tests {
     where
         A: 'static + ArconType,
     {
-        fn handle(&mut self, msg: ArconElement<A>) -> () {
-            self.result.push(msg.data);
+        fn handle(&mut self, msg: ArconEvent<A>) -> () {
+            match msg {
+                ArconEvent::Element(e) => {
+                    self.result.push(e.data);
+                }
+                _ => {}
+            }
         }
     }
     impl<A> Require<ChannelPort<A>> for TaskSink<A>

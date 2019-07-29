@@ -1,4 +1,4 @@
-use crate::data::{ArconElement, ArconType};
+use crate::data::{ArconEvent, ArconType};
 use kompact::{ActorPath, ActorRef, ComponentDefinition, Port, Require, RequiredPort};
 use std::cell::UnsafeCell;
 use std::marker::PhantomData;
@@ -14,14 +14,14 @@ where
     A: 'static + ArconType,
 {
     type Indication = ();
-    type Request = ArconElement<A>;
+    type Request = ArconEvent<A>;
 }
 
 #[derive(Clone)]
 pub enum Channel<A, B, C>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconElement<A>> + 'static + Clone,
+    B: Port<Request = ArconEvent<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
     Local(ActorRef),
@@ -33,13 +33,13 @@ where
 pub struct RequirePortRef<A, B, C>(pub Rc<UnsafeCell<RequiredPort<B, C>>>)
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconElement<A>> + 'static + Clone,
+    B: Port<Request = ArconEvent<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>;
 
 unsafe impl<A, B, C> Send for RequirePortRef<A, B, C>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconElement<A>> + 'static + Clone,
+    B: Port<Request = ArconEvent<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
 }
@@ -47,7 +47,7 @@ where
 unsafe impl<A, B, C> Sync for RequirePortRef<A, B, C>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconElement<A>> + 'static + Clone,
+    B: Port<Request = ArconEvent<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
 }

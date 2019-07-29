@@ -1,15 +1,16 @@
-use crate::data::{ArconElement, ArconType};
-use crate::messages::protobuf::*;
+use crate::data::{ArconElement, ArconEvent, ArconType, Watermark};
+use crate::error::ArconResult;
 use crate::streaming::channel::strategy::*;
+use crate::streaming::channel::ChannelPort;
 use crate::streaming::window::builder::{WindowBuilder, WindowFn, WindowModules};
 use crate::util::event_timer::{EventTimer, ExecuteAction};
 use crate::weld::module::Module;
+use arcon_macros::arcon_task;
 use kompact::*;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
 use std::sync::Arc;
-
 /*
     EventTimeWindowAssigner
         * Assigns messages to windows based on event timestamp
@@ -23,17 +24,18 @@ use std::sync::Arc;
 /// IN: Input event
 /// FUNC: ´WindowBuilder`s internal builder type
 /// OUT: Output of Window
-/// P: Port type for the `ChannelStrategy`
+/// PORT: Port type for the `ChannelStrategy`
+#[arcon_task]
 #[derive(ComponentDefinition)]
-pub struct EventTimeWindowAssigner<IN, FUNC, OUT, P>
+pub struct EventTimeWindowAssigner<IN, FUNC, OUT, PORT>
 where
     IN: 'static + ArconType + Hash,
     FUNC: 'static + Clone,
     OUT: 'static + ArconType,
-    P: Port<Request = ArconElement<OUT>> + 'static + Clone,
+    PORT: Port<Request = ArconEvent<OUT>> + 'static + Clone,
 {
     ctx: ComponentContext<Self>,
-    channel_strategy: Box<ChannelStrategy<OUT, P, Self>>,
+    channel_strategy: Box<ChannelStrategy<OUT, PORT, Self>>,
     window_length: u64,
     window_slide: u64,
     late_arrival_time: u64,
@@ -44,15 +46,15 @@ where
     hasher: BuildHasherDefault<DefaultHasher>,
 }
 
-impl<IN, FUNC, OUT, P> EventTimeWindowAssigner<IN, FUNC, OUT, P>
+impl<IN, FUNC, OUT, PORT> EventTimeWindowAssigner<IN, FUNC, OUT, PORT>
 where
     IN: 'static + ArconType + Hash,
     FUNC: 'static + Clone,
     OUT: 'static + ArconType,
-    P: Port<Request = ArconElement<OUT>> + 'static + Clone,
+    PORT: Port<Request = ArconEvent<OUT>> + 'static + Clone,
 {
     pub fn new(
-        channel_strategy: Box<ChannelStrategy<OUT, P, Self>>,
+        channel_strategy: Box<ChannelStrategy<OUT, PORT, Self>>,
         init_builder_code: String,
         udf_code: String,
         result_code: String,
@@ -69,8 +71,6 @@ where
             udf: code_module,
             materializer: result_module,
         };
-
-        // TODO: Should handle weld compilation errors here
 
         // Sanity check on slide and length
         if length < slide {
@@ -121,7 +121,7 @@ where
                                     debug!(self_c.ctx.log(), "Window {} result materialized!", ts);
                                     if let Err(_err) = self_c
                                         .channel_strategy
-                                        .output(ArconElement::new(e), self_ptr, Some(ts)) {
+                                        .output(ArconEvent::Element(ArconElement::new(e)), self_ptr) {
                                             error!(
                                                 self_c.ctx.log(),
                                                 "Failed to send window result"
@@ -154,7 +154,7 @@ where
         e.data.hash(&mut h);
         return h.finish();
     }
-    fn handle_element(&mut self, e: ArconElement<IN>) -> () {
+    fn handle_element(&mut self, e: &ArconElement<IN>) -> ArconResult<()> {
         let ts = e.timestamp.unwrap_or(0);
         if self.window_start.is_empty() {
             // First element received, set the internal timer
@@ -162,10 +162,10 @@ where
         }
         if ts < self.timer.get_time() - self.late_arrival_time {
             // Discard late arrival
-            return;
+            return Ok(());
         }
 
-        let key = self.get_key(e);
+        let key = self.get_key(*e);
         debug!(
             self.ctx.log(),
             "handling element with timestamp: {}, key: {}", ts, key
@@ -214,10 +214,14 @@ where
             }
         }
         self.window_maps.insert(key, w_map);
+        Ok(())
     }
-    fn handle_watermark(&mut self, w: &Watermark) -> () {
-        //debug!(self.ctx.log(), "handling watermark with timestamp: {}", w);
-        let ts = w.get_timestamp();
+    fn handle_watermark(&mut self, w: Watermark) -> ArconResult<()> {
+        debug!(
+            self.ctx.log(),
+            "handling watermark with timestamp: {}", w.timestamp
+        );
+        let ts = w.timestamp;
 
         // timer returns a set of executable actions
         let actions = self.timer.advance_to(ts);
@@ -232,78 +236,17 @@ where
                 ExecuteAction::None => {}
             }
         }
-        // TODO: fwd watermark
-        // self.channel_strategy.output(w, self as *const Self, Some(ts));
-    }
-}
-
-impl<IN, FUNC, OUT, P> Require<P> for EventTimeWindowAssigner<IN, FUNC, OUT, P>
-where
-    IN: 'static + ArconType + Hash,
-    FUNC: 'static + Clone,
-    OUT: 'static + ArconType,
-    P: Port<Request = ArconElement<OUT>> + 'static + Clone,
-{
-    fn handle(&mut self, _event: P::Indication) -> () {
-        // ignore
-    }
-}
-
-impl<IN, FUNC, OUT, P> Provide<ControlPort> for EventTimeWindowAssigner<IN, FUNC, OUT, P>
-where
-    IN: 'static + ArconType + Hash,
-    FUNC: 'static + Clone,
-    OUT: 'static + ArconType,
-    P: Port<Request = ArconElement<OUT>> + 'static + Clone,
-{
-    fn handle(&mut self, event: ControlEvent) -> () {
-        if let ControlEvent::Start = event {}
-    }
-}
-
-impl<IN, FUNC, OUT, P> Actor for EventTimeWindowAssigner<IN, FUNC, OUT, P>
-where
-    IN: 'static + ArconType + Hash,
-    FUNC: 'static + Clone,
-    OUT: 'static + ArconType,
-    P: Port<Request = ArconElement<OUT>> + 'static + Clone,
-{
-    fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
-        if let Some(e) = msg.downcast_ref::<ArconElement<IN>>() {
-            self.handle_element(*e);
-        } else if let Some(w) = msg.downcast_ref::<Watermark>() {
-            self.handle_watermark(w);
-        } else {
-            error!(self.ctx.log(), "Unrecognized message from {:?}", _sender);
+        // fwd watermark
+        if let Err(err) = self
+            .channel_strategy
+            .output(ArconEvent::Watermark(w), self as *const Self)
+        {
+            error!(
+                self.ctx.log(),
+                "Unable to forward Watermark, error: {}", err
+            );
         }
-    }
-    fn receive_message(&mut self, _sender: ActorPath, _ser_id: u64, _buf: &mut Buf) {
-        // This remote message receiver is untested and probably doesn't work
-        /*
-        if ser_id == serialisation_ids::PBUF {
-            let r: Result<StreamTaskMessage, SerError> = ProtoSer::deserialise(buf);
-            if let Ok(msg) = r {
-                let payload = msg.payload.unwrap();
-                match payload {
-                    element(e) => {
-                        // todo: convert from protobuff to ArconElement
-                        //self.handle_element(e);
-                    }
-                    keyed_element(_) => {}
-                    watermark(w) => {
-                        self.handle_watermark(&w);
-                    }
-                    checkpoint(_) => {
-                        // TODO: Persistant State
-                    }
-                }
-            } else {
-                error!(self.ctx.log(), "Failed to deserialize StreamTaskMessage",);
-            }
-        } else {
-            debug!(self.ctx.log(), "Unrecognized remote message",);
-        }
-        */
+        Ok(())
     }
 }
 
@@ -328,6 +271,7 @@ mod tests {
             ctx: ComponentContext<Sink>,
             pub sink_port: ProvidedPort<ChannelPort<WindowOutput>, Self>,
             pub result: Vec<Option<i64>>,
+            pub watermarks: Vec<Option<u64>>,
         }
         impl Sink {
             pub fn new() -> Sink {
@@ -335,6 +279,7 @@ mod tests {
                     ctx: ComponentContext::new(),
                     sink_port: ProvidedPort::new(),
                     result: Vec::new(),
+                    watermarks: Vec::new(),
                 }
             }
         }
@@ -343,15 +288,29 @@ mod tests {
         }
         impl Actor for Sink {
             fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
-                if let Some(m) = msg.downcast_ref::<ArconElement<WindowOutput>>() {
-                    self.result.push(Some(m.data.len));
+                if let Some(event) = msg.downcast_ref::<ArconEvent<WindowOutput>>() {
+                    match event {
+                        ArconEvent::Element(e) => {
+                            self.result.push(Some(e.data.len));
+                        }
+                        ArconEvent::Watermark(w) => {
+                            self.watermarks.push(Some(w.timestamp));
+                        }
+                    }
                 }
             }
             fn receive_message(&mut self, _sender: ActorPath, _ser_id: u64, _buf: &mut Buf) {}
         }
         impl Provide<ChannelPort<WindowOutput>> for Sink {
-            fn handle(&mut self, event: ArconElement<WindowOutput>) -> () {
-                self.result.push(Some(event.data.len));
+            fn handle(&mut self, event: ArconEvent<WindowOutput>) -> () {
+                match event {
+                    ArconEvent::Element(e) => {
+                        self.result.push(Some(e.data.len));
+                    }
+                    ArconEvent::Watermark(w) => {
+                        self.watermarks.push(Some(w.timestamp));
+                    }
+                }
             }
         }
         impl Require<ChannelPort<WindowOutput>> for Sink {
@@ -416,22 +375,20 @@ mod tests {
     fn wait(time: u64) -> () {
         thread::sleep(time::Duration::from_secs(time));
     }
-    fn watermark(time: u64) -> Watermark {
-        let mut w = Watermark::new();
-        w.set_timestamp(time);
-        return w;
+    fn watermark(time: u64) -> ArconEvent<Item> {
+        ArconEvent::Watermark(Watermark::new(time))
     }
-    fn timestamped_event(ts: u64) -> Box<ArconElement<Item>> {
-        return Box::new(ArconElement {
+    fn timestamped_event(ts: u64) -> Box<ArconEvent<Item>> {
+        return Box::new(ArconEvent::Element(ArconElement {
             data: Item { id: 1, price: 1 },
             timestamp: Some(ts),
-        });
+        }));
     }
-    fn timestamped_keyed_event(ts: u64, id: u64) -> Box<ArconElement<Item>> {
-        return Box::new(ArconElement {
+    fn timestamped_keyed_event(ts: u64, id: u64) -> Box<ArconEvent<Item>> {
+        return Box::new(ArconEvent::Element(ArconElement {
             data: Item { id, price: 1 },
             timestamp: Some(ts),
-        });
+        }));
     }
     #[key_by(id)]
     #[arcon]
@@ -611,6 +568,7 @@ mod tests {
             EventTimeWindowAssigner<Item, Appender<u32>, WindowOutput, ChannelPort<WindowOutput>>;
         let mut req_port: RequiredPort<ChannelPort<WindowOutput>, Assigner> = RequiredPort::new();
         let _ = req_port.connect(target_port);
+
         let ref_port =
             crate::streaming::channel::RequirePortRef(Rc::new(UnsafeCell::new(req_port)));
         let comp_channel: Channel<WindowOutput, ChannelPort<WindowOutput>, Assigner> =
