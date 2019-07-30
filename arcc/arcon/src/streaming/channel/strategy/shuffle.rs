@@ -1,4 +1,4 @@
-use crate::data::{ArconElement, ArconType};
+use crate::data::{ArconEvent, ArconType};
 use crate::error::*;
 use crate::streaming::channel::strategy::*;
 use crate::streaming::channel::Channel;
@@ -8,7 +8,7 @@ use rand::seq::SliceRandom;
 pub struct Shuffle<A, B, C>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconElement<A>> + 'static + Clone,
+    B: Port<Request = ArconEvent<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
     out_channels: Vec<Channel<A, B, C>>,
@@ -17,7 +17,7 @@ where
 impl<A, B, C> Shuffle<A, B, C>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconElement<A>> + 'static + Clone,
+    B: Port<Request = ArconEvent<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
     pub fn new(out_channels: Vec<Channel<A, B, C>>) -> Shuffle<A, B, C> {
@@ -28,17 +28,12 @@ where
 impl<A, B, C> ChannelStrategy<A, B, C> for Shuffle<A, B, C>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconElement<A>> + 'static + Clone,
+    B: Port<Request = ArconEvent<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
-    fn output(
-        &mut self,
-        element: ArconElement<A>,
-        source: *const C,
-        key: Option<u64>,
-    ) -> ArconResult<()> {
+    fn output(&mut self, element: ArconEvent<A>, source: *const C) -> ArconResult<()> {
         if let Some(channel) = self.out_channels.choose(&mut rand::thread_rng()) {
-            let _ = channel_output(channel, element, source, key)?;
+            let _ = channel_output(channel, element, source)?;
         } else {
             return arcon_err!("{}", "Failed to pick Channel while shuffling");
         }
@@ -57,7 +52,7 @@ where
 unsafe impl<A, B, C> Send for Shuffle<A, B, C>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconElement<A>> + 'static + Clone,
+    B: Port<Request = ArconEvent<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
 }
@@ -65,7 +60,7 @@ where
 unsafe impl<A, B, C> Sync for Shuffle<A, B, C>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconElement<A>> + 'static + Clone,
+    B: Port<Request = ArconEvent<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
 }
@@ -73,6 +68,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::data::ArconElement;
     use crate::streaming::channel::strategy::tests::*;
     use crate::streaming::channel::ChannelPort;
     use kompact::*;
@@ -100,10 +96,10 @@ mod tests {
             Box::new(Shuffle::new(channels));
 
         for _i in 0..total_msgs {
-            let input = ArconElement::new(Input { id: 1 });
+            let input = ArconEvent::Element(ArconElement::new(Input { id: 1 }));
             // Just assume it is all sent from same comp
             let comp_def = &(*comps.get(0 as usize).unwrap().definition().lock().unwrap());
-            let _ = channel_strategy.output(input, comp_def, None);
+            let _ = channel_strategy.output(input, comp_def);
         }
 
         std::thread::sleep(std::time::Duration::from_secs(1));

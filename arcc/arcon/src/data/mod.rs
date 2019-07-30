@@ -1,3 +1,7 @@
+use crate::error::ArconResult;
+use crate::messages::protobuf::messages::StreamTaskMessage;
+use crate::messages::protobuf::messages::StreamTaskMessage_oneof_payload::*;
+use crate::messages::protobuf::*;
 use serde::de::{DeserializeOwned, Deserializer, SeqAccess, Visitor};
 use serde::ser::SerializeSeq;
 use serde::*;
@@ -7,6 +11,79 @@ use std::ops::Deref;
 
 /// Type that can be passed through the Arcon runtime
 pub trait ArconType: Sync + Send + Clone + Copy + Debug + Serialize + DeserializeOwned {}
+
+/// Wrapper for unifying passing of Elements and other stream messages (watermarks)
+#[derive(Clone, Debug, Copy)]
+pub enum ArconEvent<A: 'static + ArconType> {
+    Element(ArconElement<A>),
+    Watermark(Watermark),
+}
+
+/// Watermark
+#[derive(Clone, Debug, Copy)]
+pub struct Watermark {
+    pub timestamp: u64,
+}
+
+impl<A: 'static + ArconType> ArconEvent<A> {
+    pub fn from_remote(event: StreamTaskMessage) -> ArconResult<Self> {
+        let payload = event.payload.unwrap();
+        match payload {
+            element(e) => {
+                let event: A = bincode::deserialize(e.get_data()).map_err(|e| {
+                    arcon_err_kind!("Failed to deserialise event with err {}", e.to_string())
+                })?;
+                let arcon_element = ArconElement::with_timestamp(event, e.get_timestamp());
+                Ok(ArconEvent::Element(arcon_element))
+            }
+            keyed_element(e) => {
+                // The key is implicit from the key_by
+                let event: A = bincode::deserialize(e.get_data()).map_err(|e| {
+                    arcon_err_kind!("Failed to deserialise event with err {}", e.to_string())
+                })?;
+                let arcon_element = ArconElement::with_timestamp(event, e.get_timestamp());
+                Ok(ArconEvent::Element(arcon_element))
+            }
+            watermark(w) => Ok(ArconEvent::Watermark(Watermark::new(w.timestamp))),
+            checkpoint(_) => {
+                unimplemented!();
+            }
+        }
+    }
+    pub fn to_remote(&self) -> ArconResult<StreamTaskMessage> {
+        match self {
+            ArconEvent::Element(e) => {
+                let serialised_event: Vec<u8> = bincode::serialize(&e.data).map_err(|e| {
+                    arcon_err_kind!("Failed to serialise event with err {}", e.to_string())
+                })?;
+
+                let timestamp = e.timestamp.unwrap_or(0);
+                Ok(create_element(serialised_event, timestamp))
+
+                /* How do we know if it's keyed or not?
+                if let Some(key) = key {
+                    create_keyed_element(serialised_event, timestamp, key);
+
+                } else {
+                    create_element(serialised_event, timestamp);
+                } */
+            }
+            ArconEvent::Watermark(w) => {
+                let mut msg = StreamTaskMessage::new();
+                let mut msg_watermark = messages::Watermark::new();
+                msg_watermark.set_timestamp(w.timestamp);
+                msg.set_watermark(msg_watermark);
+                Ok(msg)
+            }
+        }
+    }
+}
+
+impl Watermark {
+    pub fn new(timestamp: u64) -> Self {
+        Watermark { timestamp }
+    }
+}
 
 /// An stream element that contains a `ArconType` and an optional timestamp
 #[derive(Clone, Debug, Copy)]

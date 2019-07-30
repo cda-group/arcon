@@ -1,4 +1,4 @@
-use crate::data::{ArconElement, ArconType};
+use crate::data::{ArconEvent, ArconType};
 use crate::error::*;
 use crate::streaming::channel::strategy::{channel_output, ChannelStrategy};
 use crate::streaming::channel::Channel;
@@ -7,7 +7,7 @@ use kompact::{ComponentDefinition, Port, Require};
 pub struct Broadcast<A, B, C>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconElement<A>> + 'static + Clone,
+    B: Port<Request = ArconEvent<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
     out_channels: Vec<Channel<A, B, C>>,
@@ -16,7 +16,7 @@ where
 impl<A, B, C> Broadcast<A, B, C>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconElement<A>> + 'static + Clone,
+    B: Port<Request = ArconEvent<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
     pub fn new(out_channels: Vec<Channel<A, B, C>>) -> Broadcast<A, B, C> {
@@ -27,17 +27,12 @@ where
 impl<A, B, C> ChannelStrategy<A, B, C> for Broadcast<A, B, C>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconElement<A>> + 'static + Clone,
+    B: Port<Request = ArconEvent<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
-    fn output(
-        &mut self,
-        element: ArconElement<A>,
-        source: *const C,
-        key: Option<u64>,
-    ) -> ArconResult<()> {
+    fn output(&mut self, event: ArconEvent<A>, source: *const C) -> ArconResult<()> {
         for channel in &self.out_channels {
-            let _ = channel_output(channel, element, source, key)?;
+            let _ = channel_output(channel, event, source)?;
         }
         Ok(())
     }
@@ -53,7 +48,7 @@ where
 unsafe impl<A, B, C> Send for Broadcast<A, B, C>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconElement<A>> + 'static + Clone,
+    B: Port<Request = ArconEvent<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
 }
@@ -61,7 +56,7 @@ where
 unsafe impl<A, B, C> Sync for Broadcast<A, B, C>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconElement<A>> + 'static + Clone,
+    B: Port<Request = ArconEvent<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
 }
@@ -69,6 +64,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::data::ArconElement;
     use crate::streaming::channel::strategy::tests::*;
     use crate::streaming::channel::{ChannelPort, RequirePortRef};
     use kompact::default_components::*;
@@ -112,10 +108,10 @@ mod tests {
             Box::new(Broadcast::new(channels));
 
         for _i in 0..total_msgs {
-            let input = ArconElement::new(Input { id: 1 });
+            let input = ArconEvent::Element(ArconElement::new(Input { id: 1 }));
             // Just assume it is all sent from same comp
             let comp_def = &(*comps.get(0 as usize).unwrap().definition().lock().unwrap());
-            let _ = channel_strategy.output(input, comp_def, None);
+            let _ = channel_strategy.output(input, comp_def);
         }
 
         std::thread::sleep(std::time::Duration::from_secs(1));
@@ -176,7 +172,7 @@ mod tests {
             let input = ArconElement::new(Input { id: 1 });
             // Just assume it is all sent from same comp
             let comp_def = &(*comps.get(0 as usize).unwrap().definition().lock().unwrap());
-            let _ = channel_strategy.output(input, comp_def, None);
+            let _ = channel_strategy.output(ArconEvent::Element(input), comp_def);
         }
 
         std::thread::sleep(std::time::Duration::from_secs(1));

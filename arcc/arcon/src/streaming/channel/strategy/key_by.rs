@@ -1,4 +1,4 @@
-use crate::data::{ArconElement, ArconType};
+use crate::data::{ArconEvent, ArconType};
 use crate::error::*;
 use crate::streaming::channel::strategy::{channel_output, ChannelStrategy};
 use crate::streaming::channel::Channel;
@@ -15,7 +15,7 @@ use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
 pub struct KeyBy<A, B, C, D = BuildHasherDefault<FnvHasher>>
 where
     A: 'static + ArconType + Hash,
-    B: Port<Request = ArconElement<A>> + 'static + Clone,
+    B: Port<Request = ArconEvent<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
     builder: D,
@@ -26,7 +26,7 @@ where
 impl<A, B, C> KeyBy<A, B, C>
 where
     A: 'static + ArconType + Hash,
-    B: Port<Request = ArconElement<A>> + 'static + Clone,
+    B: Port<Request = ArconEvent<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
     pub fn with_hasher<H: BuildHasher + Default>(
@@ -63,26 +63,30 @@ where
 impl<A, B, C> ChannelStrategy<A, B, C> for KeyBy<A, B, C>
 where
     A: 'static + ArconType + Hash,
-    B: Port<Request = ArconElement<A>> + 'static + Clone,
+    B: Port<Request = ArconEvent<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
-    fn output(
-        &mut self,
-        element: ArconElement<A>,
-        source: *const C,
-        key: Option<u64>,
-    ) -> ArconResult<()> {
-        let mut h = self.builder.build_hasher();
-        element.data.hash(&mut h);
-        let hash = h.finish() as u32;
-        let id = (hash % self.parallelism) as i32;
-        if id >= 0 && id <= self.parallelism as i32 {
-            if let Some(channel) = self.map.get(&(id as usize)) {
-                let _ = channel_output(channel, element, source, key)?;
+    fn output(&mut self, event: ArconEvent<A>, source: *const C) -> ArconResult<()> {
+        match event {
+            ArconEvent::Element(element) => {
+                let mut h = self.builder.build_hasher();
+                element.data.hash(&mut h);
+                let hash = h.finish() as u32;
+                let id = (hash % self.parallelism) as i32;
+                if id >= 0 && id <= self.parallelism as i32 {
+                    if let Some(channel) = self.map.get(&(id as usize)) {
+                        let _ = channel_output(channel, event, source)?;
+                    }
+                } else {
+                    // TODO: Fix
+                    panic!("Failed to hash to channel properly..");
+                }
             }
-        } else {
-            // TODO: Fix
-            panic!("Failed to hash to channel properly..");
+            ArconEvent::Watermark(_) => {
+                for (_, channel) in self.map.iter() {
+                    let _ = channel_output(channel, event, source)?;
+                }
+            }
         }
         Ok(())
     }
@@ -98,7 +102,7 @@ where
 unsafe impl<A, B, C> Send for KeyBy<A, B, C>
 where
     A: 'static + ArconType + Hash,
-    B: Port<Request = ArconElement<A>> + 'static + Clone,
+    B: Port<Request = ArconEvent<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
 }
@@ -106,7 +110,7 @@ where
 unsafe impl<A, B, C> Sync for KeyBy<A, B, C>
 where
     A: 'static + ArconType + Hash,
-    B: Port<Request = ArconElement<A>> + 'static + Clone,
+    B: Port<Request = ArconEvent<A>> + 'static + Clone,
     C: ComponentDefinition + Sized + 'static + Require<B>,
 {
 }
@@ -114,6 +118,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::data::ArconElement;
     use crate::streaming::channel::strategy::tests::*;
     use crate::streaming::channel::ChannelPort;
     use kompact::*;
@@ -142,18 +147,18 @@ mod tests {
 
         let mut rng = rand::thread_rng();
 
-        let mut inputs: Vec<ArconElement<Input>> = Vec::new();
+        let mut inputs: Vec<ArconEvent<Input>> = Vec::new();
         for _i in 0..total_msgs {
             let input = Input {
                 id: rng.gen_range(0, 100),
             };
-            inputs.push(ArconElement::new(input));
+            inputs.push(ArconEvent::Element(ArconElement::new(input)));
         }
 
         for input in inputs {
             // Just assume it is all sent from same comp
             let comp_def = &*comps.get(0 as usize).unwrap().definition().lock().unwrap();
-            let _ = channel_strategy.output(input, comp_def, None);
+            let _ = channel_strategy.output(input, comp_def);
         }
 
         std::thread::sleep(std::time::Duration::from_secs(1));

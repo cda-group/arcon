@@ -1,45 +1,46 @@
-use crate::data::{ArconElement, ArconType, ArconVec};
+use crate::data::{ArconElement, ArconEvent, ArconType, ArconVec, Watermark};
 use crate::error::*;
-use crate::messages::protobuf::*;
 use crate::streaming::channel::strategy::ChannelStrategy;
 use crate::streaming::channel::{Channel, ChannelPort};
-use crate::streaming::task::{get_remote_msg, TaskMetric};
+use crate::streaming::task::TaskMetric;
 use crate::weld::*;
+use arcon_macros::arcon_task;
 use kompact::*;
 use std::sync::Arc;
 use weld::*;
 
 /// FlatMap task
 ///
-/// A: Input Event
-/// B: Port type for ChannelStrategy
-/// C: Output Event
+/// IN: Input Event
+/// PORT: Port type for ChannelStrategy
+/// OUT: Output Event
+#[arcon_task]
 #[derive(ComponentDefinition)]
-pub struct FlatMap<A, B, C>
+pub struct FlatMap<IN, PORT, OUT>
 where
-    A: 'static + ArconType,
-    B: Port<Request = ArconElement<C>> + 'static + Clone,
-    C: 'static + ArconType,
+    IN: 'static + ArconType,
+    PORT: Port<Request = ArconEvent<OUT>> + 'static + Clone,
+    OUT: 'static + ArconType,
 {
     ctx: ComponentContext<Self>,
-    _in_channels: Vec<Channel<C, B, Self>>,
-    out_channels: Box<ChannelStrategy<C, B, Self>>,
-    pub event_port: ProvidedPort<ChannelPort<A>, Self>,
+    _in_channels: Vec<Channel<OUT, PORT, Self>>,
+    out_channels: Box<ChannelStrategy<OUT, PORT, Self>>,
+    pub event_port: ProvidedPort<ChannelPort<IN>, Self>,
     udf: Arc<Module>,
     udf_ctx: WeldContext,
     metric: TaskMetric,
 }
 
-impl<A, B, C> FlatMap<A, B, C>
+impl<IN, PORT, OUT> FlatMap<IN, PORT, OUT>
 where
-    A: 'static + ArconType,
-    B: Port<Request = ArconElement<C>> + 'static + Clone,
-    C: 'static + ArconType,
+    IN: 'static + ArconType,
+    PORT: Port<Request = ArconEvent<OUT>> + 'static + Clone,
+    OUT: 'static + ArconType,
 {
     pub fn new(
         udf: Arc<Module>,
-        in_channels: Vec<Channel<C, B, Self>>,
-        out_channels: Box<ChannelStrategy<C, B, Self>>,
+        in_channels: Vec<Channel<OUT, PORT, Self>>,
+        out_channels: Box<ChannelStrategy<OUT, PORT, Self>>,
     ) -> Self {
         let ctx = WeldContext::new(&udf.conf()).unwrap();
         FlatMap {
@@ -53,12 +54,16 @@ where
         }
     }
 
-    fn handle_event(&mut self, event: &ArconElement<A>) -> ArconResult<()> {
+    fn handle_watermark(&mut self, _w: Watermark) -> ArconResult<()> {
+        unimplemented!();
+    }
+
+    fn handle_element(&mut self, event: &ArconElement<IN>) -> ArconResult<()> {
         if let Ok(result) = self.run_udf(&(event.data)) {
             // Result should be an ArconVec of elements
             // iterate over it and send
             for i in 0..result.len {
-                let _ = self.push_out(ArconElement::new(result[i as usize]));
+                let _ = self.push_out(ArconEvent::Element(ArconElement::new(result[i as usize])));
             }
         } else {
             // Just report the error for now...
@@ -67,92 +72,18 @@ where
         Ok(())
     }
 
-    fn run_udf(&mut self, event: &A) -> ArconResult<ArconVec<C>> {
-        let run: ModuleRun<ArconVec<C>> = self.udf.run(event, &mut self.udf_ctx)?;
+    fn run_udf(&mut self, event: &IN) -> ArconResult<ArconVec<OUT>> {
+        let run: ModuleRun<ArconVec<OUT>> = self.udf.run(event, &mut self.udf_ctx)?;
         let ns = run.1;
         self.metric.update_avg(ns);
         Ok(run.0)
     }
 
-    fn push_out(&mut self, event: ArconElement<C>) -> ArconResult<()> {
-        let self_ptr = self as *const FlatMap<A, B, C>;
-        let _ = self.out_channels.output(event, self_ptr, None)?;
+    fn push_out(&mut self, event: ArconEvent<OUT>) -> ArconResult<()> {
+        let self_ptr = self as *const FlatMap<IN, PORT, OUT>;
+        let _ = self.out_channels.output(event, self_ptr)?;
         Ok(())
     }
-}
-
-impl<A, B, C> Provide<ControlPort> for FlatMap<A, B, C>
-where
-    A: 'static + ArconType,
-    B: Port<Request = ArconElement<C>> + 'static + Clone,
-    C: 'static + ArconType,
-{
-    fn handle(&mut self, _event: ControlEvent) -> () {}
-}
-
-impl<A, B, C> Actor for FlatMap<A, B, C>
-where
-    A: 'static + ArconType,
-    B: Port<Request = ArconElement<C>> + 'static + Clone,
-    C: 'static + ArconType,
-{
-    fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
-        if let Some(event) = msg.downcast_ref::<ArconElement<A>>() {
-            let _ = self.handle_event(event);
-        }
-    }
-    fn receive_message(&mut self, sender: ActorPath, ser_id: u64, buf: &mut Buf) {
-        if ser_id == serialisation_ids::PBUF {
-            let r: Result<StreamTaskMessage, SerError> = ProtoSer::deserialise(buf);
-            if let Ok(msg) = r {
-                if let Ok(event) = get_remote_msg(msg) {
-                    let _ = self.handle_event(&event);
-                }
-            } else {
-                error!(self.ctx.log(), "Failed to deserialise StreamTaskMessage",);
-            }
-        } else {
-            error!(self.ctx.log(), "Got unexpected message from {}", sender);
-        }
-    }
-}
-
-impl<A, B, C> Require<B> for FlatMap<A, B, C>
-where
-    A: 'static + ArconType,
-    B: Port<Request = ArconElement<C>> + 'static + Clone,
-    C: 'static + ArconType,
-{
-    fn handle(&mut self, _event: B::Indication) -> () {
-        // ignore
-    }
-}
-
-impl<A, B, C> Provide<ChannelPort<A>> for FlatMap<A, B, C>
-where
-    A: 'static + ArconType,
-    B: Port<Request = ArconElement<C>> + 'static + Clone,
-    C: 'static + ArconType,
-{
-    fn handle(&mut self, event: ArconElement<A>) -> () {
-        let _ = self.handle_event(&event);
-    }
-}
-
-unsafe impl<A, B, C> Send for FlatMap<A, B, C>
-where
-    A: 'static + ArconType,
-    B: Port<Request = ArconElement<C>> + 'static + Clone,
-    C: 'static + ArconType,
-{
-}
-
-unsafe impl<A, B, C> Sync for FlatMap<A, B, C>
-where
-    A: 'static + ArconType,
-    B: Port<Request = ArconElement<C>> + 'static + Clone,
-    C: 'static + ArconType,
-{
 }
 
 #[cfg(test)]
@@ -186,7 +117,7 @@ mod tests {
         let input = ArconElement::new(arcon_vec);
 
         let event_port = filter_task.on_definition(|c| c.event_port.share());
-        system.trigger_r(input, &event_port);
+        system.trigger_r(ArconEvent::Element(input), &event_port);
 
         std::thread::sleep(std::time::Duration::from_secs(1));
         let comp_inspect = &sink_comp.definition().lock().unwrap();

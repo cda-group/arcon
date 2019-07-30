@@ -1,3 +1,4 @@
+use crate::data::ArconEvent;
 use crate::prelude::*;
 
 #[derive(ComponentDefinition)]
@@ -44,8 +45,13 @@ impl<A> Provide<ChannelPort<A>> for DebugSink<A>
 where
     A: ArconType + 'static,
 {
-    fn handle(&mut self, element: ArconElement<A>) -> () {
-        info!(self.ctx.log(), "Sink element: {:?}", element.data);
+    fn handle(&mut self, event: ArconEvent<A>) -> () {
+        match event {
+            ArconEvent::Element(e) => {
+                info!(self.ctx.log(), "Sink element: {:?}", e.data);
+            }
+            _ => {}
+        }
     }
 }
 
