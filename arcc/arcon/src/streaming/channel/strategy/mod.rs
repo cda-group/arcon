@@ -44,14 +44,9 @@ where
         Channel::Local(actor_ref) => {
             actor_ref.tell(Box::new(event), source);
         }
-        Channel::Remote(actor_path) => match event.to_remote() {
-            Ok(msg) => {
-                actor_path.tell(msg, source);
-            }
-            _ => {
-                eprintln!("Failed to convert local message to remote message");
-            }
-        },
+        Channel::Remote(actor_path) => {
+            actor_path.tell(event.to_remote()?, source);
+        }
         Channel::Port(port_ref) => {
             let required_port = (*port_ref.0).get();
             unsafe {

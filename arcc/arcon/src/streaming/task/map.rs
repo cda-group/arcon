@@ -13,34 +13,34 @@ use weld::*;
 ///
 /// IN: Input Event
 /// PORT: Port type for ChannelStrategy
-/// C: Output Event
+/// OUT: Output Event
 #[arcon_task]
 #[derive(ComponentDefinition)]
-pub struct Map<IN, PORT, C>
+pub struct Map<IN, PORT, OUT>
 where
     IN: 'static + ArconType,
-    PORT: Port<Request = ArconEvent<C>> + 'static + Clone,
-    C: 'static + ArconType,
+    PORT: Port<Request = ArconEvent<OUT>> + 'static + Clone,
+    OUT: 'static + ArconType,
 {
     ctx: ComponentContext<Self>,
-    _in_channels: Vec<Channel<C, PORT, Self>>,
-    out_channels: Box<ChannelStrategy<C, PORT, Self>>,
+    _in_channels: Vec<Channel<OUT, PORT, Self>>,
+    out_channels: Box<ChannelStrategy<OUT, PORT, Self>>,
     pub event_port: ProvidedPort<ChannelPort<IN>, Self>,
     udf: Arc<Module>,
     udf_ctx: WeldContext,
     metric: TaskMetric,
 }
 
-impl<IN, PORT, C> Map<IN, PORT, C>
+impl<IN, PORT, OUT> Map<IN, PORT, OUT>
 where
     IN: 'static + ArconType,
-    PORT: Port<Request = ArconEvent<C>> + 'static + Clone,
-    C: 'static + ArconType,
+    PORT: Port<Request = ArconEvent<OUT>> + 'static + Clone,
+    OUT: 'static + ArconType,
 {
     pub fn new(
         udf: Arc<Module>,
-        in_channels: Vec<Channel<C, PORT, Self>>,
-        out_channels: Box<ChannelStrategy<C, PORT, Self>>,
+        in_channels: Vec<Channel<OUT, PORT, Self>>,
+        out_channels: Box<ChannelStrategy<OUT, PORT, Self>>,
     ) -> Self {
         let ctx = WeldContext::new(&udf.conf()).unwrap();
         Map {
@@ -68,15 +68,15 @@ where
         unimplemented!();
     }
 
-    fn run_udf(&mut self, event: &IN) -> ArconResult<C> {
-        let run: ModuleRun<C> = self.udf.run(event, &mut self.udf_ctx)?;
+    fn run_udf(&mut self, event: &IN) -> ArconResult<OUT> {
+        let run: ModuleRun<OUT> = self.udf.run(event, &mut self.udf_ctx)?;
         let ns = run.1;
         self.metric.update_avg(ns);
         Ok(run.0)
     }
 
-    fn push_out(&mut self, event: ArconEvent<C>) -> ArconResult<()> {
-        let self_ptr = self as *const Map<IN, PORT, C>;
+    fn push_out(&mut self, event: ArconEvent<OUT>) -> ArconResult<()> {
+        let self_ptr = self as *const Map<IN, PORT, OUT>;
         let _ = self.out_channels.output(event, self_ptr)?;
         Ok(())
     }
