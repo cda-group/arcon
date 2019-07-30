@@ -1,5 +1,5 @@
-use crate::error::*;
-use crate::state_backend::StateBackend;
+use arcon_error::*;
+use crate::StateBackend;
 use std::collections::HashMap;
 
 pub struct InMemory {

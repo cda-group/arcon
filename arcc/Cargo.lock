@@ -67,22 +67,19 @@ dependencies = [
 name = "arcon"
 version = "0.1.0"
 dependencies = [
+ "arcon_backend 0.1.0",
+ "arcon_error 0.1.0",
+ "arcon_extra 0.1.0",
  "arcon_macros 0.1.0",
+ "arcon_messages 0.1.0",
  "bincode 1.1.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "bytes 0.4.12 (registry+https://github.com/rust-lang/crates.io-index)",
- "capnp 0.9.5 (registry+https://github.com/rust-lang/crates.io-index)",
- "capnpc 0.9.5 (registry+https://github.com/rust-lang/crates.io-index)",
- "derivative 1.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "fnv 1.0.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures 0.1.28 (registry+https://github.com/rust-lang/crates.io-index)",
  "keyby 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "kompact 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "protobuf 2.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "protoc-rust 2.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.6.5 (registry+https://github.com/rust-lang/crates.io-index)",
- "rdkafka 0.19.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "regex 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "rocksdb 0.12.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.97 (registry+https://github.com/rust-lang/crates.io-index)",
  "slog 2.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "slog-async 2.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -95,12 +92,44 @@ dependencies = [
 ]
 
 [[package]]
+name = "arcon_backend"
+version = "0.1.0"
+dependencies = [
+ "arcon_error 0.1.0",
+ "rocksdb 0.12.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tempfile 3.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "arcon_error"
+version = "0.1.0"
+
+[[package]]
+name = "arcon_extra"
+version = "0.1.0"
+dependencies = [
+ "rdkafka 0.19.0 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "arcon_macros"
 version = "0.1.0"
 dependencies = [
  "proc-macro2 0.4.30 (registry+https://github.com/rust-lang/crates.io-index)",
  "quote 0.6.13 (registry+https://github.com/rust-lang/crates.io-index)",
  "syn 0.15.42 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "arcon_messages"
+version = "0.1.0"
+dependencies = [
+ "capnp 0.9.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "capnpc 0.9.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "derivative 1.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "kompact 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "protobuf 2.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "protoc-rust 2.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]

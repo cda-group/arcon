@@ -1,24 +1,27 @@
 use std::error::Error as StdError;
 use std::fmt;
 
+/// Helper macro for generating an Arcon Error
 #[macro_export]
 macro_rules! arcon_err {
     ( $($arg:tt)* ) => ({
-        ::std::result::Result::Err($crate::error::Error::new_arcon(format!($($arg)*)))
+        ::std::result::Result::Err($crate::Error::new_arcon(format!($($arg)*)))
     })
 }
 
-/// Internal helper macro for generating ErrorKind
+/// Helper macro for generating ErrorKind
+#[macro_export]
 macro_rules! arcon_err_kind {
     ( $($arg:tt)* ) => ({
-        $crate::error::Error::new_arcon(format!($($arg)*))
+        $crate::Error::new_arcon(format!($($arg)*))
     })
 }
 
-/// Internal helper macro for defining Weld errors
+/// Helper macro for defining Weld errors
+#[macro_export]
 macro_rules! weld_error {
     ( $($arg:tt)* ) => ({
-        $crate::error::Error::new_weld(format!($($arg)*))
+        $crate::Error::new_weld(format!($($arg)*))
     })
 }
 
@@ -31,7 +34,7 @@ pub enum ErrorKind {
 #[derive(Debug)]
 pub struct Error {
     kind: ErrorKind,
-    cause: Option<Box<StdError + Send>>,
+    cause: Option<Box<dyn StdError + Send>>,
 }
 
 impl fmt::Display for Error {
@@ -45,7 +48,7 @@ impl fmt::Display for Error {
 }
 
 impl StdError for Error {
-    fn cause(&self) -> Option<&StdError> {
+    fn cause(&self) -> Option<&dyn StdError> {
         match self.cause {
             Some(ref x) => Some(&**x),
             None => None,
@@ -74,4 +77,4 @@ impl Error {
     }
 }
 
-pub type ArconResult<T> = ::std::result::Result<T, crate::error::Error>;
+pub type ArconResult<T> = ::std::result::Result<T, crate::Error>;

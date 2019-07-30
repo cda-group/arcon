@@ -1,0 +1,12 @@
+[package]
+name = "arcon_extra"
+version = "0.1.0"
+authors = ["Max Meldrum <mmeldrum@kth.se>"]
+edition = "2018"
+
+[features]
+default = []
+kafka = ["rdkafka"]
+
+[dependencies]
+rdkafka = { version = "~0.19", optional = true }
