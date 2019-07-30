@@ -22,12 +22,12 @@ pub fn stream_task(
     let task_ident = Ident::new(task_ident_str, Span::call_site());
     let weld_code: &str = &task.weld_code;
 
-    let channels: &Vec<spec::ChannelKind> = &task.channels;
+    let successors: &Vec<spec::ChannelKind> = &task.successors;
 
     if *parallelism == 1 {
-        assert_eq!(channels.len(), 1);
+        assert_eq!(successors.len(), 1);
 
-        match &channels.get(0).unwrap() {
+        match &successors.get(0).unwrap() {
             Local { id } => {
                 let target_name = Ident::new(&id, Span::call_site());
                 quote! {

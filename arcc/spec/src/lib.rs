@@ -49,7 +49,9 @@ pub enum NodeKind {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Window {
+    #[serde(default = "forward")]
     pub channel_strategy: ChannelStrategy,
+    pub successors: Vec<ChannelKind>,
     pub predecessor: String,
     pub assigner: WindowAssigner,
     pub window_kind: WindowKind,
@@ -96,6 +98,7 @@ pub struct Source {
     pub source_type: String,
     #[serde(default = "forward")]
     pub channel_strategy: ChannelStrategy,
+    pub successors: Vec<ChannelKind>,
     pub kind: SourceKind,
 }
 
@@ -127,8 +130,9 @@ pub struct Task {
     pub output_type: String,
     pub weld_code: String,
     pub predecessor: String,
+    #[serde(default = "forward")]
     pub channel_strategy: ChannelStrategy,
-    pub channels: Vec<ChannelKind>,
+    pub successors: Vec<ChannelKind>,
     pub kind: TaskKind,
 }
 
@@ -209,7 +213,13 @@ mod tests {
                     "kind": {
                         "Source": {
                             "source_type": "u32",
-                            "channel_strategy": "Forward",
+                            "successors": [
+                                {
+                                    "Local": {
+                                        "id": "node_2"
+                                    }
+                                }
+                            ],
                             "kind": {
                                 "Socket": { "host": "localhost", "port": 1337}
                             }
@@ -226,7 +236,7 @@ mod tests {
                             "weld_code": "|x: u32| x + u32(5)",
                             "channel_strategy": "Forward",
                             "predecessor": "node_1",
-                            "channels": [
+                            "successors": [
                                 {
                                     "Local": {
                                         "id": "node_3"
@@ -243,7 +253,13 @@ mod tests {
                     "kind": {
                         "Window": {
                             "predecessor": "node_2",
-                            "channel_strategy": "Forward",
+                            "successors" : [
+                                {
+                                    "Local": {
+                                        "id": "node_4"
+                                    }
+                                }
+                            ],
                             "window_function": {
                                 "input_type": "u32",
                                 "output_type": "i64",

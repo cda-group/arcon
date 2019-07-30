@@ -121,6 +121,7 @@ pub fn combine_token_streams(s1: TokenStream, s2: TokenStream) -> TokenStream {
 /// Generates the main file of the Operator process
 pub fn generate_main(stream: TokenStream, messages: Option<TokenStream>) -> TokenStream {
     quote! {
+        #![allow(dead_code)]
         extern crate arcon;
         use arcon::prelude::*;
         use arcon::macros::*;

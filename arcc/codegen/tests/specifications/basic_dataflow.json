@@ -8,7 +8,13 @@
         "kind": {
             "Source": {
                 "source_type": "u32",
-                "channel_strategy": "Forward",
+                "successors": [
+                    {
+                        "Local": {
+                            "id": "node_2"
+                        }
+                    }
+                ],
                 "kind": {
                     "Socket": { "host": "localhost", "port": 1337}
                 }
@@ -23,15 +29,14 @@
                 "input_type": "u32",
                 "output_type": "u32",
                 "weld_code": "|x: u32| x + u32(5)",
-                "channel_strategy": "Forward",
-                "predecessor": "node_1",
-                "channels": [
+                "successors": [
                     {
                         "Local": {
                             "id": "node_3"
                         }
                     }
                 ],
+                "predecessor": "node_1",
                 "kind": "Map"
             }
         }
