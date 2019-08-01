@@ -7,7 +7,9 @@
         "parallelism": 1,
         "kind": {
             "Source": {
-                "source_type": "u32",
+                "source_type": {
+                    "Scalar": "u32"
+                },
                 "successors": [
                     {
                         "Local": {
@@ -26,8 +28,12 @@
         "parallelism": 1,
         "kind": {
             "Task": {
-                "input_type": "u32",
-                "output_type": "u32",
+                "input_type": {
+                    "Scalar": "u32"
+                },
+                "output_type": {
+                    "Scalar": "u32"
+                },
                 "weld_code": "|x: u32| x + u32(5)",
                 "successors": [
                     {
@@ -46,7 +52,9 @@
         "parallelism": 1,
         "kind": {
             "Sink": {
-                "sink_type": "u32",
+                "sink_type": {
+                    "Scalar": "u32"
+                },
                 "predecessor": "node_2",
                 "kind": "Debug"
             }

@@ -2,6 +2,7 @@ use proc_macro2::{Ident, Span, TokenStream};
 use spec::ChannelKind::*;
 use spec::Task;
 use spec::TaskKind::{Filter, FlatMap, Map};
+use crate::types::to_token_stream;
 
 pub fn stream_task(
     node_name: &str,
@@ -10,8 +11,8 @@ pub fn stream_task(
     task: &Task,
 ) -> TokenStream {
     let node_name = Ident::new(&node_name, Span::call_site());
-    let input_type = Ident::new(&task.input_type, Span::call_site());
-    let output_type = Ident::new(&task.output_type, Span::call_site());
+    let input_type = to_token_stream(&task.input_type);
+    let output_type = to_token_stream(&task.output_type);
 
     let task_ident_str = match &task.kind {
         FlatMap => "FlatMap",

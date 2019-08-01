@@ -16,7 +16,6 @@ pub fn system(
         let system = KompactSystem::new(cfg).expect("Failed to create KompactSystem");
 
         // Connect Components, Create ActorPaths, Create Tasks
-        // Connect it all
 
         #kompact_connections
 
@@ -31,6 +30,3 @@ pub fn await_termination(system_name: &str) -> TokenStream {
         #system.await_termination();
     }
 }
-
-#[cfg(test)]
-mod tests {}

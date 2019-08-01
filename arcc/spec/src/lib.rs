@@ -73,8 +73,9 @@ pub enum WindowAssigner {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct WindowFunction {
-    pub input_type: String,
-    pub output_type: String,
+    pub input_type: Type,
+    pub output_type: Type,
+    pub builder_type: Type,
     pub builder: String,
     pub udf: String,
     pub materialiser: String,
@@ -95,7 +96,7 @@ pub enum KeyKind {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Source {
-    pub source_type: String,
+    pub source_type: Type,
     #[serde(default = "forward")]
     pub channel_strategy: ChannelStrategy,
     pub successors: Vec<ChannelKind>,
@@ -109,7 +110,7 @@ pub enum SourceKind {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Sink {
-    pub sink_type: String,
+    pub sink_type: Type,
     pub predecessor: String,
     pub kind: SinkKind,
 }
@@ -126,8 +127,8 @@ pub enum SinkKind {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Task {
-    pub input_type: String,
-    pub output_type: String,
+    pub input_type: Type,
+    pub output_type: Type,
     pub weld_code: String,
     pub predecessor: String,
     #[serde(default = "forward")]
@@ -162,6 +163,77 @@ pub enum ChannelKind {
 pub enum CompileMode {
     Debug,
     Release,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum Type {
+    Scalar(Scalar),
+    Vector {
+        elem_ty: Box<Type>,
+    },
+    Struct {
+        field_tys: Vec<Type>,
+    },
+    Appender {
+        elem_ty: Box<Type>,
+    },
+    Merger {
+        elem_ty: Box<Type>,
+        op: MergeOp,
+    },
+    DictMerger {
+        key_ty: Box<Type>,
+        val_ty: Box<Type>,
+        op: MergeOp,
+    },
+    GroupMerger {
+        key_ty: Box<Type>,
+        val_ty: Box<Type>,
+    },
+    VecMerger {
+        elem_ty: Box<Type>,
+        op: MergeOp,
+    },
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum Scalar {
+    #[serde(rename = "i8")]
+    I8,
+    #[serde(rename = "i16")]
+    I16,
+    #[serde(rename = "i32")]
+    I32,
+    #[serde(rename = "i64")]
+    I64,
+    #[serde(rename = "u8")]
+    U8,
+    #[serde(rename = "u16")]
+    U16,
+    #[serde(rename = "u32")]
+    U32,
+    #[serde(rename = "u64")]
+    U64,
+    #[serde(rename = "f32")]
+    F32,
+    #[serde(rename = "f64")]
+    F64,
+    #[serde(rename = "u8")]
+    Bool,
+    #[serde(rename = "()")]
+    Unit,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum MergeOp {
+    #[serde(rename = "+")]
+    Plus,
+    #[serde(rename = "*")]
+    Mult,
+    #[serde(rename = "max")]
+    Max,
+    #[serde(rename = "min")]
+    Min,
 }
 
 /// Default Serde Implementations for `ArcSpec`
@@ -212,7 +284,9 @@ mod tests {
                     "parallelism": 1,
                     "kind": {
                         "Source": {
-                            "source_type": "u32",
+                            "source_type": {
+                                "Scalar": "u32"
+                            },
                             "successors": [
                                 {
                                     "Local": {
@@ -231,8 +305,12 @@ mod tests {
                     "parallelism": 1,
                     "kind": {
                         "Task": {
-                            "input_type": "u32",
-                            "output_type": "u32",
+                            "input_type": {
+                                "Scalar": "u32"
+                            },
+                            "output_type": {
+                                "Scalar": "u32"
+                            },
                             "weld_code": "|x: u32| x + u32(5)",
                             "channel_strategy": "Forward",
                             "predecessor": "node_1",
@@ -261,8 +339,19 @@ mod tests {
                                 }
                             ],
                             "window_function": {
-                                "input_type": "u32",
-                                "output_type": "i64",
+                                "input_type": {
+                                    "Scalar": "u32"
+                                },
+                                "output_type": {
+                                    "Scalar": "i64"
+                                },
+                                "builder_type": {
+                                    "Appender": {
+                                        "elem_ty": {
+                                            "Scalar": "u32"
+                                        }
+                                    }
+                                },
                                 "builder": "|| appender[u32]",
                                 "udf": "|x: u32, y: appender[u32]| merge(y, x)",
                                 "materialiser": "|y: appender[u32]| len(result(y))"
@@ -282,7 +371,9 @@ mod tests {
                     "parallelism": 1,
                     "kind": {
                         "Sink": {
-                            "sink_type": "i64",
+                            "sink_type": {
+                                "Scalar": "i64"
+                            },
                             "predecessor": "node_3",
                             "kind": "Debug"
                         }
