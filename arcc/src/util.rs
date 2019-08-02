@@ -1,4 +1,5 @@
 use std::process::{Command, Stdio};
+use spec::CompileMode;
 
 pub fn target_list() -> Result<String, failure::Error> {
     let output = Command::new("rustc")
@@ -19,10 +20,10 @@ pub fn rustc_version() -> Result<String, failure::Error> {
     Ok(cmd_output(output))
 }
 
-pub fn cargo_build(release: bool) -> Result<(), failure::Error> {
+pub fn cargo_build(mode: &CompileMode) -> Result<(), failure::Error> {
     let mut args: Vec<&str> = vec!["+nightly", "build"];
-    if release {
-        args.push("--release")
+    if mode == &CompileMode::Release {
+        args.push("--release");
     }
     let mut cmd = Command::new("cargo")
         .stdout(Stdio::inherit())

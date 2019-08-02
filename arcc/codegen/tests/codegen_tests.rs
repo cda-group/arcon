@@ -44,28 +44,18 @@ fn codegen_test() {
     // Fresh start of run-pass tests
     fs::create_dir_all(RUN_PASS_PATH).unwrap();
 
-    basic_system();
-    basic_dataflow();
-
-    // TODO: Add more complex tests
+    add_test_spec("basic_dataflow");
+    add_test_spec("tumbling_window_dataflow");
 
     run_mode(RUN_PASS_MODE);
 
     fs::remove_dir_all(RUN_PASS_PATH).unwrap();
 }
 
-fn basic_system() {
-    let sys = system::system("127.0.0.1:3000", None, None, None);
-    let main = generate_main(sys, None);
-    let main_fmt = format_code(main.to_string()).unwrap();
-    let sys_path = format!("{}/basic_system.rs", RUN_PASS_PATH);
-    let _ = to_file(main_fmt, sys_path.to_string());
-}
-
-fn basic_dataflow() {
-    let json_path = format!("{}/basic_dataflow.json", SPECIFICATION_PATH);
+fn add_test_spec(name: &str) {
+    let json_path = format!("{}/{}.json", SPECIFICATION_PATH, name);
     let spec = ArcSpec::load(&json_path).unwrap();
     let generated_code = generate(&spec, true).unwrap();
-    let path = format!("{}/basic_dataflow.rs", RUN_PASS_PATH);
+    let path = format!("{}/{}.rs", RUN_PASS_PATH, name);
     let _ = to_file(generated_code, path.to_string());
 }

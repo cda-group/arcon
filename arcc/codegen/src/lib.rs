@@ -6,11 +6,12 @@ extern crate failure;
 extern crate proc_macro2;
 extern crate rustfmt_nightly;
 
-// Public interface
-pub mod sink;
-pub mod source;
-pub mod stream_task;
-pub mod system;
+mod sink;
+mod source;
+mod stream_task;
+mod system;
+mod types;
+mod window;
 
 use failure::Fail;
 use proc_macro2::TokenStream;
@@ -82,8 +83,8 @@ pub fn generate(spec: &ArcSpec, is_terminated: bool) -> Result<String, CodegenEr
                     &task,
                 ));
             }
-            Window(_window) => {
-                unimplemented!();
+            Window(window) => {
+                stream.push(window::window(&node.id, &window));
             }
         }
 
@@ -118,11 +119,13 @@ pub fn combine_token_streams(s1: TokenStream, s2: TokenStream) -> TokenStream {
     }
 }
 
-/// Generates the main file of the Operator process
+/// Generates the main file of an Arcon process
 pub fn generate_main(stream: TokenStream, messages: Option<TokenStream>) -> TokenStream {
     quote! {
+        #![allow(dead_code)]
         extern crate arcon;
         use arcon::prelude::*;
+        #[allow(unused_imports)]
         use arcon::macros::*;
 
         #messages
