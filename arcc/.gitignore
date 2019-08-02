@@ -9,6 +9,7 @@
 target/
 spec.json
 run-pass/
+Cargo.lock
 
 # Generated code
 grpc/src/arcc_grpc.rs
