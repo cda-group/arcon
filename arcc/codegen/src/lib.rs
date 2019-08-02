@@ -125,6 +125,7 @@ pub fn generate_main(stream: TokenStream, messages: Option<TokenStream>) -> Toke
         #![allow(dead_code)]
         extern crate arcon;
         use arcon::prelude::*;
+        #[allow(unused_imports)]
         use arcon::macros::*;
 
         #messages

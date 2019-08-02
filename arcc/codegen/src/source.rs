@@ -14,8 +14,8 @@ pub fn source(
     let input_type = to_token_stream(input_type);
 
     let source_stream = match source_type {
-        SourceKind::Socket { host, port } => {
-            socket_source(&source_name, &target, &input_type, host, *port as usize)
+        SourceKind::Socket { host, port, rate } => {
+            socket_source(&source_name, &target, &input_type, host, *port as usize, *rate)
         }
     };
 
@@ -28,10 +28,13 @@ fn socket_source(
     input_type: &TokenStream,
     _host: &str,
     port: usize,
+    rate: u64,
 ) -> TokenStream {
     quote! {
+        let channel = Channel::Local(#target.actor_ref());
+        let channel_strategy = Box::new(Forward::new(channel));
         let #source_name = system.create_and_start(move || {
-            let source: SocketSource<#input_type> = SocketSource::new(#port, #target.actor_ref());
+            let source: SocketSource<#input_type, ChannelPort<#input_type>> = SocketSource::new(#port, channel_strategy, #rate);
             source
         });
     }

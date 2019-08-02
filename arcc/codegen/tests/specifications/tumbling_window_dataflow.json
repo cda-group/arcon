@@ -2,6 +2,7 @@
 "id": "tumbling_window_dataflow",
 "target": "x86-64-unknown-linux-gnu",
 "system_addr": "127.0.0.1:3001",
+"mode": "debug",
 "nodes": [
     {
         "id": "node_1",
@@ -19,7 +20,7 @@
                     }
                 ],
                 "kind": {
-                    "Socket": { "host": "localhost", "port": 1337}
+                    "Socket": { "host": "localhost", "port": 1337, "rate": 2 }
                 }
             }
         }
@@ -72,7 +73,7 @@
         "kind": {
             "Sink": {
                 "sink_type": {
-                    "Scalar": "i32"
+                    "Scalar": "i64"
                 },
 
                 "predecessor": "node_2",

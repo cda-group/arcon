@@ -197,7 +197,7 @@ fn compile(
         create_workspace_member(build_dir, &spec.id)?;
         generate(build_dir, &spec)?;
         greeting_with_spec(&spec, &bin_path(&spec.id, build_dir, &spec.mode));
-        util::cargo_build(true)?;
+        util::cargo_build(&spec.mode)?;
     }
 
     Ok(())

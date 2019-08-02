@@ -130,7 +130,7 @@ where
             debug!(self.ctx.log(), "{:?}", recv.bytes);
             // Try to cast into our type from bytes
             if let Ok(byte_string) = from_utf8(&recv.bytes) {
-                if let Ok(data) = byte_string.parse::<OUT>() {
+                if let Ok(data) = byte_string.trim().parse::<OUT>() {
                     self.output_event(data);
                 } else {
                     error!(self.ctx.log(), "Unable to parse string {}", byte_string);

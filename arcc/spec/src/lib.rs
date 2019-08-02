@@ -105,7 +105,12 @@ pub struct Source {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum SourceKind {
-    Socket { host: String, port: u32 },
+    Socket {
+        host: String,
+        port: u32,
+        #[serde(default = "source_rate")]
+        rate: u64,
+    },
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -159,9 +164,11 @@ pub enum ChannelKind {
     Remote { id: String, addr: String },
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub enum CompileMode {
+    #[serde(rename = "debug")]
     Debug,
+    #[serde(rename = "release")]
     Release,
 }
 
@@ -244,6 +251,10 @@ fn forward() -> ChannelStrategy {
 
 fn release() -> CompileMode {
     CompileMode::Release
+}
+
+fn source_rate() -> u64 {
+    0
 }
 
 fn system_addr() -> String {
