@@ -5,7 +5,7 @@ pub mod in_memory;
 #[cfg(feature = "rocksdb")]
 pub mod rocksdb;
 
-use crate::error::ArconResult;
+use arcon_error::ArconResult;
 
 /// Trait required for all state backend implementations in Arcon
 pub trait StateBackend: Send + Sync {

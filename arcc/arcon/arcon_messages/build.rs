@@ -11,9 +11,9 @@ fn main() {
     if proto_feature {
         #[cfg(feature = "proto")]
         protoc_rust::run(protoc_rust::Args {
-            out_dir: "src/messages/protobuf/",
-            includes: &["./arcon_messages/proto"],
-            input: &["./arcon_messages/proto/messages.proto"],
+            out_dir: "src/protobuf/",
+            includes: &["./proto"],
+            input: &["./proto/messages.proto"],
             customize: protoc_rust::Customize {
                 ..Default::default()
             },
@@ -23,7 +23,7 @@ fn main() {
         #[cfg(feature = "capnproto")]
         ::capnpc::CompilerCommand::new()
             .src_prefix("schema")
-            .file("arcon_messages/schema/messages.capnp")
+            .file("schema/messages.capnp")
             .edition(::capnpc::RustEdition::Rust2018)
             .run()
             .expect("compiling schema");

@@ -1,0 +1,20 @@
+[package]
+name = "arcon_messages"
+version = "0.1.0"
+authors = ["Max Meldrum <mmeldrum@kth.se>"]
+edition = "2018"
+
+[features]
+default = ["proto"]
+proto = ["protobuf", "protoc-rust"]
+capnproto = ["capnp", "derivative", "capnpc"]
+
+[dependencies]
+kompact = "0.7.0"
+protobuf = { version = "2.0", optional = true }
+capnp = { version = "0.9.4", optional = true }
+derivative = { version = "1.0.2", optional = true }
+
+[build-dependencies]
+protoc-rust = {version = "2.0", optional = true }
+capnpc = { version = "0.9", optional = true }
