@@ -7,8 +7,16 @@
         "parallelism": 1,
         "kind": {
             "Source": {
-                "source_type": "u32",
-                "channel_strategy": "Forward",
+                "source_type": {
+                    "Scalar": "u32"
+                },
+                "successors": [
+                    {
+                        "Local": {
+                            "id": "node_2"
+                        }
+                    }
+                ],
                 "kind": {
                     "Socket": { "host": "localhost", "port": 1337}
                 }
@@ -20,18 +28,21 @@
         "parallelism": 1,
         "kind": {
             "Task": {
-                "input_type": "u32",
-                "output_type": "u32",
+                "input_type": {
+                    "Scalar": "u32"
+                },
+                "output_type": {
+                    "Scalar": "u32"
+                },
                 "weld_code": "|x: u32| x + u32(5)",
-                "channel_strategy": "Forward",
-                "predecessor": "node_1",
-                "channels": [
+                "successors": [
                     {
                         "Local": {
                             "id": "node_3"
                         }
                     }
                 ],
+                "predecessor": "node_1",
                 "kind": "Map"
             }
         }
@@ -41,7 +52,9 @@
         "parallelism": 1,
         "kind": {
             "Sink": {
-                "sink_type": "u32",
+                "sink_type": {
+                    "Scalar": "u32"
+                },
                 "predecessor": "node_2",
                 "kind": "Debug"
             }

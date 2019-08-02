@@ -8,6 +8,7 @@ where
 {
     ctx: ComponentContext<Self>,
     pub in_port: ProvidedPort<ChannelPort<A>, Self>,
+    pub data: Vec<A>,
 }
 
 impl<A> DebugSink<A>
@@ -18,6 +19,17 @@ where
         DebugSink {
             ctx: ComponentContext::new(),
             in_port: ProvidedPort::new(),
+            data: Vec::new(),
+        }
+    }
+
+    fn handle_event(&mut self, event: &ArconEvent<A>) {
+        match event {
+            ArconEvent::Element(e) => {
+                info!(self.ctx.log(), "Sink element: {:?}", e.data);
+                self.data.push(e.data);
+            }
+            _ => {}
         }
     }
 }
@@ -34,8 +46,8 @@ where
     A: ArconType + 'static,
 {
     fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
-        if let Some(element) = msg.downcast_ref::<ArconElement<A>>() {
-            info!(self.ctx.log(), "Sink element: {:?}", element.data);
+        if let Some(event) = msg.downcast_ref::<ArconEvent<A>>() {
+            self.handle_event(event);
         }
     }
     fn receive_message(&mut self, _sender: ActorPath, _ser_id: u64, _buf: &mut Buf) {}
@@ -46,12 +58,7 @@ where
     A: ArconType + 'static,
 {
     fn handle(&mut self, event: ArconEvent<A>) -> () {
-        match event {
-            ArconEvent::Element(e) => {
-                info!(self.ctx.log(), "Sink element: {:?}", e.data);
-            }
-            _ => {}
-        }
+        self.handle_event(&event);
     }
 }
 

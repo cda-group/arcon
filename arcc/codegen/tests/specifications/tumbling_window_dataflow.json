@@ -1,0 +1,85 @@
+{
+"id": "tumbling_window_dataflow",
+"target": "x86-64-unknown-linux-gnu",
+"system_addr": "127.0.0.1:3001",
+"mode": "debug",
+"nodes": [
+    {
+        "id": "node_1",
+        "parallelism": 1,
+        "kind": {
+            "Source": {
+                "source_type": {
+                    "Scalar": "i32"
+                },
+                "successors": [
+                    {
+                        "Local": {
+                            "id": "node_2"
+                        }
+                    }
+                ],
+                "kind": {
+                    "Socket": { "host": "localhost", "port": 1337, "rate": 2 }
+                }
+            }
+        }
+    },
+    {
+      "id" : "node_2",
+      "parallelism" : 1,
+      "kind" : {
+        "Window": {
+            "channel_strategy" : "Forward",
+            "predecessor" : "node1",
+            "successors" : [
+              {
+                "Local" : {
+                  "id" : "node_3"
+                }
+              }
+            ],
+            "assigner" : {
+              "Tumbling" : {
+                "length" : 60
+              }
+            },
+            "window_function" : {
+              "input_type": {
+                  "Scalar": "i32"
+              },
+              "output_type": {
+                  "Scalar": "i64"
+              },
+              "builder_type": {
+                  "Appender": {
+                      "elem_ty": {
+                          "Scalar": "i32"
+                      }
+                  }
+              },
+              "builder" : "||appender[i32]",
+              "udf" : "|e:i32,w:appender[i32]| merge(w,e):appender[i32]",
+              "materialiser" : "|agg:appender[i32]| len(result(agg)):i64"
+            },
+            "time_kind" : "Ingestion",
+            "window_kind" : "All"
+          }
+        }
+    },
+      {
+        "id": "node_3",
+        "parallelism": 1,
+        "kind": {
+            "Sink": {
+                "sink_type": {
+                    "Scalar": "i64"
+                },
+
+                "predecessor": "node_2",
+                "kind": "Debug"
+            }
+        }
+      }
+]
+}

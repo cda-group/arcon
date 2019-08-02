@@ -2,6 +2,7 @@ use proc_macro2::{Ident, Span, TokenStream};
 use spec::ChannelKind::*;
 use spec::Task;
 use spec::TaskKind::{Filter, FlatMap, Map};
+use crate::types::to_token_stream;
 
 pub fn stream_task(
     node_name: &str,
@@ -10,8 +11,8 @@ pub fn stream_task(
     task: &Task,
 ) -> TokenStream {
     let node_name = Ident::new(&node_name, Span::call_site());
-    let input_type = Ident::new(&task.input_type, Span::call_site());
-    let output_type = Ident::new(&task.output_type, Span::call_site());
+    let input_type = to_token_stream(&task.input_type);
+    let output_type = to_token_stream(&task.output_type);
 
     let task_ident_str = match &task.kind {
         FlatMap => "FlatMap",
@@ -22,12 +23,12 @@ pub fn stream_task(
     let task_ident = Ident::new(task_ident_str, Span::call_site());
     let weld_code: &str = &task.weld_code;
 
-    let channels: &Vec<spec::ChannelKind> = &task.channels;
+    let successors: &Vec<spec::ChannelKind> = &task.successors;
 
     if *parallelism == 1 {
-        assert_eq!(channels.len(), 1);
+        assert_eq!(successors.len(), 1);
 
-        match &channels.get(0).unwrap() {
+        match &successors.get(0).unwrap() {
             Local { id } => {
                 let target_name = Ident::new(&id, Span::call_site());
                 quote! {

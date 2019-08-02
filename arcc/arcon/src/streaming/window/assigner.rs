@@ -223,6 +223,10 @@ where
         );
         let ts = w.timestamp;
 
+        if self.window_start.is_empty() {
+            return Ok(());
+        }
+
         // timer returns a set of executable actions
         let actions = self.timer.advance_to(ts);
         for a in actions {

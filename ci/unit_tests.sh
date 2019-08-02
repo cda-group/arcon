@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-NIGHTLY_VER="nightly-2019-07-04"
+NIGHTLY_VER="nightly-2019-07-28"
 
 curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain $NIGHTLY_VER
 export PATH=$PATH:$HOME/.cargo/bin

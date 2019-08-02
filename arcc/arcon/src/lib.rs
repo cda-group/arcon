@@ -45,6 +45,7 @@ pub mod prelude {
 
     pub use crate::data::{ArconElement, ArconType, ArconVec};
     pub use crate::weld::module::{Module, ModuleRun};
+    pub use weld_core::data::*;
 
     pub use kompact::default_components::*;
     pub use kompact::*;
