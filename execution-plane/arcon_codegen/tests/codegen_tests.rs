@@ -1,9 +1,9 @@
 extern crate arcon;
-extern crate codegen;
+extern crate arcon_codegen;
 extern crate compiletest_rs as compiletest;
 
-use codegen::*;
-use spec::*;
+use arcon_codegen::*;
+use arcon_spec::*;
 use std::fs;
 use std::path::PathBuf;
 

@@ -12,8 +12,8 @@ run-pass/
 Cargo.lock
 
 # Generated code
-grpc/src/arcc_grpc.rs
-grpc/src/arcc.rs
+arconc_grpc.rs
+arconc.rs
 
 # Compile workspace
 build/

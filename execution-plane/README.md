@@ -1,13 +1,16 @@
-# arcc
+# Execution Plane
 
-arcc is the Arc backend compiler targeting the Arcon runtime.
+Requires Rust nightly (See current toolchain [here](rust-toolchain)).
 
-Install Rust (Requires Nightly):
+* [`arcon`]: Crate containing the core execution engine
+* [`arcon_codegen`]: Code generation for Arcon
+* [`arcon_compiler`]: Backend compiler targeting Arcon 
+* [`arcon_spec`]: Implementation of the Arc specification
 
-
-```bash
-$ curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly
-```
+[`arcon`]: arcon
+[`arcon_codegen`]: arcon_codegen
+[`arcon_compiler`]: arcon_compiler
+[`arcon_spec`]: arcon_spec
 
 ## Ubuntu (>= 16.04)
 
@@ -57,7 +60,7 @@ $ cargo build --release
 Compile and start binary:
 
 ```bash
-$ ./target/release/arcc compile -s codegen/tests/specifications/basic_dataflow.json
+$ ./target/release/arconc compile -s arcon_codegen/tests/specifications/basic_dataflow.json
 $ ./build/target/release/basic_dataflow
 ```
 

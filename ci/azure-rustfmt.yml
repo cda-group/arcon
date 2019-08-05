@@ -1,0 +1,7 @@
+steps:
+  - script: |
+      rustup component add rustfmt-preview
+    displayName: Installing rustfmt
+  - script: |
+      cargo fmt --all
+    displayName: Run rustfmt

@@ -4,8 +4,8 @@ extern crate grpcio;
 extern crate protobuf;
 
 // Public Interface
-pub mod arcc;
-pub mod arcc_grpc;
+pub mod arconc;
+pub mod arconc_grpc;
 
 pub mod prelude {
     pub use futures::sync::*;

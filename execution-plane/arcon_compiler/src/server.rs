@@ -1,13 +1,13 @@
-use grpc::arcc::*;
+use grpc::arconc::*;
 use grpc::prelude::*;
 
-use grpc::arcc_grpc::create_compiler;
-use grpc::arcc_grpc::Compiler;
+use grpc::arconc_grpc::create_compiler;
+use grpc::arconc_grpc::Compiler;
 use std::io::Read;
 use std::sync::Arc;
 use std::{io, thread};
 
-use spec::ArcSpec;
+use arcon_spec::ArcSpec;
 
 #[derive(Clone)]
 struct CompilerService;

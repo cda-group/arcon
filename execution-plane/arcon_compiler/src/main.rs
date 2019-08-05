@@ -9,7 +9,7 @@ extern crate lazy_static;
 
 use clap::{App, AppSettings, Arg, SubCommand};
 use ferris_says::say;
-use spec::ArcSpec;
+use arcon_spec::*;
 use std::fs::metadata;
 use std::io::{stdout, BufWriter};
 use std::str::FromStr;
@@ -73,7 +73,7 @@ fn main() {
         .short("b")
         .help("Directory where arcc builds binaries");
 
-    let matches = App::new("Arc Compiler")
+    let matches = App::new("Arcon Compiler")
         .setting(AppSettings::ColoredHelp)
         .author(crate_authors!("\n"))
         .version(crate_version!())
@@ -106,12 +106,12 @@ fn main() {
                 .arg(&port_arg)
                 .arg(&host_arg)
                 .arg(&build_dir_arg)
-                .about("Launch Arc Compiler in gRPC server mode"),
+                .about("Launch Arcon Compiler in gRPC server mode"),
         )
         .subcommand(
             SubCommand::with_name("repl")
                 .setting(AppSettings::ColoredHelp)
-                .about("Arc REPL playground"),
+                .about("REPL playground"),
         )
         .subcommand(
             SubCommand::with_name("targets")
@@ -241,25 +241,25 @@ fn create_workspace_member(ws_path: &str, id: &str) -> Result<(), failure::Error
     std::fs::create_dir_all(path)?;
 
     let manifest_file = format!("{}/Cargo.toml", full_path);
-    codegen::to_file(manifest, manifest_file)?;
+    arcon_codegen::to_file(manifest, manifest_file)?;
 
     Ok(())
 }
 
 fn generate(build_dir: &str, spec: &ArcSpec) -> Result<(), failure::Error> {
-    let code = codegen::generate(&spec, false)?;
+    let code = arcon_codegen::generate(&spec, false)?;
     let path = format!("{}/{}/src/main.rs", build_dir, spec.id);
-    codegen::to_file(code, path)?;
+    arcon_codegen::to_file(code, path)?;
     let path = std::path::Path::new(build_dir);
     // Enter the directory for compilation...
     std::env::set_current_dir(&path)?;
     Ok(())
 }
 
-fn bin_path(id: &str, build_dir: &str, mode: &spec::CompileMode) -> String {
+fn bin_path(id: &str, build_dir: &str, mode: &CompileMode) -> String {
     let mode = match mode {
-        spec::CompileMode::Debug => "debug",
-        spec::CompileMode::Release => "release",
+        CompileMode::Debug => "debug",
+        CompileMode::Release => "release",
     };
 
     let mut dir = String::from(build_dir);
@@ -273,8 +273,8 @@ fn bin_path(id: &str, build_dir: &str, mode: &spec::CompileMode) -> String {
 
 fn greeting_with_spec(spec: &ArcSpec, bin_path: &str) {
     let mode = match spec.mode {
-        spec::CompileMode::Debug => "debug",
-        spec::CompileMode::Release => "release",
+        CompileMode::Debug => "debug",
+        CompileMode::Release => "release",
     };
 
     let features_str = {

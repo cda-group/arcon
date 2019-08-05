@@ -1,16 +1,20 @@
-trigger:
-- master
+trigger: ["master", "dev"]
+pr: ["master", "dev"]
 
 jobs:
 - job: Linux
   pool:
     vmImage: 'ubuntu-latest'
   steps:
-  - script: ./ci/unit_tests.sh
-    displayName: 'Unit tests'
+  - template: ci/azure-execution-plane.yml
+    parameters:
+      name: linux_arcon
+      displayName: 'Arcon execution plane'
 - job: MacOSX
   pool:
     vmImage: 'macOS-10.13'
   steps:
-  - script: ./ci/unit_tests.sh
-    displayName: 'Unit tests'
+  - template: ci/azure-execution-plane.yml
+    parameters:
+      name: macosx_arcon
+      displayName: 'Arcon execution plane'

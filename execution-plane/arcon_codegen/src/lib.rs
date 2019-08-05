@@ -5,6 +5,7 @@ extern crate quote;
 extern crate failure;
 extern crate proc_macro2;
 extern crate rustfmt_nightly;
+extern crate arcon_spec as spec;
 
 mod sink;
 mod source;

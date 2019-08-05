@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package arcc;
+package arconc;
 
 service Compiler {
   rpc Compile(CompileRequest) returns (CompileReply) {}

@@ -1,9 +1,9 @@
 [package]
-name = "arcc"
+name = "arcon_compiler"
 version = "0.1.0"
 authors = ["Max Meldrum <mmeldrum@kth.se>"]
 description = """
-arcc is a backend compiler targeting the Arcon runtime.
+arconc is the Arc backend compiler targeting the Arcon runtime.
 """
 edition = "2018"
 repository = "https://github.com/cda-group/arcon"
@@ -12,24 +12,12 @@ readme = "README.md"
 [[bin]]
 bench = false
 path = "src/main.rs"
-name = "arcc"
-
-[workspace]
-members = [
-    "codegen",
-    "arcon",
-    "spec",
-    "grpc",
-]
-
-exclude = [
-    "spec.json",
-]
+name = "arconc"
 
 [dependencies]
-codegen = { path = "codegen" }
+arcon_codegen = { path = "../arcon_codegen" }
+arcon_spec = { path = "../arcon_spec" }
 grpc = { path = "grpc" }
-spec = { path = "spec" }
 serde = { version = "1.0", features = ["derive"] }
 toml = "0.5"
 clap = "2.33.0"
