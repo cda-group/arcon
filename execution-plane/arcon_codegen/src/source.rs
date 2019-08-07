@@ -14,9 +14,14 @@ pub fn source(
     let input_type = to_token_stream(input_type);
 
     let source_stream = match source_type {
-        SourceKind::Socket { host, port, rate } => {
-            socket_source(&source_name, &target, &input_type, host, *port as usize, *rate)
-        }
+        SourceKind::Socket { host, port, rate } => socket_source(
+            &source_name,
+            &target,
+            &input_type,
+            host,
+            *port as usize,
+            *rate,
+        ),
     };
 
     source_stream

@@ -130,5 +130,4 @@ mod tests {
             rust_map_filter_reduce(&sensor_data);
         });
     }
-
 }

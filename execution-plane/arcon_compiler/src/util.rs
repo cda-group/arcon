@@ -1,5 +1,5 @@
-use std::process::{Command, Stdio};
 use arcon_spec::CompileMode;
+use std::process::{Command, Stdio};
 
 pub fn target_list() -> Result<String, failure::Error> {
     let output = Command::new("rustc")

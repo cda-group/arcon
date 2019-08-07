@@ -1,6 +1,5 @@
 #![allow(bare_trait_objects)]
 
-
 #[cfg(feature = "proto")]
 pub mod protobuf;
 

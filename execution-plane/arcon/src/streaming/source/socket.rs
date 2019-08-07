@@ -381,5 +381,4 @@ mod tests {
         assert_eq!(sink_inspect.watermarks.len(), (2 as usize));
         Ok(())
     }
-
 }

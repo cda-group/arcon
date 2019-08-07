@@ -2,10 +2,10 @@
 #![recursion_limit = "256"]
 #[macro_use]
 extern crate quote;
+extern crate arcon_spec as spec;
 extern crate failure;
 extern crate proc_macro2;
 extern crate rustfmt_nightly;
-extern crate arcon_spec as spec;
 
 mod sink;
 mod source;

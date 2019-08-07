@@ -1,8 +1,8 @@
+use crate::types::to_token_stream;
 use proc_macro2::{Ident, Span, TokenStream};
 use spec::ChannelKind::*;
 use spec::Task;
 use spec::TaskKind::{Filter, FlatMap, Map};
-use crate::types::to_token_stream;
 
 pub fn stream_task(
     node_name: &str,

@@ -7,9 +7,9 @@ extern crate failure;
 #[macro_use]
 extern crate lazy_static;
 
+use arcon_spec::*;
 use clap::{App, AppSettings, Arg, SubCommand};
 use ferris_says::say;
-use arcon_spec::*;
 use std::fs::metadata;
 use std::io::{stdout, BufWriter};
 use std::str::FromStr;

@@ -2,8 +2,8 @@ extern crate rocksdb;
 
 use rocksdb::{Options, DB};
 
-use arcon_error::*;
 use crate::StateBackend;
+use arcon_error::*;
 
 pub struct RocksDB {
     db: DB,
