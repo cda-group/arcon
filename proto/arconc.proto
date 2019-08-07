@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package arconc;
+
+service Compiler {
+  rpc Compile(CompileRequest) returns (CompileReply) {}
+}
+
+message CompileRequest {
+  bytes spec = 1;
+}
+
+message CompileReply {
+  string message = 1;
+}

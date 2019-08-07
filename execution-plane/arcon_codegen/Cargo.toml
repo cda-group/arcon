@@ -1,0 +1,18 @@
+[package]
+name = "arcon_codegen"
+version = "0.1.0"
+authors = ["Max Meldrum <mmeldrum@kth.se>"]
+description = "Code generation for Arcon thorugh the use of Quasi-quoting."
+edition = "2018"
+publish = false
+
+[dependencies]
+arcon_spec = { path = "../arcon_spec" }
+quote = "0.6"
+proc-macro2 = "0.4"
+rustfmt-nightly = "1.2.2"
+failure = "0.1.5"
+
+[dev-dependencies]
+compiletest_rs = { version = "*", features = ["tmp"] }
+arcon = { path = "../arcon" }

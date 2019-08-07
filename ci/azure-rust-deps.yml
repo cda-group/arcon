@@ -1,0 +1,7 @@
+steps:
+  - script: |
+      set -e
+      ./ci/scripts/install_protobuf.sh
+      ./ci/scripts/install_capnproto.sh
+      ./ci/scripts/install_llvm.sh
+    displayName: "Install Rust Dependencies"

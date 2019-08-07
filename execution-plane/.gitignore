@@ -1,0 +1,19 @@
+.swp
+.swo
+*.rs.swm
+*.rs.swn
+*.rs.swl
+*.rs.swo
+*.rs.swp
+*.proto.swp
+target/
+spec.json
+run-pass/
+Cargo.lock
+
+# Generated code
+#arconc_grpc.rs
+#arconc.rs
+
+# Compile workspace
+build/

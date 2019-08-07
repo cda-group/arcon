@@ -1,0 +1,8 @@
+[workspace]
+
+members = [
+  "arcon",
+  "arcon_codegen",
+  "arcon_compiler",
+  "arcon_spec",
+]

@@ -1,0 +1,7 @@
+steps:
+  - script: |
+      rustup component add --toolchain nightly rustfmt
+    displayName: Installing rustfmt
+  - script: |
+      cd execution-plane && cargo +nightly fmt --all
+    displayName: Run rustfmt
