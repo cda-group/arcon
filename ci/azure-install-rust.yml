@@ -6,4 +6,7 @@ steps:
       rustup toolchain install $RUST_TOOLCHAIN
       rustup default $RUST_TOOLCHAIN
       echo "##vso[task.setvariable variable=PATH;]$PATH:$HOME/.cargo/bin"
-    displayName: "Linux/MacOSX"
+      rustup toolchain install nightly
+      rustup update
+      rustc -Vv
+    displayName: "Install Rust"

@@ -1,6 +1,6 @@
 steps:
   - script: |
-      rustup component add rustfmt-preview
+      rustup component add rustfmt
     displayName: Installing rustfmt
   - script: |
       cargo fmt --all
