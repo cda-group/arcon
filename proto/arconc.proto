@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package arconc;
 
-service Compiler {
+service Arconc {
   rpc Compile(CompileRequest) returns (CompileReply) {}
 }
 

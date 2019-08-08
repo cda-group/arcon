@@ -367,8 +367,8 @@ impl ::protobuf::reflect::ProtobufValue for CompileReply {
 static file_descriptor_proto_data: &'static [u8] = b"\
     \n\x0carconc.proto\x12\x06arconc\"$\n\x0eCompileRequest\x12\x12\n\x04spe\
     c\x18\x01\x20\x01(\x0cR\x04spec\"(\n\x0cCompileReply\x12\x18\n\x07messag\
-    e\x18\x01\x20\x01(\tR\x07message2E\n\x08Compiler\x129\n\x07Compile\x12\
-    \x16.arconc.CompileRequest\x1a\x14.arconc.CompileReply\"\0b\x06proto3\
+    e\x18\x01\x20\x01(\tR\x07message2C\n\x06Arconc\x129\n\x07Compile\x12\x16\
+    .arconc.CompileRequest\x1a\x14.arconc.CompileReply\"\0b\x06proto3\
 ";
 
 static mut file_descriptor_proto_lazy: ::protobuf::lazy::Lazy<::protobuf::descriptor::FileDescriptorProto> = ::protobuf::lazy::Lazy {

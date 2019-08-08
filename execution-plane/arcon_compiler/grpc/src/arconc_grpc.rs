@@ -18,27 +18,27 @@
 #![allow(unused_imports)]
 #![allow(unused_results)]
 
-const METHOD_COMPILER_COMPILE: ::grpcio::Method<super::arconc::CompileRequest, super::arconc::CompileReply> = ::grpcio::Method {
+const METHOD_ARCONC_COMPILE: ::grpcio::Method<super::arconc::CompileRequest, super::arconc::CompileReply> = ::grpcio::Method {
     ty: ::grpcio::MethodType::Unary,
-    name: "/arconc.Compiler/Compile",
+    name: "/arconc.Arconc/Compile",
     req_mar: ::grpcio::Marshaller { ser: ::grpcio::pb_ser, de: ::grpcio::pb_de },
     resp_mar: ::grpcio::Marshaller { ser: ::grpcio::pb_ser, de: ::grpcio::pb_de },
 };
 
 #[derive(Clone)]
-pub struct CompilerClient {
+pub struct ArconcClient {
     client: ::grpcio::Client,
 }
 
-impl CompilerClient {
+impl ArconcClient {
     pub fn new(channel: ::grpcio::Channel) -> Self {
-        CompilerClient {
+        ArconcClient {
             client: ::grpcio::Client::new(channel),
         }
     }
 
     pub fn compile_opt(&self, req: &super::arconc::CompileRequest, opt: ::grpcio::CallOption) -> ::grpcio::Result<super::arconc::CompileReply> {
-        self.client.unary_call(&METHOD_COMPILER_COMPILE, req, opt)
+        self.client.unary_call(&METHOD_ARCONC_COMPILE, req, opt)
     }
 
     pub fn compile(&self, req: &super::arconc::CompileRequest) -> ::grpcio::Result<super::arconc::CompileReply> {
@@ -46,7 +46,7 @@ impl CompilerClient {
     }
 
     pub fn compile_async_opt(&self, req: &super::arconc::CompileRequest, opt: ::grpcio::CallOption) -> ::grpcio::Result<::grpcio::ClientUnaryReceiver<super::arconc::CompileReply>> {
-        self.client.unary_call_async(&METHOD_COMPILER_COMPILE, req, opt)
+        self.client.unary_call_async(&METHOD_ARCONC_COMPILE, req, opt)
     }
 
     pub fn compile_async(&self, req: &super::arconc::CompileRequest) -> ::grpcio::Result<::grpcio::ClientUnaryReceiver<super::arconc::CompileReply>> {
@@ -57,14 +57,14 @@ impl CompilerClient {
     }
 }
 
-pub trait Compiler {
+pub trait Arconc {
     fn compile(&mut self, ctx: ::grpcio::RpcContext, req: super::arconc::CompileRequest, sink: ::grpcio::UnarySink<super::arconc::CompileReply>);
 }
 
-pub fn create_compiler<S: Compiler + Send + Clone + 'static>(s: S) -> ::grpcio::Service {
+pub fn create_arconc<S: Arconc + Send + Clone + 'static>(s: S) -> ::grpcio::Service {
     let mut builder = ::grpcio::ServiceBuilder::new();
     let mut instance = s.clone();
-    builder = builder.add_unary_handler(&METHOD_COMPILER_COMPILE, move |ctx, req, resp| {
+    builder = builder.add_unary_handler(&METHOD_ARCONC_COMPILE, move |ctx, req, resp| {
         instance.compile(ctx, req, resp)
     });
     builder.build()
