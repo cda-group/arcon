@@ -1,5 +1,6 @@
 use grpc::arconc::*;
-use grpc::prelude::{Environment, RpcContext, ServerBuilder, UnarySink};
+use grpc::futures::*;
+use grpc::grpcio::{Environment, RpcContext, ServerBuilder, UnarySink};
 
 use grpc::arconc_grpc::create_arconc;
 use grpc::arconc_grpc::Arconc;
@@ -20,47 +21,63 @@ impl Server {
         }
     }
 
-    pub fn compile_spec(&mut self, spec: &ArcSpec) -> Result<(), failure::Error> {
+    pub fn compile_spec(&mut self, spec: &ArcSpec) -> Result<String, failure::Error> {
+        let mut path = String::new();
         {
             let mut env = self.env.lock().unwrap();
             env.add_project(spec.id.clone())?;
-            env.create_workspace_member(&env.root, &spec.id)?;
-            env.generate(&env.root, &spec)?;
+            env.create_workspace_member(&spec.id)?;
+            env.generate(&spec)?;
+            let p: String = env.bin_path(&spec.id, &spec.mode)?;
+            path += &p;
         }
         crate::util::cargo_build(&spec.mode)?;
-        Ok(())
+        Ok(path)
     }
 }
 
 impl Arconc for Server {
-    fn compile(&mut self, _ctx: RpcContext, req: CompileRequest, _sink: UnarySink<CompileReply>) {
-        match ArcSpec::from_bytes(&req.spec) {
+    fn compile(&mut self, ctx: RpcContext, req: ArconcRequest, sink: UnarySink<ArconcReply>) {
+        let reply = match ArcSpec::from_bytes(&req.spec) {
             Ok(spec) => {
                 debug!("Received Compilation Request {:?}", spec);
                 match self.compile_spec(&spec) {
-                    Ok(()) => {
+                    Ok(bin_path) => {
                         debug!("Compiled {:?} successfully", spec.id);
-                        // TODO: reply to gRPC sender with path to binary
+                        let mut success = ArconcSuccess::default();
+                        success.set_path(bin_path);
+                        let mut resp = ArconcReply::default();
+                        resp.set_success(success);
+                        resp
                     }
                     Err(err) => {
                         error!("Failed to compile with err {:?}", err);
-                        // TODO: reply to gRPC sender with failure reason
+                        let mut err_msg = ArconcError::default();
+                        err_msg.set_message(err.to_string());
+                        let mut reply = ArconcReply::default();
+                        reply.set_error(err_msg);
+                        reply
                     }
                 }
             }
             Err(err) => {
                 error!("Failed to parse specification with err {:?}", err);
-                // TODO: reply to gRPC sender with failure reason
+                let mut err_msg = ArconcError::default();
+                err_msg.set_message(err.to_string());
+                let mut reply = ArconcReply::default();
+                reply.set_error(err_msg);
+                reply
             }
-        }
+        };
+
+        let f = sink
+            .success(reply)
+            .map_err(move |e| error!("failed to reply {:?}: {:?}", req, e));
+        ctx.spawn(f)
     }
 }
 
-pub fn start_server(
-    host: &str,
-    port: i32,
-    compiler_env: CompilerEnv,
-) {
+pub fn start_server(host: &str, port: i32, compiler_env: CompilerEnv) {
     let env = Arc::new(Environment::new(num_cpus::get()));
     let server = Server::new(compiler_env);
     let service = create_arconc(server);

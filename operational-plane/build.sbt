@@ -69,12 +69,20 @@ lazy val statemaster = (project in file("statemaster"))
   .settings(Sigar.loader())
 
 lazy val appmaster = (project in file("appmaster"))
-  .dependsOn(protobuf, common % "test->test; compile->compile")
+  .dependsOn(common % "test->test; compile->compile")
   .settings(arconSettings: _*)
   .settings(Dependencies.appmaster)
   .settings(moduleName("appmaster"))
-  .settings(Assembly.settings("appmaster.System", "appmaster.jar"))
-  .settings(Sigar.loader())
+  .settings(Assembly.settings("appmaster.Appmaster", "appmaster.jar"))
+  .settings(
+    javaAgents += "org.mortbay.jetty.alpn" % "jetty-alpn-agent" % "2.0.9" % "runtime;test"
+  )
+  .enablePlugins(JavaAgent)
+  .enablePlugins(AkkaGrpcPlugin)
+  .settings(
+    PB.protoSources in Compile := Seq(file("../proto/"))
+  )
+
 
 lazy val coordinator = (project in file("coordinator"))
   .dependsOn(protobuf, common, kompactExtension % "test->test; compile->compile")

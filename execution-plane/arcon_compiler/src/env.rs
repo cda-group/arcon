@@ -1,9 +1,11 @@
 #![allow(dead_code)]
 
+use arcon_spec::{ArcSpec, CompileMode};
 use failure::Fail;
+use path_clean::PathClean;
 use serde::{Deserialize, Serialize};
 use std::fs;
-use arcon_spec::ArcSpec;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Fail)]
 #[fail(display = "CompilerEnv: `{}`", msg)]
@@ -52,12 +54,12 @@ impl CompilerEnv {
     pub fn add_project(&mut self, id: String) -> Result<(), CompileEnvError> {
         if self.config.workspace.members.contains(&id) {
             let err_msg = format!("Workspace member {} already exists", id);
-            Err(CompileEnvError { msg: err_msg }) 
+            Err(CompileEnvError { msg: err_msg })
         } else {
             debug!("Adding Workspace member {}", id);
             self.config.workspace.members.push(id.clone());
             self.update_env()
-                .map_err(|_| CompileEnvError { msg: "Failed to update compiler env {}".to_string() })
+                .map_err(|e| CompileEnvError { msg: e.to_string() })
         }
     }
 
@@ -68,13 +70,13 @@ impl CompilerEnv {
 
     fn update_env(&mut self) -> Result<(), failure::Error> {
         let toml = toml::to_string(&self.config)?;
-        std::fs::write(&self.manifest(), toml)?;
+        std::fs::write("Cargo.toml", toml)?;
         Ok(())
     }
 
     /// Creates a Workspace member with a Cargo.toml and src/ directory
-    pub fn create_workspace_member(&self, ws_path: &str, id: &str) -> Result<(), failure::Error> {
-        let full_path = format!("{}/{}", ws_path, id);
+    pub fn create_workspace_member(&self, id: &str) -> Result<(), failure::Error> {
+        let full_path = format!("{}", id);
 
         let manifest = format!(
             "[package] \
@@ -96,15 +98,35 @@ impl CompilerEnv {
         Ok(())
     }
 
-    pub fn generate(&self, build_dir: &str, spec: &ArcSpec) -> Result<(), failure::Error> {
+    pub fn generate(&self, spec: &ArcSpec) -> Result<(), failure::Error> {
         let code = arcon_codegen::generate(&spec, false)?;
-        let path = format!("{}/{}/src/main.rs", build_dir, spec.id);
+        let path = format!("{}/src/main.rs", spec.id);
         arcon_codegen::to_file(code, path)?;
         Ok(())
     }
 
-    fn manifest(&mut self) -> String {
-        format!("{}/Cargo.toml", self.root)
+    pub fn bin_path(&self, id: &str, mode: &CompileMode) -> Result<String, failure::Error> {
+        let mode = match mode {
+            CompileMode::Debug => "debug",
+            CompileMode::Release => "release",
+        };
+
+        let path_str = format!("target/{}/{}", mode, id);
+        let path = std::path::Path::new(&path_str);
+        let abs_path = self.absolute_path(path)?;
+        Ok(abs_path.into_os_string().into_string().unwrap())
+    }
+
+    fn absolute_path<P>(&self, path: P) -> std::io::Result<PathBuf>
+    where
+        P: AsRef<Path>,
+    {
+        let path = path.as_ref();
+        if path.is_absolute() {
+            Ok(path.to_path_buf().clean())
+        } else {
+            Ok(std::env::current_dir()?.join(path).clean())
+        }
     }
 
     pub fn destroy(&mut self) -> Result<(), failure::Error> {

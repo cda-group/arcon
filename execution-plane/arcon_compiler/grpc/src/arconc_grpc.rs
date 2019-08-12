@@ -18,7 +18,7 @@
 #![allow(unused_imports)]
 #![allow(unused_results)]
 
-const METHOD_ARCONC_COMPILE: ::grpcio::Method<super::arconc::CompileRequest, super::arconc::CompileReply> = ::grpcio::Method {
+const METHOD_ARCONC_COMPILE: ::grpcio::Method<super::arconc::ArconcRequest, super::arconc::ArconcReply> = ::grpcio::Method {
     ty: ::grpcio::MethodType::Unary,
     name: "/arconc.Arconc/Compile",
     req_mar: ::grpcio::Marshaller { ser: ::grpcio::pb_ser, de: ::grpcio::pb_de },
@@ -37,19 +37,19 @@ impl ArconcClient {
         }
     }
 
-    pub fn compile_opt(&self, req: &super::arconc::CompileRequest, opt: ::grpcio::CallOption) -> ::grpcio::Result<super::arconc::CompileReply> {
+    pub fn compile_opt(&self, req: &super::arconc::ArconcRequest, opt: ::grpcio::CallOption) -> ::grpcio::Result<super::arconc::ArconcReply> {
         self.client.unary_call(&METHOD_ARCONC_COMPILE, req, opt)
     }
 
-    pub fn compile(&self, req: &super::arconc::CompileRequest) -> ::grpcio::Result<super::arconc::CompileReply> {
+    pub fn compile(&self, req: &super::arconc::ArconcRequest) -> ::grpcio::Result<super::arconc::ArconcReply> {
         self.compile_opt(req, ::grpcio::CallOption::default())
     }
 
-    pub fn compile_async_opt(&self, req: &super::arconc::CompileRequest, opt: ::grpcio::CallOption) -> ::grpcio::Result<::grpcio::ClientUnaryReceiver<super::arconc::CompileReply>> {
+    pub fn compile_async_opt(&self, req: &super::arconc::ArconcRequest, opt: ::grpcio::CallOption) -> ::grpcio::Result<::grpcio::ClientUnaryReceiver<super::arconc::ArconcReply>> {
         self.client.unary_call_async(&METHOD_ARCONC_COMPILE, req, opt)
     }
 
-    pub fn compile_async(&self, req: &super::arconc::CompileRequest) -> ::grpcio::Result<::grpcio::ClientUnaryReceiver<super::arconc::CompileReply>> {
+    pub fn compile_async(&self, req: &super::arconc::ArconcRequest) -> ::grpcio::Result<::grpcio::ClientUnaryReceiver<super::arconc::ArconcReply>> {
         self.compile_async_opt(req, ::grpcio::CallOption::default())
     }
     pub fn spawn<F>(&self, f: F) where F: ::futures::Future<Item = (), Error = ()> + Send + 'static {
@@ -58,7 +58,7 @@ impl ArconcClient {
 }
 
 pub trait Arconc {
-    fn compile(&mut self, ctx: ::grpcio::RpcContext, req: super::arconc::CompileRequest, sink: ::grpcio::UnarySink<super::arconc::CompileReply>);
+    fn compile(&mut self, ctx: ::grpcio::RpcContext, req: super::arconc::ArconcRequest, sink: ::grpcio::UnarySink<super::arconc::ArconcReply>);
 }
 
 pub fn create_arconc<S: Arconc + Send + Clone + 'static>(s: S) -> ::grpcio::Service {

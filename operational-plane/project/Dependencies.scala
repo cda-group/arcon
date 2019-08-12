@@ -19,8 +19,8 @@ object Dependencies {
   )
 
   val logDependencies: Seq[ModuleID] = Seq(
-    "com.typesafe.scala-logging" %% "scala-logging" % loggingVersion
-    //"ch.qos.logback" % "logback-classic" % logbackVersion
+    "com.typesafe.scala-logging" %% "scala-logging" % loggingVersion,
+    "ch.qos.logback" % "logback-classic" % logbackVersion
   )
 
   val logbackDependencies: Seq[ModuleID] = Seq(
@@ -90,7 +90,7 @@ object Dependencies {
 
   // Actual Dependencies
   val statemasterDeps: Seq[ModuleID] = basic ++ akkaDependencies ++ sigarDependencies
-  val appmasterDeps: Seq[ModuleID] = basic ++ akkaDependencies ++ sigarDependencies
+  val appmasterDeps: Seq[ModuleID] = basic
   val coordinatorDeps: Seq[ModuleID] = basic ++ akkaDependencies ++ sigarDependencies
   val protobufDeps: Seq[ModuleID] = testDependencies ++ protobufDependencies ++ akkaDependencies
   val kompactExtDeps: Seq[ModuleID] = basic ++ protobufDependencies ++ nettyDependencies ++ simpleAkkaDependencies ++ logbackDependencies
