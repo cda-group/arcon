@@ -17,7 +17,7 @@ pub struct SpecError {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ArcSpec {
+pub struct ArconSpec {
     pub id: String,
     #[serde(default = "release")]
     pub mode: CompileMode,
@@ -243,7 +243,7 @@ pub enum MergeOp {
     Min,
 }
 
-/// Default Serde Implementations for `ArcSpec`
+/// Default Serde Implementations for `ArconSpec`
 
 fn forward() -> ChannelStrategy {
     ChannelStrategy::Forward
@@ -265,16 +265,16 @@ fn parallelism() -> u32 {
     1
 }
 
-impl ArcSpec {
-    pub fn load(path: &str) -> Result<ArcSpec, SpecError> {
+impl ArconSpec {
+    pub fn load(path: &str) -> Result<ArconSpec, SpecError> {
         let file = File::open(path).map_err(|e| SpecError { msg: e.to_string() })?;
         serde_json::from_reader(file).map_err(|e| SpecError { msg: e.to_string() })
     }
-    pub fn from_bytes(bytes: &[u8]) -> Result<ArcSpec, SpecError> {
+    pub fn from_bytes(bytes: &[u8]) -> Result<ArconSpec, SpecError> {
         serde_json::from_slice(bytes).map_err(|e| SpecError { msg: e.to_string() })
     }
 
-    pub fn from_string(input: &str) -> Result<ArcSpec, SpecError> {
+    pub fn from_string(input: &str) -> Result<ArconSpec, SpecError> {
         serde_json::from_str(input).map_err(|e| SpecError { msg: e.to_string() })
     }
 }
@@ -285,7 +285,7 @@ mod tests {
     use std::io::Write;
     use tempfile::NamedTempFile;
 
-    static ARC_SPEC_JSON: &str = r#"
+    static ARCON_SPEC_JSON: &str = r#"
         {
             "id": "some_id",
             "target": "x86-64-unknown-linux-gnu",
@@ -395,22 +395,22 @@ mod tests {
 
     #[test]
     fn arc_spec_string_test() {
-        let arc_spec: ArcSpec = serde_json::from_str(ARC_SPEC_JSON).unwrap();
-        assert_eq!(arc_spec.id, "some_id");
+        let arcon_spec: ArconSpec = serde_json::from_str(ARCON_SPEC_JSON).unwrap();
+        assert_eq!(arcon_spec.id, "some_id");
     }
 
     #[test]
     fn arc_spec_bytes_test() {
-        let raw = ARC_SPEC_JSON.as_bytes();
-        let arc_spec = ArcSpec::from_bytes(raw);
-        assert_eq!(arc_spec.is_ok(), true);
+        let raw = ARCON_SPEC_JSON.as_bytes();
+        let arcon_spec = ArconSpec::from_bytes(raw);
+        assert_eq!(arcon_spec.is_ok(), true);
     }
 
     #[test]
     fn arc_spec_file_test() {
         let mut file = NamedTempFile::new().unwrap();
-        writeln!(file, "{}", ARC_SPEC_JSON).unwrap();
-        let arc_spec = ArcSpec::load(file.path().to_str().unwrap());
-        assert_eq!(arc_spec.is_ok(), true);
+        writeln!(file, "{}", ARCON_SPEC_JSON).unwrap();
+        let arcon_spec = ArconSpec::load(file.path().to_str().unwrap());
+        assert_eq!(arcon_spec.is_ok(), true);
     }
 }

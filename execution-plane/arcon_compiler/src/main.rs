@@ -168,7 +168,7 @@ fn compile(spec_path: &str, build_dir: &str, daemonize: bool) -> Result<(), fail
         }
     };
 
-    let spec = ArcSpec::load(&spec_file)?;
+    let spec = ArconSpec::load(&spec_file)?;
 
     let mut env = env::CompilerEnv::load(build_dir.to_string())?;
 
@@ -211,7 +211,7 @@ fn repl() -> Result<(), failure::Error> {
     Ok(())
 }
 
-fn greeting_with_spec(spec: &ArcSpec, bin_path: &str) {
+fn greeting_with_spec(spec: &ArconSpec, bin_path: &str) {
     let mode = match spec.mode {
         CompileMode::Debug => "debug",
         CompileMode::Release => "release",

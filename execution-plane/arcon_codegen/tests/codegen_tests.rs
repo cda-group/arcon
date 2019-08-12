@@ -54,7 +54,7 @@ fn codegen_test() {
 
 fn add_test_spec(name: &str) {
     let json_path = format!("{}/{}.json", SPECIFICATION_PATH, name);
-    let spec = ArcSpec::load(&json_path).unwrap();
+    let spec = ArconSpec::load(&json_path).unwrap();
     let generated_code = generate(&spec, true).unwrap();
     let path = format!("{}/{}.rs", RUN_PASS_PATH, name);
     let _ = to_file(generated_code, path.to_string());

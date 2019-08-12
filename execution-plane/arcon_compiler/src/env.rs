@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use arcon_spec::{ArcSpec, CompileMode};
+use arcon_spec::{ArconSpec, CompileMode};
 use failure::Fail;
 use path_clean::PathClean;
 use serde::{Deserialize, Serialize};
@@ -98,7 +98,7 @@ impl CompilerEnv {
         Ok(())
     }
 
-    pub fn generate(&self, spec: &ArcSpec) -> Result<(), failure::Error> {
+    pub fn generate(&self, spec: &ArconSpec) -> Result<(), failure::Error> {
         let code = arcon_codegen::generate(&spec, false)?;
         let path = format!("{}/src/main.rs", spec.id);
         arcon_codegen::to_file(code, path)?;

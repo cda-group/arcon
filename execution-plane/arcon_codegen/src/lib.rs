@@ -19,7 +19,7 @@ use proc_macro2::TokenStream;
 use rustfmt_nightly::*;
 use std::fs;
 
-use spec::ArcSpec;
+use spec::ArconSpec;
 use spec::NodeKind::{Sink, Source, Task, Window};
 
 #[derive(Debug, Fail)]
@@ -53,8 +53,8 @@ pub fn to_file(input: String, path: String) -> std::result::Result<(), std::io::
     fs::write(&path, input)
 }
 
-/// Generates a main.rs by parsing an `ArcSpec`
-pub fn generate(spec: &ArcSpec, is_terminated: bool) -> Result<String, CodegenError> {
+/// Generates a main.rs by parsing an `ArconSpec`
+pub fn generate(spec: &ArconSpec, is_terminated: bool) -> Result<String, CodegenError> {
     let mut nodes = spec.nodes.clone();
     let mut stream: Vec<TokenStream> = Vec::new();
     let mut previous_node: String = String::new();

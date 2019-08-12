@@ -7,7 +7,7 @@ use grpc::arconc_grpc::Arconc;
 use std::sync::{Arc, Mutex};
 
 use crate::env::CompilerEnv;
-use arcon_spec::ArcSpec;
+use arcon_spec::ArconSpec;
 
 #[derive(Clone)]
 struct Server {
@@ -21,7 +21,7 @@ impl Server {
         }
     }
 
-    pub fn compile_spec(&mut self, spec: &ArcSpec) -> Result<String, failure::Error> {
+    pub fn compile_spec(&mut self, spec: &ArconSpec) -> Result<String, failure::Error> {
         let mut path = String::new();
         {
             let mut env = self.env.lock().unwrap();
@@ -38,7 +38,7 @@ impl Server {
 
 impl Arconc for Server {
     fn compile(&mut self, ctx: RpcContext, req: ArconcRequest, sink: UnarySink<ArconcReply>) {
-        let reply = match ArcSpec::from_bytes(&req.spec) {
+        let reply = match ArconSpec::from_bytes(&req.spec) {
             Ok(spec) => {
                 debug!("Received Compilation Request {:?}", spec);
                 match self.compile_spec(&spec) {

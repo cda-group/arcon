@@ -5,7 +5,7 @@ Requires Rust nightly (See current toolchain [here](rust-toolchain)).
 * [`arcon`]: Crate containing the core execution engine
 * [`arcon_codegen`]: Code generation for Arcon
 * [`arcon_compiler`]: Backend compiler targeting Arcon 
-* [`arcon_spec`]: Implementation of the Arc specification
+* [`arcon_spec`]: Implementation of the Arcon specification
 
 [`arcon`]: arcon
 [`arcon_codegen`]: arcon_codegen
