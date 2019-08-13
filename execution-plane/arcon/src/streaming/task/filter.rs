@@ -1,7 +1,7 @@
 use crate::data::{ArconElement, ArconEvent, ArconType, Watermark};
 use crate::error::*;
 use crate::streaming::channel::strategy::ChannelStrategy;
-use crate::streaming::channel::{Channel, ChannelPort};
+use crate::streaming::channel::Channel;
 use crate::streaming::task::TaskMetric;
 use crate::weld::*;
 use arcon_macros::arcon_task;
@@ -11,34 +11,30 @@ use weld::*;
 
 #[arcon_task]
 #[derive(ComponentDefinition)]
-pub struct Filter<IN, PORT>
+pub struct Filter<IN>
 where
     IN: 'static + ArconType,
-    PORT: Port<Request = ArconEvent<IN>> + 'static + Clone,
 {
     ctx: ComponentContext<Self>,
-    _in_channels: Vec<Channel<IN, PORT, Self>>,
-    out_channels: Box<ChannelStrategy<IN, PORT, Self>>,
-    pub event_port: ProvidedPort<ChannelPort<IN>, Self>,
+    _in_channels: Vec<Channel>,
+    out_channels: Box<ChannelStrategy<IN, Self>>,
     udf: Arc<Module>,
     udf_ctx: WeldContext,
     metric: TaskMetric,
 }
 
-impl<IN, PORT> Filter<IN, PORT>
+impl<IN> Filter<IN>
 where
     IN: 'static + ArconType,
-    PORT: Port<Request = ArconEvent<IN>> + 'static + Clone,
 {
     pub fn new(
         udf: Arc<Module>,
-        in_channels: Vec<Channel<IN, PORT, Self>>,
-        out_channels: Box<ChannelStrategy<IN, PORT, Self>>,
+        in_channels: Vec<Channel>,
+        out_channels: Box<ChannelStrategy<IN, Self>>,
     ) -> Self {
         let ctx = WeldContext::new(&udf.conf()).unwrap();
         Filter {
             ctx: ComponentContext::new(),
-            event_port: ProvidedPort::new(),
             _in_channels: in_channels,
             out_channels,
             udf: udf.clone(),
@@ -73,7 +69,7 @@ where
     }
 
     fn push_out(&mut self, event: ArconEvent<IN>) -> ArconResult<()> {
-        let self_ptr = self as *const Filter<IN, PORT>;
+        let self_ptr = self as *const Filter<IN>;
         let _ = self.out_channels.output(event, self_ptr)?;
         Ok(())
     }
@@ -97,9 +93,8 @@ mod tests {
         });
 
         let channel = Channel::Local(sink_comp.actor_ref());
-        let channel_strategy: Box<
-            ChannelStrategy<i32, ChannelPort<i32>, Filter<i32, ChannelPort<i32>>>,
-        > = Box::new(Forward::new(channel));
+        let channel_strategy: Box<ChannelStrategy<i32, Filter<i32>>> =
+            Box::new(Forward::new(channel));
 
         let weld_code = String::from("|x: i32| x > 5");
         let module = Arc::new(Module::new(weld_code).unwrap());
@@ -109,9 +104,9 @@ mod tests {
         let input_one = ArconElement::new(6 as i32);
         let input_two = ArconElement::new(2 as i32);
 
-        let event_port = filter_task.on_definition(|c| c.event_port.share());
-        system.trigger_r(ArconEvent::Element(input_one), &event_port);
-        system.trigger_r(ArconEvent::Element(input_two), &event_port);
+        let target_ref = filter_task.actor_ref();
+        target_ref.tell(Box::new(ArconEvent::Element(input_one)), &target_ref);
+        target_ref.tell(Box::new(ArconEvent::Element(input_two)), &target_ref);
 
         std::thread::sleep(std::time::Duration::from_secs(1));
         let comp_inspect = &sink_comp.definition().lock().unwrap();

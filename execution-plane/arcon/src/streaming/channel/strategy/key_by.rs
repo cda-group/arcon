@@ -3,37 +3,38 @@ use crate::error::*;
 use crate::streaming::channel::strategy::{channel_output, ChannelStrategy};
 use crate::streaming::channel::Channel;
 use fnv::FnvHasher;
-use kompact::{ComponentDefinition, Port, Require};
+use kompact::ComponentDefinition;
 use std::collections::HashMap;
 use std::default::Default;
 use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
+use std::marker::PhantomData;
 
 /// A hash based partitioner
 ///
 /// `KeyBy` may be constructed with
 /// either a custom hasher or the default `FnvHasher`
-pub struct KeyBy<A, B, C, D = BuildHasherDefault<FnvHasher>>
+pub struct KeyBy<A, B, D = BuildHasherDefault<FnvHasher>>
 where
     A: 'static + ArconType + Hash,
-    B: Port<Request = ArconEvent<A>> + 'static + Clone,
-    C: ComponentDefinition + Sized + 'static + Require<B>,
+    B: ComponentDefinition + Sized + 'static,
 {
     builder: D,
     parallelism: u32,
-    map: HashMap<usize, Channel<A, B, C>, D>,
+    map: HashMap<usize, Channel, D>,
+    phantom_a: PhantomData<A>,
+    phantom_b: PhantomData<B>,
 }
 
-impl<A, B, C> KeyBy<A, B, C>
+impl<A, B> KeyBy<A, B>
 where
     A: 'static + ArconType + Hash,
-    B: Port<Request = ArconEvent<A>> + 'static + Clone,
-    C: ComponentDefinition + Sized + 'static + Require<B>,
+    B: ComponentDefinition + Sized + 'static,
 {
     pub fn with_hasher<H: BuildHasher + Default>(
         builder: H,
         parallelism: u32,
-        channels: Vec<Channel<A, B, C>>,
-    ) -> KeyBy<A, B, C, H> {
+        channels: Vec<Channel>,
+    ) -> KeyBy<A, B, H> {
         assert_eq!(channels.len(), parallelism as usize);
         let mut map = HashMap::with_capacity_and_hasher(parallelism as usize, Default::default());
         for (i, channel) in channels.into_iter().enumerate() {
@@ -43,10 +44,12 @@ where
             builder: builder.into(),
             parallelism,
             map,
+            phantom_a: PhantomData,
+            phantom_b: PhantomData,
         }
     }
 
-    pub fn with_default_hasher(parallelism: u32, channels: Vec<Channel<A, B, C>>) -> Self {
+    pub fn with_default_hasher(parallelism: u32, channels: Vec<Channel>) -> Self {
         assert_eq!(channels.len(), parallelism as usize);
         let mut map = HashMap::with_capacity_and_hasher(parallelism as usize, Default::default());
         for (i, channel) in channels.into_iter().enumerate() {
@@ -56,17 +59,18 @@ where
             builder: BuildHasherDefault::<FnvHasher>::default(),
             parallelism,
             map,
+            phantom_a: PhantomData,
+            phantom_b: PhantomData,
         }
     }
 }
 
-impl<A, B, C> ChannelStrategy<A, B, C> for KeyBy<A, B, C>
+impl<A, B> ChannelStrategy<A, B> for KeyBy<A, B>
 where
     A: 'static + ArconType + Hash,
-    B: Port<Request = ArconEvent<A>> + 'static + Clone,
-    C: ComponentDefinition + Sized + 'static + Require<B>,
+    B: ComponentDefinition + Sized + 'static,
 {
-    fn output(&mut self, event: ArconEvent<A>, source: *const C) -> ArconResult<()> {
+    fn output(&mut self, event: ArconEvent<A>, source: *const B) -> ArconResult<()> {
         match event {
             ArconEvent::Element(element) => {
                 let mut h = self.builder.build_hasher();
@@ -91,27 +95,25 @@ where
         Ok(())
     }
 
-    fn add_channel(&mut self, _channel: Channel<A, B, C>) {
+    fn add_channel(&mut self, _channel: Channel) {
         unimplemented!();
     }
-    fn remove_channel(&mut self, _channel: Channel<A, B, C>) {
+    fn remove_channel(&mut self, _channel: Channel) {
         unimplemented!();
     }
 }
 
-unsafe impl<A, B, C> Send for KeyBy<A, B, C>
+unsafe impl<A, B> Send for KeyBy<A, B>
 where
     A: 'static + ArconType + Hash,
-    B: Port<Request = ArconEvent<A>> + 'static + Clone,
-    C: ComponentDefinition + Sized + 'static + Require<B>,
+    B: ComponentDefinition + Sized + 'static,
 {
 }
 
-unsafe impl<A, B, C> Sync for KeyBy<A, B, C>
+unsafe impl<A, B> Sync for KeyBy<A, B>
 where
     A: 'static + ArconType + Hash,
-    B: Port<Request = ArconEvent<A>> + 'static + Clone,
-    C: ComponentDefinition + Sized + 'static + Require<B>,
+    B: ComponentDefinition + Sized + 'static,
 {
 }
 
@@ -120,7 +122,6 @@ mod tests {
     use super::*;
     use crate::data::ArconElement;
     use crate::streaming::channel::strategy::tests::*;
-    use crate::streaming::channel::ChannelPort;
     use kompact::*;
     use rand::Rng;
     use std::sync::Arc;
@@ -133,7 +134,7 @@ mod tests {
         let parallelism: u32 = 8;
         let total_msgs = 1000;
 
-        let mut channels: Vec<Channel<Input, ChannelPort<Input>, TestComp>> = Vec::new();
+        let mut channels: Vec<Channel> = Vec::new();
         let mut comps: Vec<Arc<crate::prelude::Component<TestComp>>> = Vec::new();
 
         for _i in 0..parallelism {
@@ -142,7 +143,7 @@ mod tests {
             comps.push(comp);
         }
 
-        let mut channel_strategy: Box<ChannelStrategy<Input, ChannelPort<Input>, TestComp>> =
+        let mut channel_strategy: Box<ChannelStrategy<Input, TestComp>> =
             Box::new(KeyBy::with_default_hasher(parallelism, channels));
 
         let mut rng = rand::thread_rng();

@@ -1,7 +1,7 @@
 use crate::data::{ArconElement, ArconEvent, ArconType, ArconVec, Watermark};
 use crate::error::*;
 use crate::streaming::channel::strategy::ChannelStrategy;
-use crate::streaming::channel::{Channel, ChannelPort};
+use crate::streaming::channel::Channel;
 use crate::streaming::task::TaskMetric;
 use crate::weld::*;
 use arcon_macros::arcon_task;
@@ -12,40 +12,35 @@ use weld::*;
 /// FlatMap task
 ///
 /// IN: Input Event
-/// PORT: Port type for ChannelStrategy
 /// OUT: Output Event
 #[arcon_task]
 #[derive(ComponentDefinition)]
-pub struct FlatMap<IN, PORT, OUT>
+pub struct FlatMap<IN, OUT>
 where
     IN: 'static + ArconType,
-    PORT: Port<Request = ArconEvent<OUT>> + 'static + Clone,
     OUT: 'static + ArconType,
 {
     ctx: ComponentContext<Self>,
-    _in_channels: Vec<Channel<OUT, PORT, Self>>,
-    out_channels: Box<ChannelStrategy<OUT, PORT, Self>>,
-    pub event_port: ProvidedPort<ChannelPort<IN>, Self>,
+    _in_channels: Vec<Channel>,
+    out_channels: Box<ChannelStrategy<OUT, Self>>,
     udf: Arc<Module>,
     udf_ctx: WeldContext,
     metric: TaskMetric,
 }
 
-impl<IN, PORT, OUT> FlatMap<IN, PORT, OUT>
+impl<IN, OUT> FlatMap<IN, OUT>
 where
     IN: 'static + ArconType,
-    PORT: Port<Request = ArconEvent<OUT>> + 'static + Clone,
     OUT: 'static + ArconType,
 {
     pub fn new(
         udf: Arc<Module>,
-        in_channels: Vec<Channel<OUT, PORT, Self>>,
-        out_channels: Box<ChannelStrategy<OUT, PORT, Self>>,
+        in_channels: Vec<Channel>,
+        out_channels: Box<ChannelStrategy<OUT, Self>>,
     ) -> Self {
         let ctx = WeldContext::new(&udf.conf()).unwrap();
         FlatMap {
             ctx: ComponentContext::new(),
-            event_port: ProvidedPort::new(),
             _in_channels: in_channels,
             out_channels,
             udf: udf.clone(),
@@ -80,7 +75,7 @@ where
     }
 
     fn push_out(&mut self, event: ArconEvent<OUT>) -> ArconResult<()> {
-        let self_ptr = self as *const FlatMap<IN, PORT, OUT>;
+        let self_ptr = self as *const FlatMap<IN, OUT>;
         let _ = self.out_channels.output(event, self_ptr)?;
         Ok(())
     }
@@ -103,9 +98,8 @@ mod tests {
         });
 
         let channel = Channel::Local(sink_comp.actor_ref());
-        let channel_strategy: Box<
-            ChannelStrategy<i32, ChannelPort<i32>, FlatMap<ArconVec<i32>, ChannelPort<i32>, i32>>,
-        > = Box::new(Forward::new(channel));
+        let channel_strategy: Box<ChannelStrategy<i32, FlatMap<ArconVec<i32>, i32>>> =
+            Box::new(Forward::new(channel));
 
         let weld_code = String::from("|x: vec[i32]| map(x, |a: i32| a + i32(5))");
         let module = Arc::new(Module::new(weld_code).unwrap());
@@ -116,8 +110,8 @@ mod tests {
         let arcon_vec = ArconVec::new(vec);
         let input = ArconElement::new(arcon_vec);
 
-        let event_port = filter_task.on_definition(|c| c.event_port.share());
-        system.trigger_r(ArconEvent::Element(input), &event_port);
+        let target_ref = filter_task.actor_ref();
+        target_ref.tell(Box::new(ArconEvent::Element(input)), &target_ref);
 
         std::thread::sleep(std::time::Duration::from_secs(1));
         let comp_inspect = &sink_comp.definition().lock().unwrap();

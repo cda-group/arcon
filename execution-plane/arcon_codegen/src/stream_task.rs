@@ -30,18 +30,30 @@ pub fn stream_task(
 
         match &successors.get(0).unwrap() {
             Local { id } => {
-                let target_name = Ident::new(&id, Span::call_site());
+                let target = Ident::new(&id, Span::call_site());
+                // Yeah... Fix this..
+                let channel_strategy = {
+                    match &task.kind {
+                        FlatMap => {
+                            quote! {
+                                let channel_strategy: Box<ChannelStrategy<#output_type, FlatMap<#input_type, #output_type>>> = Box::new(Forward::new(channel));
+                            }
+                        }
+                        Map => {
+                            quote! {
+                                let channel_strategy: Box<ChannelStrategy<#output_type, Map<#input_type, #output_type>>> = Box::new(Forward::new(channel));
+                            }
+                        }
+                        Filter => {
+                            quote! {
+                                let channel_strategy: Box<ChannelStrategy<#output_type, Filter<#input_type>>> = Box::new(Forward::new(channel));
+                            }
+                        }
+                    }
+                };
                 quote! {
-                    let target_port = #target_name.on_definition(|c| c.in_port.share());
-                    let mut req_port: RequiredPort<
-                        ChannelPort<#output_type>,
-                        #task_ident<#input_type, ChannelPort<#output_type>, #output_type>,
-                    > = RequiredPort::new();
-                    let _ = req_port.connect(target_port);
-
-                    let ref_port = RequirePortRef(std::rc::Rc::new(std::cell::UnsafeCell::new(req_port)));
-                    let channel = Channel::Port(ref_port);
-                    let channel_strategy = Box::new(Forward::new(channel));
+                    let channel = Channel::Local(#target.actor_ref());
+                    #channel_strategy
 
                     let code = String::from(#weld_code);
                     let module = std::sync::Arc::new(Module::new(code).unwrap());

@@ -111,6 +111,9 @@ pub enum SourceKind {
         #[serde(default = "source_rate")]
         rate: u64,
     },
+    LocalFile {
+        path: String,
+    },
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -128,6 +131,9 @@ pub enum SinkKind {
     },
     /// A debug Sink that simply prints out received elements
     Debug,
+    LocalFile {
+        path: String,
+    },
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

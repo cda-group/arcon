@@ -2,7 +2,6 @@ pub mod filter;
 pub mod flatmap;
 pub mod manager;
 pub mod map;
-pub mod stateless;
 
 pub struct TaskMetric {
     avg: u64,
@@ -35,7 +34,6 @@ impl TaskMetric {
 #[cfg(test)]
 mod tests {
     use crate::data::{ArconEvent, ArconType, Watermark};
-    use crate::streaming::channel::ChannelPort;
     use kompact::*;
     /// A component that is used during testing of Tasks..
     #[derive(ComponentDefinition)]
@@ -45,7 +43,6 @@ mod tests {
         A: 'static + ArconType,
     {
         ctx: ComponentContext<Self>,
-        in_port: ProvidedPort<ChannelPort<A>, Self>,
         pub result: Vec<A>,
         pub watermarks: Vec<Watermark>,
     }
@@ -57,7 +54,6 @@ mod tests {
         pub fn new() -> Self {
             TaskSink {
                 ctx: ComponentContext::new(),
-                in_port: ProvidedPort::new(),
                 result: Vec::new(),
                 watermarks: Vec::new(),
             }
@@ -88,25 +84,5 @@ mod tests {
             }
         }
         fn receive_message(&mut self, _sender: ActorPath, _ser_id: u64, _buf: &mut Buf) {}
-    }
-
-    impl<A> Provide<ChannelPort<A>> for TaskSink<A>
-    where
-        A: 'static + ArconType,
-    {
-        fn handle(&mut self, msg: ArconEvent<A>) -> () {
-            match msg {
-                ArconEvent::Element(e) => {
-                    self.result.push(e.data);
-                }
-                _ => {}
-            }
-        }
-    }
-    impl<A> Require<ChannelPort<A>> for TaskSink<A>
-    where
-        A: 'static + ArconType,
-    {
-        fn handle(&mut self, _event: ()) -> () {}
     }
 }

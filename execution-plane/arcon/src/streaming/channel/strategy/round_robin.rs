@@ -2,39 +2,41 @@ use crate::data::{ArconEvent, ArconType};
 use crate::error::*;
 use crate::streaming::channel::strategy::*;
 use crate::streaming::channel::Channel;
-use kompact::{ComponentDefinition, Port, Require};
+use kompact::ComponentDefinition;
+use std::marker::PhantomData;
 
-pub struct RoundRobin<A, B, C>
+pub struct RoundRobin<A, B>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconEvent<A>> + 'static + Clone,
-    C: ComponentDefinition + Sized + 'static + Require<B>,
+    B: ComponentDefinition + Sized + 'static,
 {
-    out_channels: Vec<Channel<A, B, C>>,
+    out_channels: Vec<Channel>,
     curr_index: usize,
+    phantom_a: PhantomData<A>,
+    phantom_b: PhantomData<B>,
 }
 
-impl<A, B, C> RoundRobin<A, B, C>
+impl<A, B> RoundRobin<A, B>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconEvent<A>> + 'static + Clone,
-    C: ComponentDefinition + Sized + 'static + Require<B>,
+    B: ComponentDefinition + Sized + 'static,
 {
-    pub fn new(out_channels: Vec<Channel<A, B, C>>) -> RoundRobin<A, B, C> {
+    pub fn new(out_channels: Vec<Channel>) -> RoundRobin<A, B> {
         RoundRobin {
             out_channels,
             curr_index: 0,
+            phantom_a: PhantomData,
+            phantom_b: PhantomData,
         }
     }
 }
 
-impl<A, B, C> ChannelStrategy<A, B, C> for RoundRobin<A, B, C>
+impl<A, B> ChannelStrategy<A, B> for RoundRobin<A, B>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconEvent<A>> + 'static + Clone,
-    C: ComponentDefinition + Sized + 'static + Require<B>,
+    B: ComponentDefinition + Sized + 'static,
 {
-    fn output(&mut self, element: ArconEvent<A>, source: *const C) -> ArconResult<()> {
+    fn output(&mut self, element: ArconEvent<A>, source: *const B) -> ArconResult<()> {
         if self.out_channels.is_empty() {
             return arcon_err!("{}", "Vector of Channels is empty");
         }
@@ -50,27 +52,25 @@ where
         Ok(())
     }
 
-    fn add_channel(&mut self, channel: Channel<A, B, C>) {
+    fn add_channel(&mut self, channel: Channel) {
         self.out_channels.push(channel);
     }
-    fn remove_channel(&mut self, _channel: Channel<A, B, C>) {
+    fn remove_channel(&mut self, _channel: Channel) {
         unimplemented!();
     }
 }
 
-unsafe impl<A, B, C> Send for RoundRobin<A, B, C>
+unsafe impl<A, B> Send for RoundRobin<A, B>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconEvent<A>> + 'static + Clone,
-    C: ComponentDefinition + Sized + 'static + Require<B>,
+    B: ComponentDefinition + Sized + 'static,
 {
 }
 
-unsafe impl<A, B, C> Sync for RoundRobin<A, B, C>
+unsafe impl<A, B> Sync for RoundRobin<A, B>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconEvent<A>> + 'static + Clone,
-    C: ComponentDefinition + Sized + 'static + Require<B>,
+    B: ComponentDefinition + Sized + 'static,
 {
 }
 
@@ -79,10 +79,7 @@ mod tests {
     use super::*;
     use crate::data::ArconElement;
     use crate::streaming::channel::strategy::tests::*;
-    use crate::streaming::channel::{ChannelPort, RequirePortRef};
     use kompact::*;
-    use std::cell::UnsafeCell;
-    use std::rc::Rc;
     use std::sync::Arc;
 
     #[test]
@@ -93,31 +90,17 @@ mod tests {
         let components: u64 = 8;
         let total_msgs: u64 = components * 4;
 
-        let mut channels: Vec<Channel<Input, ChannelPort<Input>, TestComp>> = Vec::new();
+        let mut channels: Vec<Channel> = Vec::new();
         let mut comps: Vec<Arc<crate::prelude::Component<TestComp>>> = Vec::new();
 
         // Create half of the channels using ActorRefs
-        for _i in 0..components / 2 {
+        for _i in 0..components {
             let comp = system.create_and_start(move || TestComp::new());
             channels.push(Channel::Local(comp.actor_ref()));
             comps.push(comp);
         }
 
-        // Create half of the channels using Ports
-        for _i in 0..components / 2 {
-            let comp = system.create_and_start(move || TestComp::new());
-            let target_port = comp.on_definition(|c| c.prov_port.share());
-            let mut req_port: RequiredPort<ChannelPort<Input>, TestComp> = RequiredPort::new();
-            let _ = req_port.connect(target_port);
-
-            let ref_port = RequirePortRef(Rc::new(UnsafeCell::new(req_port)));
-            let comp_channel: Channel<Input, ChannelPort<Input>, TestComp> =
-                Channel::Port(ref_port);
-            channels.push(comp_channel);
-            comps.push(comp);
-        }
-
-        let mut channel_strategy: Box<ChannelStrategy<Input, ChannelPort<Input>, TestComp>> =
+        let mut channel_strategy: Box<ChannelStrategy<Input, TestComp>> =
             Box::new(RoundRobin::new(channels));
 
         for _i in 0..total_msgs {

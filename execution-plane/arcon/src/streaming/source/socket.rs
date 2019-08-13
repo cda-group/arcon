@@ -16,28 +16,26 @@ use std::time::SystemTime;
     AND it will add a timestamp of the ingestion time to each event outputted
 */
 #[derive(ComponentDefinition)]
-pub struct SocketSource<OUT, PORT>
+pub struct SocketSource<OUT>
 where
     OUT: 'static + ArconType + FromStr,
-    PORT: Port<Request = ArconEvent<OUT>> + 'static + Clone,
 {
-    ctx: ComponentContext<SocketSource<OUT, PORT>>,
-    out_channels: Box<ChannelStrategy<OUT, PORT, Self>>,
+    ctx: ComponentContext<SocketSource<OUT>>,
+    out_channels: Box<ChannelStrategy<OUT, Self>>,
     tcp_port: usize,
     received: u8,
     watermark_interval: u64, // If 0: no watermarks/timestamps generated
 }
 
-impl<OUT, PORT> SocketSource<OUT, PORT>
+impl<OUT> SocketSource<OUT>
 where
     OUT: 'static + ArconType + FromStr,
-    PORT: Port<Request = ArconEvent<OUT>> + 'static + Clone,
 {
     pub fn new(
         tcp_port: usize,
-        out_channels: Box<ChannelStrategy<OUT, PORT, Self>>,
+        out_channels: Box<ChannelStrategy<OUT, Self>>,
         watermark_interval: u64,
-    ) -> SocketSource<OUT, PORT> {
+    ) -> SocketSource<OUT> {
         SocketSource {
             ctx: ComponentContext::new(),
             out_channels,
@@ -89,10 +87,9 @@ where
     }
 }
 
-impl<OUT, PORT> Provide<ControlPort> for SocketSource<OUT, PORT>
+impl<OUT> Provide<ControlPort> for SocketSource<OUT>
 where
     OUT: 'static + ArconType + FromStr,
-    PORT: Port<Request = ArconEvent<OUT>> + 'static + Clone,
 {
     fn handle(&mut self, event: ControlEvent) -> () {
         match event {
@@ -120,10 +117,9 @@ where
     }
 }
 
-impl<OUT, PORT> Actor for SocketSource<OUT, PORT>
+impl<OUT> Actor for SocketSource<OUT>
 where
     OUT: 'static + ArconType + FromStr,
-    PORT: Port<Request = ArconEvent<OUT>> + 'static + Clone,
 {
     fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
         if let Some(ref recv) = msg.downcast_ref::<TcpRecv>() {
@@ -151,21 +147,11 @@ where
     }
 }
 
-impl<OUT, PORT> Require<PORT> for SocketSource<OUT, PORT>
-where
-    OUT: 'static + ArconType + FromStr,
-    PORT: Port<Request = ArconEvent<OUT>> + 'static + Clone,
-{
-    fn handle(&mut self, _event: PORT::Indication) -> () {
-        // Up-stream messages, do nothing
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::streaming::channel::strategy::forward::Forward;
-    use crate::streaming::channel::{Channel, ChannelPort};
+    use crate::streaming::channel::Channel;
     use crate::tokio::prelude::Future;
     use std::{thread, time};
     use tokio::io;
@@ -245,13 +231,12 @@ mod tests {
         let (sink, _) = system.create_and_register(move || sink::Sink::<u8>::new());
         let sink_ref = sink.actor_ref();
 
-        pub type Source = SocketSource<u8, ChannelPort<u8>>;
+        pub type Source = SocketSource<u8>;
 
-        let out_channels: Box<Forward<u8, ChannelPort<u8>, Source>> =
+        let out_channels: Box<Forward<u8, Source>> =
             Box::new(Forward::new(Channel::Local(sink_ref.clone())));
 
-        let socket_source: SocketSource<u8, ChannelPort<u8>> =
-            SocketSource::new(port, out_channels, 0);
+        let socket_source: SocketSource<u8> = SocketSource::new(port, out_channels, 0);
         let (source, _) = system.create_and_register(move || socket_source);
 
         system.start(&sink);
@@ -288,13 +273,12 @@ mod tests {
         let (sink, _) = system.create_and_register(move || sink::Sink::<f32>::new());
         let sink_ref = sink.actor_ref();
 
-        pub type Source = SocketSource<f32, ChannelPort<f32>>;
+        pub type Source = SocketSource<f32>;
 
-        let out_channels: Box<Forward<f32, ChannelPort<f32>, Source>> =
+        let out_channels: Box<Forward<f32, Source>> =
             Box::new(Forward::new(Channel::Local(sink_ref.clone())));
 
-        let socket_source: SocketSource<f32, ChannelPort<f32>> =
-            SocketSource::new(port, out_channels, 0);
+        let socket_source: SocketSource<f32> = SocketSource::new(port, out_channels, 0);
         let (source, _) = system.create_and_register(move || socket_source);
 
         system.start(&sink);
@@ -348,13 +332,12 @@ mod tests {
         let (sink, _) = system.create_and_register(move || sink::Sink::<u8>::new());
         let sink_ref = sink.actor_ref();
 
-        pub type Source = SocketSource<u8, ChannelPort<u8>>;
+        pub type Source = SocketSource<u8>;
 
-        let out_channels: Box<Forward<u8, ChannelPort<u8>, Source>> =
+        let out_channels: Box<Forward<u8, Source>> =
             Box::new(Forward::new(Channel::Local(sink_ref.clone())));
 
-        let socket_source: SocketSource<u8, ChannelPort<u8>> =
-            SocketSource::new(port, out_channels, 3);
+        let socket_source: SocketSource<u8> = SocketSource::new(port, out_channels, 3);
         let (source, _) = system.create_and_register(move || socket_source);
 
         system.start(&sink);

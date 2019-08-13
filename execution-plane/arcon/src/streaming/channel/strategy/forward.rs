@@ -2,58 +2,60 @@ use crate::data::{ArconEvent, ArconType};
 use crate::error::*;
 use crate::streaming::channel::strategy::{channel_output, ChannelStrategy};
 use crate::streaming::channel::Channel;
-use kompact::{ComponentDefinition, Port, Require};
+use kompact::ComponentDefinition;
+use std::marker::PhantomData;
 
-pub struct Forward<A, B, C>
+pub struct Forward<A, B>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconEvent<A>> + 'static + Clone,
-    C: ComponentDefinition + Sized + 'static + Require<B>,
+    B: ComponentDefinition + Sized + 'static,
 {
-    out_channel: Channel<A, B, C>,
+    out_channel: Channel,
+    phantom_a: PhantomData<A>,
+    phantom_b: PhantomData<B>,
 }
 
-impl<A, B, C> Forward<A, B, C>
+impl<A, B> Forward<A, B>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconEvent<A>> + 'static + Clone,
-    C: ComponentDefinition + Sized + 'static + Require<B>,
+    B: ComponentDefinition + Sized + 'static,
 {
-    pub fn new(out_channel: Channel<A, B, C>) -> Forward<A, B, C> {
-        Forward { out_channel }
+    pub fn new(out_channel: Channel) -> Forward<A, B> {
+        Forward {
+            out_channel,
+            phantom_a: PhantomData,
+            phantom_b: PhantomData,
+        }
     }
 }
 
-impl<A, B, C> ChannelStrategy<A, B, C> for Forward<A, B, C>
+impl<A, B> ChannelStrategy<A, B> for Forward<A, B>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconEvent<A>> + 'static + Clone,
-    C: ComponentDefinition + Sized + 'static + Require<B>,
+    B: ComponentDefinition + Sized + 'static,
 {
-    fn output(&mut self, event: ArconEvent<A>, source: *const C) -> ArconResult<()> {
+    fn output(&mut self, event: ArconEvent<A>, source: *const B) -> ArconResult<()> {
         channel_output(&self.out_channel, event, source)
     }
-    fn add_channel(&mut self, _channel: Channel<A, B, C>) {
+    fn add_channel(&mut self, _channel: Channel) {
         // ignore
     }
-    fn remove_channel(&mut self, _channel: Channel<A, B, C>) {
+    fn remove_channel(&mut self, _channel: Channel) {
         // ignore
     }
 }
 
-unsafe impl<A, B, C> Send for Forward<A, B, C>
+unsafe impl<A, B> Send for Forward<A, B>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconEvent<A>> + 'static + Clone,
-    C: ComponentDefinition + Sized + 'static + Require<B>,
+    B: ComponentDefinition + Sized + 'static,
 {
 }
 
-unsafe impl<A, B, C> Sync for Forward<A, B, C>
+unsafe impl<A, B> Sync for Forward<A, B>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconEvent<A>> + 'static + Clone,
-    C: ComponentDefinition + Sized + 'static + Require<B>,
+    B: ComponentDefinition + Sized + 'static,
 {
 }
 
@@ -62,10 +64,7 @@ mod tests {
     use super::*;
     use crate::data::ArconElement;
     use crate::streaming::channel::strategy::tests::*;
-    use crate::streaming::channel::{ChannelPort, RequirePortRef};
     use kompact::*;
-    use std::cell::UnsafeCell;
-    use std::rc::Rc;
 
     #[test]
     fn forward_test() {
@@ -74,16 +73,8 @@ mod tests {
 
         let total_msgs = 10;
         let comp = system.create_and_start(move || TestComp::new());
-        let target_port = comp.on_definition(|c| c.prov_port.share());
-
-        let mut req_port: RequiredPort<ChannelPort<Input>, TestComp> = RequiredPort::new();
-        let _ = req_port.connect(target_port);
-
-        let ref_port = RequirePortRef(Rc::new(UnsafeCell::new(req_port)));
-        let comp_channel: Channel<Input, ChannelPort<Input>, TestComp> = Channel::Port(ref_port);
-
-        let mut channel_strategy: Box<ChannelStrategy<Input, ChannelPort<Input>, TestComp>> =
-            Box::new(Forward::new(comp_channel));
+        let mut channel_strategy: Box<ChannelStrategy<Input, TestComp>> =
+            Box::new(Forward::new(Channel::Local(comp.actor_ref())));
 
         for _i in 0..total_msgs {
             // NOTE: second parameter is a fake channel...

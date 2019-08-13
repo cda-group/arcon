@@ -35,7 +35,6 @@ pub fn arcon(metadata: TokenStream, input: TokenStream) -> TokenStream {
 /// Adds all necessary methods needed to declare a kompact component.
 /// Requires the generic attributes IN and PORT to be declared where:
 ///     IN is the ArconType which the component will receive
-///     PORT is the generic port which the component will use to send messages downstream
 /// Requires the component to implement the functions handle_element and handle_watermark
 #[proc_macro_attribute]
 pub fn arcon_task(metadata: TokenStream, input: TokenStream) -> TokenStream {
@@ -82,18 +81,6 @@ pub fn arcon_task(metadata: TokenStream, input: TokenStream) -> TokenStream {
                     }
                 }
 
-                impl #impl_generics Require<PORT> for #name #ty_generics #where_clause {
-                    fn handle(&mut self, _event: PORT::Indication) -> () {
-                        // up-stream port, does nothing
-                    }
-                }
-
-                impl #impl_generics Provide<ChannelPort<IN>> for #name #ty_generics #where_clause {
-                    fn handle(&mut self, event: ArconEvent<IN>) -> () {
-                        let _ = self.handle_event(&event);
-                    }
-                }
-
                 unsafe impl #impl_generics Send for #name #ty_generics #where_clause {
                 }
 
@@ -117,6 +104,6 @@ pub fn arcon_task(metadata: TokenStream, input: TokenStream) -> TokenStream {
         };
         proc_macro::TokenStream::from(output)
     } else {
-        panic!("#[arcon] is only defined for structs!");
+        panic!("#[arcon_task] is only defined for structs!");
     }
 }

@@ -7,7 +7,6 @@ where
     A: ArconType + 'static,
 {
     ctx: ComponentContext<Self>,
-    pub in_port: ProvidedPort<ChannelPort<A>, Self>,
     pub data: Vec<A>,
 }
 
@@ -18,7 +17,6 @@ where
     pub fn new() -> Self {
         DebugSink {
             ctx: ComponentContext::new(),
-            in_port: ProvidedPort::new(),
             data: Vec::new(),
         }
     }
@@ -51,20 +49,4 @@ where
         }
     }
     fn receive_message(&mut self, _sender: ActorPath, _ser_id: u64, _buf: &mut Buf) {}
-}
-
-impl<A> Provide<ChannelPort<A>> for DebugSink<A>
-where
-    A: ArconType + 'static,
-{
-    fn handle(&mut self, event: ArconEvent<A>) -> () {
-        self.handle_event(&event);
-    }
-}
-
-impl<A> Require<ChannelPort<A>> for DebugSink<A>
-where
-    A: ArconType + 'static,
-{
-    fn handle(&mut self, _event: ()) -> () {}
 }

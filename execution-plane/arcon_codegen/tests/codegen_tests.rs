@@ -46,6 +46,7 @@ fn codegen_test() {
 
     add_test_spec("basic_dataflow");
     add_test_spec("tumbling_window_dataflow");
+    add_test_spec("file_source_sink");
 
     run_mode(RUN_PASS_MODE);
 
