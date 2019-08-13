@@ -14,6 +14,11 @@ scalacOptions ++= Seq(
 lazy val asciiGraphs = RootProject(uri("git://github.com/Max-Meldrum/ascii-graphs.git"))
 version in asciiGraphs := "0.0.7-SNAPSHOT"
 
+lazy val arc = RootProject(uri("git://github.com/cda-group/arc.git"))
+version in arc := "0.1.0-SNAPSHOT"
+
+lazy val compilerPipeline = RootProject(uri("git://github.com/cda-group/compiler-pipeline.git"))
+version in arc := "0.1.0-SNAPSHOT"
 
 lazy val generalSettings = Seq(
   organization := "se.kth.arcon",
@@ -29,7 +34,7 @@ lazy val arconSettings = generalSettings ++ Seq(
 )
 
 lazy val root = (project in file("."))
-  .aggregate(kompactExtension, asciiGraphs, 
+  .aggregate(kompactExtension, asciiGraphs, arc, compilerPipeline,
       common, protobuf, statemaster, appmaster)
 
 lazy val kompactExtension = (project in file("kompact-extension"))
@@ -69,12 +74,20 @@ lazy val statemaster = (project in file("statemaster"))
   .settings(Sigar.loader())
 
 lazy val appmaster = (project in file("appmaster"))
-  .dependsOn(protobuf, common % "test->test; compile->compile")
+  .dependsOn(compilerPipeline, common % "test->test; compile->compile")
   .settings(arconSettings: _*)
   .settings(Dependencies.appmaster)
   .settings(moduleName("appmaster"))
-  .settings(Assembly.settings("appmaster.System", "appmaster.jar"))
-  .settings(Sigar.loader())
+  .settings(Assembly.settings("appmaster.Appmaster", "appmaster.jar"))
+  .settings(
+    javaAgents += "org.mortbay.jetty.alpn" % "jetty-alpn-agent" % "2.0.9" % "runtime;test"
+  )
+  .enablePlugins(JavaAgent)
+  .enablePlugins(AkkaGrpcPlugin)
+  .settings(
+    PB.protoSources in Compile := Seq(file("../proto/"))
+  )
+
 
 lazy val coordinator = (project in file("coordinator"))
   .dependsOn(protobuf, common, kompactExtension % "test->test; compile->compile")

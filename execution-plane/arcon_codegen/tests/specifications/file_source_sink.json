@@ -1,0 +1,66 @@
+{
+"id": "file_source_sink",
+"target": "x86-64-unknown-linux-gnu",
+"nodes": [
+    {
+        "id": "node_1",
+        "parallelism": 1,
+        "kind": {
+            "Source": {
+                "source_type": {
+                    "Scalar": "u32"
+                },
+                "successors": [
+                    {
+                        "Local": {
+                            "id": "node_2"
+                        }
+                    }
+                ],
+                "kind": {
+                    "LocalFile": { "path": "/tmp/some_file"}
+                }
+            }
+        }
+    },
+    {
+        "id": "node_2",
+        "parallelism": 1,
+        "kind": {
+            "Task": {
+                "input_type": {
+                    "Scalar": "u32"
+                },
+                "output_type": {
+                    "Scalar": "u32"
+                },
+                "weld_code": "|x: u32| x + u32(5)",
+                "successors": [
+                    {
+                        "Local": {
+                            "id": "node_3"
+                        }
+                    }
+                ],
+                "predecessor": "node_1",
+                "kind": "Map"
+            }
+        }
+    },
+    {
+        "id": "node_3",
+        "parallelism": 1,
+        "kind": {
+            "Sink": {
+                "sink_type": {
+                    "Scalar": "u32"
+                },
+                "predecessor": "node_2",
+                "kind": {
+                  "LocalFile": { "path": "/tmp/sink_file"}
+                }
+            }
+        }
+    }
+]
+}

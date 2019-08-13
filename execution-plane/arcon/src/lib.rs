@@ -29,8 +29,8 @@ pub mod prelude {
         broadcast::Broadcast, forward::Forward, key_by::KeyBy, round_robin::RoundRobin,
         shuffle::Shuffle, ChannelStrategy,
     };
-    pub use crate::streaming::channel::{Channel, ChannelPort, RequirePortRef};
-    pub use crate::streaming::task::stateless::StreamTask;
+
+    pub use crate::streaming::channel::Channel;
     pub use crate::streaming::task::{filter::Filter, flatmap::FlatMap, map::Map};
     pub use crate::streaming::window::{
         assigner::EventTimeWindowAssigner, builder::WindowBuilder, builder::WindowFn,
@@ -41,7 +41,7 @@ pub mod prelude {
         collection::CollectionSource, local_file::LocalFileSource, socket::SocketSource,
     };
 
-    pub use crate::streaming::sink::debug::DebugSink;
+    pub use crate::streaming::sink::{debug::DebugSink, local_file::LocalFileSink};
 
     pub use crate::data::{ArconElement, ArconType, ArconVec};
     pub use crate::weld::module::{Module, ModuleRun};

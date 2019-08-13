@@ -18,3 +18,5 @@ project/plugins/project/
 native/
 build/
 .idea/
+
+spec.json

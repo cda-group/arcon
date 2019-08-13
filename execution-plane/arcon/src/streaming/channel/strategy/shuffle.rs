@@ -2,36 +2,40 @@ use crate::data::{ArconEvent, ArconType};
 use crate::error::*;
 use crate::streaming::channel::strategy::*;
 use crate::streaming::channel::Channel;
-use kompact::{ComponentDefinition, Port, Require};
+use kompact::ComponentDefinition;
 use rand::seq::SliceRandom;
+use std::marker::PhantomData;
 
-pub struct Shuffle<A, B, C>
+pub struct Shuffle<A, B>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconEvent<A>> + 'static + Clone,
-    C: ComponentDefinition + Sized + 'static + Require<B>,
+    B: ComponentDefinition + Sized + 'static,
 {
-    out_channels: Vec<Channel<A, B, C>>,
+    out_channels: Vec<Channel>,
+    phantom_a: PhantomData<A>,
+    phantom_b: PhantomData<B>,
 }
 
-impl<A, B, C> Shuffle<A, B, C>
+impl<A, B> Shuffle<A, B>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconEvent<A>> + 'static + Clone,
-    C: ComponentDefinition + Sized + 'static + Require<B>,
+    B: ComponentDefinition + Sized + 'static,
 {
-    pub fn new(out_channels: Vec<Channel<A, B, C>>) -> Shuffle<A, B, C> {
-        Shuffle { out_channels }
+    pub fn new(out_channels: Vec<Channel>) -> Shuffle<A, B> {
+        Shuffle {
+            out_channels,
+            phantom_a: PhantomData,
+            phantom_b: PhantomData,
+        }
     }
 }
 
-impl<A, B, C> ChannelStrategy<A, B, C> for Shuffle<A, B, C>
+impl<A, B> ChannelStrategy<A, B> for Shuffle<A, B>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconEvent<A>> + 'static + Clone,
-    C: ComponentDefinition + Sized + 'static + Require<B>,
+    B: ComponentDefinition + Sized + 'static,
 {
-    fn output(&mut self, element: ArconEvent<A>, source: *const C) -> ArconResult<()> {
+    fn output(&mut self, element: ArconEvent<A>, source: *const B) -> ArconResult<()> {
         if let Some(channel) = self.out_channels.choose(&mut rand::thread_rng()) {
             let _ = channel_output(channel, element, source)?;
         } else {
@@ -41,27 +45,25 @@ where
         Ok(())
     }
 
-    fn add_channel(&mut self, channel: Channel<A, B, C>) {
+    fn add_channel(&mut self, channel: Channel) {
         self.out_channels.push(channel);
     }
-    fn remove_channel(&mut self, _channel: Channel<A, B, C>) {
+    fn remove_channel(&mut self, _channel: Channel) {
         //self.out_channels.retain(|c| c == &channel);
     }
 }
 
-unsafe impl<A, B, C> Send for Shuffle<A, B, C>
+unsafe impl<A, B> Send for Shuffle<A, B>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconEvent<A>> + 'static + Clone,
-    C: ComponentDefinition + Sized + 'static + Require<B>,
+    B: ComponentDefinition + Sized + 'static,
 {
 }
 
-unsafe impl<A, B, C> Sync for Shuffle<A, B, C>
+unsafe impl<A, B> Sync for Shuffle<A, B>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconEvent<A>> + 'static + Clone,
-    C: ComponentDefinition + Sized + 'static + Require<B>,
+    B: ComponentDefinition + Sized + 'static,
 {
 }
 
@@ -70,7 +72,6 @@ mod tests {
     use super::*;
     use crate::data::ArconElement;
     use crate::streaming::channel::strategy::tests::*;
-    use crate::streaming::channel::ChannelPort;
     use kompact::*;
     use std::sync::Arc;
 
@@ -82,7 +83,7 @@ mod tests {
         let components: u32 = 4;
         let total_msgs: u64 = 50;
 
-        let mut channels: Vec<Channel<Input, ChannelPort<Input>, TestComp>> = Vec::new();
+        let mut channels: Vec<Channel> = Vec::new();
         let mut comps: Vec<Arc<crate::prelude::Component<TestComp>>> = Vec::new();
 
         // Create half of the channels using ActorRefs
@@ -92,7 +93,7 @@ mod tests {
             comps.push(comp);
         }
 
-        let mut channel_strategy: Box<ChannelStrategy<Input, ChannelPort<Input>, TestComp>> =
+        let mut channel_strategy: Box<ChannelStrategy<Input, TestComp>> =
             Box::new(Shuffle::new(channels));
 
         for _i in 0..total_msgs {

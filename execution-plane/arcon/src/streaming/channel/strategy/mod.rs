@@ -1,7 +1,7 @@
 use crate::data::*;
 use crate::error::*;
 use crate::streaming::channel::Channel;
-use kompact::{ComponentDefinition, Port, Require};
+use kompact::ComponentDefinition;
 
 pub mod broadcast;
 pub mod forward;
@@ -12,30 +12,27 @@ pub mod shuffle;
 /// `ChannelStrategy` is used to output events to one or more channels
 ///
 /// A: The Event to be sent
-/// B: Which Port that is used for Partitioner
-/// C: Source Component required for the tell method
-pub trait ChannelStrategy<A, B, C>: Send + Sync
+/// B: Source Component required for the tell method
+pub trait ChannelStrategy<A, B>: Send + Sync
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconEvent<A>> + 'static + Clone,
-    C: ComponentDefinition + Sized + 'static + Require<B>,
+    B: ComponentDefinition + Sized + 'static,
 {
-    fn output(&mut self, element: B::Request, source: *const C) -> ArconResult<()>;
-    fn add_channel(&mut self, channel: Channel<A, B, C>);
-    fn remove_channel(&mut self, channel: Channel<A, B, C>);
+    fn output(&mut self, element: ArconEvent<A>, source: *const B) -> ArconResult<()>;
+    fn add_channel(&mut self, channel: Channel);
+    fn remove_channel(&mut self, channel: Channel);
 }
 
 /// `channel_output` takes an event and sends it to another component.
-/// Either locally through a Port or by ActorRef, or remote (ActorPath)
-fn channel_output<A, B, C>(
-    channel: &Channel<A, B, C>,
+/// Either locally through an ActorRef, or remote (ActorPath)
+fn channel_output<A, B>(
+    channel: &Channel,
     event: ArconEvent<A>,
-    source: *const C,
+    source: *const B,
 ) -> ArconResult<()>
 where
     A: 'static + ArconType,
-    B: Port<Request = ArconEvent<A>> + 'static + Clone,
-    C: ComponentDefinition + Sized + 'static + Require<B>,
+    B: ComponentDefinition + Sized + 'static,
 {
     // pointer in order to escape the double borrow issue
     // TODO: find better way...
@@ -47,12 +44,6 @@ where
         Channel::Remote(actor_path) => {
             actor_path.tell(event.to_remote()?, source);
         }
-        Channel::Port(port_ref) => {
-            let required_port = (*port_ref.0).get();
-            unsafe {
-                (*required_port).trigger(event);
-            }
-        }
     }
     Ok(())
 }
@@ -60,14 +51,12 @@ where
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::streaming::channel::ChannelPort;
     use kompact::*;
 
     #[derive(ComponentDefinition)]
     #[allow(dead_code)]
     pub struct TestComp {
         ctx: ComponentContext<TestComp>,
-        pub prov_port: ProvidedPort<ChannelPort<Input>, TestComp>,
         pub counter: u64,
     }
 
@@ -75,7 +64,6 @@ pub mod tests {
         pub fn new() -> TestComp {
             TestComp {
                 ctx: ComponentContext::new(),
-                prov_port: ProvidedPort::new(),
                 counter: 0,
             }
         }
@@ -89,16 +77,6 @@ pub mod tests {
             self.counter += 1;
         }
         fn receive_message(&mut self, _sender: ActorPath, _ser_id: u64, _buf: &mut Buf) {
-            self.counter += 1;
-        }
-    }
-    impl Require<ChannelPort<Input>> for TestComp {
-        fn handle(&mut self, _event: ()) -> () {
-            // ignore
-        }
-    }
-    impl Provide<ChannelPort<Input>> for TestComp {
-        fn handle(&mut self, _event: ArconEvent<Input>) -> () {
             self.counter += 1;
         }
     }

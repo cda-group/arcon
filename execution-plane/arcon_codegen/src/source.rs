@@ -22,6 +22,9 @@ pub fn source(
             *port as usize,
             *rate,
         ),
+        SourceKind::LocalFile { path } => {
+            local_file_source(&source_name, &target, &input_type, &path)
+        }
     };
 
     source_stream
@@ -37,10 +40,27 @@ fn socket_source(
 ) -> TokenStream {
     quote! {
         let channel = Channel::Local(#target.actor_ref());
-        let channel_strategy = Box::new(Forward::new(channel));
+        let channel_strategy: Box<ChannelStrategy<#input_type, SocketSource<#input_type>>> = Box::new(Forward::new(channel));
         let #source_name = system.create_and_start(move || {
-            let source: SocketSource<#input_type, ChannelPort<#input_type>> = SocketSource::new(#port, channel_strategy, #rate);
+            let source: SocketSource<#input_type> = SocketSource::new(#port, channel_strategy, #rate);
             source
         });
+    }
+}
+
+fn local_file_source(
+    source_name: &Ident,
+    target: &Ident,
+    input_type: &TokenStream,
+    file_path: &str,
+) -> TokenStream {
+    quote! {
+        let channel = Channel::Local(#target.actor_ref());
+        let channel_strategy: Box<ChannelStrategy<#input_type, SocketSource<#input_type>>> = Box::new(Forward::new(channel));
+
+        let #source_name: LocalFileSource<#input_type> = LocalFileSource::new(
+            String::from(#file_path),
+            #target.actor_ref(),
+        );
     }
 }

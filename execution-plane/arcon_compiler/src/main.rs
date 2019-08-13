@@ -19,19 +19,11 @@ mod repl;
 mod server;
 mod util;
 
-arg_enum! {
-    #[derive(Debug)]
-    pub enum CompilerMode {
-        Boring,
-        Lagom,
-        Fancy,
-    }
-}
-
 const DEFAULT_SERVER_PORT: i32 = 3000;
 const DEFAULT_SERVER_HOST: &str = "127.0.0.1";
-const DEFAULT_ARC_INPUT: &str = "spec.json";
+const DEFAULT_SPEC: &str = "spec.json";
 const DEFAULT_BUILD_DIR: &str = "build";
+const DEFAULT_LOG_DIR: &str = "/tmp";
 
 lazy_static! {
     static ref TARGETS: Vec<String> = {
@@ -45,6 +37,8 @@ lazy_static! {
 fn main() {
     pretty_env_logger::init();
 
+    let default_port_str = DEFAULT_SERVER_PORT.to_string();
+
     let spec_arg = Arg::with_name("s")
         .required(true)
         .default_value(".")
@@ -54,12 +48,14 @@ fn main() {
         .help("Path to Arc specification");
 
     let port_arg = Arg::with_name("p")
+        .default_value(&default_port_str)
         .takes_value(true)
         .long("Port number")
         .short("p")
         .help("Port for server");
 
     let host_arg = Arg::with_name("h")
+        .default_value(DEFAULT_SERVER_HOST)
         .takes_value(true)
         .long("Host address")
         .short("h")
@@ -83,15 +79,6 @@ fn main() {
                 .help("Daemonize the process")
                 .long("daemonize")
                 .short("d"),
-        )
-        .arg(
-            Arg::with_name("m")
-                .help("Compiler mode")
-                .long("mode")
-                .short("m")
-                .possible_values(&CompilerMode::variants())
-                .default_value("Lagom")
-                .required(false),
         )
         .subcommand(
             SubCommand::with_name("compile")
@@ -125,7 +112,6 @@ fn main() {
         )
         .get_matches_from(fetch_args());
 
-    let mode = value_t_or_exit!(matches.value_of("m"), CompilerMode);
     let daemonize: bool = matches.is_present("d");
 
     match matches.subcommand() {
@@ -136,7 +122,7 @@ fn main() {
 
             let build_dir: &str = arg_matches.value_of("b").unwrap_or(DEFAULT_BUILD_DIR);
 
-            if let Err(err) = compile(spec_path, build_dir, daemonize, mode) {
+            if let Err(err) = compile(spec_path, build_dir, daemonize) {
                 error!("Error: {} ", err.to_string());
             }
         }
@@ -149,12 +135,12 @@ fn main() {
             let host: &str = arg_matches.value_of("h").unwrap_or(DEFAULT_SERVER_HOST);
             let build_dir: &str = arg_matches.value_of("b").unwrap_or(DEFAULT_BUILD_DIR);
 
-            if let Err(err) = server(host, port, build_dir, daemonize, mode) {
+            if let Err(err) = server(host, port, build_dir, daemonize) {
                 error!("Error: {} ", err.to_string());
             }
         }
         ("repl", Some(_)) => {
-            if let Err(err) = repl(mode) {
+            if let Err(err) = repl() {
                 error!("Error: {} ", err.to_string());
             }
         }
@@ -172,106 +158,60 @@ fn fetch_args() -> Vec<String> {
     std::env::args().collect()
 }
 
-fn compile(
-    spec_path: &str,
-    build_dir: &str,
-    daemonize: bool,
-    _mode: CompilerMode,
-) -> Result<(), failure::Error> {
+fn compile(spec_path: &str, build_dir: &str, daemonize: bool) -> Result<(), failure::Error> {
     let spec_file: String = {
         let md = metadata(&spec_path)?;
         if md.is_file() {
             spec_path.to_string()
         } else {
-            (spec_path.to_owned() + "/" + DEFAULT_ARC_INPUT)
+            (spec_path.to_owned() + "/" + DEFAULT_SPEC)
         }
     };
 
-    let spec = ArcSpec::load(&spec_file)?;
+    let spec = ArconSpec::load(&spec_file)?;
+
+    let mut env = env::CompilerEnv::load(build_dir.to_string())?;
+
+    // Enter the build directory
+    let path = std::path::Path::new(build_dir);
+    std::env::set_current_dir(&path)?;
+
+    env.add_project(spec.id.clone())?;
+    env.create_workspace_member(&spec.id)?;
+    env.generate(&spec)?;
 
     if daemonize {
-        unimplemented!();
+        daemonize_arconc();
     } else {
-        let mut env = env::CompilerEnv::load(build_dir.to_string())?;
-        env.add_project(spec.id.clone())?;
-        create_workspace_member(build_dir, &spec.id)?;
-        generate(build_dir, &spec)?;
-        greeting_with_spec(&spec, &bin_path(&spec.id, build_dir, &spec.mode));
-        util::cargo_build(&spec.mode)?;
+        let bin = env.bin_path(&spec.id, &spec.mode)?;
+        greeting_with_spec(&spec, &bin);
     }
 
-    Ok(())
-}
-
-fn server(
-    host: &str,
-    port: i32,
-    _build_dir: &str,
-    _daemonize: bool,
-    _mode: CompilerMode,
-) -> Result<(), failure::Error> {
-    // TODO: start up gRPC server
-    greeting("Server is coming soon!");
-    server::start_server(host, port);
-    Ok(())
-}
-
-fn repl(_mode: CompilerMode) -> Result<(), failure::Error> {
-    // TODO: start up REPL
-    greeting("REPL is coming soon!");
-    Ok(())
-}
-
-/// Creates a Workspace member with a Cargo.toml and src/ directory
-fn create_workspace_member(ws_path: &str, id: &str) -> Result<(), failure::Error> {
-    let full_path = format!("{}/{}", ws_path, id);
-
-    let manifest = format!(
-        "[package] \
-         \nname = \"{}\" \
-         \nversion = \"0.1.0\" \
-         \nauthors = [\"Arcon Developers <insert-email>\"] \
-         \nedition = \"2018\" \
-         \n[dependencies] \
-         \narcon = {{path = \"../../arcon\"}}",
-        id
-    );
-
-    let path = format!("{}/src/", full_path);
-    std::fs::create_dir_all(path)?;
-
-    let manifest_file = format!("{}/Cargo.toml", full_path);
-    arcon_codegen::to_file(manifest, manifest_file)?;
+    util::cargo_build(&spec.mode)?;
 
     Ok(())
 }
 
-fn generate(build_dir: &str, spec: &ArcSpec) -> Result<(), failure::Error> {
-    let code = arcon_codegen::generate(&spec, false)?;
-    let path = format!("{}/{}/src/main.rs", build_dir, spec.id);
-    arcon_codegen::to_file(code, path)?;
+fn server(host: &str, port: i32, build_dir: &str, daemonize: bool) -> Result<(), failure::Error> {
+    let env = env::CompilerEnv::load(build_dir.to_string())?;
+
+    if daemonize {
+        daemonize_arconc();
+    }
+
     let path = std::path::Path::new(build_dir);
-    // Enter the directory for compilation...
     std::env::set_current_dir(&path)?;
+
+    server::start_server(host, port, env);
     Ok(())
 }
 
-fn bin_path(id: &str, build_dir: &str, mode: &CompileMode) -> String {
-    let mode = match mode {
-        CompileMode::Debug => "debug",
-        CompileMode::Release => "release",
-    };
-
-    let mut dir = String::from(build_dir);
-
-    if dir.ends_with("/") {
-        dir.pop();
-    }
-
-    format!("{}/target/{}/{}", dir, mode, id)
+fn repl() -> Result<(), failure::Error> {
+    error!("REPL is not implemented!");
+    Ok(())
 }
 
-fn greeting_with_spec(spec: &ArcSpec, bin_path: &str) {
+fn greeting_with_spec(spec: &ArconSpec, bin_path: &str) {
     let mode = match spec.mode {
         CompileMode::Debug => "debug",
         CompileMode::Release => "release",
@@ -304,9 +244,19 @@ fn greeting_with_spec(spec: &ArcSpec, bin_path: &str) {
     say(msg.as_bytes(), width, &mut writer).unwrap();
 }
 
-fn greeting(msg: &str) {
-    let width = msg.len();
+fn daemonize_arconc() {
+    let out = format!("{}/arconc.out", DEFAULT_LOG_DIR);
+    let err = format!("{}/arconc.err", DEFAULT_LOG_DIR);
+    let stdout = std::fs::File::create(&out).unwrap();
+    let stderr = std::fs::File::create(&err).unwrap();
 
-    let mut writer = BufWriter::new(stdout());
-    say(msg.as_bytes(), width, &mut writer).unwrap();
+    let d = daemonize::Daemonize::new()
+        .stdout(stdout)
+        .stderr(stderr)
+        .working_directory(".");
+
+    match d.start() {
+        Ok(_) => info!("arconc running as daemon"),
+        Err(e) => error!("Error: {}", e),
+    }
 }

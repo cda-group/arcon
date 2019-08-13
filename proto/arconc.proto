@@ -1,15 +1,30 @@
 syntax = "proto3";
 
+option java_package = "se.kth.arcon.appmaster.arconc";
+
 package arconc;
 
-service Compiler {
-  rpc Compile(CompileRequest) returns (CompileReply) {}
+service Arconc {
+  rpc Compile(ArconcRequest) returns (ArconcReply) {}
 }
 
-message CompileRequest {
+
+message ArconcRequest {
   bytes spec = 1;
 }
 
-message CompileReply {
+message ArconcReply {
+  oneof msg {
+        ArconcError error = 1;
+        ArconcSuccess success = 2;
+    }
+}
+
+message ArconcError {
   string message = 1;
+}
+
+message ArconcSuccess {
+  // Path to binary
+  string path = 1;
 }

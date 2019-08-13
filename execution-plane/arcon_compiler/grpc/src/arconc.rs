@@ -27,7 +27,7 @@ use protobuf::ProtobufEnum as ProtobufEnum_imported_for_functions;
 const _PROTOBUF_VERSION_CHECK: () = ::protobuf::VERSION_2_8_0;
 
 #[derive(PartialEq,Clone,Default)]
-pub struct CompileRequest {
+pub struct ArconcRequest {
     // message fields
     pub spec: ::std::vec::Vec<u8>,
     // special fields
@@ -35,14 +35,14 @@ pub struct CompileRequest {
     pub cached_size: ::protobuf::CachedSize,
 }
 
-impl<'a> ::std::default::Default for &'a CompileRequest {
-    fn default() -> &'a CompileRequest {
-        <CompileRequest as ::protobuf::Message>::default_instance()
+impl<'a> ::std::default::Default for &'a ArconcRequest {
+    fn default() -> &'a ArconcRequest {
+        <ArconcRequest as ::protobuf::Message>::default_instance()
     }
 }
 
-impl CompileRequest {
-    pub fn new() -> CompileRequest {
+impl ArconcRequest {
+    pub fn new() -> ArconcRequest {
         ::std::default::Default::default()
     }
 
@@ -73,7 +73,7 @@ impl CompileRequest {
     }
 }
 
-impl ::protobuf::Message for CompileRequest {
+impl ::protobuf::Message for ArconcRequest {
     fn is_initialized(&self) -> bool {
         true
     }
@@ -139,8 +139,8 @@ impl ::protobuf::Message for CompileRequest {
         Self::descriptor_static()
     }
 
-    fn new() -> CompileRequest {
-        CompileRequest::new()
+    fn new() -> ArconcRequest {
+        ArconcRequest::new()
     }
 
     fn descriptor_static() -> &'static ::protobuf::reflect::MessageDescriptor {
@@ -153,11 +153,11 @@ impl ::protobuf::Message for CompileRequest {
                 let mut fields = ::std::vec::Vec::new();
                 fields.push(::protobuf::reflect::accessor::make_simple_field_accessor::<_, ::protobuf::types::ProtobufTypeBytes>(
                     "spec",
-                    |m: &CompileRequest| { &m.spec },
-                    |m: &mut CompileRequest| { &mut m.spec },
+                    |m: &ArconcRequest| { &m.spec },
+                    |m: &mut ArconcRequest| { &mut m.spec },
                 ));
-                ::protobuf::reflect::MessageDescriptor::new::<CompileRequest>(
-                    "CompileRequest",
+                ::protobuf::reflect::MessageDescriptor::new::<ArconcRequest>(
+                    "ArconcRequest",
                     fields,
                     file_descriptor_proto()
                 )
@@ -165,38 +165,330 @@ impl ::protobuf::Message for CompileRequest {
         }
     }
 
-    fn default_instance() -> &'static CompileRequest {
-        static mut instance: ::protobuf::lazy::Lazy<CompileRequest> = ::protobuf::lazy::Lazy {
+    fn default_instance() -> &'static ArconcRequest {
+        static mut instance: ::protobuf::lazy::Lazy<ArconcRequest> = ::protobuf::lazy::Lazy {
             lock: ::protobuf::lazy::ONCE_INIT,
-            ptr: 0 as *const CompileRequest,
+            ptr: 0 as *const ArconcRequest,
         };
         unsafe {
-            instance.get(CompileRequest::new)
+            instance.get(ArconcRequest::new)
         }
     }
 }
 
-impl ::protobuf::Clear for CompileRequest {
+impl ::protobuf::Clear for ArconcRequest {
     fn clear(&mut self) {
         self.spec.clear();
         self.unknown_fields.clear();
     }
 }
 
-impl ::std::fmt::Debug for CompileRequest {
+impl ::std::fmt::Debug for ArconcRequest {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
         ::protobuf::text_format::fmt(self, f)
     }
 }
 
-impl ::protobuf::reflect::ProtobufValue for CompileRequest {
+impl ::protobuf::reflect::ProtobufValue for ArconcRequest {
     fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef {
         ::protobuf::reflect::ProtobufValueRef::Message(self)
     }
 }
 
 #[derive(PartialEq,Clone,Default)]
-pub struct CompileReply {
+pub struct ArconcReply {
+    // message oneof groups
+    pub msg: ::std::option::Option<ArconcReply_oneof_msg>,
+    // special fields
+    pub unknown_fields: ::protobuf::UnknownFields,
+    pub cached_size: ::protobuf::CachedSize,
+}
+
+impl<'a> ::std::default::Default for &'a ArconcReply {
+    fn default() -> &'a ArconcReply {
+        <ArconcReply as ::protobuf::Message>::default_instance()
+    }
+}
+
+#[derive(Clone,PartialEq,Debug)]
+pub enum ArconcReply_oneof_msg {
+    error(ArconcError),
+    success(ArconcSuccess),
+}
+
+impl ArconcReply {
+    pub fn new() -> ArconcReply {
+        ::std::default::Default::default()
+    }
+
+    // .arconc.ArconcError error = 1;
+
+
+    pub fn get_error(&self) -> &ArconcError {
+        match self.msg {
+            ::std::option::Option::Some(ArconcReply_oneof_msg::error(ref v)) => v,
+            _ => ArconcError::default_instance(),
+        }
+    }
+    pub fn clear_error(&mut self) {
+        self.msg = ::std::option::Option::None;
+    }
+
+    pub fn has_error(&self) -> bool {
+        match self.msg {
+            ::std::option::Option::Some(ArconcReply_oneof_msg::error(..)) => true,
+            _ => false,
+        }
+    }
+
+    // Param is passed by value, moved
+    pub fn set_error(&mut self, v: ArconcError) {
+        self.msg = ::std::option::Option::Some(ArconcReply_oneof_msg::error(v))
+    }
+
+    // Mutable pointer to the field.
+    pub fn mut_error(&mut self) -> &mut ArconcError {
+        if let ::std::option::Option::Some(ArconcReply_oneof_msg::error(_)) = self.msg {
+        } else {
+            self.msg = ::std::option::Option::Some(ArconcReply_oneof_msg::error(ArconcError::new()));
+        }
+        match self.msg {
+            ::std::option::Option::Some(ArconcReply_oneof_msg::error(ref mut v)) => v,
+            _ => panic!(),
+        }
+    }
+
+    // Take field
+    pub fn take_error(&mut self) -> ArconcError {
+        if self.has_error() {
+            match self.msg.take() {
+                ::std::option::Option::Some(ArconcReply_oneof_msg::error(v)) => v,
+                _ => panic!(),
+            }
+        } else {
+            ArconcError::new()
+        }
+    }
+
+    // .arconc.ArconcSuccess success = 2;
+
+
+    pub fn get_success(&self) -> &ArconcSuccess {
+        match self.msg {
+            ::std::option::Option::Some(ArconcReply_oneof_msg::success(ref v)) => v,
+            _ => ArconcSuccess::default_instance(),
+        }
+    }
+    pub fn clear_success(&mut self) {
+        self.msg = ::std::option::Option::None;
+    }
+
+    pub fn has_success(&self) -> bool {
+        match self.msg {
+            ::std::option::Option::Some(ArconcReply_oneof_msg::success(..)) => true,
+            _ => false,
+        }
+    }
+
+    // Param is passed by value, moved
+    pub fn set_success(&mut self, v: ArconcSuccess) {
+        self.msg = ::std::option::Option::Some(ArconcReply_oneof_msg::success(v))
+    }
+
+    // Mutable pointer to the field.
+    pub fn mut_success(&mut self) -> &mut ArconcSuccess {
+        if let ::std::option::Option::Some(ArconcReply_oneof_msg::success(_)) = self.msg {
+        } else {
+            self.msg = ::std::option::Option::Some(ArconcReply_oneof_msg::success(ArconcSuccess::new()));
+        }
+        match self.msg {
+            ::std::option::Option::Some(ArconcReply_oneof_msg::success(ref mut v)) => v,
+            _ => panic!(),
+        }
+    }
+
+    // Take field
+    pub fn take_success(&mut self) -> ArconcSuccess {
+        if self.has_success() {
+            match self.msg.take() {
+                ::std::option::Option::Some(ArconcReply_oneof_msg::success(v)) => v,
+                _ => panic!(),
+            }
+        } else {
+            ArconcSuccess::new()
+        }
+    }
+}
+
+impl ::protobuf::Message for ArconcReply {
+    fn is_initialized(&self) -> bool {
+        if let Some(ArconcReply_oneof_msg::error(ref v)) = self.msg {
+            if !v.is_initialized() {
+                return false;
+            }
+        }
+        if let Some(ArconcReply_oneof_msg::success(ref v)) = self.msg {
+            if !v.is_initialized() {
+                return false;
+            }
+        }
+        true
+    }
+
+    fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream) -> ::protobuf::ProtobufResult<()> {
+        while !is.eof()? {
+            let (field_number, wire_type) = is.read_tag_unpack()?;
+            match field_number {
+                1 => {
+                    if wire_type != ::protobuf::wire_format::WireTypeLengthDelimited {
+                        return ::std::result::Result::Err(::protobuf::rt::unexpected_wire_type(wire_type));
+                    }
+                    self.msg = ::std::option::Option::Some(ArconcReply_oneof_msg::error(is.read_message()?));
+                },
+                2 => {
+                    if wire_type != ::protobuf::wire_format::WireTypeLengthDelimited {
+                        return ::std::result::Result::Err(::protobuf::rt::unexpected_wire_type(wire_type));
+                    }
+                    self.msg = ::std::option::Option::Some(ArconcReply_oneof_msg::success(is.read_message()?));
+                },
+                _ => {
+                    ::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields())?;
+                },
+            };
+        }
+        ::std::result::Result::Ok(())
+    }
+
+    // Compute sizes of nested messages
+    #[allow(unused_variables)]
+    fn compute_size(&self) -> u32 {
+        let mut my_size = 0;
+        if let ::std::option::Option::Some(ref v) = self.msg {
+            match v {
+                &ArconcReply_oneof_msg::error(ref v) => {
+                    let len = v.compute_size();
+                    my_size += 1 + ::protobuf::rt::compute_raw_varint32_size(len) + len;
+                },
+                &ArconcReply_oneof_msg::success(ref v) => {
+                    let len = v.compute_size();
+                    my_size += 1 + ::protobuf::rt::compute_raw_varint32_size(len) + len;
+                },
+            };
+        }
+        my_size += ::protobuf::rt::unknown_fields_size(self.get_unknown_fields());
+        self.cached_size.set(my_size);
+        my_size
+    }
+
+    fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream) -> ::protobuf::ProtobufResult<()> {
+        if let ::std::option::Option::Some(ref v) = self.msg {
+            match v {
+                &ArconcReply_oneof_msg::error(ref v) => {
+                    os.write_tag(1, ::protobuf::wire_format::WireTypeLengthDelimited)?;
+                    os.write_raw_varint32(v.get_cached_size())?;
+                    v.write_to_with_cached_sizes(os)?;
+                },
+                &ArconcReply_oneof_msg::success(ref v) => {
+                    os.write_tag(2, ::protobuf::wire_format::WireTypeLengthDelimited)?;
+                    os.write_raw_varint32(v.get_cached_size())?;
+                    v.write_to_with_cached_sizes(os)?;
+                },
+            };
+        }
+        os.write_unknown_fields(self.get_unknown_fields())?;
+        ::std::result::Result::Ok(())
+    }
+
+    fn get_cached_size(&self) -> u32 {
+        self.cached_size.get()
+    }
+
+    fn get_unknown_fields(&self) -> &::protobuf::UnknownFields {
+        &self.unknown_fields
+    }
+
+    fn mut_unknown_fields(&mut self) -> &mut ::protobuf::UnknownFields {
+        &mut self.unknown_fields
+    }
+
+    fn as_any(&self) -> &dyn (::std::any::Any) {
+        self as &dyn (::std::any::Any)
+    }
+    fn as_any_mut(&mut self) -> &mut dyn (::std::any::Any) {
+        self as &mut dyn (::std::any::Any)
+    }
+    fn into_any(self: Box<Self>) -> ::std::boxed::Box<dyn (::std::any::Any)> {
+        self
+    }
+
+    fn descriptor(&self) -> &'static ::protobuf::reflect::MessageDescriptor {
+        Self::descriptor_static()
+    }
+
+    fn new() -> ArconcReply {
+        ArconcReply::new()
+    }
+
+    fn descriptor_static() -> &'static ::protobuf::reflect::MessageDescriptor {
+        static mut descriptor: ::protobuf::lazy::Lazy<::protobuf::reflect::MessageDescriptor> = ::protobuf::lazy::Lazy {
+            lock: ::protobuf::lazy::ONCE_INIT,
+            ptr: 0 as *const ::protobuf::reflect::MessageDescriptor,
+        };
+        unsafe {
+            descriptor.get(|| {
+                let mut fields = ::std::vec::Vec::new();
+                fields.push(::protobuf::reflect::accessor::make_singular_message_accessor::<_, ArconcError>(
+                    "error",
+                    ArconcReply::has_error,
+                    ArconcReply::get_error,
+                ));
+                fields.push(::protobuf::reflect::accessor::make_singular_message_accessor::<_, ArconcSuccess>(
+                    "success",
+                    ArconcReply::has_success,
+                    ArconcReply::get_success,
+                ));
+                ::protobuf::reflect::MessageDescriptor::new::<ArconcReply>(
+                    "ArconcReply",
+                    fields,
+                    file_descriptor_proto()
+                )
+            })
+        }
+    }
+
+    fn default_instance() -> &'static ArconcReply {
+        static mut instance: ::protobuf::lazy::Lazy<ArconcReply> = ::protobuf::lazy::Lazy {
+            lock: ::protobuf::lazy::ONCE_INIT,
+            ptr: 0 as *const ArconcReply,
+        };
+        unsafe {
+            instance.get(ArconcReply::new)
+        }
+    }
+}
+
+impl ::protobuf::Clear for ArconcReply {
+    fn clear(&mut self) {
+        self.msg = ::std::option::Option::None;
+        self.msg = ::std::option::Option::None;
+        self.unknown_fields.clear();
+    }
+}
+
+impl ::std::fmt::Debug for ArconcReply {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+        ::protobuf::text_format::fmt(self, f)
+    }
+}
+
+impl ::protobuf::reflect::ProtobufValue for ArconcReply {
+    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef {
+        ::protobuf::reflect::ProtobufValueRef::Message(self)
+    }
+}
+
+#[derive(PartialEq,Clone,Default)]
+pub struct ArconcError {
     // message fields
     pub message: ::std::string::String,
     // special fields
@@ -204,14 +496,14 @@ pub struct CompileReply {
     pub cached_size: ::protobuf::CachedSize,
 }
 
-impl<'a> ::std::default::Default for &'a CompileReply {
-    fn default() -> &'a CompileReply {
-        <CompileReply as ::protobuf::Message>::default_instance()
+impl<'a> ::std::default::Default for &'a ArconcError {
+    fn default() -> &'a ArconcError {
+        <ArconcError as ::protobuf::Message>::default_instance()
     }
 }
 
-impl CompileReply {
-    pub fn new() -> CompileReply {
+impl ArconcError {
+    pub fn new() -> ArconcError {
         ::std::default::Default::default()
     }
 
@@ -242,7 +534,7 @@ impl CompileReply {
     }
 }
 
-impl ::protobuf::Message for CompileReply {
+impl ::protobuf::Message for ArconcError {
     fn is_initialized(&self) -> bool {
         true
     }
@@ -308,8 +600,8 @@ impl ::protobuf::Message for CompileReply {
         Self::descriptor_static()
     }
 
-    fn new() -> CompileReply {
-        CompileReply::new()
+    fn new() -> ArconcError {
+        ArconcError::new()
     }
 
     fn descriptor_static() -> &'static ::protobuf::reflect::MessageDescriptor {
@@ -322,11 +614,11 @@ impl ::protobuf::Message for CompileReply {
                 let mut fields = ::std::vec::Vec::new();
                 fields.push(::protobuf::reflect::accessor::make_simple_field_accessor::<_, ::protobuf::types::ProtobufTypeString>(
                     "message",
-                    |m: &CompileReply| { &m.message },
-                    |m: &mut CompileReply| { &mut m.message },
+                    |m: &ArconcError| { &m.message },
+                    |m: &mut ArconcError| { &mut m.message },
                 ));
-                ::protobuf::reflect::MessageDescriptor::new::<CompileReply>(
-                    "CompileReply",
+                ::protobuf::reflect::MessageDescriptor::new::<ArconcError>(
+                    "ArconcError",
                     fields,
                     file_descriptor_proto()
                 )
@@ -334,41 +626,214 @@ impl ::protobuf::Message for CompileReply {
         }
     }
 
-    fn default_instance() -> &'static CompileReply {
-        static mut instance: ::protobuf::lazy::Lazy<CompileReply> = ::protobuf::lazy::Lazy {
+    fn default_instance() -> &'static ArconcError {
+        static mut instance: ::protobuf::lazy::Lazy<ArconcError> = ::protobuf::lazy::Lazy {
             lock: ::protobuf::lazy::ONCE_INIT,
-            ptr: 0 as *const CompileReply,
+            ptr: 0 as *const ArconcError,
         };
         unsafe {
-            instance.get(CompileReply::new)
+            instance.get(ArconcError::new)
         }
     }
 }
 
-impl ::protobuf::Clear for CompileReply {
+impl ::protobuf::Clear for ArconcError {
     fn clear(&mut self) {
         self.message.clear();
         self.unknown_fields.clear();
     }
 }
 
-impl ::std::fmt::Debug for CompileReply {
+impl ::std::fmt::Debug for ArconcError {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
         ::protobuf::text_format::fmt(self, f)
     }
 }
 
-impl ::protobuf::reflect::ProtobufValue for CompileReply {
+impl ::protobuf::reflect::ProtobufValue for ArconcError {
+    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef {
+        ::protobuf::reflect::ProtobufValueRef::Message(self)
+    }
+}
+
+#[derive(PartialEq,Clone,Default)]
+pub struct ArconcSuccess {
+    // message fields
+    pub path: ::std::string::String,
+    // special fields
+    pub unknown_fields: ::protobuf::UnknownFields,
+    pub cached_size: ::protobuf::CachedSize,
+}
+
+impl<'a> ::std::default::Default for &'a ArconcSuccess {
+    fn default() -> &'a ArconcSuccess {
+        <ArconcSuccess as ::protobuf::Message>::default_instance()
+    }
+}
+
+impl ArconcSuccess {
+    pub fn new() -> ArconcSuccess {
+        ::std::default::Default::default()
+    }
+
+    // string path = 1;
+
+
+    pub fn get_path(&self) -> &str {
+        &self.path
+    }
+    pub fn clear_path(&mut self) {
+        self.path.clear();
+    }
+
+    // Param is passed by value, moved
+    pub fn set_path(&mut self, v: ::std::string::String) {
+        self.path = v;
+    }
+
+    // Mutable pointer to the field.
+    // If field is not initialized, it is initialized with default value first.
+    pub fn mut_path(&mut self) -> &mut ::std::string::String {
+        &mut self.path
+    }
+
+    // Take field
+    pub fn take_path(&mut self) -> ::std::string::String {
+        ::std::mem::replace(&mut self.path, ::std::string::String::new())
+    }
+}
+
+impl ::protobuf::Message for ArconcSuccess {
+    fn is_initialized(&self) -> bool {
+        true
+    }
+
+    fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream) -> ::protobuf::ProtobufResult<()> {
+        while !is.eof()? {
+            let (field_number, wire_type) = is.read_tag_unpack()?;
+            match field_number {
+                1 => {
+                    ::protobuf::rt::read_singular_proto3_string_into(wire_type, is, &mut self.path)?;
+                },
+                _ => {
+                    ::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields())?;
+                },
+            };
+        }
+        ::std::result::Result::Ok(())
+    }
+
+    // Compute sizes of nested messages
+    #[allow(unused_variables)]
+    fn compute_size(&self) -> u32 {
+        let mut my_size = 0;
+        if !self.path.is_empty() {
+            my_size += ::protobuf::rt::string_size(1, &self.path);
+        }
+        my_size += ::protobuf::rt::unknown_fields_size(self.get_unknown_fields());
+        self.cached_size.set(my_size);
+        my_size
+    }
+
+    fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream) -> ::protobuf::ProtobufResult<()> {
+        if !self.path.is_empty() {
+            os.write_string(1, &self.path)?;
+        }
+        os.write_unknown_fields(self.get_unknown_fields())?;
+        ::std::result::Result::Ok(())
+    }
+
+    fn get_cached_size(&self) -> u32 {
+        self.cached_size.get()
+    }
+
+    fn get_unknown_fields(&self) -> &::protobuf::UnknownFields {
+        &self.unknown_fields
+    }
+
+    fn mut_unknown_fields(&mut self) -> &mut ::protobuf::UnknownFields {
+        &mut self.unknown_fields
+    }
+
+    fn as_any(&self) -> &dyn (::std::any::Any) {
+        self as &dyn (::std::any::Any)
+    }
+    fn as_any_mut(&mut self) -> &mut dyn (::std::any::Any) {
+        self as &mut dyn (::std::any::Any)
+    }
+    fn into_any(self: Box<Self>) -> ::std::boxed::Box<dyn (::std::any::Any)> {
+        self
+    }
+
+    fn descriptor(&self) -> &'static ::protobuf::reflect::MessageDescriptor {
+        Self::descriptor_static()
+    }
+
+    fn new() -> ArconcSuccess {
+        ArconcSuccess::new()
+    }
+
+    fn descriptor_static() -> &'static ::protobuf::reflect::MessageDescriptor {
+        static mut descriptor: ::protobuf::lazy::Lazy<::protobuf::reflect::MessageDescriptor> = ::protobuf::lazy::Lazy {
+            lock: ::protobuf::lazy::ONCE_INIT,
+            ptr: 0 as *const ::protobuf::reflect::MessageDescriptor,
+        };
+        unsafe {
+            descriptor.get(|| {
+                let mut fields = ::std::vec::Vec::new();
+                fields.push(::protobuf::reflect::accessor::make_simple_field_accessor::<_, ::protobuf::types::ProtobufTypeString>(
+                    "path",
+                    |m: &ArconcSuccess| { &m.path },
+                    |m: &mut ArconcSuccess| { &mut m.path },
+                ));
+                ::protobuf::reflect::MessageDescriptor::new::<ArconcSuccess>(
+                    "ArconcSuccess",
+                    fields,
+                    file_descriptor_proto()
+                )
+            })
+        }
+    }
+
+    fn default_instance() -> &'static ArconcSuccess {
+        static mut instance: ::protobuf::lazy::Lazy<ArconcSuccess> = ::protobuf::lazy::Lazy {
+            lock: ::protobuf::lazy::ONCE_INIT,
+            ptr: 0 as *const ArconcSuccess,
+        };
+        unsafe {
+            instance.get(ArconcSuccess::new)
+        }
+    }
+}
+
+impl ::protobuf::Clear for ArconcSuccess {
+    fn clear(&mut self) {
+        self.path.clear();
+        self.unknown_fields.clear();
+    }
+}
+
+impl ::std::fmt::Debug for ArconcSuccess {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+        ::protobuf::text_format::fmt(self, f)
+    }
+}
+
+impl ::protobuf::reflect::ProtobufValue for ArconcSuccess {
     fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef {
         ::protobuf::reflect::ProtobufValueRef::Message(self)
     }
 }
 
 static file_descriptor_proto_data: &'static [u8] = b"\
-    \n\x0carconc.proto\x12\x06arconc\"$\n\x0eCompileRequest\x12\x12\n\x04spe\
-    c\x18\x01\x20\x01(\x0cR\x04spec\"(\n\x0cCompileReply\x12\x18\n\x07messag\
-    e\x18\x01\x20\x01(\tR\x07message2E\n\x08Compiler\x129\n\x07Compile\x12\
-    \x16.arconc.CompileRequest\x1a\x14.arconc.CompileReply\"\0b\x06proto3\
+    \n\x0carconc.proto\x12\x06arconc\"#\n\rArconcRequest\x12\x12\n\x04spec\
+    \x18\x01\x20\x01(\x0cR\x04spec\"t\n\x0bArconcReply\x12+\n\x05error\x18\
+    \x01\x20\x01(\x0b2\x13.arconc.ArconcErrorH\0R\x05error\x121\n\x07success\
+    \x18\x02\x20\x01(\x0b2\x15.arconc.ArconcSuccessH\0R\x07successB\x05\n\
+    \x03msg\"'\n\x0bArconcError\x12\x18\n\x07message\x18\x01\x20\x01(\tR\x07\
+    message\"#\n\rArconcSuccess\x12\x12\n\x04path\x18\x01\x20\x01(\tR\x04pat\
+    h2A\n\x06Arconc\x127\n\x07Compile\x12\x15.arconc.ArconcRequest\x1a\x13.a\
+    rconc.ArconcReply\"\0B\x1f\n\x1dse.kth.arcon.appmaster.arconcb\x06proto3\
 ";
 
 static mut file_descriptor_proto_lazy: ::protobuf::lazy::Lazy<::protobuf::descriptor::FileDescriptorProto> = ::protobuf::lazy::Lazy {
