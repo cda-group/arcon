@@ -148,14 +148,23 @@ struct WorkSpace {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::TempDir;
 
     #[test]
     fn simple_compiler_env_test() {
-        let mut env = CompilerEnv::load("testenv".to_string()).unwrap();
+        let tmp_dir = TempDir::new().unwrap();
+        let dir_path = tmp_dir.path().to_string_lossy().into_owned();
+
+        let mut env = CompilerEnv::load(dir_path.clone()).unwrap();
+
+        // NOTE: this should probably be approached in a different way
+        let path = std::path::Path::new(&dir_path);
+        std::env::set_current_dir(&path).unwrap();
+
         assert_eq!(env.get_projects().len(), 0);
-        env.add_project("hej".to_string()).unwrap();
+        env.add_project("project".to_string()).unwrap();
         assert_eq!(env.get_projects().len(), 1);
-        env.remove_project("hej".to_string()).unwrap();
+        env.remove_project("project".to_string()).unwrap();
         assert_eq!(env.get_projects().len(), 0);
         env.destroy().unwrap();
     }
