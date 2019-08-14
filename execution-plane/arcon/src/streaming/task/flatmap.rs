@@ -22,7 +22,7 @@ where
 {
     ctx: ComponentContext<Self>,
     _in_channels: Vec<Channel>,
-    out_channels: Box<ChannelStrategy<OUT, Self>>,
+    out_channels: Box<ChannelStrategy<OUT>>,
     udf: Arc<Module>,
     udf_ctx: WeldContext,
     metric: TaskMetric,
@@ -36,7 +36,7 @@ where
     pub fn new(
         udf: Arc<Module>,
         in_channels: Vec<Channel>,
-        out_channels: Box<ChannelStrategy<OUT, Self>>,
+        out_channels: Box<ChannelStrategy<OUT>>,
     ) -> Self {
         let ctx = WeldContext::new(&udf.conf()).unwrap();
         FlatMap {
@@ -75,8 +75,7 @@ where
     }
 
     fn push_out(&mut self, event: ArconEvent<OUT>) -> ArconResult<()> {
-        let self_ptr = self as *const FlatMap<IN, OUT>;
-        let _ = self.out_channels.output(event, self_ptr)?;
+        let _ = self.out_channels.output(event, &self.ctx.system())?;
         Ok(())
     }
 }
@@ -98,13 +97,13 @@ mod tests {
         });
 
         let channel = Channel::Local(sink_comp.actor_ref());
-        let channel_strategy: Box<ChannelStrategy<i32, FlatMap<ArconVec<i32>, i32>>> =
+        let channel_strategy: Box<ChannelStrategy<i32>> =
             Box::new(Forward::new(channel));
 
         let weld_code = String::from("|x: vec[i32]| map(x, |a: i32| a + i32(5))");
         let module = Arc::new(Module::new(weld_code).unwrap());
         let filter_task =
-            system.create_and_start(move || FlatMap::new(module, Vec::new(), channel_strategy));
+            system.create_and_start(move || FlatMap::<ArconVec<i32>, i32>::new(module, Vec::new(), channel_strategy));
 
         let vec: Vec<i32> = vec![1, 2, 3, 4, 5];
         let arcon_vec = ArconVec::new(vec);

@@ -65,14 +65,11 @@ fn tumbling(
     builder_type: &TokenStream,
 ) -> TokenStream {
     quote! {
-        pub type Assigner =
-            EventTimeWindowAssigner<#input_type, #builder_type, #output_type>;
-
-        let channel_strategy: Box<Forward<#output_type, Assigner>> =
+        let channel_strategy: Box<Forward<#output_type>> =
             Box::new(Forward::new(Channel::Local(#successor.actor_ref())));
 
         let #name = system.create_and_start(move || {
-             EventTimeWindowAssigner::new(
+             EventTimeWindowAssigner::<#input_type, #builder_type, #output_type>::new(
                 channel_strategy,
                 builder_code,
                 udf_code,

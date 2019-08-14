@@ -31,33 +31,32 @@ pub fn stream_task(
         match &successors.get(0).unwrap() {
             Local { id } => {
                 let target = Ident::new(&id, Span::call_site());
-                // Yeah... Fix this..
-                let channel_strategy = {
+                let task_signature = {
                     match &task.kind {
                         FlatMap => {
                             quote! {
-                                let channel_strategy: Box<ChannelStrategy<#output_type, FlatMap<#input_type, #output_type>>> = Box::new(Forward::new(channel));
+                                FlatMap::<#input_type, #output_type>::new(module, Vec::new(), channel_strategy)
                             }
                         }
                         Map => {
                             quote! {
-                                let channel_strategy: Box<ChannelStrategy<#output_type, Map<#input_type, #output_type>>> = Box::new(Forward::new(channel));
+                                Map::<#input_type, #output_type>::new(module, Vec::new(), channel_strategy)
                             }
                         }
                         Filter => {
                             quote! {
-                                let channel_strategy: Box<ChannelStrategy<#output_type, Filter<#input_type>>> = Box::new(Forward::new(channel));
+                                Filter::<#output_type>::new(module, Vec::new(), channel_strategy)
                             }
                         }
                     }
                 };
                 quote! {
                     let channel = Channel::Local(#target.actor_ref());
-                    #channel_strategy
+                    let channel_strategy: Box<ChannelStrategy<#output_type>> = Box::new(Forward::new(channel));
 
                     let code = String::from(#weld_code);
                     let module = std::sync::Arc::new(Module::new(code).unwrap());
-                    let #node_name = system.create_and_start(move || #task_ident::new(module, Vec::new(), channel_strategy));
+                    let #node_name = system.create_and_start(move || #task_signature);
                 }
             }
             Remote { id: _, addr: _ } => {

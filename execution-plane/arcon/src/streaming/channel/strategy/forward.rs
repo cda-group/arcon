@@ -1,40 +1,35 @@
+use kompact::KompactSystem;
 use crate::data::{ArconEvent, ArconType};
 use crate::error::*;
 use crate::streaming::channel::strategy::{channel_output, ChannelStrategy};
 use crate::streaming::channel::Channel;
-use kompact::ComponentDefinition;
 use std::marker::PhantomData;
 
-pub struct Forward<A, B>
+pub struct Forward<A>
 where
     A: 'static + ArconType,
-    B: ComponentDefinition + Sized + 'static,
 {
     out_channel: Channel,
     phantom_a: PhantomData<A>,
-    phantom_b: PhantomData<B>,
 }
 
-impl<A, B> Forward<A, B>
+impl<A> Forward<A>
 where
     A: 'static + ArconType,
-    B: ComponentDefinition + Sized + 'static,
 {
-    pub fn new(out_channel: Channel) -> Forward<A, B> {
+    pub fn new(out_channel: Channel) -> Forward<A> {
         Forward {
             out_channel,
             phantom_a: PhantomData,
-            phantom_b: PhantomData,
         }
     }
 }
 
-impl<A, B> ChannelStrategy<A, B> for Forward<A, B>
+impl<A> ChannelStrategy<A> for Forward<A>
 where
     A: 'static + ArconType,
-    B: ComponentDefinition + Sized + 'static,
 {
-    fn output(&mut self, event: ArconEvent<A>, source: *const B) -> ArconResult<()> {
+    fn output(&mut self, event: ArconEvent<A>, source: &KompactSystem) -> ArconResult<()> {
         channel_output(&self.out_channel, event, source)
     }
     fn add_channel(&mut self, _channel: Channel) {
@@ -43,20 +38,6 @@ where
     fn remove_channel(&mut self, _channel: Channel) {
         // ignore
     }
-}
-
-unsafe impl<A, B> Send for Forward<A, B>
-where
-    A: 'static + ArconType,
-    B: ComponentDefinition + Sized + 'static,
-{
-}
-
-unsafe impl<A, B> Sync for Forward<A, B>
-where
-    A: 'static + ArconType,
-    B: ComponentDefinition + Sized + 'static,
-{
 }
 
 #[cfg(test)]
@@ -73,13 +54,13 @@ mod tests {
 
         let total_msgs = 10;
         let comp = system.create_and_start(move || TestComp::new());
-        let mut channel_strategy: Box<ChannelStrategy<Input, TestComp>> =
+        let mut channel_strategy: Box<ChannelStrategy<Input>> =
             Box::new(Forward::new(Channel::Local(comp.actor_ref())));
 
         for _i in 0..total_msgs {
             // NOTE: second parameter is a fake channel...
             let input = ArconEvent::Element(ArconElement::new(Input { id: 1 }));
-            let _ = channel_strategy.output(input, &*comp.definition().lock().unwrap());
+            let _ = channel_strategy.output(input, &system);
         }
 
         std::thread::sleep(std::time::Duration::from_secs(1));
