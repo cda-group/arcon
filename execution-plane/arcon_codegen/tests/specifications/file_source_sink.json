@@ -1,6 +1,7 @@
 {
 "id": "file_source_sink",
 "target": "x86-64-unknown-linux-gnu",
+"system_addr": "127.0.0.1:3003",
 "nodes": [
     {
         "id": "node_1",
