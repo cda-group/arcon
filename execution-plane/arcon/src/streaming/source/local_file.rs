@@ -1,10 +1,10 @@
 use crate::data::{ArconType, ArconEvent, ArconElement};
+use crate::streaming::channel::strategy::ChannelStrategy;
 use kompact::*;
 use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
 use std::str::FromStr;
-use std::sync::Arc;
 /*
     LocalFileSource:
     Allows generation of events from a file.
@@ -15,15 +15,15 @@ use std::sync::Arc;
 #[derive(ComponentDefinition)]
 pub struct LocalFileSource<A: 'static + ArconType + FromStr> {
     ctx: ComponentContext<LocalFileSource<A>>,
-    subscriber: Arc<ActorRef>,
+    channel_strategy: Box<ChannelStrategy<A>>,
     file_path: String,
 }
 
 impl<A: ArconType + FromStr> LocalFileSource<A> {
-    pub fn new(file_path: String, subscriber: ActorRef) -> LocalFileSource<A> {
+    pub fn new(file_path: String, strategy: Box<ChannelStrategy<A>>) -> LocalFileSource<A> {
         LocalFileSource {
             ctx: ComponentContext::new(),
-            subscriber: Arc::new(subscriber),
+            channel_strategy: strategy,
             file_path: file_path,
         }
     }
@@ -36,7 +36,9 @@ impl<A: ArconType + FromStr> LocalFileSource<A> {
                     Ok(l) => {
                         if let Ok(v) = l.parse::<A>() {
                             let event = ArconEvent::Element(ArconElement::new(v));
-                            self.subscriber.tell(Box::new(event), &self.actor_ref());
+                            if let Err(err) = self.channel_strategy.output(event,&self.ctx.system()) {
+                                error!(self.ctx.log(), "Unable to output event, error {}", err);
+                            }
                         } else {
                             error!(self.ctx.log(), "Unable to parse line {}", self.file_path);
                         }
@@ -58,9 +60,7 @@ impl<A: ArconType + FromStr> Provide<ControlPort> for LocalFileSource<A> {
             ControlEvent::Start => {
                 self.process_file();
             }
-            _ => {
-                error!(self.ctx.log(), "bad ControlEvent");
-            }
+            _ => ()
         }
     }
 }
@@ -74,11 +74,13 @@ impl<A: ArconType + FromStr> Actor for LocalFileSource<A> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::prelude::{Channel, Forward};
     use kompact::default_components::DeadletterBox;
     use std::io::prelude::*;
     use std::{thread, time};
     use crate::prelude::DebugSink;
     use tempfile::NamedTempFile;
+    use std::sync::Arc;
 
     // Shared methods for test cases
     fn wait(time: u64) -> () {
@@ -112,9 +114,12 @@ mod tests {
 
         file.write_all(b"123").unwrap();
 
+        let channel = Channel::Local(sink.actor_ref());
+        let channel_strategy = Box::new(Forward::new(channel));
+
         let file_source: LocalFileSource<u64> = LocalFileSource::new(
             String::from(&file_path),
-            sink.actor_ref(),
+            channel_strategy,
         );
         let (source, _) = system.create_and_register(move || file_source);
         system.start(&source);
@@ -135,8 +140,11 @@ mod tests {
 
         file.write_all(b"123.5").unwrap();
 
+        let channel = Channel::Local(sink.actor_ref());
+        let channel_strategy = Box::new(Forward::new(channel));
+
         let file_source: LocalFileSource<u64> =
-            LocalFileSource::new(String::from(&file_path), sink.actor_ref());
+            LocalFileSource::new(String::from(&file_path), channel_strategy);
         let (source, _) = system.create_and_register(move || file_source);
         system.start(&source);
         wait(1);
@@ -153,9 +161,12 @@ mod tests {
 
         file.write_all(b"123").unwrap();
 
+        let channel = Channel::Local(sink.actor_ref());
+        let channel_strategy = Box::new(Forward::new(channel));
+
         let file_source: LocalFileSource<f32> = LocalFileSource::new(
             String::from(&file_path),
-            sink.actor_ref(),
+            channel_strategy,
         );
         let (source, _) = system.create_and_register(move || file_source);
         system.start(&source);
@@ -175,8 +186,11 @@ mod tests {
 
         file.write_all(b"123.5").unwrap();
 
+        let channel = Channel::Local(sink.actor_ref());
+        let channel_strategy = Box::new(Forward::new(channel));
+
         let file_source: LocalFileSource<f32> =
-            LocalFileSource::new(String::from(&file_path), sink.actor_ref());
+            LocalFileSource::new(String::from(&file_path), channel_strategy);
         let (source, _) = system.create_and_register(move || file_source);
         system.start(&source);
         wait(1);
