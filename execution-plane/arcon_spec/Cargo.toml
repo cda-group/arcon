@@ -3,7 +3,13 @@ name = "arcon_spec"
 version = "0.1.0"
 authors = ["Max Meldrum <mmeldrum@kth.se>"]
 edition = "2018"
-publish = false
+readme = "README.md"
+license = "BSD-3-Clause"
+repository = "https://github.com/cda-group/arcon"
+homepage = "https://github.com/cda-group/arcon"
+description = """
+Implementation of the Arcon Specification
+"""
 
 [dependencies]
 serde = "0.9"
