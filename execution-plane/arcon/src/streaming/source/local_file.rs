@@ -76,71 +76,28 @@ mod tests {
     use super::*;
     use kompact::default_components::DeadletterBox;
     use std::io::prelude::*;
-    use std::{fs, thread, time};
+    use std::{thread, time};
+    use crate::prelude::DebugSink;
+    use tempfile::NamedTempFile;
 
-    // Stub for window-results
-    mod sink {
-        use super::*;
-
-        pub struct Sink<A: 'static + ArconType> {
-            ctx: ComponentContext<Sink<A>>,
-            pub result: Vec<A>,
-        }
-        impl<A: ArconType> Sink<A> {
-            pub fn new(_t: A) -> Sink<A> {
-                Sink {
-                    ctx: ComponentContext::new(),
-                    result: Vec::new(),
-                }
-            }
-        }
-        impl<A: ArconType> Provide<ControlPort> for Sink<A> {
-            fn handle(&mut self, _event: ControlEvent) -> () {}
-        }
-        impl<A: ArconType> Actor for Sink<A> {
-            fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
-                if let Some(m) = msg.downcast_ref::<A>() {
-                    self.result.push((*m).clone());
-                } else {
-                    println!("unrecognized message");
-                }
-            }
-            fn receive_message(&mut self, _sender: ActorPath, _ser_id: u64, _buf: &mut Buf) {}
-        }
-        impl<A: ArconType> ComponentDefinition for Sink<A> {
-            fn setup(&mut self, self_component: Arc<Component<Self>>) -> () {
-                self.ctx_mut().initialise(self_component);
-            }
-            fn execute(&mut self, _max_events: usize, skip: usize) -> ExecuteResult {
-                ExecuteResult::new(skip, skip)
-            }
-            fn ctx(&self) -> &ComponentContext<Self> {
-                &self.ctx
-            }
-            fn ctx_mut(&mut self) -> &mut ComponentContext<Self> {
-                &mut self.ctx
-            }
-            fn type_name() -> &'static str {
-                "EventTimeWindowAssigner"
-            }
-        }
-    }
     // Shared methods for test cases
     fn wait(time: u64) -> () {
         thread::sleep(time::Duration::from_secs(time));
     }
-    fn test_setup<A: ArconType>(
-        a: A,
-    ) -> (
+
+    fn test_setup<A: ArconType>() -> (
         kompact::KompactSystem,
-        Arc<kompact::Component<sink::Sink<A>>>,
+        Arc<kompact::Component<DebugSink<A>>>,
     ) {
         // Kompact set-up
         let mut cfg = KompactConfig::new();
         cfg.system_components(DeadletterBox::new, NetworkConfig::default().build());
         let system = KompactSystem::new(cfg).expect("KompactSystem");
 
-        let (sink, _) = system.create_and_register(move || sink::Sink::new(a));
+        let (sink, _) = system.create_and_register(move || {
+            let s: DebugSink<A> = DebugSink::new();
+            s
+        });
 
         system.start(&sink);
 
@@ -148,19 +105,15 @@ mod tests {
     }
     // Test cases
     #[test]
-    fn local_file_u64_no_decimal() -> std::result::Result<(), std::io::Error> {
-        let (system, sink) = test_setup(1 as u64);
-        if let Ok(mut file) = File::create("local_file_u64_no_decimal.txt") {
-            if let Ok(_) = file.write_all(b"123") {
-            } else {
-                println!("Unable to write file in test case");
-            }
-        } else {
-            println!("Unable to create file in test case");
-        }
+    fn local_file_u64_no_decimal() {
+        let (system, sink) = test_setup::<u64>();
+        let mut file = NamedTempFile::new().unwrap();
+        let file_path = file.path().to_string_lossy().into_owned();
+
+        file.write_all(b"123").unwrap();
 
         let file_source: LocalFileSource<u64> = LocalFileSource::new(
-            String::from("local_file_u64_no_decimal.txt"),
+            String::from(&file_path),
             sink.actor_ref(),
         );
         let (source, _) = system.create_and_register(move || file_source);
@@ -168,50 +121,40 @@ mod tests {
         wait(1);
 
         let sink_inspect = sink.definition().lock().unwrap();
-        assert_eq!(&sink_inspect.result.len(), &(1 as usize));
-        let r0 = &sink_inspect.result[0];
+        assert_eq!(&sink_inspect.data.len(), &(1 as usize));
+        let r0 = &sink_inspect.data[0];
         assert_eq!(*r0, 123 as u64);
-        fs::remove_file("local_file_u64_no_decimal.txt")?;
-        Ok(())
     }
+
     #[test]
-    fn local_file_u64_decimal() -> std::result::Result<(), std::io::Error> {
+    fn local_file_u64_decimal() {
         // Should not work, Asserts that nothing is received by sink
-        let (system, sink) = test_setup(1 as u64);
-        if let Ok(mut file) = File::create("local_file_u64_decimal.txt") {
-            if let Ok(_) = file.write_all(b"123.5") {
-            } else {
-                println!("Unable to write file in test case");
-            }
-        } else {
-            println!("Unable to create file in test case");
-        }
+        let (system, sink) = test_setup::<u64>();
+        let mut file = NamedTempFile::new().unwrap();
+        let file_path = file.path().to_string_lossy().into_owned();
+
+        file.write_all(b"123.5").unwrap();
 
         let file_source: LocalFileSource<u64> =
-            LocalFileSource::new(String::from("local_file_u64_decimal.txt"), sink.actor_ref());
+            LocalFileSource::new(String::from(&file_path), sink.actor_ref());
         let (source, _) = system.create_and_register(move || file_source);
         system.start(&source);
         wait(1);
 
         let sink_inspect = sink.definition().lock().unwrap();
-        assert_eq!(&sink_inspect.result.len(), &(0 as usize));
-        fs::remove_file("local_file_u64_decimal.txt")?;
-        Ok(())
+        assert_eq!(&sink_inspect.data.len(), &(0 as usize));
     }
+
     #[test]
-    fn local_file_f32_no_decimal() -> std::result::Result<(), std::io::Error> {
-        let (system, sink) = test_setup(1 as f32);
-        if let Ok(mut file) = File::create("local_file_f32_no_decimal.txt") {
-            if let Ok(_) = file.write_all(b"123") {
-            } else {
-                println!("Unable to write file in test case");
-            }
-        } else {
-            println!("Unable to create file in test case");
-        }
+    fn local_file_f32_no_decimal() {
+        let (system, sink) = test_setup::<f32>();
+        let mut file = NamedTempFile::new().unwrap();
+        let file_path = file.path().to_string_lossy().into_owned();
+
+        file.write_all(b"123").unwrap();
 
         let file_source: LocalFileSource<f32> = LocalFileSource::new(
-            String::from("local_file_f32_no_decimal.txt"),
+            String::from(&file_path),
             sink.actor_ref(),
         );
         let (source, _) = system.create_and_register(move || file_source);
@@ -219,35 +162,28 @@ mod tests {
         wait(1);
 
         let sink_inspect = sink.definition().lock().unwrap();
-        assert_eq!(&sink_inspect.result.len(), &(1 as usize));
-        let r0 = &sink_inspect.result[0];
+        assert_eq!(&sink_inspect.data.len(), &(1 as usize));
+        let r0 = &sink_inspect.data[0];
         assert_eq!(*r0, 123 as f32);
-        fs::remove_file("local_file_f32_no_decimal.txt")?;
-        Ok(())
     }
+
     #[test]
-    fn local_file_f32_decimal() -> std::result::Result<(), std::io::Error> {
-        let (system, sink) = test_setup(1 as f32);
-        if let Ok(mut file) = File::create("local_file_f32_decimal.txt") {
-            if let Ok(_) = file.write_all(b"123.5") {
-            } else {
-                println!("Unable to write file in test case");
-            }
-        } else {
-            println!("Unable to create file in test case");
-        }
+    fn local_file_f32_decimal() {
+        let (system, sink) = test_setup::<f32>();
+        let mut file = NamedTempFile::new().unwrap();
+        let file_path = file.path().to_string_lossy().into_owned();
+
+        file.write_all(b"123.5").unwrap();
 
         let file_source: LocalFileSource<f32> =
-            LocalFileSource::new(String::from("local_file_f32_decimal.txt"), sink.actor_ref());
+            LocalFileSource::new(String::from(&file_path), sink.actor_ref());
         let (source, _) = system.create_and_register(move || file_source);
         system.start(&source);
         wait(1);
 
         let sink_inspect = sink.definition().lock().unwrap();
-        assert_eq!(&sink_inspect.result.len(), &(1 as usize));
-        let r0 = &sink_inspect.result[0];
+        assert_eq!(&sink_inspect.data.len(), &(1 as usize));
+        let r0 = &sink_inspect.data[0];
         assert_eq!(*r0, 123.5 as f32);
-        fs::remove_file("local_file_f32_decimal.txt")?;
-        Ok(())
     }
 }
