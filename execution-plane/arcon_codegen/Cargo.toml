@@ -14,5 +14,5 @@ rustfmt-nightly = "1.2.2"
 failure = "0.1.5"
 
 [dev-dependencies]
-compiletest_rs = { version = "*", features = ["tmp"] }
 arcon = { path = "../arcon" }
+trybuild = "1.0"
