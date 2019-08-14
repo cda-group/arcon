@@ -1,9 +1,9 @@
+use kompact::KompactSystem;
 use crate::data::{ArconEvent, ArconType};
 use crate::error::*;
 use crate::streaming::channel::strategy::{channel_output, ChannelStrategy};
 use crate::streaming::channel::Channel;
 use fnv::FnvHasher;
-use kompact::ComponentDefinition;
 use std::collections::HashMap;
 use std::default::Default;
 use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
@@ -13,28 +13,25 @@ use std::marker::PhantomData;
 ///
 /// `KeyBy` may be constructed with
 /// either a custom hasher or the default `FnvHasher`
-pub struct KeyBy<A, B, D = BuildHasherDefault<FnvHasher>>
+pub struct KeyBy<A, D = BuildHasherDefault<FnvHasher>>
 where
     A: 'static + ArconType + Hash,
-    B: ComponentDefinition + Sized + 'static,
 {
     builder: D,
     parallelism: u32,
     map: HashMap<usize, Channel, D>,
     phantom_a: PhantomData<A>,
-    phantom_b: PhantomData<B>,
 }
 
-impl<A, B> KeyBy<A, B>
+impl<A> KeyBy<A>
 where
     A: 'static + ArconType + Hash,
-    B: ComponentDefinition + Sized + 'static,
 {
     pub fn with_hasher<H: BuildHasher + Default>(
         builder: H,
         parallelism: u32,
         channels: Vec<Channel>,
-    ) -> KeyBy<A, B, H> {
+    ) -> KeyBy<A, H> {
         assert_eq!(channels.len(), parallelism as usize);
         let mut map = HashMap::with_capacity_and_hasher(parallelism as usize, Default::default());
         for (i, channel) in channels.into_iter().enumerate() {
@@ -45,7 +42,6 @@ where
             parallelism,
             map,
             phantom_a: PhantomData,
-            phantom_b: PhantomData,
         }
     }
 
@@ -60,17 +56,15 @@ where
             parallelism,
             map,
             phantom_a: PhantomData,
-            phantom_b: PhantomData,
         }
     }
 }
 
-impl<A, B> ChannelStrategy<A, B> for KeyBy<A, B>
+impl<A> ChannelStrategy<A> for KeyBy<A>
 where
     A: 'static + ArconType + Hash,
-    B: ComponentDefinition + Sized + 'static,
 {
-    fn output(&mut self, event: ArconEvent<A>, source: *const B) -> ArconResult<()> {
+    fn output(&mut self, event: ArconEvent<A>, source: &KompactSystem) -> ArconResult<()> {
         match event {
             ArconEvent::Element(element) => {
                 let mut h = self.builder.build_hasher();
@@ -86,7 +80,7 @@ where
                     panic!("Failed to hash to channel properly..");
                 }
             }
-            ArconEvent::Watermark(_) => {
+            _ => {
                 for (_, channel) in self.map.iter() {
                     let _ = channel_output(channel, event, source)?;
                 }
@@ -101,20 +95,6 @@ where
     fn remove_channel(&mut self, _channel: Channel) {
         unimplemented!();
     }
-}
-
-unsafe impl<A, B> Send for KeyBy<A, B>
-where
-    A: 'static + ArconType + Hash,
-    B: ComponentDefinition + Sized + 'static,
-{
-}
-
-unsafe impl<A, B> Sync for KeyBy<A, B>
-where
-    A: 'static + ArconType + Hash,
-    B: ComponentDefinition + Sized + 'static,
-{
 }
 
 #[cfg(test)]
@@ -143,7 +123,7 @@ mod tests {
             comps.push(comp);
         }
 
-        let mut channel_strategy: Box<ChannelStrategy<Input, TestComp>> =
+        let mut channel_strategy: Box<ChannelStrategy<Input>> =
             Box::new(KeyBy::with_default_hasher(parallelism, channels));
 
         let mut rng = rand::thread_rng();
@@ -158,8 +138,7 @@ mod tests {
 
         for input in inputs {
             // Just assume it is all sent from same comp
-            let comp_def = &*comps.get(0 as usize).unwrap().definition().lock().unwrap();
-            let _ = channel_strategy.output(input, comp_def);
+            let _ = channel_strategy.output(input, &system);
         }
 
         std::thread::sleep(std::time::Duration::from_secs(1));

@@ -17,7 +17,7 @@ where
 {
     ctx: ComponentContext<Self>,
     _in_channels: Vec<Channel>,
-    out_channels: Box<ChannelStrategy<IN, Self>>,
+    out_channels: Box<ChannelStrategy<IN>>,
     udf: Arc<Module>,
     udf_ctx: WeldContext,
     metric: TaskMetric,
@@ -30,7 +30,7 @@ where
     pub fn new(
         udf: Arc<Module>,
         in_channels: Vec<Channel>,
-        out_channels: Box<ChannelStrategy<IN, Self>>,
+        out_channels: Box<ChannelStrategy<IN>>,
     ) -> Self {
         let ctx = WeldContext::new(&udf.conf()).unwrap();
         Filter {
@@ -69,8 +69,7 @@ where
     }
 
     fn push_out(&mut self, event: ArconEvent<IN>) -> ArconResult<()> {
-        let self_ptr = self as *const Filter<IN>;
-        let _ = self.out_channels.output(event, self_ptr)?;
+        let _ = self.out_channels.output(event, &self.ctx.system())?;
         Ok(())
     }
 }
@@ -93,7 +92,7 @@ mod tests {
         });
 
         let channel = Channel::Local(sink_comp.actor_ref());
-        let channel_strategy: Box<ChannelStrategy<i32, Filter<i32>>> =
+        let channel_strategy: Box<ChannelStrategy<i32>> =
             Box::new(Forward::new(channel));
 
         let weld_code = String::from("|x: i32| x > 5");

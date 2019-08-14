@@ -1,7 +1,7 @@
+use kompact::KompactSystem;
 use crate::data::*;
 use crate::error::*;
 use crate::streaming::channel::Channel;
-use kompact::ComponentDefinition;
 
 pub mod broadcast;
 pub mod forward;
@@ -13,31 +13,26 @@ pub mod shuffle;
 ///
 /// A: The Event to be sent
 /// B: Source Component required for the tell method
-pub trait ChannelStrategy<A, B>: Send + Sync
+pub trait ChannelStrategy<A>: Send + Sync
 where
     A: 'static + ArconType,
-    B: ComponentDefinition + Sized + 'static,
 {
-    fn output(&mut self, element: ArconEvent<A>, source: *const B) -> ArconResult<()>;
+    fn output(&mut self, event: ArconEvent<A>, source: &KompactSystem) -> ArconResult<()>;
     fn add_channel(&mut self, channel: Channel);
     fn remove_channel(&mut self, channel: Channel);
 }
 
 /// `channel_output` takes an event and sends it to another component.
 /// Either locally through an ActorRef, or remote (ActorPath)
-fn channel_output<A, B>(
+fn channel_output<A>(
     channel: &Channel,
     event: ArconEvent<A>,
-    source: *const B,
+    source: &KompactSystem,
 ) -> ArconResult<()>
 where
     A: 'static + ArconType,
-    B: ComponentDefinition + Sized + 'static,
 {
-    // pointer in order to escape the double borrow issue
-    // TODO: find better way...
-    let source = unsafe { &(*source) };
-    match &channel {
+    match channel {
         Channel::Local(actor_ref) => {
             actor_ref.tell(Box::new(event), source);
         }
