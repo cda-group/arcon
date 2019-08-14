@@ -55,12 +55,12 @@ fn local_file_source(
     file_path: &str,
 ) -> TokenStream {
     quote! {
-        let channel = Channel::Local(#target.actor_ref());
-        let channel_strategy: Box<ChannelStrategy<#input_type, SocketSource<#input_type>>> = Box::new(Forward::new(channel));
-
-        let #source_name: LocalFileSource<#input_type> = LocalFileSource::new(
-            String::from(#file_path),
-            #target.actor_ref(),
-        );
+        let #source_name = system.create_and_start(move || {
+            let source: LocalFileSource<#input_type> = LocalFileSource::new(
+                String::from(#file_path),
+                #target.actor_ref(),
+            );
+            source
+        });
     }
 }

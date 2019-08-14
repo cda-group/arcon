@@ -1,4 +1,4 @@
-use crate::data::ArconType;
+use crate::data::{ArconType, ArconEvent, ArconElement};
 use kompact::*;
 use std::fs::File;
 use std::io::BufRead;
@@ -35,7 +35,8 @@ impl<A: ArconType + FromStr> LocalFileSource<A> {
                 match line {
                     Ok(l) => {
                         if let Ok(v) = l.parse::<A>() {
-                            self.subscriber.tell(Box::new(v), &self.actor_ref());
+                            let event = ArconEvent::Element(ArconElement::new(v));
+                            self.subscriber.tell(Box::new(event), &self.actor_ref());
                         } else {
                             error!(self.ctx.log(), "Unable to parse line {}", self.file_path);
                         }
