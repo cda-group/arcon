@@ -2,47 +2,50 @@ use crate::data::{ArconEvent, ArconType};
 use crate::error::*;
 use crate::streaming::channel::strategy::*;
 use crate::streaming::channel::Channel;
-use kompact::ComponentDefinition;
 use rand::seq::SliceRandom;
 use std::marker::PhantomData;
 
-pub struct Shuffle<A, B>
+pub struct Shuffle<A>
 where
     A: 'static + ArconType,
-    B: ComponentDefinition + Sized + 'static,
 {
     out_channels: Vec<Channel>,
     phantom_a: PhantomData<A>,
-    phantom_b: PhantomData<B>,
 }
 
-impl<A, B> Shuffle<A, B>
+impl<A> Shuffle<A>
 where
     A: 'static + ArconType,
-    B: ComponentDefinition + Sized + 'static,
 {
-    pub fn new(out_channels: Vec<Channel>) -> Shuffle<A, B> {
+    pub fn new(out_channels: Vec<Channel>) -> Shuffle<A> {
         Shuffle {
             out_channels,
             phantom_a: PhantomData,
-            phantom_b: PhantomData,
         }
     }
 }
 
-impl<A, B> ChannelStrategy<A, B> for Shuffle<A, B>
+impl<A> ChannelStrategy<A> for Shuffle<A>
 where
     A: 'static + ArconType,
-    B: ComponentDefinition + Sized + 'static,
 {
-    fn output(&mut self, element: ArconEvent<A>, source: *const B) -> ArconResult<()> {
-        if let Some(channel) = self.out_channels.choose(&mut rand::thread_rng()) {
-            let _ = channel_output(channel, element, source)?;
-        } else {
-            return arcon_err!("{}", "Failed to pick Channel while shuffling");
+    fn output(&mut self, event: ArconEvent<A>, source: &KompactSystem) -> ArconResult<()> {
+        match event {
+            ArconEvent::Element(_) => {
+                if let Some(channel) = self.out_channels.choose(&mut rand::thread_rng()) {
+                    channel_output(channel, event, source)?;
+                } else {
+                    return arcon_err!("{}", "Failed to pick Channel while shuffling");
+                }
+                Ok(())
+            }
+            _ => {
+                for channel in &self.out_channels {
+                    channel_output(channel, event, source)?;
+                }
+                Ok(())
+            }
         }
-
-        Ok(())
     }
 
     fn add_channel(&mut self, channel: Channel) {
@@ -51,20 +54,6 @@ where
     fn remove_channel(&mut self, _channel: Channel) {
         //self.out_channels.retain(|c| c == &channel);
     }
-}
-
-unsafe impl<A, B> Send for Shuffle<A, B>
-where
-    A: 'static + ArconType,
-    B: ComponentDefinition + Sized + 'static,
-{
-}
-
-unsafe impl<A, B> Sync for Shuffle<A, B>
-where
-    A: 'static + ArconType,
-    B: ComponentDefinition + Sized + 'static,
-{
 }
 
 #[cfg(test)]
@@ -93,14 +82,13 @@ mod tests {
             comps.push(comp);
         }
 
-        let mut channel_strategy: Box<ChannelStrategy<Input, TestComp>> =
+        let mut channel_strategy: Box<ChannelStrategy<Input>> =
             Box::new(Shuffle::new(channels));
 
         for _i in 0..total_msgs {
             let input = ArconEvent::Element(ArconElement::new(Input { id: 1 }));
             // Just assume it is all sent from same comp
-            let comp_def = &(*comps.get(0 as usize).unwrap().definition().lock().unwrap());
-            let _ = channel_strategy.output(input, comp_def);
+            let _ = channel_strategy.output(input, &system);
         }
 
         std::thread::sleep(std::time::Duration::from_secs(1));

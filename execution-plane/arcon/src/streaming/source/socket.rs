@@ -21,7 +21,7 @@ where
     OUT: 'static + ArconType + FromStr,
 {
     ctx: ComponentContext<SocketSource<OUT>>,
-    out_channels: Box<ChannelStrategy<OUT, Self>>,
+    out_channels: Box<ChannelStrategy<OUT>>,
     tcp_port: usize,
     received: u8,
     watermark_interval: u64, // If 0: no watermarks/timestamps generated
@@ -33,7 +33,7 @@ where
 {
     pub fn new(
         tcp_port: usize,
-        out_channels: Box<ChannelStrategy<OUT, Self>>,
+        out_channels: Box<ChannelStrategy<OUT>>,
         watermark_interval: u64,
     ) -> SocketSource<OUT> {
         SocketSource {
@@ -52,7 +52,7 @@ where
                 Ok(ts) => {
                     if let Err(err) = self.out_channels.output(
                         ArconEvent::Element(ArconElement::with_timestamp(data, ts.as_secs())),
-                        self as *const Self,
+                        &self.ctx.system(),
                     ) {
                         error!(self.ctx.log(), "Unable to output event, error {}", err);
                     }
@@ -64,7 +64,7 @@ where
         } else {
             if let Err(err) = self.out_channels.output(
                 ArconEvent::Element(ArconElement::new(data)),
-                self as *const Self,
+                &self.ctx.system()
             ) {
                 error!(self.ctx.log(), "Unable to output event, error {}", err);
             }
@@ -75,7 +75,7 @@ where
             Ok(n) => {
                 if let Err(err) = self.out_channels.output(
                     ArconEvent::Watermark(Watermark::new(n.as_secs())),
-                    self as *const Self,
+                    &self.ctx.system(),
                 ) {
                     error!(self.ctx.log(), "Unable to output watermark, error {}", err);
                 }
@@ -231,9 +231,7 @@ mod tests {
         let (sink, _) = system.create_and_register(move || sink::Sink::<u8>::new());
         let sink_ref = sink.actor_ref();
 
-        pub type Source = SocketSource<u8>;
-
-        let out_channels: Box<Forward<u8, Source>> =
+        let out_channels: Box<Forward<u8>> =
             Box::new(Forward::new(Channel::Local(sink_ref.clone())));
 
         let socket_source: SocketSource<u8> = SocketSource::new(port, out_channels, 0);
@@ -273,9 +271,7 @@ mod tests {
         let (sink, _) = system.create_and_register(move || sink::Sink::<f32>::new());
         let sink_ref = sink.actor_ref();
 
-        pub type Source = SocketSource<f32>;
-
-        let out_channels: Box<Forward<f32, Source>> =
+        let out_channels: Box<Forward<f32>> =
             Box::new(Forward::new(Channel::Local(sink_ref.clone())));
 
         let socket_source: SocketSource<f32> = SocketSource::new(port, out_channels, 0);
@@ -332,9 +328,7 @@ mod tests {
         let (sink, _) = system.create_and_register(move || sink::Sink::<u8>::new());
         let sink_ref = sink.actor_ref();
 
-        pub type Source = SocketSource<u8>;
-
-        let out_channels: Box<Forward<u8, Source>> =
+        let out_channels: Box<Forward<u8>> =
             Box::new(Forward::new(Channel::Local(sink_ref.clone())));
 
         let socket_source: SocketSource<u8> = SocketSource::new(port, out_channels, 3);

@@ -1,40 +1,35 @@
+use kompact::KompactSystem;
 use crate::data::{ArconEvent, ArconType};
 use crate::error::*;
 use crate::streaming::channel::strategy::{channel_output, ChannelStrategy};
 use crate::streaming::channel::Channel;
-use kompact::ComponentDefinition;
 use std::marker::PhantomData;
 
-pub struct Broadcast<A, B>
+pub struct Broadcast<A>
 where
     A: 'static + ArconType,
-    B: ComponentDefinition + Sized + 'static,
 {
     out_channels: Vec<Channel>,
     phantom_a: PhantomData<A>,
-    phantom_b: PhantomData<B>,
 }
 
-impl<A, B> Broadcast<A, B>
+impl<A> Broadcast<A>
 where
     A: 'static + ArconType,
-    B: ComponentDefinition + Sized + 'static,
 {
-    pub fn new(out_channels: Vec<Channel>) -> Broadcast<A, B> {
+    pub fn new(out_channels: Vec<Channel>) -> Broadcast<A> {
         Broadcast {
             out_channels,
             phantom_a: PhantomData,
-            phantom_b: PhantomData,
         }
     }
 }
 
-impl<A, B> ChannelStrategy<A, B> for Broadcast<A, B>
+impl<A> ChannelStrategy<A> for Broadcast<A>
 where
     A: 'static + ArconType,
-    B: ComponentDefinition + Sized + 'static,
 {
-    fn output(&mut self, event: ArconEvent<A>, source: *const B) -> ArconResult<()> {
+    fn output(&mut self, event: ArconEvent<A>, source: &KompactSystem) -> ArconResult<()> {
         for channel in &self.out_channels {
             let _ = channel_output(channel, event, source)?;
         }
@@ -47,20 +42,6 @@ where
     fn remove_channel(&mut self, _channel: Channel) {
         unimplemented!();
     }
-}
-
-unsafe impl<A, B> Send for Broadcast<A, B>
-where
-    A: 'static + ArconType,
-    B: ComponentDefinition + Sized + 'static,
-{
-}
-
-unsafe impl<A, B> Sync for Broadcast<A, B>
-where
-    A: 'static + ArconType,
-    B: ComponentDefinition + Sized + 'static,
-{
 }
 
 #[cfg(test)]
@@ -89,14 +70,13 @@ mod tests {
             comps.push(comp);
         }
 
-        let mut channel_strategy: Box<ChannelStrategy<Input, TestComp>> =
+        let mut channel_strategy: Box<ChannelStrategy<Input>> =
             Box::new(Broadcast::new(channels));
 
         for _i in 0..total_msgs {
             let input = ArconEvent::Element(ArconElement::new(Input { id: 1 }));
             // Just assume it is all sent from same comp
-            let comp_def = &(*comps.get(0 as usize).unwrap().definition().lock().unwrap());
-            let _ = channel_strategy.output(input, comp_def);
+            let _ = channel_strategy.output(input, &system);
         }
 
         std::thread::sleep(std::time::Duration::from_secs(1));
@@ -150,14 +130,13 @@ mod tests {
         }
         std::thread::sleep(std::time::Duration::from_secs(1));
 
-        let mut channel_strategy: Box<ChannelStrategy<Input, TestComp>> =
+        let mut channel_strategy: Box<ChannelStrategy<Input>> =
             Box::new(Broadcast::new(channels));
 
         for _i in 0..total_msgs {
             let input = ArconElement::new(Input { id: 1 });
             // Just assume it is all sent from same comp
-            let comp_def = &(*comps.get(0 as usize).unwrap().definition().lock().unwrap());
-            let _ = channel_strategy.output(ArconEvent::Element(input), comp_def);
+            let _ = channel_strategy.output(ArconEvent::Element(input), &system);
         }
 
         std::thread::sleep(std::time::Duration::from_secs(1));

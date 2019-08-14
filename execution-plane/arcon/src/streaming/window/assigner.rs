@@ -32,7 +32,7 @@ where
     OUT: 'static + ArconType,
 {
     ctx: ComponentContext<Self>,
-    channel_strategy: Box<ChannelStrategy<OUT, Self>>,
+    channel_strategy: Box<ChannelStrategy<OUT>>,
     window_length: u64,
     window_slide: u64,
     late_arrival_time: u64,
@@ -50,7 +50,7 @@ where
     OUT: 'static + ArconType,
 {
     pub fn new(
-        channel_strategy: Box<ChannelStrategy<OUT, Self>>,
+        channel_strategy: Box<ChannelStrategy<OUT>>,
         init_builder_code: String,
         udf_code: String,
         result_code: String,
@@ -107,7 +107,6 @@ where
         // Schedule trigger
         self.timer
             .schedule_at(ts + self.late_arrival_time, move |self_c, _| {
-                let self_ptr = self_c as *const Self;
 
                 if let Some(w_map) = self_c.window_maps.get_mut(&key) {
                     match w_map.remove(&index) {
@@ -117,7 +116,7 @@ where
                                     debug!(self_c.ctx.log(), "Window {} result materialized!", ts);
                                     if let Err(_err) = self_c
                                         .channel_strategy
-                                        .output(ArconEvent::Element(ArconElement::new(e)), self_ptr) {
+                                        .output(ArconEvent::Element(ArconElement::new(e)), &self_c.ctx.system()) {
                                             error!(
                                                 self_c.ctx.log(),
                                                 "Failed to send window result"
@@ -239,7 +238,7 @@ where
         // fwd watermark
         if let Err(err) = self
             .channel_strategy
-            .output(ArconEvent::Watermark(w), self as *const Self)
+            .output(ArconEvent::Watermark(w), &self.ctx.system())
         {
             error!(
                 self.ctx.log(),
@@ -318,16 +317,14 @@ mod tests {
         let (sink, _) = system.create_and_register(move || sink::Sink::new());
         let sink_ref = sink.actor_ref();
 
-        pub type Assigner = EventTimeWindowAssigner<Item, Appender<u32>, WindowOutput>;
-
-        let channel_strategy: Box<Forward<WindowOutput, Assigner>> =
+        let channel_strategy: Box<Forward<WindowOutput>> =
             Box::new(Forward::new(Channel::Local(sink_ref.clone())));
 
         // Create the window_assigner
         let builder_code = String::from("|| appender[u32]");
         let udf_code = String::from("|x: {u64, u32}, y: appender[u32]| merge(y, x.$1)");
         let udf_result = String::from("|y: appender[u32]| len(result(y))");
-        let window_assigner = EventTimeWindowAssigner::new(
+        let window_assigner = EventTimeWindowAssigner::<Item, Appender<u32>, WindowOutput>::new(
             channel_strategy,
             builder_code,
             udf_code,

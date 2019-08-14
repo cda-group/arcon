@@ -2,54 +2,61 @@ use crate::data::{ArconEvent, ArconType};
 use crate::error::*;
 use crate::streaming::channel::strategy::*;
 use crate::streaming::channel::Channel;
-use kompact::ComponentDefinition;
 use std::marker::PhantomData;
 
-pub struct RoundRobin<A, B>
+pub struct RoundRobin<A>
 where
     A: 'static + ArconType,
-    B: ComponentDefinition + Sized + 'static,
 {
     out_channels: Vec<Channel>,
     curr_index: usize,
     phantom_a: PhantomData<A>,
-    phantom_b: PhantomData<B>,
 }
 
-impl<A, B> RoundRobin<A, B>
+impl<A> RoundRobin<A>
 where
     A: 'static + ArconType,
-    B: ComponentDefinition + Sized + 'static,
 {
-    pub fn new(out_channels: Vec<Channel>) -> RoundRobin<A, B> {
+    pub fn new(out_channels: Vec<Channel>) -> RoundRobin<A> {
         RoundRobin {
             out_channels,
             curr_index: 0,
             phantom_a: PhantomData,
-            phantom_b: PhantomData,
         }
     }
 }
 
-impl<A, B> ChannelStrategy<A, B> for RoundRobin<A, B>
+impl<A> ChannelStrategy<A> for RoundRobin<A>
 where
     A: 'static + ArconType,
-    B: ComponentDefinition + Sized + 'static,
 {
-    fn output(&mut self, element: ArconEvent<A>, source: *const B) -> ArconResult<()> {
-        if self.out_channels.is_empty() {
-            return arcon_err!("{}", "Vector of Channels is empty");
+    fn output(&mut self, event: ArconEvent<A>, source: &KompactSystem) -> ArconResult<()> {
+        match event {
+            ArconEvent::Element(_) => {
+                if self.out_channels.is_empty() {
+                    return arcon_err!("{}", "Vector of Channels is empty");
+                }
+
+                if let Some(channel) = self.out_channels.get(self.curr_index) {
+                    channel_output(channel, event, source)?;
+                    self.curr_index += 1;
+
+                    if self.curr_index >= self.out_channels.len() {
+                        self.curr_index = 0;
+                    }
+
+                    Ok(())
+                } else {
+                    arcon_err!("Unable to select channel")
+                }
+            }
+            _ => {
+                for channel in &self.out_channels {
+                    channel_output(channel, event, source)?;
+                }
+                Ok(())
+            }
         }
-
-        let channel = &(*self.out_channels.get(self.curr_index).unwrap());
-        let _ = channel_output(channel, element, source)?;
-        self.curr_index += 1;
-
-        if self.curr_index >= self.out_channels.len() {
-            self.curr_index = 0;
-        }
-
-        Ok(())
     }
 
     fn add_channel(&mut self, channel: Channel) {
@@ -58,20 +65,6 @@ where
     fn remove_channel(&mut self, _channel: Channel) {
         unimplemented!();
     }
-}
-
-unsafe impl<A, B> Send for RoundRobin<A, B>
-where
-    A: 'static + ArconType,
-    B: ComponentDefinition + Sized + 'static,
-{
-}
-
-unsafe impl<A, B> Sync for RoundRobin<A, B>
-where
-    A: 'static + ArconType,
-    B: ComponentDefinition + Sized + 'static,
-{
 }
 
 #[cfg(test)]
@@ -100,14 +93,13 @@ mod tests {
             comps.push(comp);
         }
 
-        let mut channel_strategy: Box<ChannelStrategy<Input, TestComp>> =
+        let mut channel_strategy: Box<ChannelStrategy<Input>> =
             Box::new(RoundRobin::new(channels));
 
         for _i in 0..total_msgs {
             let input = ArconEvent::Element(ArconElement::new(Input { id: 1 }));
             // Just assume it is all sent from same comp
-            let comp_def = &(*comps.get(0 as usize).unwrap().definition().lock().unwrap());
-            let _ = channel_strategy.output(input, comp_def);
+            let _ = channel_strategy.output(input, &system);
         }
 
         std::thread::sleep(std::time::Duration::from_secs(1));
