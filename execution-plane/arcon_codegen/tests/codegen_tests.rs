@@ -21,7 +21,7 @@ fn codegen_test() {
 
     add_test_spec("basic_dataflow");
     add_test_spec("tumbling_window_dataflow");
-    add_test_spec("file_source_sink");
+    add_test_spec("normalise");
 
     // test all generated .rs files
     let specs = format!("{}/{}", RUN_PASS_PATH, "*.rs");
