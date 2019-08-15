@@ -33,8 +33,8 @@ pub mod prelude {
     pub use crate::streaming::channel::Channel;
     pub use crate::streaming::task::{filter::Filter, flatmap::FlatMap, map::Map};
     pub use crate::streaming::window::{
-        assigner::EventTimeWindowAssigner, builder::WindowBuilder, builder::WindowFn,
-        builder::WindowModules,
+        event_time::EventTimeWindowAssigner, builder::WindowBuilder, builder::WindowFn,
+        processing_time::ProcessingTimeWindowAssigner, builder::WindowModules,
     };
 
     pub use crate::streaming::source::{
