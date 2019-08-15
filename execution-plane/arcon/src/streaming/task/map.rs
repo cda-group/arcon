@@ -50,6 +50,7 @@ where
     }
 
     fn handle_element(&mut self, event: &ArconElement<IN>) -> ArconResult<()> {
+        debug!(self.ctx.log(), "Got element {:?}", &event.data);
         if let Ok(result) = self.run_udf(&(event.data)) {
             let _ = self.push_out(ArconEvent::Element(ArconElement::new(result)));
         } else {
@@ -93,13 +94,12 @@ mod tests {
         });
 
         let channel = Channel::Local(sink_comp.actor_ref());
-        let channel_strategy: Box<ChannelStrategy<i32>> =
-            Box::new(Forward::new(channel));
+        let channel_strategy: Box<ChannelStrategy<i32>> = Box::new(Forward::new(channel));
 
         let weld_code = String::from("|x: i32| x + 10");
         let module = Arc::new(Module::new(weld_code).unwrap());
-        let filter_task =
-            system.create_and_start(move || Map::<i32, i32>::new(module, Vec::new(), channel_strategy));
+        let filter_task = system
+            .create_and_start(move || Map::<i32, i32>::new(module, Vec::new(), channel_strategy));
 
         let input_one = ArconEvent::Element(ArconElement::new(6 as i32));
         filter_task

@@ -383,6 +383,35 @@ mod tests {
     }
 
     #[test]
+    fn normalise_window_builder_test() {
+        let builder_code = String::from("||appender[i64]");
+        let udf_code = String::from("|e:i64,w:appender[i64]| merge(w,e):appender[i64]");
+        let materialiser_code = String::from("|e: appender[i64]| let elem = result(e); let sum = result(for(elem, merger[i64, +], |b: merger[i64, +], i: i64, e: i64| merge(b, e))); 
+                                         let count = len(elem); let avg = sum / count; result(for(elem, appender[i64], |b: appender[i64], i: i64, e: i64| merge(b, e / avg)))") ;
+        let init_builder = Arc::new(Module::new(builder_code).unwrap());
+        let udf = Arc::new(Module::new(udf_code).unwrap());
+        let materializer = Arc::new(Module::new(materialiser_code).unwrap());
+
+        let window_modules = WindowModules {
+            init_builder,
+            udf,
+            materializer,
+        };
+
+        let mut window_builder: WindowBuilder<i64, Appender<i64>, ArconVec<i64>> =
+            WindowBuilder::new(window_modules).unwrap();
+
+        for i in 1..10 {
+            let _ = window_builder.on_element(i as i64);
+        }
+
+        let result = window_builder.result().unwrap();
+        assert_eq!(result.len, 9);
+        let expected: Vec<i64> = vec![0, 0, 0, 0, 1, 1, 1, 1, 1];
+        assert_eq!(*expected, *result);
+    }
+
+    #[test]
     fn max_by_price_window_builder_test() {
         // TODO: In this case it is not really a builder, but a Item struct.
         //       Gotta find out how to use merger[{u64,u32}, max] with structs

@@ -1,0 +1,142 @@
+{
+"id": "normalise",
+"target": "x86-64-unknown-linux-gnu",
+"system_addr": "127.0.0.1:3004",
+"mode": "debug",
+"nodes": [
+    {
+        "id": "node_1",
+        "parallelism": 1,
+        "kind": {
+            "Source": {
+                "source_type": {
+                    "Scalar": "i64"
+                },
+                "successors": [
+                    {
+                        "Local": {
+                            "id": "node_2"
+                        }
+                    }
+                ],
+                "kind": {
+                    "LocalFile": { "path": "/tmp/normalise_source"}
+                }
+            }
+        }
+    },
+    {
+        "id": "node_2",
+        "parallelism": 1,
+        "kind": {
+            "Task": {
+                "input_type": {
+                    "Scalar": "i64"
+                },
+                "output_type": {
+                    "Scalar": "i64"
+                },
+                "weld_code": "|x: i64| x < i64(3)",
+                "successors": [
+                    {
+                        "Local": {
+                            "id": "node_3"
+                        }
+                    }
+                ],
+                "predecessor": "node_1",
+                "kind": "Filter"
+            }
+        }
+    },
+    {
+      "id" : "node_3",
+      "parallelism" : 1,
+      "kind" : {
+        "Window": {
+            "channel_strategy" : "Forward",
+            "predecessor" : "node2",
+            "successors" : [
+              {
+                "Local" : {
+                  "id" : "node_4"
+                }
+              }
+            ],
+            "assigner" : {
+              "Tumbling" : {
+                "length" : 5
+              }
+            },
+            "window_function" : {
+              "input_type": {
+                  "Scalar": "i64"
+              },
+              "output_type": {
+                  "Vector": {
+                    "elem_ty": {
+                      "Scalar": "i64"
+                    }
+                  }
+              },
+              "builder_type": {
+                  "Appender": {
+                      "elem_ty": {
+                          "Scalar": "i64"
+                      }
+                  }
+              },
+              "builder" : "||appender[i64]",
+              "udf" : "|e:i64,w:appender[i64]| merge(w,e):appender[i64]",
+              "materialiser" : "|e: appender[i64]| let elem = result(e); let sum = result(for(elem, merger[i64, +], |b: merger[i64, +], i: i64, e: i64| merge(b, e))); let count = len(elem); let avg = sum / count; result(for(elem, appender[i64], |b: appender[i64], i: i64, e: i64| merge(b, e / avg)))"
+            },
+            "time_kind" : "Processing",
+            "window_kind" : "All"
+          }
+        }
+    },
+    {
+        "id": "node_4",
+        "parallelism": 1,
+        "kind": {
+            "Task": {
+                "input_type": {
+                  "Vector": {
+                    "elem_ty": {
+                      "Scalar": "i64"
+                    }
+                  }
+                },
+                "output_type": {
+                    "Scalar": "i64"
+                },
+                "weld_code": "|x: vec[i64]| let m = merger[i64, +]; result(for(x, m, |b: merger[i64, +], i, e| merge(b, e + i64(3))))",
+                "successors": [
+                    {
+                        "Local": {
+                            "id": "node_5"
+                        }
+                    }
+                ],
+                "predecessor": "node_3",
+                "kind": "Map"
+            }
+        }
+    },
+    {
+        "id": "node_5",
+        "parallelism": 1,
+        "kind": {
+            "Sink": {
+                "sink_type": {
+                    "Scalar": "i64"
+                },
+                "predecessor": "node_4",
+                "kind": {
+                  "LocalFile": { "path": "/tmp/normalise_sink"}
+                }
+            }
+        }
+    }
+]
+}

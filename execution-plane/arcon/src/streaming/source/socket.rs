@@ -64,7 +64,7 @@ where
         } else {
             if let Err(err) = self.out_channels.output(
                 ArconEvent::Element(ArconElement::new(data)),
-                &self.ctx.system()
+                &self.ctx.system(),
             ) {
                 error!(self.ctx.log(), "Unable to output event, error {}", err);
             }

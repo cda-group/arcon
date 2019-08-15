@@ -7,11 +7,10 @@ use arcon_macros::arcon_task;
 use kompact::*;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
+use std::convert::TryInto;
 use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
-use std::convert::TryInto;
-
 
 /*
     ProcessingTimeWindowAssigner
@@ -103,22 +102,26 @@ where
             }
         };
         let mut now = 0;
-        let window_close = w_start + (index * self.window_slide) + self.window_length + self.late_arrival_time;
+        let window_close =
+            w_start + (index * self.window_slide) + self.window_length + self.late_arrival_time;
         match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
             Ok(timestamp) => {
                 now = timestamp.as_millis();
             }
             _ => {
-                error!(self.ctx.log(), "unable to get current time while scheduling trigger");
+                error!(
+                    self.ctx.log(),
+                    "unable to get current time while scheduling trigger"
+                );
             }
         }
-        
+
         let timeout: u64 = (window_close - now).try_into().unwrap();
         debug!(
             self.ctx.log(),
             "creating new window for key {}, timestamp {}", key, &window_close
         );
-        
+
         // Schedule trigger
         self.schedule_once(Duration::from_millis(timeout.try_into().unwrap()),
             move |self_c, _| {
@@ -127,7 +130,7 @@ where
                         Some(mut window) => {
                             match window.result() {
                                 Ok(e) => {
-                                    debug!(self_c.ctx.log(), "Window {} result materialized!", window_close);
+                                    debug!(self_c.ctx.log(), "Window {} result {:?} materialized!", window_close, &e);
                                     if let Err(_err) = self_c
                                         .channel_strategy
                                         .output(ArconEvent::Element(ArconElement::new(e)), &self_c.ctx.system()) {
@@ -183,7 +186,6 @@ where
             "handling element with timestamp: {}, key: {}", ts, key
         );
 
-
         // Will store the index of the highest and lowest window it should go into
         let mut floor = 0;
         let mut ceil = 0;
@@ -234,7 +236,6 @@ where
         Ok(())
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -327,16 +328,17 @@ mod tests {
         let builder_code = String::from("|| appender[u32]");
         let udf_code = String::from("|x: {u64, u32}, y: appender[u32]| merge(y, x.$1)");
         let udf_result = String::from("|y: appender[u32]| len(result(y))");
-        let window_assigner = ProcessingTimeWindowAssigner::<Item, Appender<u32>, WindowOutput>::new(
-            channel_strategy,
-            builder_code,
-            udf_code,
-            udf_result,
-            length,
-            slide,
-            late,
-            true,
-        );
+        let window_assigner =
+            ProcessingTimeWindowAssigner::<Item, Appender<u32>, WindowOutput>::new(
+                channel_strategy,
+                builder_code,
+                udf_code,
+                udf_result,
+                length,
+                slide,
+                late,
+                true,
+            );
 
         let (assigner, _) = system.create_and_register(move || window_assigner);
         let win_ref = assigner.actor_ref();
@@ -356,7 +358,7 @@ mod tests {
         assigner_ref.tell(keyed_event(1), &assigner_ref); // 2nd window opens, element goes into both
         assigner_ref.tell(keyed_event(2), &assigner_ref); // 1st window opens for different key
         wait(7); // wait for all three windows to trigger
-        
+
         // Inspect and assert
         let mut sink_inspect = sink.definition().lock().unwrap();
         let rl = &sink_inspect.result.len();

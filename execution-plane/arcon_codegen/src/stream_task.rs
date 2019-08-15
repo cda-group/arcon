@@ -14,13 +14,6 @@ pub fn stream_task(
     let input_type = to_token_stream(&task.input_type);
     let output_type = to_token_stream(&task.output_type);
 
-    let task_ident_str = match &task.kind {
-        FlatMap => "FlatMap",
-        Map => "Map",
-        Filter => "Filter",
-    };
-
-    let task_ident = Ident::new(task_ident_str, Span::call_site());
     let weld_code: &str = &task.weld_code;
 
     let successors: &Vec<spec::ChannelKind> = &task.successors;

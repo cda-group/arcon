@@ -97,13 +97,13 @@ mod tests {
         });
 
         let channel = Channel::Local(sink_comp.actor_ref());
-        let channel_strategy: Box<ChannelStrategy<i32>> =
-            Box::new(Forward::new(channel));
+        let channel_strategy: Box<ChannelStrategy<i32>> = Box::new(Forward::new(channel));
 
         let weld_code = String::from("|x: vec[i32]| map(x, |a: i32| a + i32(5))");
         let module = Arc::new(Module::new(weld_code).unwrap());
-        let filter_task =
-            system.create_and_start(move || FlatMap::<ArconVec<i32>, i32>::new(module, Vec::new(), channel_strategy));
+        let filter_task = system.create_and_start(move || {
+            FlatMap::<ArconVec<i32>, i32>::new(module, Vec::new(), channel_strategy)
+        });
 
         let vec: Vec<i32> = vec![1, 2, 3, 4, 5];
         let arcon_vec = ArconVec::new(vec);

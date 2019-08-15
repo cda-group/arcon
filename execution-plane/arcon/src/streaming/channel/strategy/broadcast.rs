@@ -1,8 +1,8 @@
-use kompact::KompactSystem;
 use crate::data::{ArconEvent, ArconType};
 use crate::error::*;
 use crate::streaming::channel::strategy::{channel_output, ChannelStrategy};
 use crate::streaming::channel::Channel;
+use kompact::KompactSystem;
 use std::marker::PhantomData;
 
 pub struct Broadcast<A>
@@ -70,8 +70,7 @@ mod tests {
             comps.push(comp);
         }
 
-        let mut channel_strategy: Box<ChannelStrategy<Input>> =
-            Box::new(Broadcast::new(channels));
+        let mut channel_strategy: Box<ChannelStrategy<Input>> = Box::new(Broadcast::new(channels));
 
         for _i in 0..total_msgs {
             let input = ArconEvent::Element(ArconElement::new(Input { id: 1 }));
@@ -130,8 +129,7 @@ mod tests {
         }
         std::thread::sleep(std::time::Duration::from_secs(1));
 
-        let mut channel_strategy: Box<ChannelStrategy<Input>> =
-            Box::new(Broadcast::new(channels));
+        let mut channel_strategy: Box<ChannelStrategy<Input>> = Box::new(Broadcast::new(channels));
 
         for _i in 0..total_msgs {
             let input = ArconElement::new(Input { id: 1 });

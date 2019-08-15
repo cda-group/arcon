@@ -1,4 +1,4 @@
-use crate::data::{ArconType, ArconEvent, ArconElement};
+use crate::data::{ArconElement, ArconEvent, ArconType};
 use crate::streaming::channel::strategy::ChannelStrategy;
 use kompact::*;
 use std::fs::File;
@@ -36,7 +36,9 @@ impl<A: ArconType + FromStr> LocalFileSource<A> {
                     Ok(l) => {
                         if let Ok(v) = l.parse::<A>() {
                             let event = ArconEvent::Element(ArconElement::new(v));
-                            if let Err(err) = self.channel_strategy.output(event,&self.ctx.system()) {
+                            if let Err(err) =
+                                self.channel_strategy.output(event, &self.ctx.system())
+                            {
                                 error!(self.ctx.log(), "Unable to output event, error {}", err);
                             }
                         } else {
@@ -60,7 +62,7 @@ impl<A: ArconType + FromStr> Provide<ControlPort> for LocalFileSource<A> {
             ControlEvent::Start => {
                 self.process_file();
             }
-            _ => ()
+            _ => (),
         }
     }
 }
@@ -74,13 +76,13 @@ impl<A: ArconType + FromStr> Actor for LocalFileSource<A> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::prelude::DebugSink;
     use crate::prelude::{Channel, Forward};
     use kompact::default_components::DeadletterBox;
     use std::io::prelude::*;
-    use std::{thread, time};
-    use crate::prelude::DebugSink;
-    use tempfile::NamedTempFile;
     use std::sync::Arc;
+    use std::{thread, time};
+    use tempfile::NamedTempFile;
 
     // Shared methods for test cases
     fn wait(time: u64) -> () {
@@ -117,10 +119,8 @@ mod tests {
         let channel = Channel::Local(sink.actor_ref());
         let channel_strategy = Box::new(Forward::new(channel));
 
-        let file_source: LocalFileSource<u64> = LocalFileSource::new(
-            String::from(&file_path),
-            channel_strategy,
-        );
+        let file_source: LocalFileSource<u64> =
+            LocalFileSource::new(String::from(&file_path), channel_strategy);
         let (source, _) = system.create_and_register(move || file_source);
         system.start(&source);
         wait(1);
@@ -164,10 +164,8 @@ mod tests {
         let channel = Channel::Local(sink.actor_ref());
         let channel_strategy = Box::new(Forward::new(channel));
 
-        let file_source: LocalFileSource<f32> = LocalFileSource::new(
-            String::from(&file_path),
-            channel_strategy,
-        );
+        let file_source: LocalFileSource<f32> =
+            LocalFileSource::new(String::from(&file_path), channel_strategy);
         let (source, _) = system.create_and_register(move || file_source);
         system.start(&source);
         wait(1);

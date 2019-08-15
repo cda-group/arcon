@@ -25,6 +25,12 @@ pub struct Watermark {
     pub timestamp: u64,
 }
 
+impl Watermark {
+    pub fn new(timestamp: u64) -> Self {
+        Watermark { timestamp }
+    }
+}
+
 impl<A: 'static + ArconType> ArconEvent<A> {
     pub fn from_remote(event: StreamTaskMessage) -> ArconResult<Self> {
         let payload = event.payload.unwrap();
@@ -79,13 +85,7 @@ impl<A: 'static + ArconType> ArconEvent<A> {
     }
 }
 
-impl Watermark {
-    pub fn new(timestamp: u64) -> Self {
-        Watermark { timestamp }
-    }
-}
-
-/// An stream element that contains a `ArconType` and an optional timestamp
+/// A stream element that contains an `ArconType` and an optional timestamp
 #[derive(Clone, Debug, Copy)]
 pub struct ArconElement<A>
 where
@@ -128,10 +128,18 @@ unsafe impl<K, V> Sync for Pair<K, V> {}
 /// however, it is reintroduced here to add extra features
 /// and to easier integrate with serialisation/deserialisation
 #[repr(C)]
-#[derive(Clone, Debug, Copy)]
+#[derive(Debug, Copy)]
 pub struct ArconVec<A: ArconType> {
     pub ptr: *const A,
     pub len: i64,
+}
+
+impl<A: ArconType> Clone for ArconVec<A> {
+    fn clone(&self) -> ArconVec<A> {
+        let boxed_vec = Box::new(self.to_vec());
+        let arcon_vec: ArconVec<A> = ArconVec::new(*boxed_vec);
+        arcon_vec
+    }
 }
 
 impl<A: ArconType> ArconVec<A> {
