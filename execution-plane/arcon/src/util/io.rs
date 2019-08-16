@@ -119,7 +119,7 @@ impl Actor for IO {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
     use tokio::io;
     use tokio::net::TcpStream;
