@@ -185,6 +185,8 @@ pub enum Type {
         elem_ty: Box<Type>,
     },
     Struct {
+        id: String,
+        key: Option<u32>,
         field_tys: Vec<Type>,
     },
     Appender {

@@ -85,7 +85,8 @@ impl CompilerEnv {
              \nauthors = [\"Arcon Developers <insert-email>\"] \
              \nedition = \"2018\" \
              \n[dependencies] \
-             \narcon = {{path = \"../../arcon\"}}",
+             \narcon = {{path = \"../../arcon\"}} \
+             \nserde = {{version = \"1.0.63\", features = [\"derive\"] }}",
             id
         );
 

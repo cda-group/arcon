@@ -6,6 +6,9 @@ extern crate arcon_spec as spec;
 extern crate failure;
 extern crate proc_macro2;
 extern crate rustfmt_nightly;
+#[macro_use]
+extern crate lazy_static;
+
 
 mod sink;
 mod source;
@@ -18,6 +21,8 @@ use failure::Fail;
 use proc_macro2::TokenStream;
 use rustfmt_nightly::*;
 use std::fs;
+use std::collections::HashMap;
+use std::sync::Mutex;
 
 use spec::ArconSpec;
 use spec::NodeKind::{Sink, Source, Task, Window};
@@ -26,6 +31,14 @@ use spec::NodeKind::{Sink, Source, Task, Window};
 #[fail(display = "Codegen err: `{}`", msg)]
 pub struct CodegenError {
     msg: String,
+}
+
+
+lazy_static! {
+    static ref GENERATED_STRUCTS: Mutex<HashMap<String, String>> = {
+        let m = HashMap::new();
+        Mutex::new(m)
+    };
 }
 
 /// Rustfmt the generated code to make it readable
@@ -107,7 +120,25 @@ pub fn generate(spec: &ArconSpec, is_terminated: bool) -> Result<String, Codegen
     // NOTE: Currently just assumes there is a single KompactSystem
     let system = system::system(&spec.system_addr, None, Some(final_stream), termination);
 
-    let main = generate_main(system, None);
+    // Check if we need to add Struct definitions
+    let struct_map = GENERATED_STRUCTS.lock().unwrap();
+
+    let mut struct_token_streams: Vec<TokenStream> = Vec::new();
+    for (_, v) in struct_map.iter() {
+        let stream: proc_macro2::TokenStream = v.parse().unwrap();
+        struct_token_streams.push(stream);
+    }
+
+    let struct_definitions = if struct_token_streams.is_empty() {
+        None
+    } else {
+        let defs = struct_token_streams
+        .into_iter()
+        .fold(quote! {}, |f, s| combine_token_streams(f, s));
+        Some(defs)
+    };
+
+    let main = generate_main(system, struct_definitions);
     let formatted_main = format_code(main.to_string())?;
 
     Ok(formatted_main.to_string())
@@ -129,6 +160,9 @@ pub fn generate_main(stream: TokenStream, messages: Option<TokenStream>) -> Toke
         use arcon::prelude::*;
         #[allow(unused_imports)]
         use arcon::macros::*;
+
+        #[macro_use]
+        extern crate serde;
 
         #messages
 

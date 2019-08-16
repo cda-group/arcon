@@ -1,6 +1,7 @@
 use proc_macro2::{Ident, Span, TokenStream};
 use spec::Type::*;
-use spec::{MergeOp, Scalar, Type};
+use spec::{MergeOp, Scalar, Type, Type::Struct};
+use crate::GENERATED_STRUCTS;
 
 pub fn to_token_stream(t: &Type) -> TokenStream {
     match t {
@@ -8,8 +9,13 @@ pub fn to_token_stream(t: &Type) -> TokenStream {
             let ident = Ident::new(scalar(s), Span::call_site());
             quote! { #ident }
         }
-        Struct { field_tys: _ } => {
-            unimplemented!();
+        Struct { id, key, field_tys } => {
+            let mut struct_map = GENERATED_STRUCTS.lock().unwrap();
+            let struct_ident = Ident::new(id, Span::call_site());
+            if !struct_map.contains_key(id) {
+                struct_map.insert(String::from(id), struct_gen(&id, *key, *&field_tys).to_string());
+            } 
+            quote! { #struct_ident }
         }
         Appender { elem_ty } => {
             let t = to_token_stream(&elem_ty);
@@ -64,4 +70,59 @@ fn merge_op(op: &MergeOp) -> String {
         MergeOp::Min => "min",
     }
     .to_string()
+}
+
+fn struct_gen(id: &str, key: Option<u32>, field_tys: &Vec<Type>) -> TokenStream {
+    let key_opt_stream = if let Some(k) = key {
+        let key_id = format!("f{}", k);
+        let key_ident = Ident::new(&key_id, Span::call_site());
+        Some(quote! { #[key_by(#key_ident)] })
+    } else {
+        None
+    };
+
+    let mut field_counter: u32 = 0;
+    let mut fields: Vec<TokenStream> = Vec::new();
+
+    let struct_ident = Ident::new(id, Span::call_site());
+
+    for field in &field_tys.clone() {
+        let expanded_field = to_token_stream(field);
+        let field_str = format!("f{}", field_counter);
+        let field_ident = Ident::new(&field_str, Span::call_site());
+        let field_quote = quote! { #field_ident: #expanded_field };
+        fields.push(field_quote);
+        field_counter += 1;
+    }
+
+    let struct_def = quote! { #struct_ident {
+        #(#fields),*
+    } };
+
+    quote! {
+        #key_opt_stream
+        #[arcon]
+        pub struct #struct_def
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use arcon_spec::Scalar::*;
+
+    #[test]
+    fn struct_gen_test() {
+        let s = Struct { id: String::from("MyStruct"), key: Some(0), field_tys: vec![Scalar(Scalar::U32), Scalar(Scalar::I32)] };
+        match s {
+            Struct { id, key, field_tys } => {
+                let stream = struct_gen(&id, key, &field_tys);
+                let fmt = crate::format_code(stream.to_string()).unwrap();
+                // RustFmt will return an empty String if it is bad Rust code...
+                assert!(fmt.len() > 0);
+            },
+            _ => panic!("Not supposed to happen")
+        }
+    }
+
 }
