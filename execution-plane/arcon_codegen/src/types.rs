@@ -60,8 +60,8 @@ fn scalar(scalar: &Scalar) -> &str {
         Scalar::U16 => "u16",
         Scalar::U32 => "u32",
         Scalar::U64 => "u64",
-        Scalar::F32 => "f32",
-        Scalar::F64 => "f64",
+        Scalar::F32 => "ArconF32",
+        Scalar::F64 => "ArconF64",
         Scalar::Bool => "WeldBool",
         Scalar::Unit => "()",
     }
@@ -114,7 +114,6 @@ fn struct_gen(id: &str, key: Option<u32>, field_tys: &Vec<Type>, spec_id: &Strin
 #[cfg(test)]
 mod tests {
     use super::*;
-    use arcon_spec::Scalar::*;
 
     #[test]
     fn struct_gen_test() {

@@ -43,7 +43,7 @@ pub mod prelude {
 
     pub use crate::streaming::sink::{debug::DebugSink, local_file::LocalFileSink};
 
-    pub use crate::data::{ArconElement, ArconType, ArconVec};
+    pub use crate::data::*;
     pub use crate::weld::module::{Module, ModuleRun};
     pub use weld_core::data::*;
 

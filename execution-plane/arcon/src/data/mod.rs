@@ -8,6 +8,8 @@ use serde::*;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::ops::Deref;
+use std::hash::{Hash, Hasher};
+use crate::macros::*;
 
 /// Type that can be passed through the Arcon runtime
 pub trait ArconType: Sync + Send + Clone + Copy + Debug + Serialize + DeserializeOwned {}
@@ -281,6 +283,46 @@ where
         std::mem::forget(vec);
 
         seq.end()
+    }
+}
+
+/// Float wrappers for Arcon
+///
+/// The `Hash` impl rounds the floats down to an integer
+/// and then hashes it. Might want to change this later on..
+#[arcon]
+pub struct ArconF32(f32);
+
+impl Hash for ArconF32 {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        let s: u64 = self.0.trunc() as u64;
+        s.hash(state);
+    }
+}
+
+impl Deref for ArconF32 {
+    type Target = f32;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+#[arcon]
+pub struct ArconF64(f64);
+
+impl Hash for ArconF64 {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        let s: u64 = self.0.trunc() as u64;
+        s.hash(state);
+    }
+}
+
+impl Deref for ArconF64 {
+    type Target = f64;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
