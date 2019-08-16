@@ -1,11 +1,14 @@
 use crate::types::to_token_stream;
 use proc_macro2::{Ident, Span, TokenStream};
-use spec::{ChannelKind, Window, WindowAssigner, WindowFunction, TimeKind, WindowKind, WindowKind::Keyed, WindowKind::All};
+use spec::{
+    ChannelKind, TimeKind, Window, WindowAssigner, WindowFunction, WindowKind, WindowKind::All,
+    WindowKind::Keyed,
+};
 
-pub fn window(name: &str, window: &Window) -> TokenStream {
-    let input_type = to_token_stream(&window.window_function.input_type);
-    let output_type = to_token_stream(&window.window_function.output_type);
-    let builder_type = to_token_stream(&window.window_function.builder_type);
+pub fn window(name: &str, window: &Window, spec_id: &String) -> TokenStream {
+    let input_type = to_token_stream(&window.window_function.input_type, spec_id);
+    let output_type = to_token_stream(&window.window_function.output_type, spec_id);
+    let builder_type = to_token_stream(&window.window_function.builder_type, spec_id);
     let name = Ident::new(&name, Span::call_site());
 
     let successors = &window.successors;
@@ -58,7 +61,6 @@ fn window_modules(window_function: &WindowFunction) -> TokenStream {
     }
 }
 
-
 fn tumbling(
     name: &Ident,
     time_kind: &TimeKind,
@@ -70,8 +72,8 @@ fn tumbling(
     builder_type: &TokenStream,
 ) -> TokenStream {
     let keyed = match window_kind {
-        Keyed { kind: _} => unimplemented!(),
-        All => quote! { false }
+        Keyed { kind: _ } => unimplemented!(),
+        All => quote! { false },
     };
 
     let component = match time_kind {
@@ -88,7 +90,7 @@ fn tumbling(
                 #keyed,
             )
             }
-        },
+        }
         TimeKind::Processing => {
             quote! {
              ProcessingTimeWindowAssigner::<#input_type, #builder_type, #output_type>::new(
@@ -102,7 +104,7 @@ fn tumbling(
                 #keyed
             )
             }
-        },
+        }
         TimeKind::Ingestion => {
             quote! {
              EventTimeWindowAssigner::<#input_type, #builder_type, #output_type>::new(
@@ -116,9 +118,8 @@ fn tumbling(
                 #keyed
             )
             }
-        },
+        }
     };
-
 
     quote! {
         let channel_strategy: Box<Forward<#output_type>> =

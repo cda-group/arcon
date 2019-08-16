@@ -9,10 +9,11 @@ pub fn stream_task(
     _target_name: &str,
     parallelism: &u32,
     task: &Task,
+    spec_id: &String,
 ) -> TokenStream {
     let node_name = Ident::new(&node_name, Span::call_site());
-    let input_type = to_token_stream(&task.input_type);
-    let output_type = to_token_stream(&task.output_type);
+    let input_type = to_token_stream(&task.input_type, spec_id);
+    let output_type = to_token_stream(&task.output_type, spec_id);
 
     let weld_code: &str = &task.weld_code;
 

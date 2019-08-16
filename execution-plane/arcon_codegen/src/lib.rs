@@ -9,7 +9,6 @@ extern crate rustfmt_nightly;
 #[macro_use]
 extern crate lazy_static;
 
-
 mod sink;
 mod source;
 mod stream_task;
@@ -20,8 +19,8 @@ mod window;
 use failure::Fail;
 use proc_macro2::TokenStream;
 use rustfmt_nightly::*;
-use std::fs;
 use std::collections::HashMap;
+use std::fs;
 use std::sync::Mutex;
 
 use spec::ArconSpec;
@@ -33,9 +32,8 @@ pub struct CodegenError {
     msg: String,
 }
 
-
 lazy_static! {
-    static ref GENERATED_STRUCTS: Mutex<HashMap<String, String>> = {
+    static ref GENERATED_STRUCTS: Mutex<HashMap<String, HashMap<String, String>>> = {
         let m = HashMap::new();
         Mutex::new(m)
     };
@@ -72,6 +70,12 @@ pub fn generate(spec: &ArconSpec, is_terminated: bool) -> Result<String, Codegen
     let mut stream: Vec<TokenStream> = Vec::new();
     let mut previous_node: String = String::new();
 
+    {
+        // Creat entry for this Arcon Spec
+        let mut struct_map = GENERATED_STRUCTS.lock().unwrap();
+        struct_map.insert(spec.id.clone(), HashMap::new());
+    }
+
     // NOTE: We go backwards while generating the code
     //       i.e. Sink to Source
     while !nodes.is_empty() {
@@ -84,10 +88,11 @@ pub fn generate(spec: &ArconSpec, is_terminated: bool) -> Result<String, Codegen
                     &previous_node,
                     &source.source_type,
                     &source.kind,
+                    &spec.id,
                 ));
             }
             Sink(sink) => {
-                stream.push(sink::sink(&node.id, &sink.sink_type, &sink.kind));
+                stream.push(sink::sink(&node.id, &sink.sink_type, &sink.kind, &spec.id));
             }
             Task(task) => {
                 stream.push(stream_task::stream_task(
@@ -95,10 +100,11 @@ pub fn generate(spec: &ArconSpec, is_terminated: bool) -> Result<String, Codegen
                     &previous_node,
                     &node.parallelism,
                     &task,
+                    &spec.id,
                 ));
             }
             Window(window) => {
-                stream.push(window::window(&node.id, &window));
+                stream.push(window::window(&node.id, &window, &spec.id));
             }
         }
 
@@ -109,6 +115,7 @@ pub fn generate(spec: &ArconSpec, is_terminated: bool) -> Result<String, Codegen
         .into_iter()
         .fold(quote! {}, |f, s| combine_token_streams(f, s));
 
+    // By default, the system is told to block
     let termination = {
         if is_terminated {
             None
@@ -120,22 +127,29 @@ pub fn generate(spec: &ArconSpec, is_terminated: bool) -> Result<String, Codegen
     // NOTE: Currently just assumes there is a single KompactSystem
     let system = system::system(&spec.system_addr, None, Some(final_stream), termination);
 
-    // Check if we need to add Struct definitions
-    let struct_map = GENERATED_STRUCTS.lock().unwrap();
-
-    let mut struct_token_streams: Vec<TokenStream> = Vec::new();
-    for (_, v) in struct_map.iter() {
-        let stream: proc_macro2::TokenStream = v.parse().unwrap();
-        struct_token_streams.push(stream);
+    // Check for struct definitions
+    let mut struct_map = GENERATED_STRUCTS.lock().unwrap();
+    let mut struct_streams: Vec<TokenStream> = Vec::new();
+    if let Some(map) = struct_map.get(&spec.id) {
+        for (_, v) in map.iter() {
+            let stream: proc_macro2::TokenStream = v.parse().unwrap();
+            struct_streams.push(stream);
+        }
     }
 
-    let struct_definitions = if struct_token_streams.is_empty() {
-        None
-    } else {
-        let defs = struct_token_streams
-        .into_iter()
-        .fold(quote! {}, |f, s| combine_token_streams(f, s));
-        Some(defs)
+    // Remove this Arcon specs entry
+    let _ = struct_map.remove(&spec.id);
+
+    // Create an optional `TokenStream` with struct definitions
+    let struct_definitions = {
+        if struct_streams.is_empty() {
+            None
+        } else {
+            let defs = struct_streams
+                .into_iter()
+                .fold(quote! {}, |f, s| combine_token_streams(f, s));
+            Some(defs)
+        }
     };
 
     let main = generate_main(system, struct_definitions);

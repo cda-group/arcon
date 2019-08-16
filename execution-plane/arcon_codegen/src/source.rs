@@ -8,10 +8,11 @@ pub fn source(
     target: &str,
     input_type: &Type,
     source_type: &SourceKind,
+    spec_id: &String,
 ) -> TokenStream {
     let source_name = Ident::new(&name, Span::call_site());
     let target = Ident::new(&target, Span::call_site());
-    let input_type = to_token_stream(input_type);
+    let input_type = to_token_stream(input_type, spec_id);
 
     let source_stream = match source_type {
         SourceKind::Socket { host, port, rate } => socket_source(

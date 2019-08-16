@@ -3,9 +3,9 @@ use proc_macro2::{Ident, Span, TokenStream};
 use spec::SinkKind;
 use spec::Type;
 
-pub fn sink(name: &str, input_type: &Type, sink_type: &SinkKind) -> TokenStream {
+pub fn sink(name: &str, input_type: &Type, sink_type: &SinkKind, spec_id: &String) -> TokenStream {
     let sink_name = Ident::new(&name, Span::call_site());
-    let input_type = to_token_stream(input_type);
+    let input_type = to_token_stream(input_type, spec_id);
 
     let sink_stream = match sink_type {
         SinkKind::Debug => debug_sink(&sink_name, &input_type),
