@@ -1,4 +1,5 @@
 use crate::error::ArconResult;
+use crate::macros::*;
 use crate::messages::protobuf::messages::StreamTaskMessage;
 use crate::messages::protobuf::messages::StreamTaskMessage_oneof_payload::*;
 use crate::messages::protobuf::*;
@@ -6,10 +7,9 @@ use serde::de::{DeserializeOwned, Deserializer, SeqAccess, Visitor};
 use serde::ser::SerializeSeq;
 use serde::*;
 use std::fmt::Debug;
+use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 use std::ops::Deref;
-use std::hash::{Hash, Hasher};
-use crate::macros::*;
 
 /// Type that can be passed through the Arcon runtime
 pub trait ArconType: Sync + Send + Clone + Copy + Debug + Serialize + DeserializeOwned {}

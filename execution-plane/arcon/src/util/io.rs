@@ -2,12 +2,16 @@ extern crate tokio_codec;
 use kompact::prelude::*;
 use kompact::*;
 
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::codec::Decoder;
 use tokio::net::TcpListener;
+use tokio::net::{UdpFramed, UdpSocket};
 use tokio::prelude::*;
+use tokio::runtime::Runtime;
 use tokio_codec::BytesCodec;
+
+use std::thread::{Builder, JoinHandle};
 
 use crate::tokio::prelude::Future;
 use bytes::BytesMut;
@@ -15,81 +19,103 @@ use bytes::BytesMut;
 pub enum IOKind {
     Http,
     Tcp,
+    Udp,
 }
 
-pub struct TcpRecv {
+pub struct BytesRecv {
     pub bytes: BytesMut,
 }
-
-pub struct TcpClosed {}
-pub struct TcpErr {}
-
-pub struct HttpRecv {
-    pub bytes: BytesMut,
-}
+pub struct SockClosed {}
+pub struct SockErr {}
 
 #[derive(ComponentDefinition)]
 pub struct IO {
     ctx: ComponentContext<IO>,
-    port: usize,
-    subscriber: Arc<ActorRef>,
-    kind: IOKind,
+    _handle: JoinHandle<()>,
 }
 
 impl IO {
-    pub fn new(port: usize, subscriber: ActorRef, kind: IOKind) -> IO {
+    pub fn udp(sock_addr: SocketAddr, subscriber: ActorRef) -> IO {
+        let subscriber = Arc::new(subscriber);
+        let th = Builder::new()
+            .name(String::from("IOThread"))
+            .spawn(move || {
+                let mut runtime = Runtime::new().expect("Could not create Tokio Runtime!");
+                let socket = UdpSocket::bind(&sock_addr).expect("Failed to bind");
+
+                let (_, reader) = UdpFramed::new(socket, BytesCodec::new()).split();
+                let handler = reader
+                    .for_each(move |(bytes, _from)| {
+                        let actor_ref = &*subscriber;
+                        actor_ref.tell(Box::new(BytesRecv { bytes }), actor_ref);
+                        Ok(())
+                    })
+                    .map_err(|_| ());
+
+                runtime.spawn(handler);
+                runtime.shutdown_on_idle().wait().unwrap();
+            })
+            .map_err(|_| ())
+            .unwrap();
+
         IO {
             ctx: ComponentContext::new(),
-            port,
-            subscriber: Arc::new(subscriber),
-            kind,
+            _handle: th,
         }
     }
 
-    fn tcp_server(&mut self) -> Result<(), Box<std::error::Error>> {
-        let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), self.port as u16);
-        let listener = TcpListener::bind(&addr)?;
-        let subscriber = Arc::clone(&self.subscriber);
+    pub fn tcp(sock_addr: SocketAddr, subscriber: ActorRef) -> IO {
+        let subscriber = Arc::new(subscriber);
+        let th = Builder::new()
+            .name(String::from("IOThread"))
+            .spawn(move || {
+                let mut runtime = Runtime::new().expect("Could not create Tokio Runtime!");
+                let executor = runtime.executor();
+                let listener = TcpListener::bind(&sock_addr).expect("failed to bind");
+                let handler = listener
+                    .incoming()
+                    .map_err(|e| println!("failed to accept socket; error = {:?}", e))
+                    .for_each(move |socket| {
+                        let framed = BytesCodec::new().framed(socket);
+                        let (_writer, reader) = framed.split();
 
-        let server = listener
-            .incoming()
-            .map_err(|e| println!("failed to accept socket; error = {:?}", e))
-            .for_each(move |socket| {
-                let framed = BytesCodec::new().framed(socket);
-                let (_writer, reader) = framed.split();
+                        let recv_sub = Arc::clone(&subscriber);
+                        let close_sub = Arc::clone(&subscriber);
+                        let err_sub = Arc::clone(&subscriber);
 
-                let recv_sub = Arc::clone(&subscriber);
-                let close_sub = Arc::clone(&subscriber);
-                let err_sub = Arc::clone(&subscriber);
+                        let processor = reader
+                            .for_each(move |bytes| {
+                                let tcp_recv = BytesRecv { bytes };
+                                let actor_ref = &*recv_sub;
+                                actor_ref.tell(Box::new(tcp_recv), actor_ref);
+                                Ok(())
+                            })
+                            .and_then(move |()| {
+                                let actor_ref = &*close_sub;
+                                actor_ref.tell(Box::new(SockClosed {}), actor_ref);
+                                Ok(())
+                            })
+                            .or_else(move |err| {
+                                let actor_ref = &*err_sub;
+                                actor_ref.tell(Box::new(SockErr {}), actor_ref);
+                                Err(err)
+                            })
+                            .then(|_result| Ok(()));
 
-                let processor = reader
-                    .for_each(move |bytes| {
-                        let tcp_recv = TcpRecv { bytes };
-                        let actor_ref = &*recv_sub;
-                        actor_ref.tell(Box::new(tcp_recv), actor_ref);
+                        executor.spawn(processor);
                         Ok(())
-                    })
-                    .and_then(move |()| {
-                        let actor_ref = &*close_sub;
-                        actor_ref.tell(Box::new(TcpClosed {}), actor_ref);
-                        Ok(())
-                    })
-                    .or_else(move |err| {
-                        let actor_ref = &*err_sub;
-                        actor_ref.tell(Box::new(TcpErr {}), actor_ref);
-                        Err(err)
-                    })
-                    .then(|_result| Ok(()));
-                tokio::spawn(processor)
-            });
+                    });
 
-        info!(
-            self.ctx.log(),
-            "Starting IO::TCP on localhost:{}", self.port
-        );
+                runtime.spawn(handler);
+                runtime.shutdown_on_idle().wait().unwrap();
+            })
+            .map_err(|_| ())
+            .unwrap();
 
-        tokio::run(server);
-        Ok(())
+        IO {
+            ctx: ComponentContext::new(),
+            _handle: th,
+        }
     }
 }
 
@@ -97,18 +123,7 @@ unsafe impl Send for IO {}
 unsafe impl Sync for IO {}
 
 impl Provide<ControlPort> for IO {
-    fn handle(&mut self, event: ControlEvent) {
-        if let ControlEvent::Start = event {
-            match &self.kind {
-                IOKind::Tcp => {
-                    let _ = self.tcp_server();
-                }
-                IOKind::Http => {
-                    // Not implemented
-                }
-            }
-        }
-    }
+    fn handle(&mut self, _event: ControlEvent) {}
 }
 
 impl Actor for IO {
@@ -124,30 +139,39 @@ pub mod tests {
     use tokio::io;
     use tokio::net::TcpStream;
 
+    pub enum IOKind {
+        Tcp,
+        Udp,
+    }
+
     #[derive(ComponentDefinition)]
-    pub struct TcpSource {
-        ctx: ComponentContext<TcpSource>,
+    pub struct IOSource {
+        ctx: ComponentContext<IOSource>,
+        kind: IOKind,
+        sock_addr: SocketAddr,
         pub received: u64,
     }
 
-    impl TcpSource {
-        pub fn new() -> TcpSource {
-            TcpSource {
+    impl IOSource {
+        pub fn new(sock_addr: SocketAddr, kind: IOKind) -> IOSource {
+            IOSource {
                 ctx: ComponentContext::new(),
+                kind,
+                sock_addr,
                 received: 0,
             }
         }
     }
 
-    impl Actor for TcpSource {
+    impl Actor for IOSource {
         fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
-            if let Some(ref recv) = msg.downcast_ref::<TcpRecv>() {
+            if let Some(ref recv) = msg.downcast_ref::<BytesRecv>() {
                 debug!(self.ctx.log(), "{:?}", recv.bytes);
                 self.received += 1;
-            } else if let Some(ref _close) = msg.downcast_ref::<TcpClosed>() {
-                debug!(self.ctx.log(), "TCP connection closed");
-            } else if let Some(ref _err) = msg.downcast_ref::<TcpErr>() {
-                error!(self.ctx.log(), "TCP IO Error");
+            } else if let Some(ref _close) = msg.downcast_ref::<SockClosed>() {
+                debug!(self.ctx.log(), "Sock connection closed");
+            } else if let Some(ref _err) = msg.downcast_ref::<SockErr>() {
+                error!(self.ctx.log(), " Sock IO Error");
             }
         }
         fn receive_message(&mut self, sender: ActorPath, _ser_id: u64, _buf: &mut Buf) {
@@ -155,25 +179,32 @@ pub mod tests {
         }
     }
 
-    impl Provide<ControlPort> for TcpSource {
+    impl Provide<ControlPort> for IOSource {
         fn handle(&mut self, event: ControlEvent) {
             if let ControlEvent::Start = event {
-                let port = 3000;
                 let system = self.ctx.system();
-                system.create_and_start(move || IO::new(port, self.actor_ref(), IOKind::Tcp));
+                match self.kind {
+                    IOKind::Tcp => {
+                        system.create_and_start(move || IO::tcp(self.sock_addr, self.actor_ref()));
+                    }
+                    IOKind::Udp => {
+                        system.create_and_start(move || IO::udp(self.sock_addr, self.actor_ref()));
+                    }
+                }
             }
         }
     }
 
     #[test]
-    fn tcp_io() -> Result<(), Box<std::error::Error>> {
+    fn tcp_io_test() {
         let system = KompactConfig::default().build().expect("KompactSystem");
-        let (tcp_source, _t) = system.create_and_register(move || TcpSource::new());
-        system.start(&tcp_source);
+        let addr = "127.0.0.1:3333".parse().unwrap();
+        let (io_source, _) = system.create_and_register(move || IOSource::new(addr, IOKind::Tcp));
+        system.start(&io_source);
 
         // Make sure IO::TCP is started
         std::thread::sleep(std::time::Duration::from_millis(100));
-        let addr = "127.0.0.1:3000".parse()?;
+
         let client = TcpStream::connect(&addr)
             .and_then(|stream| io::write_all(stream, "hello\n").then(|_| Ok(())))
             .map_err(|_| {
@@ -182,9 +213,29 @@ pub mod tests {
         tokio::run(client);
         std::thread::sleep(std::time::Duration::from_millis(50));
 
-        // Our TcpSource should have received 1 msg, that is, "hello"
-        let source = tcp_source.definition().lock().unwrap();
+        // Our IOSource should have received 1 msg, that is, "hello"
+        let source = io_source.definition().lock().unwrap();
         assert_eq!(source.received, 1);
-        Ok(())
+    }
+
+    #[test]
+    fn udp_io_test() {
+        let system = KompactConfig::default().build().expect("KompactSystem");
+        let sock = "127.0.0.1:9313".parse().unwrap();
+        let (io_source, _) = system.create_and_register(move || IOSource::new(sock, IOKind::Udp));
+        system.start(&io_source);
+        std::thread::sleep(std::time::Duration::from_millis(100));
+
+        let self_addr = "0.0.0.0:0".parse().unwrap();
+        let socket = UdpSocket::bind(&self_addr).expect("Failed to bind");
+        socket.connect(&sock).expect("Failed connection");
+
+        let fmt_data = format!("{:?}\n", "test1");
+        let bytes = bytes::Bytes::from(fmt_data);
+        socket.send_dgram(bytes, &sock).wait().unwrap();
+
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        let source = io_source.definition().lock().unwrap();
+        assert_eq!(source.received, 1);
     }
 }

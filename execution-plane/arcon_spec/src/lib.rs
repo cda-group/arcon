@@ -106,8 +106,8 @@ pub struct Source {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum SourceKind {
     Socket {
-        host: String,
-        port: u32,
+        addr: String,
+        kind: SocketKind,
         #[serde(default = "source_rate")]
         rate: u64,
     },
@@ -126,14 +126,22 @@ pub struct Sink {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum SinkKind {
     Socket {
-        host: String,
-        port: u32,
+        addr: String,
+        kind: SocketKind,
     },
     /// A debug Sink that simply prints out received elements
     Debug,
     LocalFile {
         path: String,
     },
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum SocketKind {
+    #[serde(rename = "tcp")]
+    Tcp,
+    #[serde(rename = "udp")]
+    Udp,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -314,7 +322,7 @@ mod tests {
                                 }
                             ],
                             "kind": {
-                                "Socket": { "host": "localhost", "port": 1337}
+                                "Socket": { "addr": "127.0.0.1:3002", "kind": "udp"}
                             }
                         }
                     }

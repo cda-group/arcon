@@ -38,10 +38,13 @@ pub mod prelude {
     };
 
     pub use crate::streaming::source::{
-        collection::CollectionSource, local_file::LocalFileSource, socket::SocketSource,
+        collection::CollectionSource, local_file::LocalFileSource, socket::SocketKind,
+        socket::SocketSource,
     };
 
-    pub use crate::streaming::sink::{debug::DebugSink, local_file::LocalFileSink};
+    pub use crate::streaming::sink::{
+        debug::DebugSink, local_file::LocalFileSink, socket::SocketSink,
+    };
 
     pub use crate::data::*;
     pub use crate::weld::module::{Module, ModuleRun};

@@ -20,7 +20,7 @@
                     }
                 ],
                 "kind": {
-                    "Socket": { "host": "localhost", "port": 1337, "rate": 2 }
+                    "Socket": { "addr": "127.0.0.1:5001", "kind": "udp"}
                 }
             }
         }
