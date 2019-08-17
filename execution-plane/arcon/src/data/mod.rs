@@ -300,6 +300,14 @@ impl Hash for ArconF32 {
     }
 }
 
+impl std::str::FromStr for ArconF32 {
+    type Err = ::std::num::ParseFloatError;
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        let f: f32 = s.parse::<f32>()?;
+        Ok(ArconF32(f))
+    }
+}
+
 impl Deref for ArconF32 {
     type Target = f32;
 
@@ -315,6 +323,14 @@ impl Hash for ArconF64 {
     fn hash<H: Hasher>(&self, state: &mut H) {
         let s: u64 = self.0.trunc() as u64;
         s.hash(state);
+    }
+}
+
+impl std::str::FromStr for ArconF64 {
+    type Err = ::std::num::ParseFloatError;
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        let f: f64 = s.parse::<f64>()?;
+        Ok(ArconF64(f))
     }
 }
 
