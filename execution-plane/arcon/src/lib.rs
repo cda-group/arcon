@@ -67,10 +67,19 @@ mod tests {
     use std::collections::hash_map::DefaultHasher;
 
     #[key_by(id)]
+    #[arcon_decoder(,)]
     #[arcon]
     pub struct Item {
         id: u64,
         price: u32,
+    }
+
+    #[test]
+    fn arcon_decoder_test() {
+        use std::str::FromStr;
+        let item: Item = Item::from_str("100, 250").unwrap();
+        assert_eq!(item.id, 100);
+        assert_eq!(item.price, 250);
     }
 
     #[test]

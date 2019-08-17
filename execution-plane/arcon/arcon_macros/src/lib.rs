@@ -25,6 +25,7 @@ pub fn arcon(metadata: TokenStream, input: TokenStream) -> TokenStream {
                 impl #impl_generics ArconType for #name #ty_generics #where_clause {}
             }
         };
+
         proc_macro::TokenStream::from(output)
     } else {
         panic!("#[arcon] is only defined for structs!");
@@ -105,5 +106,67 @@ pub fn arcon_task(metadata: TokenStream, input: TokenStream) -> TokenStream {
         proc_macro::TokenStream::from(output)
     } else {
         panic!("#[arcon_task] is only defined for structs!");
+    }
+}
+
+/// `arcon_decoder` generates a FromStr impl for its struct
+///
+///
+/// NOTE: the inner fields need to implement FromStr as well
+#[proc_macro_attribute]
+pub fn arcon_decoder(delimiter: TokenStream, input: TokenStream) -> TokenStream {
+    let item = parse_macro_input!(input as DeriveInput);
+    let name = &item.ident;
+
+    if let syn::Data::Struct(ref s) = item.data {
+        let delim_str: String = delimiter.to_string();
+        // Set comma to default if no other is specified..
+        let delim = if delim_str.is_empty() {
+            ","
+        } else {
+            &delim_str
+        };
+
+        let mut idents = Vec::new();
+        for ref field in s.fields.iter() {
+            match &field.ident {
+                &Some(ref ident) => idents.push((ident.clone(), &field.ty)),
+                &None => panic!("Struct missing identiy"),
+            }
+        }
+
+        let mut field_quotes = Vec::new();
+        let mut pos: usize = 0;
+        for (ident, ty) in idents.iter() {
+            let parse = quote! { string_vec[#pos].parse::<#ty>()? };
+            let field_gen = quote! { #ident: #parse };
+            pos += 1;
+            field_quotes.push(field_gen);
+        }
+
+        let from_str = quote! {Self{#(#field_quotes,)*}};
+
+        let output: proc_macro2::TokenStream = {
+            quote! {
+                #item
+                impl ::std::str::FromStr for #name {
+                    type Err = ::std::num::ParseIntError;
+                    fn from_str(s: &str) -> ::std::result::Result<Self, Self::Err> {
+                        let string_vec: Vec<&str> = s.trim()
+                            .split(#delim)
+                            .collect::<Vec<&str>>()
+                            .iter()
+                            .map(|s| s.trim() as &str)
+                            .collect();
+
+                        Ok(#from_str)
+                    }
+                }
+            }
+        };
+
+        proc_macro::TokenStream::from(output)
+    } else {
+        panic!("#[arcon_decoder] is only defined for structs!");
     }
 }
