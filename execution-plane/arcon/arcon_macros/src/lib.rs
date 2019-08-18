@@ -138,7 +138,7 @@ pub fn arcon_decoder(delimiter: TokenStream, input: TokenStream) -> TokenStream 
         let mut field_quotes = Vec::new();
         let mut pos: usize = 0;
         for (ident, ty) in idents.iter() {
-            let parse = quote! { 
+            let parse = quote! {
                 string_vec[#pos].parse::<#ty>().map_err(|_| String::from("Failed to parse field"))?
             };
             let field_gen = quote! { #ident: #parse };

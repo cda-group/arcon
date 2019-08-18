@@ -83,13 +83,7 @@ pub fn generate(spec: &ArconSpec, is_terminated: bool) -> Result<String, Codegen
 
         match node.kind {
             Source(source) => {
-                stream.push(source::source(
-                    &node.id,
-                    &previous_node,
-                    &source.source_type,
-                    &source.kind,
-                    &spec.id,
-                ));
+                stream.push(source::source(&node.id, &previous_node, &source, &spec.id));
             }
             Sink(sink) => {
                 stream.push(sink::sink(&node.id, &sink.sink_type, &sink.kind, &spec.id));

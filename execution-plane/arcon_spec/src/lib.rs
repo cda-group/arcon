@@ -101,6 +101,13 @@ pub struct Source {
     pub channel_strategy: ChannelStrategy,
     pub successors: Vec<ChannelKind>,
     pub kind: SourceKind,
+    pub ts_extraction: Option<TimestampExtraction>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct TimestampExtraction {
+    pub index: u32,
+    pub delimiter: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -195,6 +202,7 @@ pub enum Type {
     Struct {
         id: String,
         key: Option<u32>,
+        decoder: Option<String>,
         field_tys: Vec<Type>,
     },
     Appender {

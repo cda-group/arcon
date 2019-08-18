@@ -28,6 +28,7 @@ where
     sock_kind: SocketKind,
     received: u8,
     watermark_interval: u64, // If 0: no watermarks/timestamps generated
+    watermark_index: Option<u32>,
 }
 
 impl<OUT> SocketSource<OUT>
@@ -39,6 +40,7 @@ where
         sock_kind: SocketKind,
         out_channels: Box<ChannelStrategy<OUT>>,
         watermark_interval: u64,
+        watermark_index: Option<u32>,
     ) -> SocketSource<OUT> {
         SocketSource {
             ctx: ComponentContext::new(),
@@ -46,24 +48,35 @@ where
             sock_addr,
             sock_kind,
             watermark_interval,
+            watermark_index,
             received: 0,
         }
     }
-    pub fn output_event(&mut self, data: OUT) -> () {
+    pub fn output_event(&mut self, data: OUT, ts: Option<u64>) -> () {
         self.received += 1;
         if self.watermark_interval > 0 {
-            // This should be replaced with a Timestamp extractor, we use ingestiontime for now
-            match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
-                Ok(ts) => {
-                    if let Err(err) = self.out_channels.output(
-                        ArconEvent::Element(ArconElement::with_timestamp(data, ts.as_secs())),
-                        &self.ctx.system(),
-                    ) {
-                        error!(self.ctx.log(), "Unable to output event, error {}", err);
-                    }
+            if let Some(timestamp) = ts {
+                debug!(self.ctx.log(), "Extracted timestamp and using that");
+                if let Err(err) = self.out_channels.output(
+                    ArconEvent::Element(ArconElement::with_timestamp(data, timestamp)),
+                    &self.ctx.system(),
+                ) {
+                    error!(self.ctx.log(), "Unable to output event, error {}", err);
                 }
-                _ => {
-                    error!(self.ctx.log(), "Failed to read SystemTime");
+            } else {
+                // This should be replaced with a Timestamp extractor, we use ingestiontime for now
+                match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
+                    Ok(ts) => {
+                        if let Err(err) = self.out_channels.output(
+                            ArconEvent::Element(ArconElement::with_timestamp(data, ts.as_secs())),
+                            &self.ctx.system(),
+                        ) {
+                            error!(self.ctx.log(), "Unable to output event, error {}", err);
+                        }
+                    }
+                    _ => {
+                        error!(self.ctx.log(), "Failed to read SystemTime");
+                    }
                 }
             }
         } else {
@@ -136,10 +149,40 @@ where
             debug!(self.ctx.log(), "{:?}", recv.bytes);
             // Try to cast into our type from bytes
             if let Ok(byte_string) = from_utf8(&recv.bytes) {
-                if let Ok(data) = byte_string.trim().parse::<OUT>() {
-                    self.output_event(data);
+                // NOTE: Hacky...
+                if let Some(wm_index) = self.watermark_index {
+                    // Just assume it is at first place
+                    let mut v: Vec<String> = byte_string
+                        .trim()
+                        .split(",")
+                        .collect::<Vec<&str>>()
+                        .iter()
+                        .map(|s| s.trim().to_string())
+                        .collect();
+                    if v.is_empty() {
+                        error!(
+                            self.ctx.log(),
+                            "Bad input data, should be delimited by comma"
+                        );
+                    } else {
+                        if let Ok(ts) = v.remove(wm_index as usize).parse::<u64>() {
+                            // parse the actual input data
+                            let remaining = v.join(",");
+                            if let Ok(data) = remaining.trim().parse::<OUT>() {
+                                self.output_event(data, Some(ts));
+                            } else {
+                                error!(self.ctx.log(), "Unable to parse string {}", byte_string);
+                            }
+                        } else {
+                            error!(self.ctx.log(), "Failed to extract Timestamp");
+                        }
+                    }
                 } else {
-                    error!(self.ctx.log(), "Unable to parse string {}", byte_string);
+                    if let Ok(data) = byte_string.trim().parse::<OUT>() {
+                        self.output_event(data, None);
+                    } else {
+                        error!(self.ctx.log(), "Unable to parse string {}", byte_string);
+                    }
                 }
             } else {
                 error!(self.ctx.log(), "Unable to parse bytes to string");
@@ -227,7 +270,7 @@ mod tests {
             Box::new(Forward::new(Channel::Local(sink_ref.clone())));
 
         let socket_source: SocketSource<u8> =
-            SocketSource::new(addr, SocketKind::Tcp, out_channels, 0);
+            SocketSource::new(addr, SocketKind::Tcp, out_channels, 0, None);
         let (source, _) = system.create_and_register(move || socket_source);
 
         system.start(&sink);
@@ -266,7 +309,7 @@ mod tests {
             Box::new(Forward::new(Channel::Local(sink_ref.clone())));
 
         let socket_source: SocketSource<f32> =
-            SocketSource::new(addr, SocketKind::Tcp, out_channels, 0);
+            SocketSource::new(addr, SocketKind::Tcp, out_channels, 0, None);
         let (source, _) = system.create_and_register(move || socket_source);
 
         system.start(&sink);
@@ -321,7 +364,7 @@ mod tests {
             Box::new(Forward::new(Channel::Local(sink_ref.clone())));
 
         let socket_source: SocketSource<u8> =
-            SocketSource::new(addr, SocketKind::Tcp, out_channels, 3);
+            SocketSource::new(addr, SocketKind::Tcp, out_channels, 3, None);
         let (source, _) = system.create_and_register(move || socket_source);
 
         system.start(&sink);

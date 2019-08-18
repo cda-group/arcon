@@ -69,7 +69,14 @@ where
             ArconEvent::Element(e) => {
                 debug!(self.ctx.log(), "Sink element: {:?}", e.data);
                 let tx = self.tx_channel.clone();
-                let fmt_data = format!("{:?}\n", e.data);
+                let fmt_data = {
+                    if let Ok(mut json) = serde_json::to_string(&e.data) {
+                        json += "\n";
+                        json
+                    } else {
+                        format!("{:?}\n", e.data)
+                    }
+                };
                 let bytes = Bytes::from(fmt_data);
                 let req_dispatch = tx.send(bytes).map_err(|_| ()).and_then(|_| Ok(()));
                 self.executor.spawn(req_dispatch);
@@ -128,7 +135,7 @@ mod tests {
             .recv_dgram(vec![0u8; MAX_DATAGRAM_SIZE])
             .map(|(_, data, len, _)| {
                 let recv = String::from_utf8_lossy(&data[..len]);
-                assert_eq!(recv, String::from("10\n"))
+                assert_eq!(recv, String::from("10"))
             })
             .wait();
 

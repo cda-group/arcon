@@ -9,14 +9,19 @@ pub fn to_token_stream(t: &Type, spec_id: &String) -> TokenStream {
             let ident = Ident::new(scalar(s), Span::call_site());
             quote! { #ident }
         }
-        Struct { id, key, field_tys } => {
+        Struct {
+            id,
+            key,
+            decoder,
+            field_tys,
+        } => {
             let mut struct_map = GENERATED_STRUCTS.lock().unwrap();
             let struct_ident = Ident::new(id, Span::call_site());
             if let Some(map) = struct_map.get_mut(spec_id) {
                 if !map.contains_key(id) {
                     map.insert(
                         String::from(id),
-                        struct_gen(&id, *key, *&field_tys, spec_id).to_string(),
+                        struct_gen(&id, *key, &decoder, *&field_tys, spec_id).to_string(),
                     );
                 }
             }
@@ -77,13 +82,27 @@ fn merge_op(op: &MergeOp) -> String {
     .to_string()
 }
 
-fn struct_gen(id: &str, key: Option<u32>, field_tys: &Vec<Type>, spec_id: &String) -> TokenStream {
+fn struct_gen(
+    id: &str,
+    key: Option<u32>,
+    decoder: &Option<String>,
+    field_tys: &Vec<Type>,
+    spec_id: &String,
+) -> TokenStream {
     let key_opt_stream = if let Some(k) = key {
         let key_id = format!("f{}", k);
         let key_ident = Ident::new(&key_id, Span::call_site());
         Some(quote! { #[key_by(#key_ident)] })
     } else {
         None
+    };
+
+    // Default decoding by comma
+    let decoder_stream = if let Some(dec) = decoder {
+        let dec_ident = Ident::new(&dec.trim(), Span::call_site());
+        Some(quote! { #[arcon_decoder(#dec_ident)] })
+    } else {
+        Some(quote! { #[arcon_decoder(,)] })
     };
 
     let mut field_counter: u32 = 0;
@@ -106,6 +125,7 @@ fn struct_gen(id: &str, key: Option<u32>, field_tys: &Vec<Type>, spec_id: &Strin
 
     quote! {
         #key_opt_stream
+        #decoder_stream
         #[arcon]
         pub struct #struct_def
     }
@@ -120,22 +140,26 @@ mod tests {
         let s = Struct {
             id: String::from("MyStruct"),
             key: Some(0),
+            decoder: None,
             field_tys: vec![Scalar(Scalar::U32), Scalar(Scalar::I32)],
         };
         // Should generate the following struct
         //
         // #[key_by(f0)]
+        // #[arcon_decoder(,)]
         // #[arcon]
         // pub struct MyStruct {
         //  f0: u32,
         //  f1: i32,
         // }
         match s {
-            Struct { id, key, field_tys } => {
-                let stream = struct_gen(&id, key, &field_tys, &"MySpec".to_string());
+            Struct { id, key, decoder, field_tys } => {
+                let stream = struct_gen(&id, key, &decoder, &field_tys, &"MySpec".to_string());
                 let fmt = crate::format_code(stream.to_string()).unwrap();
                 // RustFmt will return an empty String if it is bad Rust code...
                 assert!(fmt.len() > 0);
+                let expected = String::from("#[key_by(f0)]\n# [ arcon_decoder ( , ) ]\n#[arcon]\npub struct MyStruct {\n    f0: u32,\n    f1: i32,\n}\n");
+                assert_eq!(expected, fmt);
             }
             _ => panic!("Not supposed to happen"),
         }
