@@ -23,15 +23,22 @@ impl Server {
 
     pub fn compile_spec(&mut self, spec: &ArconSpec) -> Result<String, failure::Error> {
         let mut path = String::new();
+        let mut logged: Option<String> = None;
         {
             let mut env = self.env.lock().unwrap();
             env.add_project(spec.id.clone())?;
             env.create_workspace_member(&spec.id)?;
             env.generate(&spec)?;
+
+            if let Some(log_dir) = env.log_dir.clone() {
+                logged = Some(log_dir)
+            }
+
             let p: String = env.bin_path(&spec.id, &spec.mode)?;
             path += &p;
         }
-        crate::util::cargo_build(&spec.mode)?;
+
+        crate::util::cargo_build(&spec.id, logged, &spec.mode)?;
         Ok(path)
     }
 }
@@ -43,7 +50,7 @@ impl Arconc for Server {
                 debug!("Received Compilation Request {:?}", spec);
                 match self.compile_spec(&spec) {
                     Ok(bin_path) => {
-                        debug!("Compiled {:?} successfully", spec.id);
+                        info!("Compiled {:?} successfully at path {}", spec.id, bin_path);
                         let mut success = ArconcSuccess::default();
                         success.set_path(bin_path);
                         let mut resp = ArconcReply::default();

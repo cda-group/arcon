@@ -67,7 +67,15 @@ fn main() {
         .takes_value(true)
         .long("build-dir")
         .short("b")
-        .help("Directory where arcc builds binaries");
+        .help("Directory where arconc compiles into");
+
+    let log_dir_arg = Arg::with_name("l")
+        .required(false)
+        .default_value(DEFAULT_LOG_DIR)
+        .takes_value(true)
+        .long("log-dir")
+        .short("l")
+        .help("Directory where logs are stored");
 
     let matches = App::new("Arcon Compiler")
         .setting(AppSettings::ColoredHelp)
@@ -85,6 +93,7 @@ fn main() {
                 .setting(AppSettings::ColoredHelp)
                 .arg(&spec_arg)
                 .arg(&build_dir_arg)
+                .arg(&log_dir_arg)
                 .about("Compile Arc Specification"),
         )
         .subcommand(
@@ -93,6 +102,7 @@ fn main() {
                 .arg(&port_arg)
                 .arg(&host_arg)
                 .arg(&build_dir_arg)
+                .arg(&log_dir_arg)
                 .about("Launch Arcon Compiler in gRPC server mode"),
         )
         .subcommand(
@@ -121,8 +131,9 @@ fn main() {
                 .expect("Should not happen as there is a default");
 
             let build_dir: &str = arg_matches.value_of("b").unwrap_or(DEFAULT_BUILD_DIR);
+            let log_dir: &str = arg_matches.value_of("l").unwrap_or(DEFAULT_LOG_DIR);
 
-            if let Err(err) = compile(spec_path, build_dir, daemonize) {
+            if let Err(err) = compile(spec_path, build_dir, log_dir, daemonize) {
                 error!("Error: {} ", err.to_string());
             }
         }
@@ -134,8 +145,9 @@ fn main() {
 
             let host: &str = arg_matches.value_of("h").unwrap_or(DEFAULT_SERVER_HOST);
             let build_dir: &str = arg_matches.value_of("b").unwrap_or(DEFAULT_BUILD_DIR);
+            let log_dir: &str = arg_matches.value_of("l").unwrap_or(DEFAULT_LOG_DIR);
 
-            if let Err(err) = server(host, port, build_dir, daemonize) {
+            if let Err(err) = server(host, port, build_dir, log_dir, daemonize) {
                 error!("Error: {} ", err.to_string());
             }
         }
@@ -158,7 +170,12 @@ fn fetch_args() -> Vec<String> {
     std::env::args().collect()
 }
 
-fn compile(spec_path: &str, build_dir: &str, daemonize: bool) -> Result<(), failure::Error> {
+fn compile(
+    spec_path: &str,
+    build_dir: &str,
+    log_dir: &str,
+    daemonize: bool,
+) -> Result<(), failure::Error> {
     let spec_file: String = {
         let md = metadata(&spec_path)?;
         if md.is_file() {
@@ -187,15 +204,28 @@ fn compile(spec_path: &str, build_dir: &str, daemonize: bool) -> Result<(), fail
         greeting_with_spec(&spec, &bin);
     }
 
-    util::cargo_build(&spec.mode)?;
+    let logged = if daemonize {
+        Some(log_dir.to_string())
+    } else {
+        None
+    };
+
+    util::cargo_build(&spec.id, logged, &spec.mode)?;
 
     Ok(())
 }
 
-fn server(host: &str, port: i32, build_dir: &str, daemonize: bool) -> Result<(), failure::Error> {
-    let env = env::CompilerEnv::load(build_dir.to_string())?;
+fn server(
+    host: &str,
+    port: i32,
+    build_dir: &str,
+    log_dir: &str,
+    daemonize: bool,
+) -> Result<(), failure::Error> {
+    let mut env = env::CompilerEnv::load(build_dir.to_string())?;
 
     if daemonize {
+        env.add_log_dir(log_dir.to_string());
         daemonize_arconc();
     }
 

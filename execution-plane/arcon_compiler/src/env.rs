@@ -18,6 +18,7 @@ pub struct CompileEnvError {
 pub struct CompilerEnv {
     pub root: String,
     config: Config,
+    pub log_dir: Option<String>,
 }
 
 impl CompilerEnv {
@@ -44,7 +45,15 @@ impl CompilerEnv {
             }
         };
 
-        Ok(CompilerEnv { root, config })
+        Ok(CompilerEnv {
+            root,
+            config,
+            log_dir: None,
+        })
+    }
+
+    pub fn add_log_dir(&mut self, dir: String) {
+        self.log_dir = Some(dir)
     }
 
     pub fn get_projects(&self) -> Vec<String> {
