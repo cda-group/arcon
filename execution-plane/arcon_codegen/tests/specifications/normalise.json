@@ -1,7 +1,7 @@
 {
 "id": "normalise",
 "target": "x86-64-unknown-linux-gnu",
-"system_addr": "127.0.0.1:3004",
+"system_addr": "127.0.0.1:3008",
 "mode": "debug",
 "nodes": [
     {

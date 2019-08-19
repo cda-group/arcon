@@ -2,9 +2,13 @@
 name = "arcon_codegen"
 version = "0.1.0"
 authors = ["Max Meldrum <mmeldrum@kth.se>"]
-description = "Code generation for Arcon thorugh the use of Quasi-quoting."
 edition = "2018"
-publish = false
+license = "BSD-3-Clause"
+repository = "https://github.com/cda-group/arcon"
+homepage = "https://github.com/cda-group/arcon"
+description = """
+Code generation for the Arcon system
+"""
 
 [dependencies]
 arcon_spec = { path = "../arcon_spec" }
