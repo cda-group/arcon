@@ -45,7 +45,7 @@ fn main() {
         .takes_value(true)
         .long("spec")
         .short("s")
-        .help("Path to Arc specification");
+        .help("Path to Arcon specification");
 
     let port_arg = Arg::with_name("p")
         .default_value(&default_port_str)
