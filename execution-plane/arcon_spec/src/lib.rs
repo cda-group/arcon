@@ -102,6 +102,8 @@ pub struct Source {
     pub successors: Vec<ChannelKind>,
     pub kind: SourceKind,
     pub ts_extraction: Option<TimestampExtraction>,
+    #[serde(default = "utf8")]
+    pub format: Format,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -114,6 +116,7 @@ pub struct TimestampExtraction {
 pub enum SourceKind {
     Socket {
         addr: String,
+        #[serde(default = "udp")]
         kind: SocketKind,
         #[serde(default = "source_rate")]
         rate: u64,
@@ -128,12 +131,15 @@ pub struct Sink {
     pub sink_type: Type,
     pub predecessor: String,
     pub kind: SinkKind,
+    #[serde(default = "utf8")]
+    pub format: Format,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum SinkKind {
     Socket {
         addr: String,
+        #[serde(default = "udp")]
         kind: SocketKind,
     },
     /// A debug Sink that simply prints out received elements
@@ -191,6 +197,13 @@ pub enum CompileMode {
     Debug,
     #[serde(rename = "release")]
     Release,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum Format {
+    CSV,
+    JSON,
+    UTF8,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -279,6 +292,14 @@ fn release() -> CompileMode {
 
 fn source_rate() -> u64 {
     0
+}
+
+fn udp() -> SocketKind {
+    SocketKind::Udp
+}
+
+fn utf8() -> Format {
+    Format::UTF8
 }
 
 fn system_addr() -> String {
