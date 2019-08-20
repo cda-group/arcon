@@ -135,7 +135,7 @@ mod tests {
             .recv_dgram(vec![0u8; MAX_DATAGRAM_SIZE])
             .map(|(_, data, len, _)| {
                 let recv = String::from_utf8_lossy(&data[..len]);
-                assert_eq!(recv, String::from("10"))
+                assert_eq!(recv, String::from("10\n"))
             })
             .wait();
 
