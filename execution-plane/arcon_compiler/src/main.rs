@@ -94,7 +94,7 @@ fn main() {
                 .arg(&spec_arg)
                 .arg(&build_dir_arg)
                 .arg(&log_dir_arg)
-                .about("Compile Arc Specification"),
+                .about("Compile Arcon Specification"),
         )
         .subcommand(
             SubCommand::with_name("server")
