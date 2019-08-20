@@ -61,7 +61,7 @@ pub struct Window {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum WindowKind {
-    Keyed { kind: KeyKind },
+    Keyed,
     All,
 }
 
@@ -89,12 +89,6 @@ pub enum TimeKind {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum KeyKind {
-    Struct { id: String },
-    Primitive,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Source {
     pub source_type: Type,
     #[serde(default = "forward")]
@@ -104,6 +98,8 @@ pub struct Source {
     pub ts_extraction: Option<TimestampExtraction>,
     #[serde(default = "utf8")]
     pub format: Format,
+    #[serde(default = "source_rate")]
+    pub rate: u64,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -118,8 +114,6 @@ pub enum SourceKind {
         addr: String,
         #[serde(default = "udp")]
         kind: SocketKind,
-        #[serde(default = "source_rate")]
-        rate: u64,
     },
     LocalFile {
         path: String,
@@ -242,29 +236,17 @@ pub enum Type {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Scalar {
-    #[serde(rename = "i8")]
     I8,
-    #[serde(rename = "i16")]
     I16,
-    #[serde(rename = "i32")]
     I32,
-    #[serde(rename = "i64")]
     I64,
-    #[serde(rename = "u8")]
     U8,
-    #[serde(rename = "u16")]
     U16,
-    #[serde(rename = "u32")]
     U32,
-    #[serde(rename = "u64")]
     U64,
-    #[serde(rename = "f32")]
     F32,
-    #[serde(rename = "f64")]
     F64,
-    #[serde(rename = "u8")]
     Bool,
-    #[serde(rename = "()")]
     Unit,
 }
 
@@ -341,7 +323,7 @@ mod tests {
                     "kind": {
                         "Source": {
                             "source_type": {
-                                "Scalar": "u32"
+                                "Scalar": "U32"
                             },
                             "successors": [
                                 {
@@ -362,10 +344,10 @@ mod tests {
                     "kind": {
                         "Task": {
                             "input_type": {
-                                "Scalar": "u32"
+                                "Scalar": "U32"
                             },
                             "output_type": {
-                                "Scalar": "u32"
+                                "Scalar": "U32"
                             },
                             "weld_code": "|x: u32| x + u32(5)",
                             "channel_strategy": "Forward",
@@ -396,15 +378,15 @@ mod tests {
                             ],
                             "window_function": {
                                 "input_type": {
-                                    "Scalar": "u32"
+                                    "Scalar": "U32"
                                 },
                                 "output_type": {
-                                    "Scalar": "i64"
+                                    "Scalar": "I64"
                                 },
                                 "builder_type": {
                                     "Appender": {
                                         "elem_ty": {
-                                            "Scalar": "u32"
+                                            "Scalar": "U32"
                                         }
                                     }
                                 },
@@ -428,7 +410,7 @@ mod tests {
                     "kind": {
                         "Sink": {
                             "sink_type": {
-                                "Scalar": "i64"
+                                "Scalar": "I64"
                             },
                             "predecessor": "node_3",
                             "kind": "Debug"

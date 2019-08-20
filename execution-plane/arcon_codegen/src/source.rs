@@ -8,13 +8,13 @@ pub fn source(name: &str, target: &str, source: &Source, spec_id: &String) -> To
     let input_type = to_token_stream(&source.source_type, spec_id);
 
     let source_stream = match &source.kind {
-        SourceKind::Socket { addr, kind, rate } => socket_source(
+        SourceKind::Socket { addr, kind } => socket_source(
             &source_name,
             &target,
             &input_type,
             &addr,
             &kind,
-            *rate,
+            *&source.rate,
             &source.ts_extraction,
         ),
         SourceKind::LocalFile { path } => {

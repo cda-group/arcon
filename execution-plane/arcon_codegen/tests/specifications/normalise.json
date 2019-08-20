@@ -10,7 +10,7 @@
         "kind": {
             "Source": {
                 "source_type": {
-                    "Scalar": "i64"
+                    "Scalar": "I64"
                 },
                 "successors": [
                     {
@@ -31,10 +31,10 @@
         "kind": {
             "Task": {
                 "input_type": {
-                    "Scalar": "i64"
+                    "Scalar": "I64"
                 },
                 "output_type": {
-                    "Scalar": "i64"
+                    "Scalar": "I64"
                 },
                 "weld_code": "|x: i64| x < i64(3)",
                 "successors": [
@@ -70,19 +70,19 @@
             },
             "window_function" : {
               "input_type": {
-                  "Scalar": "i64"
+                  "Scalar": "I64"
               },
               "output_type": {
                   "Vector": {
                     "elem_ty": {
-                      "Scalar": "i64"
+                      "Scalar": "I64"
                     }
                   }
               },
               "builder_type": {
                   "Appender": {
                       "elem_ty": {
-                          "Scalar": "i64"
+                          "Scalar": "I64"
                       }
                   }
               },
@@ -103,12 +103,12 @@
                 "input_type": {
                   "Vector": {
                     "elem_ty": {
-                      "Scalar": "i64"
+                      "Scalar": "I64"
                     }
                   }
                 },
                 "output_type": {
-                    "Scalar": "i64"
+                    "Scalar": "I64"
                 },
                 "weld_code": "|x: vec[i64]| let m = merger[i64, +]; result(for(x, m, |b: merger[i64, +], i, e| merge(b, e + i64(3))))",
                 "successors": [
@@ -129,7 +129,7 @@
         "kind": {
             "Sink": {
                 "sink_type": {
-                    "Scalar": "i64"
+                    "Scalar": "I64"
                 },
                 "predecessor": "node_4",
                 "kind": {

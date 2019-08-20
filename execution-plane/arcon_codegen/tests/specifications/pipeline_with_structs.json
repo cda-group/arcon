@@ -9,7 +9,7 @@
         "kind": {
             "Source": {
                 "source_type": {
-                    "Scalar": "u32"
+                    "Scalar": "U32"
                 },
                 "successors": [
                     {
@@ -30,17 +30,17 @@
         "kind": {
             "Task": {
                 "input_type": {
-                    "Scalar": "u32"
+                    "Scalar": "U32"
                 },
                 "output_type": {
                     "Struct": {
                       "id": "MyStruct",
                       "field_tys" : [
                         {
-                          "Scalar": "u32"
+                          "Scalar": "U32"
                         },
                         {
-                          "Scalar": "i32"
+                          "Scalar": "U32"
                         }
                       ]
                     }
@@ -68,10 +68,10 @@
                       "id": "MyStruct",
                       "field_tys" : [
                         {
-                          "Scalar": "u32"
+                          "Scalar": "U32"
                         },
                         {
-                          "Scalar": "i32"
+                          "Scalar": "I32"
                         }
                       ]
                     }

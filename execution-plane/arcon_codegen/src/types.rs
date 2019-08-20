@@ -153,7 +153,12 @@ mod tests {
         //  f1: i32,
         // }
         match s {
-            Struct { id, key, decoder, field_tys } => {
+            Struct {
+                id,
+                key,
+                decoder,
+                field_tys,
+            } => {
                 let stream = struct_gen(&id, key, &decoder, &field_tys, &"MySpec".to_string());
                 let fmt = crate::format_code(stream.to_string()).unwrap();
                 // RustFmt will return an empty String if it is bad Rust code...

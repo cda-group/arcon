@@ -8,7 +8,7 @@
         "kind": {
             "Source": {
                 "source_type": {
-                    "Scalar": "u32"
+                    "Scalar": "U32"
                 },
                 "successors": [
                     {
@@ -29,10 +29,10 @@
         "kind": {
             "Task": {
                 "input_type": {
-                    "Scalar": "u32"
+                    "Scalar": "U32"
                 },
                 "output_type": {
-                    "Scalar": "u32"
+                    "Scalar": "U32"
                 },
                 "weld_code": "|x: u32| x + u32(5)",
                 "successors": [
@@ -53,7 +53,7 @@
         "kind": {
             "Sink": {
                 "sink_type": {
-                    "Scalar": "u32"
+                    "Scalar": "U32"
                 },
                 "predecessor": "node_2",
                 "kind": "Debug"

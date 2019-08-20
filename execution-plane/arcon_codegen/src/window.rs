@@ -72,7 +72,7 @@ fn tumbling(
     builder_type: &TokenStream,
 ) -> TokenStream {
     let keyed = match window_kind {
-        Keyed { kind: _ } => unimplemented!(),
+        Keyed => unimplemented!(),
         All => quote! { false },
     };
 

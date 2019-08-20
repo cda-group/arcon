@@ -10,7 +10,7 @@
         "kind": {
             "Source": {
                 "source_type": {
-                    "Scalar": "i32"
+                    "Scalar": "I32"
                 },
                 "successors": [
                     {
@@ -46,15 +46,15 @@
             },
             "window_function" : {
               "input_type": {
-                  "Scalar": "i32"
+                  "Scalar": "I32"
               },
               "output_type": {
-                  "Scalar": "i64"
+                  "Scalar": "I64"
               },
               "builder_type": {
                   "Appender": {
                       "elem_ty": {
-                          "Scalar": "i32"
+                          "Scalar": "I32"
                       }
                   }
               },
@@ -73,7 +73,7 @@
         "kind": {
             "Sink": {
                 "sink_type": {
-                    "Scalar": "i64"
+                    "Scalar": "I64"
                 },
 
                 "predecessor": "node_2",

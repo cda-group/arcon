@@ -14,13 +14,13 @@
                       "id": "TouchpadData",
                       "field_tys" : [
                         {
-                          "Scalar": "f64"
+                          "Scalar": "F64"
                         },
                         {
-                          "Scalar": "f64"
+                          "Scalar": "F64"
                         },
                         {
-                          "Scalar": "f64"
+                          "Scalar": "F64"
                         }
                       ]
                     }
@@ -52,13 +52,13 @@
                       "id": "TouchpadData",
                       "field_tys" : [
                         {
-                          "Scalar": "f64"
+                          "Scalar": "F64"
                         },
                         {
-                          "Scalar": "f64"
+                          "Scalar": "F64"
                         },
                         {
-                          "Scalar": "f64"
+                          "Scalar": "F64"
                         }
                       ]
                     }
