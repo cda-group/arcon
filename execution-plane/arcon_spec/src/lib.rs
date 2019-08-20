@@ -29,6 +29,8 @@ pub struct ArconSpec {
     pub system_addr: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub nodes: Vec<Node>,
+    #[serde(default = "timestamp_extractor")]
+    pub timestamp_extractor: u32,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -273,6 +275,10 @@ fn release() -> CompileMode {
 }
 
 fn source_rate() -> u64 {
+    0
+}
+
+fn timestamp_extractor() -> u32 {
     0
 }
 
