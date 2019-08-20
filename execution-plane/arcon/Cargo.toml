@@ -11,12 +11,16 @@ description = """
 Arcon's execution plane
 """
 
+[features]
+default = []
+kafka = ["arcon_extra/kafka"]
+
 [dependencies]
 arcon_macros = { path = "arcon_macros" , version = "0.1.0" }
-arcon_messages = { path = "arcon_messages" }
-arcon_backend = { path = "arcon_backend" }
-arcon_error = { path = "arcon_error" }
-arcon_extra= { path = "arcon_extra" }
+arcon_messages = { path = "arcon_messages", version = "0.1.0" }
+arcon_backend = { path = "arcon_backend", version = "0.1.0" }
+arcon_error = { path = "arcon_error", version = "0.1.0" }
+arcon_extra = { path = "arcon_extra", version = "0.1.0" }
 
 weld = "0.3.0"
 kompact = "0.7.0"
