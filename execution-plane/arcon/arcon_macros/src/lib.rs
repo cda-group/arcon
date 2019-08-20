@@ -34,7 +34,7 @@ pub fn arcon(metadata: TokenStream, input: TokenStream) -> TokenStream {
 
 /// arcon_task macro used for unified event passing between components
 /// Adds all necessary methods needed to declare a kompact component.
-/// Requires the generic attributes IN and PORT to be declared where:
+/// Requires the generic attribute IN to be declared where:
 ///     IN is the ArconType which the component will receive
 /// Requires the component to implement the functions handle_element and handle_watermark
 #[proc_macro_attribute]
