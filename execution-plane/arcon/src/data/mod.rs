@@ -130,7 +130,7 @@ unsafe impl<K, V> Sync for Pair<K, V> {}
 /// however, it is reintroduced here to add extra features
 /// and to easier integrate with serialisation/deserialisation
 #[repr(C)]
-#[derive(Debug, Copy)]
+#[derive(Copy)]
 pub struct ArconVec<A: ArconType> {
     pub ptr: *const A,
     pub len: i64,
@@ -208,6 +208,13 @@ impl<A: ArconType> Deref for ArconVec<A> {
 }
 
 impl<A: ArconType> Display for ArconVec<A> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let vec: Vec<A> = self.to_vec();
+        write!(f, "{:?}", vec)
+    }
+}
+
+impl<A: ArconType> Debug for ArconVec<A> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let vec: Vec<A> = self.to_vec();
         write!(f, "{:?}", vec)
