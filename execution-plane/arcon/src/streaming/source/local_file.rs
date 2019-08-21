@@ -1,10 +1,12 @@
-use crate::data::{ArconElement, ArconEvent, ArconType};
+use crate::data::{ArconElement, ArconEvent, ArconType, Watermark};
 use crate::streaming::channel::strategy::ChannelStrategy;
 use kompact::*;
 use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
 use std::str::FromStr;
+use std::time::Duration;
+use std::time::SystemTime;
 /*
     LocalFileSource:
     Allows generation of events from a file.
@@ -17,29 +19,46 @@ pub struct LocalFileSource<A: 'static + ArconType + FromStr> {
     ctx: ComponentContext<LocalFileSource<A>>,
     channel_strategy: Box<ChannelStrategy<A>>,
     file_path: String,
+    watermark_interval: u64, // If 0: no watermarks/timestamps generated
 }
 
 impl<A: ArconType + FromStr> LocalFileSource<A> {
-    pub fn new(file_path: String, strategy: Box<ChannelStrategy<A>>) -> LocalFileSource<A> {
+    pub fn new(file_path: String, strategy: Box<ChannelStrategy<A>>, watermark_interval: u64) -> LocalFileSource<A> {
         LocalFileSource {
             ctx: ComponentContext::new(),
             channel_strategy: strategy,
             file_path: file_path,
+            watermark_interval,
         }
     }
     pub fn process_file(&mut self) {
         if let Ok(f) = File::open(&self.file_path) {
             let reader = BufReader::new(f);
+            let mut counter: u64 = 0;
 
             for line in reader.lines() {
                 match line {
                     Ok(l) => {
                         if let Ok(v) = l.parse::<A>() {
-                            let event = ArconEvent::Element(ArconElement::new(v));
-                            if let Err(err) =
-                                self.channel_strategy.output(event, &self.ctx.system())
-                            {
-                                error!(self.ctx.log(), "Unable to output event, error {}", err);
+                            match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
+                                Ok(ts) => {
+                                    if let Err(err) = self.channel_strategy.output(
+                                        ArconEvent::Element(ArconElement::with_timestamp(v, ts.as_secs())),
+                                        &self.ctx.system(),
+                                    ) {
+                                        error!(self.ctx.log(), "Unable to output event, error {}", err);
+                                    } else {
+                                        counter += 1;
+                                        if counter == self.watermark_interval {
+                                            let _ = self.channel_strategy.output(
+                                                ArconEvent::Watermark(Watermark::new(ts.as_secs())),&self.ctx.system());
+                                            counter = 0;
+                                        }
+                                    }
+                                }
+                                _ => {
+                                    error!(self.ctx.log(), "Failed to read SystemTime");
+                                }
                             }
                         } else {
                             error!(self.ctx.log(), "Unable to parse line {}", self.file_path);
@@ -50,8 +69,34 @@ impl<A: ArconType + FromStr> LocalFileSource<A> {
                     }
                 }
             }
+
+            // We finished processing the file
+            // Just generate watermarks in a periodic fashion..
+            self.schedule_periodic(
+                Duration::from_secs(0),
+                Duration::from_secs(3),
+                move |self_c, _| {
+                    self_c.output_watermark();
+                },
+            );
         } else {
             error!(self.ctx.log(), "Unable to open file {}", self.file_path);
+        }
+    }
+
+    pub fn output_watermark(&mut self) -> () {
+        match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
+            Ok(n) => {
+                if let Err(err) = self.channel_strategy.output(
+                    ArconEvent::Watermark(Watermark::new(n.as_secs())),
+                    &self.ctx.system(),
+                ) {
+                    error!(self.ctx.log(), "Unable to output watermark, error {}", err);
+                }
+            }
+            _ => {
+                error!(self.ctx.log(), "Failed to read SystemTime");
+            }
         }
     }
 }
@@ -120,7 +165,7 @@ mod tests {
         let channel_strategy = Box::new(Forward::new(channel));
 
         let file_source: LocalFileSource<u64> =
-            LocalFileSource::new(String::from(&file_path), channel_strategy);
+            LocalFileSource::new(String::from(&file_path), channel_strategy, 5);
         let (source, _) = system.create_and_register(move || file_source);
         system.start(&source);
         wait(1);
@@ -144,7 +189,7 @@ mod tests {
         let channel_strategy = Box::new(Forward::new(channel));
 
         let file_source: LocalFileSource<u64> =
-            LocalFileSource::new(String::from(&file_path), channel_strategy);
+            LocalFileSource::new(String::from(&file_path), channel_strategy, 5);
         let (source, _) = system.create_and_register(move || file_source);
         system.start(&source);
         wait(1);
@@ -165,7 +210,7 @@ mod tests {
         let channel_strategy = Box::new(Forward::new(channel));
 
         let file_source: LocalFileSource<f32> =
-            LocalFileSource::new(String::from(&file_path), channel_strategy);
+            LocalFileSource::new(String::from(&file_path), channel_strategy, 5);
         let (source, _) = system.create_and_register(move || file_source);
         system.start(&source);
         wait(1);
@@ -188,7 +233,7 @@ mod tests {
         let channel_strategy = Box::new(Forward::new(channel));
 
         let file_source: LocalFileSource<f32> =
-            LocalFileSource::new(String::from(&file_path), channel_strategy);
+            LocalFileSource::new(String::from(&file_path), channel_strategy, 5);
         let (source, _) = system.create_and_register(move || file_source);
         system.start(&source);
         wait(1);

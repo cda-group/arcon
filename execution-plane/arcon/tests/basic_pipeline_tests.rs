@@ -51,14 +51,14 @@ fn normalise_pipeline_test() {
         Box::new(Forward::new(Channel::Local(node_4.actor_ref())));
 
     let node_3 = system.create_and_start(move || {
-        ProcessingTimeWindowAssigner::<i64, Appender<i64>, ArconVec<i64>>::new(
+        EventTimeWindowAssigner::<i64, Appender<i64>, ArconVec<i64>>::new(
             channel_strategy,
             builder_code,
             udf_code,
             materialiser_code,
-            250 as u128,
-            250 as u128,
-            0 as u128,
+            3,
+            3,
+            0,
             false,
         )
     });
@@ -75,13 +75,15 @@ fn normalise_pipeline_test() {
     let channel = Channel::Local(node_2.actor_ref());
     let channel_strategy: Box<ChannelStrategy<i64>> = Box::new(Forward::new(channel));
 
+    // Watermark per 5 lines in the file 
+    let wm_interval = 5;
     let _ = system.create_and_start(move || {
         let source: LocalFileSource<i64> =
-            LocalFileSource::new(String::from(&source_path), channel_strategy);
+            LocalFileSource::new(String::from(&source_path), channel_strategy, wm_interval);
         source
     });
 
-    std::thread::sleep(std::time::Duration::from_secs(2));
+    std::thread::sleep(std::time::Duration::from_secs(5));
 
     // Only a single window should have been triggered.
     // Check results from the sink file!

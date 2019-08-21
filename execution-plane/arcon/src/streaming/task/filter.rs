@@ -43,8 +43,8 @@ where
         }
     }
 
-    fn handle_watermark(&mut self, _w: Watermark) -> ArconResult<()> {
-        unimplemented!();
+    fn handle_watermark(&mut self, w: Watermark) -> ArconResult<()> {
+        self.push_out(ArconEvent::Watermark(w))
     }
 
     fn handle_element(&mut self, element: &ArconElement<IN>) -> ArconResult<()> {

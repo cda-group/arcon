@@ -60,8 +60,8 @@ where
         Ok(())
     }
 
-    fn handle_watermark(&mut self, _w: Watermark) -> ArconResult<()> {
-        unimplemented!();
+    fn handle_watermark(&mut self, w: Watermark) -> ArconResult<()> {
+        self.push_out(ArconEvent::Watermark(w))
     }
 
     fn run_udf(&mut self, event: &IN) -> ArconResult<OUT> {
