@@ -12,7 +12,9 @@ import scala.concurrent.duration._
 import scala.util.{ Failure, Success }
 
 import se.kth.cda.compiler.Compiler._
+import se.kth.cda.compiler.dataflow.DFG
 import appmaster.util.Ascii._
+import appmaster.util.DagDrawer._
 
 object Appmaster extends App {
   if (args.length == 0) {
@@ -31,8 +33,8 @@ object Appmaster extends App {
 
     val jsonInput = Source.fromFile(filePath).getLines.mkString
     // Compile the arc IR to an Arcon Specification
-    val result = compile(jsonInput)
-    val arconSpec = ByteString.copyFromUtf8(result)
+    val dfg: String = compile(jsonInput)
+    val arconSpec = ByteString.copyFromUtf8(dfg)
     val request = client.compile(ArconcRequest(arconSpec))
     sys.log.info("Sent request to the Arcon compiler, please hold!")
 

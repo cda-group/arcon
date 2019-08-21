@@ -1,9 +1,7 @@
-use grpc::arconc::*;
-use grpc::futures::*;
-use grpc::grpcio::{Environment, RpcContext, ServerBuilder, UnarySink};
+use arcon_proto::*;
+use futures::*;
+use grpcio::{Environment, RpcContext, ServerBuilder, UnarySink};
 
-use grpc::arconc_grpc::create_arconc;
-use grpc::arconc_grpc::Arconc;
 use std::sync::{Arc, Mutex};
 
 use crate::env::CompilerEnv;

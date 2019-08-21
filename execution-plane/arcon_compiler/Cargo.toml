@@ -2,12 +2,14 @@
 name = "arcon_compiler"
 version = "0.1.0"
 authors = ["Max Meldrum <mmeldrum@kth.se>"]
+edition = "2018"
+readme = "README.md"
+license = "BSD-3-Clause"
+repository = "https://github.com/cda-group/arcon"
+homepage = "https://github.com/cda-group/arcon"
 description = """
 arconc is the Arc backend compiler targeting the Arcon runtime.
 """
-edition = "2018"
-repository = "https://github.com/cda-group/arcon"
-readme = "README.md"
 
 [[bin]]
 bench = false
@@ -15,9 +17,11 @@ path = "src/main.rs"
 name = "arconc"
 
 [dependencies]
-arcon_codegen = { path = "../arcon_codegen" }
-arcon_spec = { path = "../arcon_spec" }
-grpc = { path = "grpc" }
+arcon_codegen = { version = "0.1", path = "../arcon_codegen" }
+arcon_spec = { version = "0.1", path = "../arcon_spec" }
+arcon_proto = { version = "0.1", features = ["arconc"] }
+grpcio = { version = "0.4", default-features = false, features = ["protobuf-codec"] }
+futures = "0.1.16"
 serde = { version = "1.0", features = ["derive"] }
 toml = "0.5"
 clap = "2.33.0"

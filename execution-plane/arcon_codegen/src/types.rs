@@ -124,11 +124,25 @@ fn struct_gen(
         #(#fields),*
     } };
 
-    quote! {
-        #key_opt_stream
-        #decoder_stream
-        #[arcon]
-        pub struct #struct_def
+    // TODO: Just temporary solution! Remove!
+    if key.is_some() {
+        quote! {
+            #key_opt_stream
+            #decoder_stream
+            #[arcon]
+            pub struct #struct_def
+        }
+    } else {
+        quote! {
+            #decoder_stream
+            #[arcon]
+            pub struct #struct_def
+            impl ::std::hash::Hash for #struct_ident {
+                fn hash<H: ::std::hash::Hasher>(&self, _state: &mut H) {
+
+                }
+            }
+        }
     }
 }
 
