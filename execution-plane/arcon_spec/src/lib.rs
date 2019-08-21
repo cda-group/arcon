@@ -274,8 +274,10 @@ fn release() -> CompileMode {
     CompileMode::Release
 }
 
+// NOTE: this currently assumes seconds.
+//       will be reworked later on..
 fn source_rate() -> u64 {
-    0
+    10
 }
 
 fn timestamp_extractor() -> u32 {
