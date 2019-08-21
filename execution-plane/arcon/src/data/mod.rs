@@ -6,7 +6,7 @@ use crate::messages::protobuf::*;
 use serde::de::{DeserializeOwned, Deserializer, SeqAccess, Visitor};
 use serde::ser::SerializeSeq;
 use serde::*;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 use std::ops::Deref;
@@ -204,6 +204,13 @@ impl<A: ArconType> Deref for ArconVec<A> {
 
     fn deref(&self) -> &Self::Target {
         unsafe { std::slice::from_raw_parts(self.ptr, self.len as usize) }
+    }
+}
+
+impl<A: ArconType> Display for ArconVec<A> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let vec: Vec<A> = self.to_vec();
+        write!(f, "{:?}", vec)
     }
 }
 
