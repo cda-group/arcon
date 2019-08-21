@@ -4,6 +4,7 @@ use spec::{
     ChannelKind, TimeKind, Window, WindowAssigner, WindowFunction, WindowKind, WindowKind::All,
     WindowKind::Keyed,
 };
+use crate::common::verify_and_start;
 
 pub fn window(name: &str, window: &Window, spec_id: &String) -> TokenStream {
     let input_type = to_token_stream(&window.window_function.input_type, spec_id);
@@ -121,12 +122,15 @@ fn tumbling(
         }
     };
 
+    let verify = verify_and_start(name, "system");
+
     quote! {
         let channel_strategy: Box<Forward<#output_type>> =
             Box::new(Forward::new(Channel::Local(#successor.actor_ref())));
 
-        let #name = system.create_and_start(move || {
+        let (#name, reg) = system.create_and_register(move || {
             #component
         });
+        #verify
     }
 }

@@ -1,6 +1,7 @@
 use crate::types::to_token_stream;
 use proc_macro2::{Ident, Span, TokenStream};
 use spec::{SocketKind, Source, SourceKind, TimestampExtraction};
+use crate::common::*;
 
 pub fn source(name: &str, target: &str, source: &Source, spec_id: &String) -> TokenStream {
     let source_name = Ident::new(&name, Span::call_site());
@@ -34,6 +35,8 @@ fn socket_source(
     rate: u64,
     ts_extraction: &Option<TimestampExtraction>,
 ) -> TokenStream {
+    let verify = verify_and_start(source_name, "system");
+
     let sock_kind = {
         match kind {
             SocketKind::Tcp => quote! { SocketKind::Tcp },
@@ -54,11 +57,13 @@ fn socket_source(
     quote! {
         let channel = Channel::Local(#target.actor_ref());
         let channel_strategy: Box<ChannelStrategy<#input_type>> = Box::new(Forward::new(channel));
-        let #source_name = system.create_and_start(move || {
+        let (#source_name, reg) = system.create_and_register(move || {
             let sock_addr = #addr.parse().expect("Failed to parse SocketAddr");
             let source: SocketSource<#input_type> = SocketSource::new(sock_addr, #sock_kind, channel_strategy, #rate, #ts_quote);
             source
         });
+
+        #verify
     }
 }
 
@@ -69,10 +74,12 @@ fn local_file_source(
     file_path: &str,
     rate: u64,
 ) -> TokenStream {
+    let verify = verify_and_start(source_name, "system");
+
     quote! {
         let channel = Channel::Local(#target.actor_ref());
         let channel_strategy: Box<ChannelStrategy<#input_type>> = Box::new(Forward::new(channel));
-        let #source_name = system.create_and_start(move || {
+        let (#source_name, reg) = system.create_and_register(move || {
             let source: LocalFileSource<#input_type> = LocalFileSource::new(
                 String::from(#file_path),
                 channel_strategy,
@@ -80,5 +87,7 @@ fn local_file_source(
             );
             source
         });
+
+        #verify
     }
 }

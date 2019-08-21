@@ -1,6 +1,7 @@
 use crate::types::to_token_stream;
 use proc_macro2::{Ident, Span, TokenStream};
 use spec::{SinkKind, SocketKind, Type};
+use crate::common::verify_and_start;
 
 pub fn sink(name: &str, input_type: &Type, sink_type: &SinkKind, spec_id: &String) -> TokenStream {
     let sink_name = Ident::new(&name, Span::call_site());
@@ -16,20 +17,24 @@ pub fn sink(name: &str, input_type: &Type, sink_type: &SinkKind, spec_id: &Strin
 }
 
 fn debug_sink(sink_name: &Ident, input_type: &TokenStream) -> TokenStream {
+    let verify = verify_and_start(sink_name, "system");
     quote! {
-        let #sink_name = system.create_and_start(move || {
+        let (#sink_name, reg)= system.create_and_register(move || {
             let sink: DebugSink<#input_type> = DebugSink::new();
             sink
         });
+        #verify
     }
 }
 
 fn local_file_sink(sink_name: &Ident, input_type: &TokenStream, file_path: &str) -> TokenStream {
+    let verify = verify_and_start(sink_name, "system");
     quote! {
-        let #sink_name = system.create_and_start(move || {
+        let (#sink_name, reg) = system.create_and_register(move || {
             let sink: LocalFileSink<#input_type> = LocalFileSink::new(#file_path);
             sink
         });
+        #verify
     }
 }
 
@@ -39,6 +44,7 @@ fn socket_sink(
     addr: &str,
     kind: &SocketKind,
 ) -> TokenStream {
+    let verify = verify_and_start(sink_name, "system");
     let sock_sink = {
         match kind {
             SocketKind::Tcp => unimplemented!(),
@@ -47,10 +53,11 @@ fn socket_sink(
     };
 
     quote! {
-        let #sink_name = system.create_and_start(move || {
+        let (#sink_name, reg) = system.create_and_register(move || {
             let sock_addr = #addr.parse().expect("Failed to parse SocketAddr");
             let sink: SocketSink<#input_type> = #sock_sink
             sink
         });
+        #verify
     }
 }

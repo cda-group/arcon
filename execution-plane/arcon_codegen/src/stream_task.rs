@@ -50,7 +50,12 @@ pub fn stream_task(
 
                     let code = String::from(#weld_code);
                     let module = std::sync::Arc::new(Module::new(code).unwrap());
-                    let #node_name = system.create_and_start(move || #task_signature);
+                    let (#node_name, reg) = system.create_and_register(move || #task_signature);
+
+                    reg.wait_timeout(std::time::Duration::from_millis(1000))
+                        .expect("Component never registered!")
+                        .expect("Component failed to register!");
+                    system.start(&#node_name);
                 }
             }
             Remote { id: _, addr: _ } => {
