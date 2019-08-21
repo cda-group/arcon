@@ -18,7 +18,7 @@ pub fn source(name: &str, target: &str, source: &Source, spec_id: &String) -> To
             &source.ts_extraction,
         ),
         SourceKind::LocalFile { path } => {
-            local_file_source(&source_name, &target, &input_type, &path)
+            local_file_source(&source_name, &target, &input_type, &path, *&source.rate)
         }
     };
 
@@ -67,6 +67,7 @@ fn local_file_source(
     target: &Ident,
     input_type: &TokenStream,
     file_path: &str,
+    rate: u64,
 ) -> TokenStream {
     quote! {
         let channel = Channel::Local(#target.actor_ref());
@@ -75,6 +76,7 @@ fn local_file_source(
             let source: LocalFileSource<#input_type> = LocalFileSource::new(
                 String::from(#file_path),
                 channel_strategy,
+                #rate,
             );
             source
         });
