@@ -15,13 +15,14 @@ pub fn to_token_stream(t: &Type, spec_id: &String) -> TokenStream {
             decoder,
             field_tys,
         } => {
+            let generated = struct_gen(&id, *key, &decoder, *&field_tys, spec_id).to_string();
             let mut struct_map = GENERATED_STRUCTS.lock().unwrap();
             let struct_ident = Ident::new(id, Span::call_site());
             if let Some(map) = struct_map.get_mut(spec_id) {
                 if !map.contains_key(id) {
                     map.insert(
                         String::from(id),
-                        struct_gen(&id, *key, &decoder, *&field_tys, spec_id).to_string(),
+                        generated,
                     );
                 }
             }
