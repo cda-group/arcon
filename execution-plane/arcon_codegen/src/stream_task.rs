@@ -39,15 +39,28 @@ pub fn stream_task(
                         }
                         Filter => {
                             quote! {
-                                Filter::<#output_type>::new(module, Vec::new(), channel_strategy)
+                                Filter::<#input_type>::new(module, Vec::new(), channel_strategy)
                             }
                         }
                     }
                 };
+
+                let channel_strategy_quote = match &task.kind {
+                    Filter => {
+                        quote! {
+                        let channel_strategy: Box<ChannelStrategy<#input_type>> = Box::new(Forward::new(channel));
+                    }
+                    },
+                    _ => {
+                        quote! {
+                        let channel_strategy: Box<ChannelStrategy<#output_type>> = Box::new(Forward::new(channel));
+                    }
+                    }
+                };
+
                 quote! {
                     let channel = Channel::Local(#target.actor_ref());
-                    let channel_strategy: Box<ChannelStrategy<#output_type>> = Box::new(Forward::new(channel));
-
+                    #channel_strategy_quote
                     let code = String::from(#weld_code);
                     let module = std::sync::Arc::new(Module::new(code).unwrap());
                     let (#node_name, reg) = system.create_and_register(move || #task_signature);

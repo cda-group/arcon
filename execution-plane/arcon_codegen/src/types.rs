@@ -66,8 +66,8 @@ fn scalar(scalar: &Scalar) -> &str {
         Scalar::U16 => "u16",
         Scalar::U32 => "u32",
         Scalar::U64 => "u64",
-        Scalar::F32 => "ArconF32",
-        Scalar::F64 => "ArconF64",
+        Scalar::F32 => "f32",
+        Scalar::F64 => "f64",
         Scalar::Bool => "WeldBool",
         Scalar::Unit => "()",
     }

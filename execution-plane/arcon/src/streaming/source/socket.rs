@@ -26,9 +26,10 @@ where
     out_channels: Box<ChannelStrategy<OUT>>,
     sock_addr: SocketAddr,
     sock_kind: SocketKind,
-    received: u8,
+    received: u64,
     watermark_interval: u64, // If 0: no watermarks/timestamps generated
     watermark_index: Option<u32>,
+    max_timestamp: u64,
 }
 
 impl<OUT> SocketSource<OUT>
@@ -50,6 +51,7 @@ where
             watermark_interval,
             watermark_index,
             received: 0,
+            max_timestamp: 0,
         }
     }
     pub fn output_event(&mut self, data: OUT, ts: Option<u64>) -> () {
@@ -89,17 +91,26 @@ where
         }
     }
     pub fn output_watermark(&mut self) -> () {
-        match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
-            Ok(n) => {
-                if let Err(err) = self.out_channels.output(
-                    ArconEvent::Watermark(Watermark::new(n.as_secs())),
-                    &self.ctx.system(),
-                ) {
-                    error!(self.ctx.log(), "Unable to output watermark, error {}", err);
-                }
+        if self.watermark_index.is_some() {
+            if let Err(err) = self.out_channels.output(
+                ArconEvent::Watermark(Watermark::new(self.max_timestamp)),
+                &self.ctx.system(),
+            ) {
+                error!(self.ctx.log(), "Unable to output watermark, error {}", err);
             }
-            _ => {
-                error!(self.ctx.log(), "Failed to read SystemTime");
+        } else {
+            match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
+                Ok(n) => {
+                    if let Err(err) = self.out_channels.output(
+                        ArconEvent::Watermark(Watermark::new(n.as_secs())),
+                        &self.ctx.system(),
+                    ) {
+                        error!(self.ctx.log(), "Unable to output watermark, error {}", err);
+                    }
+                }
+                _ => {
+                    error!(self.ctx.log(), "Failed to read SystemTime");
+                }
             }
         }
     }
@@ -167,6 +178,9 @@ where
                     } else {
                         if let Some(ts_str) = v.get(wm_index as usize) {
                             if let Ok(ts) =  ts_str.parse::<u64>() {
+                                if ts > self.max_timestamp {
+                                    self.max_timestamp = ts;
+                                }
                                 let input_data = v.join(",");
                                 debug!(self.ctx.log(), "Trying to parse str {}", input_data);
                                 match input_data.parse::<OUT>() {
