@@ -19,6 +19,7 @@ pub struct CompilerEnv {
     pub root: String,
     config: Config,
     pub log_dir: Option<String>,
+    local_arcon: bool,
 }
 
 impl CompilerEnv {
@@ -49,9 +50,13 @@ impl CompilerEnv {
             root,
             config,
             log_dir: None,
+            local_arcon: false,
         })
     }
 
+    pub fn set_local_arcon(&mut self) {
+        self.local_arcon = true;
+    }
     pub fn add_log_dir(&mut self, dir: String) {
         self.log_dir = Some(dir)
     }
@@ -87,6 +92,13 @@ impl CompilerEnv {
     pub fn create_workspace_member(&self, id: &str) -> Result<(), failure::Error> {
         let full_path = format!("{}", id);
 
+        // Check if we are to use a local arcon crate or pull from crates.io
+        let arcon_dependency = if self.local_arcon {
+            String::from("path = \"../../arcon\"")
+        } else {
+            format!("version = \"{}\"", crate::ARCON_VER)
+        };;
+
         let manifest = format!(
             "[package] \
              \nname = \"{}\" \
@@ -94,9 +106,9 @@ impl CompilerEnv {
              \nauthors = [\"Arcon Developers <insert-email>\"] \
              \nedition = \"2018\" \
              \n[dependencies] \
-             \narcon = {{path = \"../../arcon\"}} \
+             \narcon = {{{}}} \
              \nserde = {{version = \"1.0.63\", features = [\"derive\"] }}",
-            id
+            id, arcon_dependency
         );
 
         let path = format!("{}/src/", full_path);

@@ -24,6 +24,8 @@ const DEFAULT_SERVER_HOST: &str = "127.0.0.1";
 const DEFAULT_SPEC: &str = "spec.json";
 const DEFAULT_BUILD_DIR: &str = "build";
 const DEFAULT_LOG_DIR: &str = "/tmp";
+// For compilations that do not depend on the local arcon
+const ARCON_VER: &str = "0.1"; // 0.1.x
 
 lazy_static! {
     static ref TARGETS: Vec<String> = {
@@ -88,6 +90,12 @@ fn main() {
                 .long("daemonize")
                 .short("d"),
         )
+        .arg(
+            Arg::with_name("l")
+                .help("Use local arcon crate")
+                .long("local arcon crate")
+                .short("l"),
+        )
         .subcommand(
             SubCommand::with_name("compile")
                 .setting(AppSettings::ColoredHelp)
@@ -123,6 +131,7 @@ fn main() {
         .get_matches_from(fetch_args());
 
     let daemonize: bool = matches.is_present("d");
+    let is_local_arcon: bool = matches.is_present("l");
 
     match matches.subcommand() {
         ("compile", Some(arg_matches)) => {
@@ -133,7 +142,7 @@ fn main() {
             let build_dir: &str = arg_matches.value_of("b").unwrap_or(DEFAULT_BUILD_DIR);
             let log_dir: &str = arg_matches.value_of("l").unwrap_or(DEFAULT_LOG_DIR);
 
-            if let Err(err) = compile(spec_path, build_dir, log_dir, daemonize) {
+            if let Err(err) = compile(spec_path, build_dir, log_dir, daemonize, is_local_arcon) {
                 error!("Error: {} ", err.to_string());
             }
         }
@@ -175,6 +184,7 @@ fn compile(
     build_dir: &str,
     log_dir: &str,
     daemonize: bool,
+    is_local_arcon: bool,
 ) -> Result<(), failure::Error> {
     let spec_file: String = {
         let md = metadata(&spec_path)?;
@@ -189,7 +199,14 @@ fn compile(
 
     let mut env = env::CompilerEnv::load(build_dir.to_string())?;
 
+    if is_local_arcon {
+        // NOTE: we use a local path to the arcon crate
+        //       i.e. ../../arcon
+        env.set_local_arcon();
+    }
+
     // Enter the build directory
+    // TODO: Change approach
     let path = std::path::Path::new(build_dir);
     std::env::set_current_dir(&path)?;
 
@@ -229,6 +246,7 @@ fn server(
         daemonize_arconc();
     }
 
+    // TODO: Change approach
     let path = std::path::Path::new(build_dir);
     std::env::set_current_dir(&path)?;
 
