@@ -32,12 +32,11 @@ where
         let th = Builder::new()
             .name(String::from("UdpSinkThread"))
             .spawn(move || {
-                let mut runtime = Runtime::new().expect("Could not create Tokio Runtime!");
+                let runtime = Runtime::new().expect("Could not create Tokio Runtime!");
                 let executor = runtime.executor();
                 // Let OS handle port alloc
                 let self_addr = "0.0.0.0:0".parse().unwrap();
                 let socket = UdpSocket::bind(&self_addr).expect("Failed to bind");
-                socket.connect(&socket_addr).expect("Failed connection");
 
                 let handler = rx
                     .fold(socket, move |s, b| {
@@ -47,9 +46,8 @@ where
                     })
                     .map(|_| ());
 
-                runtime.spawn(handler);
                 tx_exec.send(executor).expect("failed to send executor");
-                runtime.shutdown_on_idle().wait().unwrap();
+                tokio::run(handler);
             })
             .map_err(|_| ())
             .unwrap();
@@ -138,7 +136,6 @@ mod tests {
                 assert_eq!(recv, String::from("10\n"))
             })
             .wait();
-
         let _ = system.shutdown();
     }
 }
