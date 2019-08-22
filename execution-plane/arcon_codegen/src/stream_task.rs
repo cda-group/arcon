@@ -9,18 +9,12 @@ pub fn stream_task(
     _target_name: &str,
     parallelism: &u32,
     task: &Task,
+    spec_id: &String,
 ) -> TokenStream {
     let node_name = Ident::new(&node_name, Span::call_site());
-    let input_type = to_token_stream(&task.input_type);
-    let output_type = to_token_stream(&task.output_type);
+    let input_type = to_token_stream(&task.input_type, spec_id);
+    let output_type = to_token_stream(&task.output_type, spec_id);
 
-    let task_ident_str = match &task.kind {
-        FlatMap => "FlatMap",
-        Map => "Map",
-        Filter => "Filter",
-    };
-
-    let task_ident = Ident::new(task_ident_str, Span::call_site());
     let weld_code: &str = &task.weld_code;
 
     let successors: &Vec<spec::ChannelKind> = &task.successors;
@@ -45,18 +39,36 @@ pub fn stream_task(
                         }
                         Filter => {
                             quote! {
-                                Filter::<#output_type>::new(module, Vec::new(), channel_strategy)
+                                Filter::<#input_type>::new(module, Vec::new(), channel_strategy)
                             }
                         }
                     }
                 };
+
+                let channel_strategy_quote = match &task.kind {
+                    Filter => {
+                        quote! {
+                        let channel_strategy: Box<ChannelStrategy<#input_type>> = Box::new(Forward::new(channel));
+                    }
+                    },
+                    _ => {
+                        quote! {
+                        let channel_strategy: Box<ChannelStrategy<#output_type>> = Box::new(Forward::new(channel));
+                    }
+                    }
+                };
+
                 quote! {
                     let channel = Channel::Local(#target.actor_ref());
-                    let channel_strategy: Box<ChannelStrategy<#output_type>> = Box::new(Forward::new(channel));
-
+                    #channel_strategy_quote
                     let code = String::from(#weld_code);
                     let module = std::sync::Arc::new(Module::new(code).unwrap());
-                    let #node_name = system.create_and_start(move || #task_signature);
+                    let (#node_name, reg) = system.create_and_register(move || #task_signature);
+
+                    reg.wait_timeout(std::time::Duration::from_millis(1000))
+                        .expect("Component never registered!")
+                        .expect("Component failed to register!");
+                    system.start(&#node_name);
                 }
             }
             Remote { id: _, addr: _ } => {

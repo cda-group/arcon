@@ -49,16 +49,23 @@ where
         }
     }
 
-    fn handle_watermark(&mut self, _w: Watermark) -> ArconResult<()> {
-        unimplemented!();
+    fn handle_watermark(&mut self, w: Watermark) -> ArconResult<()> {
+        self.push_out(ArconEvent::Watermark(w))
     }
 
     fn handle_element(&mut self, event: &ArconElement<IN>) -> ArconResult<()> {
         if let Ok(result) = self.run_udf(&(event.data)) {
             // Result should be an ArconVec of elements
             // iterate over it and send
+            let timestamp = if let Some(ts) = event.timestamp {
+                ts
+            } else  {
+                0
+            };
+
             for i in 0..result.len {
-                let _ = self.push_out(ArconEvent::Element(ArconElement::new(result[i as usize])));
+                debug!(self.ctx.log(), "Flatmap Sending element {:?}", result[i as usize]);
+                let _ = self.push_out(ArconEvent::Element(ArconElement::with_timestamp(result[i as usize], timestamp)));
             }
         } else {
             // Just report the error for now...
@@ -97,13 +104,13 @@ mod tests {
         });
 
         let channel = Channel::Local(sink_comp.actor_ref());
-        let channel_strategy: Box<ChannelStrategy<i32>> =
-            Box::new(Forward::new(channel));
+        let channel_strategy: Box<ChannelStrategy<i32>> = Box::new(Forward::new(channel));
 
         let weld_code = String::from("|x: vec[i32]| map(x, |a: i32| a + i32(5))");
         let module = Arc::new(Module::new(weld_code).unwrap());
-        let filter_task =
-            system.create_and_start(move || FlatMap::<ArconVec<i32>, i32>::new(module, Vec::new(), channel_strategy));
+        let filter_task = system.create_and_start(move || {
+            FlatMap::<ArconVec<i32>, i32>::new(module, Vec::new(), channel_strategy)
+        });
 
         let vec: Vec<i32> = vec![1, 2, 3, 4, 5];
         let arcon_vec = ArconVec::new(vec);

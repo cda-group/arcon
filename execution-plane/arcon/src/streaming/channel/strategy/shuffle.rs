@@ -82,8 +82,7 @@ mod tests {
             comps.push(comp);
         }
 
-        let mut channel_strategy: Box<ChannelStrategy<Input>> =
-            Box::new(Shuffle::new(channels));
+        let mut channel_strategy: Box<ChannelStrategy<Input>> = Box::new(Shuffle::new(channels));
 
         for _i in 0..total_msgs {
             let input = ArconEvent::Element(ArconElement::new(Input { id: 1 }));

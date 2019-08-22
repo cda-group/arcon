@@ -1,6 +1,6 @@
 [package]
 name = "arcon"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Max Meldrum <mmeldrum@kth.se>"]
 edition = "2018"
 readme = "README.md"
@@ -11,18 +11,22 @@ description = """
 Arcon's execution plane
 """
 
+[features]
+default = []
+kafka = ["arcon_extra/kafka"]
+
 [dependencies]
-arcon_macros = { path = "arcon_macros" , version = "0.1.0" }
-arcon_messages = { path = "arcon_messages" }
-arcon_backend = { path = "arcon_backend" }
-arcon_error = { path = "arcon_error" }
-arcon_extra= { path = "arcon_extra" }
+arcon_macros = { version = "0.1", path = "arcon_macros" }
+arcon_messages = { version = "0.1", path = "arcon_messages" }
+arcon_backend = { version = "0.1", path = "arcon_backend" }
+arcon_error = { version = "0.1", path = "arcon_error" }
+arcon_extra = { version = "0.1", path = "arcon_extra" }
 
 weld = "0.3.0"
 kompact = "0.7.0"
 futures = "0.1"
 regex = "1"
-keyby = "0.1.0"
+keyby = "0.2.0"
 rand = "0.6.5"
 fnv = "1.0.3"
 tokio = "0.1"
@@ -38,6 +42,7 @@ slog-term = "2.4"
 # Serialisation
 bincode = "1.1.4"
 serde = { version = "1.0.63", features = ["derive"] }
+serde_json = "1.0.40"
 
 [dev-dependencies]
 tempfile = "3"

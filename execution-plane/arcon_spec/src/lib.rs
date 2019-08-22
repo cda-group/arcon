@@ -29,6 +29,8 @@ pub struct ArconSpec {
     pub system_addr: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub nodes: Vec<Node>,
+    #[serde(default = "timestamp_extractor")]
+    pub timestamp_extractor: u32,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -61,7 +63,7 @@ pub struct Window {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum WindowKind {
-    Keyed { kind: KeyKind },
+    Keyed,
     All,
 }
 
@@ -89,27 +91,24 @@ pub enum TimeKind {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum KeyKind {
-    Struct { id: String },
-    Primitive,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Source {
     pub source_type: Type,
     #[serde(default = "forward")]
     pub channel_strategy: ChannelStrategy,
     pub successors: Vec<ChannelKind>,
     pub kind: SourceKind,
+    #[serde(default = "utf8")]
+    pub format: Format,
+    #[serde(default = "source_rate")]
+    pub rate: u64,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum SourceKind {
     Socket {
-        host: String,
-        port: u32,
-        #[serde(default = "source_rate")]
-        rate: u64,
+        addr: String,
+        #[serde(default = "udp")]
+        kind: SocketKind,
     },
     LocalFile {
         path: String,
@@ -121,19 +120,30 @@ pub struct Sink {
     pub sink_type: Type,
     pub predecessor: String,
     pub kind: SinkKind,
+    #[serde(default = "utf8")]
+    pub format: Format,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum SinkKind {
     Socket {
-        host: String,
-        port: u32,
+        addr: String,
+        #[serde(default = "udp")]
+        kind: SocketKind,
     },
     /// A debug Sink that simply prints out received elements
     Debug,
     LocalFile {
         path: String,
     },
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum SocketKind {
+    #[serde(rename = "tcp")]
+    Tcp,
+    #[serde(rename = "udp")]
+    Udp,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -179,12 +189,22 @@ pub enum CompileMode {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum Format {
+    CSV,
+    JSON,
+    UTF8,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Type {
     Scalar(Scalar),
     Vector {
         elem_ty: Box<Type>,
     },
     Struct {
+        id: String,
+        key: Option<u32>,
+        decoder: Option<String>,
         field_tys: Vec<Type>,
     },
     Appender {
@@ -211,29 +231,17 @@ pub enum Type {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Scalar {
-    #[serde(rename = "i8")]
     I8,
-    #[serde(rename = "i16")]
     I16,
-    #[serde(rename = "i32")]
     I32,
-    #[serde(rename = "i64")]
     I64,
-    #[serde(rename = "u8")]
     U8,
-    #[serde(rename = "u16")]
     U16,
-    #[serde(rename = "u32")]
     U32,
-    #[serde(rename = "u64")]
     U64,
-    #[serde(rename = "f32")]
     F32,
-    #[serde(rename = "f64")]
     F64,
-    #[serde(rename = "u8")]
     Bool,
-    #[serde(rename = "()")]
     Unit,
 }
 
@@ -259,8 +267,22 @@ fn release() -> CompileMode {
     CompileMode::Release
 }
 
+// NOTE: this currently assumes seconds.
+//       will be reworked later on..
 fn source_rate() -> u64 {
+    10
+}
+
+fn timestamp_extractor() -> u32 {
     0
+}
+
+fn udp() -> SocketKind {
+    SocketKind::Udp
+}
+
+fn utf8() -> Format {
+    Format::UTF8
 }
 
 fn system_addr() -> String {
@@ -302,7 +324,7 @@ mod tests {
                     "kind": {
                         "Source": {
                             "source_type": {
-                                "Scalar": "u32"
+                                "Scalar": "U32"
                             },
                             "successors": [
                                 {
@@ -312,7 +334,7 @@ mod tests {
                                 }
                             ],
                             "kind": {
-                                "Socket": { "host": "localhost", "port": 1337}
+                                "Socket": { "addr": "127.0.0.1:3002", "kind": "udp"}
                             }
                         }
                     }
@@ -323,10 +345,10 @@ mod tests {
                     "kind": {
                         "Task": {
                             "input_type": {
-                                "Scalar": "u32"
+                                "Scalar": "U32"
                             },
                             "output_type": {
-                                "Scalar": "u32"
+                                "Scalar": "U32"
                             },
                             "weld_code": "|x: u32| x + u32(5)",
                             "channel_strategy": "Forward",
@@ -357,15 +379,15 @@ mod tests {
                             ],
                             "window_function": {
                                 "input_type": {
-                                    "Scalar": "u32"
+                                    "Scalar": "U32"
                                 },
                                 "output_type": {
-                                    "Scalar": "i64"
+                                    "Scalar": "I64"
                                 },
                                 "builder_type": {
                                     "Appender": {
                                         "elem_ty": {
-                                            "Scalar": "u32"
+                                            "Scalar": "U32"
                                         }
                                     }
                                 },
@@ -389,7 +411,7 @@ mod tests {
                     "kind": {
                         "Sink": {
                             "sink_type": {
-                                "Scalar": "i64"
+                                "Scalar": "I64"
                             },
                             "predecessor": "node_3",
                             "kind": "Debug"

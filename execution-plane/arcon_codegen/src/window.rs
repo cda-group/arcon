@@ -1,11 +1,15 @@
 use crate::types::to_token_stream;
 use proc_macro2::{Ident, Span, TokenStream};
-use spec::{ChannelKind, Window, WindowAssigner, WindowFunction};
+use spec::{
+    ChannelKind, TimeKind, Window, WindowAssigner, WindowFunction, WindowKind, WindowKind::All,
+    WindowKind::Keyed,
+};
+use crate::common::verify_and_start;
 
-pub fn window(name: &str, window: &Window) -> TokenStream {
-    let input_type = to_token_stream(&window.window_function.input_type);
-    let output_type = to_token_stream(&window.window_function.output_type);
-    let builder_type = to_token_stream(&window.window_function.builder_type);
+pub fn window(name: &str, window: &Window, spec_id: &String) -> TokenStream {
+    let input_type = to_token_stream(&window.window_function.input_type, spec_id);
+    let output_type = to_token_stream(&window.window_function.output_type, spec_id);
+    let builder_type = to_token_stream(&window.window_function.builder_type, spec_id);
     let name = Ident::new(&name, Span::call_site());
 
     let successors = &window.successors;
@@ -26,6 +30,8 @@ pub fn window(name: &str, window: &Window) -> TokenStream {
             let window_code = window_modules(&window.window_function);
             let window_comp = tumbling(
                 &name,
+                &window.time_kind,
+                &window.window_kind,
                 length,
                 &successor_ident,
                 &input_type,
@@ -58,17 +64,50 @@ fn window_modules(window_function: &WindowFunction) -> TokenStream {
 
 fn tumbling(
     name: &Ident,
+    time_kind: &TimeKind,
+    window_kind: &WindowKind,
     window_len: u64,
     successor: &Ident,
     input_type: &TokenStream,
     output_type: &TokenStream,
     builder_type: &TokenStream,
 ) -> TokenStream {
-    quote! {
-        let channel_strategy: Box<Forward<#output_type>> =
-            Box::new(Forward::new(Channel::Local(#successor.actor_ref())));
+    let keyed = match window_kind {
+        Keyed => unimplemented!(),
+        All => quote! { false },
+    };
 
-        let #name = system.create_and_start(move || {
+    let component = match time_kind {
+        TimeKind::Event { slack } => {
+            quote! {
+             EventTimeWindowAssigner::<#input_type, #builder_type, #output_type>::new(
+                channel_strategy,
+                builder_code,
+                udf_code,
+                materialiser_code,
+                #window_len,
+                #window_len,
+                #slack,
+                #keyed,
+            )
+            }
+        }
+        TimeKind::Processing => {
+            quote! {
+             ProcessingTimeWindowAssigner::<#input_type, #builder_type, #output_type>::new(
+                channel_strategy,
+                builder_code,
+                udf_code,
+                materialiser_code,
+                #window_len as u128,
+                #window_len as u128,
+                0 as u128,
+                #keyed
+            )
+            }
+        }
+        TimeKind::Ingestion => {
+            quote! {
              EventTimeWindowAssigner::<#input_type, #builder_type, #output_type>::new(
                 channel_strategy,
                 builder_code,
@@ -77,7 +116,21 @@ fn tumbling(
                 #window_len,
                 #window_len,
                 0,
+                #keyed
             )
+            }
+        }
+    };
+
+    let verify = verify_and_start(name, "system");
+
+    quote! {
+        let channel_strategy: Box<Forward<#output_type>> =
+            Box::new(Forward::new(Channel::Local(#successor.actor_ref())));
+
+        let (#name, reg) = system.create_and_register(move || {
+            #component
         });
+        #verify
     }
 }

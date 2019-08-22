@@ -60,6 +60,7 @@ where
 {
     fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
         if let Some(event) = msg.downcast_ref::<ArconEvent<A>>() {
+            debug!(self.ctx.log(), "Got event {:?}", event);
             self.handle_event(event);
         }
     }

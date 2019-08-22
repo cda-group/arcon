@@ -1,7 +1,7 @@
 {
-"id": "file_source_sink",
+"id": "pipeline_with_structs",
 "target": "x86-64-unknown-linux-gnu",
-"system_addr": "127.0.0.1:3003",
+"mode": "debug",
 "nodes": [
     {
         "id": "node_1",
@@ -9,7 +9,7 @@
         "kind": {
             "Source": {
                 "source_type": {
-                    "Scalar": "u32"
+                    "Scalar": "U32"
                 },
                 "successors": [
                     {
@@ -19,7 +19,7 @@
                     }
                 ],
                 "kind": {
-                    "LocalFile": { "path": "/tmp/some_file"}
+                    "Socket": { "addr": "127.0.0.1:5002", "kind": "udp"}
                 }
             }
         }
@@ -30,12 +30,22 @@
         "kind": {
             "Task": {
                 "input_type": {
-                    "Scalar": "u32"
+                    "Scalar": "U32"
                 },
                 "output_type": {
-                    "Scalar": "u32"
+                    "Struct": {
+                      "id": "MyStruct",
+                      "field_tys" : [
+                        {
+                          "Scalar": "U32"
+                        },
+                        {
+                          "Scalar": "U32"
+                        }
+                      ]
+                    }
                 },
-                "weld_code": "|x: u32| x + u32(5)",
+                "weld_code": "|x: u32| {x, 10}",
                 "successors": [
                     {
                         "Local": {
@@ -54,11 +64,21 @@
         "kind": {
             "Sink": {
                 "sink_type": {
-                    "Scalar": "u32"
+                    "Struct": {
+                      "id": "MyStruct",
+                      "field_tys" : [
+                        {
+                          "Scalar": "U32"
+                        },
+                        {
+                          "Scalar": "I32"
+                        }
+                      ]
+                    }
                 },
                 "predecessor": "node_2",
                 "kind": {
-                  "LocalFile": { "path": "/tmp/sink_file"}
+                  "Socket": { "addr": "127.0.0.1:9500", "kind": "udp"}
                 }
             }
         }

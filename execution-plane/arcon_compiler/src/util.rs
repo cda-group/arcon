@@ -1,4 +1,5 @@
 use arcon_spec::CompileMode;
+use std::fs::File;
 use std::process::{Command, Stdio};
 
 pub fn target_list() -> Result<String, failure::Error> {
@@ -20,17 +21,36 @@ pub fn rustc_version() -> Result<String, failure::Error> {
     Ok(cmd_output(output))
 }
 
-pub fn cargo_build(mode: &CompileMode) -> Result<(), failure::Error> {
+pub fn cargo_build(
+    id: &str,
+    logged: Option<String>,
+    mode: &CompileMode,
+) -> Result<(), failure::Error> {
     let mut args: Vec<&str> = vec!["+nightly", "build"];
     if mode == &CompileMode::Release {
         args.push("--release");
     }
-    let mut cmd = Command::new("cargo")
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .args(args)
-        .spawn()
-        .unwrap_or_else(|e| panic!("failed to execute process: {}", e));
+
+    let mut cmd = {
+        if let Some(log_dir) = logged {
+            let log_path = format!("{}/{}.log", log_dir, id);
+            let log_file = File::create(&log_path)?;
+            let log_err = log_file.try_clone()?;
+            Command::new("cargo")
+                .stdout(Stdio::from(log_file))
+                .stderr(Stdio::from(log_err))
+                .args(args)
+                .spawn()
+                .unwrap_or_else(|e| panic!("failed to execute process: {}", e))
+        } else {
+            Command::new("cargo")
+                .stdout(Stdio::inherit())
+                .stderr(Stdio::inherit())
+                .args(args)
+                .spawn()
+                .unwrap_or_else(|e| panic!("failed to execute process: {}", e))
+        }
+    };
 
     cmd.wait()?;
     Ok(())

@@ -33,17 +33,20 @@ pub mod prelude {
     pub use crate::streaming::channel::Channel;
     pub use crate::streaming::task::{filter::Filter, flatmap::FlatMap, map::Map};
     pub use crate::streaming::window::{
-        assigner::EventTimeWindowAssigner, builder::WindowBuilder, builder::WindowFn,
-        builder::WindowModules,
+        builder::WindowBuilder, builder::WindowFn, builder::WindowModules,
+        event_time::EventTimeWindowAssigner, processing_time::ProcessingTimeWindowAssigner,
     };
 
     pub use crate::streaming::source::{
-        collection::CollectionSource, local_file::LocalFileSource, socket::SocketSource,
+        collection::CollectionSource, local_file::LocalFileSource, socket::SocketKind,
+        socket::SocketSource,
     };
 
-    pub use crate::streaming::sink::{debug::DebugSink, local_file::LocalFileSink};
+    pub use crate::streaming::sink::{
+        debug::DebugSink, local_file::LocalFileSink, socket::SocketSink,
+    };
 
-    pub use crate::data::{ArconElement, ArconType, ArconVec};
+    pub use crate::data::*;
     pub use crate::weld::module::{Module, ModuleRun};
     pub use weld_core::data::*;
 
@@ -64,10 +67,19 @@ mod tests {
     use std::collections::hash_map::DefaultHasher;
 
     #[key_by(id)]
+    #[arcon_decoder(,)]
     #[arcon]
     pub struct Item {
         id: u64,
         price: u32,
+    }
+
+    #[test]
+    fn arcon_decoder_test() {
+        use std::str::FromStr;
+        let item: Item = Item::from_str("100, 250").unwrap();
+        assert_eq!(item.id, 100);
+        assert_eq!(item.price, 250);
     }
 
     #[test]

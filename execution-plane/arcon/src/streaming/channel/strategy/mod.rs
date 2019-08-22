@@ -1,7 +1,7 @@
-use kompact::KompactSystem;
 use crate::data::*;
 use crate::error::*;
 use crate::streaming::channel::Channel;
+use kompact::KompactSystem;
 
 pub mod broadcast;
 pub mod forward;

@@ -41,6 +41,7 @@ where
     window_modules: WindowModules,
     timer: Box<EventTimer<Self>>,
     hasher: BuildHasherDefault<DefaultHasher>,
+    keyed: bool,
 }
 
 impl<IN, FUNC, OUT> EventTimeWindowAssigner<IN, FUNC, OUT>
@@ -57,6 +58,7 @@ where
         length: u64,
         slide: u64,
         late: u64,
+        keyed: bool,
     ) -> Self {
         let init_builder = Arc::new(Module::new(init_builder_code).unwrap());
         let code_module = Arc::new(Module::new(udf_code).unwrap());
@@ -87,6 +89,7 @@ where
             window_modules,
             timer: Box::new(EventTimer::new()),
             hasher: BuildHasherDefault::<DefaultHasher>::default(),
+            keyed,
         }
     }
 
@@ -145,6 +148,9 @@ where
     }
     // Extracts the key from ArconElements
     fn get_key(&mut self, e: ArconElement<IN>) -> u64 {
+        if !self.keyed {
+            return 0;
+        }
         let mut h = self.hasher.build_hasher();
         e.data.hash(&mut h);
         return h.finish();
@@ -332,6 +338,7 @@ mod tests {
             length,
             slide,
             late,
+            true,
         );
 
         let (assigner, _) = system.create_and_register(move || window_assigner);

@@ -43,8 +43,8 @@ where
         }
     }
 
-    fn handle_watermark(&mut self, _w: Watermark) -> ArconResult<()> {
-        unimplemented!();
+    fn handle_watermark(&mut self, w: Watermark) -> ArconResult<()> {
+        self.push_out(ArconEvent::Watermark(w))
     }
 
     fn handle_element(&mut self, element: &ArconElement<IN>) -> ArconResult<()> {
@@ -92,8 +92,7 @@ mod tests {
         });
 
         let channel = Channel::Local(sink_comp.actor_ref());
-        let channel_strategy: Box<ChannelStrategy<i32>> =
-            Box::new(Forward::new(channel));
+        let channel_strategy: Box<ChannelStrategy<i32>> = Box::new(Forward::new(channel));
 
         let weld_code = String::from("|x: i32| x > 5");
         let module = Arc::new(Module::new(weld_code).unwrap());

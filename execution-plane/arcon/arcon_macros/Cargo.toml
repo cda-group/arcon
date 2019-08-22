@@ -1,9 +1,9 @@
 [package]
 name = "arcon_macros"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Max Meldrum <mmeldrum@kth.se>"]
 readme = "README.md"
-license = "MIT"
+license = "BSD-3-Clause"
 repository = "https://github.com/cda-group/arcon"
 homepage = "https://github.com/cda-group/arcon"
 description = """

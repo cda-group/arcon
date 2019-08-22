@@ -1,11 +1,13 @@
 use crate::error::ArconResult;
+use crate::macros::*;
 use crate::messages::protobuf::messages::StreamTaskMessage;
 use crate::messages::protobuf::messages::StreamTaskMessage_oneof_payload::*;
 use crate::messages::protobuf::*;
 use serde::de::{DeserializeOwned, Deserializer, SeqAccess, Visitor};
 use serde::ser::SerializeSeq;
 use serde::*;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
+use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 use std::ops::Deref;
 
@@ -23,6 +25,12 @@ pub enum ArconEvent<A: 'static + ArconType> {
 #[derive(Clone, Debug, Copy)]
 pub struct Watermark {
     pub timestamp: u64,
+}
+
+impl Watermark {
+    pub fn new(timestamp: u64) -> Self {
+        Watermark { timestamp }
+    }
 }
 
 impl<A: 'static + ArconType> ArconEvent<A> {
@@ -79,13 +87,7 @@ impl<A: 'static + ArconType> ArconEvent<A> {
     }
 }
 
-impl Watermark {
-    pub fn new(timestamp: u64) -> Self {
-        Watermark { timestamp }
-    }
-}
-
-/// An stream element that contains a `ArconType` and an optional timestamp
+/// A stream element that contains an `ArconType` and an optional timestamp
 #[derive(Clone, Debug, Copy)]
 pub struct ArconElement<A>
 where
@@ -128,10 +130,18 @@ unsafe impl<K, V> Sync for Pair<K, V> {}
 /// however, it is reintroduced here to add extra features
 /// and to easier integrate with serialisation/deserialisation
 #[repr(C)]
-#[derive(Clone, Debug, Copy)]
+#[derive(Copy)]
 pub struct ArconVec<A: ArconType> {
     pub ptr: *const A,
     pub len: i64,
+}
+
+impl<A: ArconType> Clone for ArconVec<A> {
+    fn clone(&self) -> ArconVec<A> {
+        let boxed_vec = Box::new(self.to_vec());
+        let arcon_vec: ArconVec<A> = ArconVec::new(*boxed_vec);
+        arcon_vec
+    }
 }
 
 impl<A: ArconType> ArconVec<A> {
@@ -194,6 +204,20 @@ impl<A: ArconType> Deref for ArconVec<A> {
 
     fn deref(&self) -> &Self::Target {
         unsafe { std::slice::from_raw_parts(self.ptr, self.len as usize) }
+    }
+}
+
+impl<A: ArconType> Display for ArconVec<A> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let vec: Vec<A> = self.to_vec();
+        write!(f, "{:?}", vec)
+    }
+}
+
+impl<A: ArconType> Debug for ArconVec<A> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let vec: Vec<A> = self.to_vec();
+        write!(f, "{:?}", vec)
     }
 }
 
@@ -273,6 +297,62 @@ where
         std::mem::forget(vec);
 
         seq.end()
+    }
+}
+
+/// Float wrappers for Arcon
+///
+/// The `Hash` impl rounds the floats down to an integer
+/// and then hashes it. Might want to change this later on..
+#[arcon]
+pub struct ArconF32(f32);
+
+impl Hash for ArconF32 {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        let s: u64 = self.0.trunc() as u64;
+        s.hash(state);
+    }
+}
+
+impl std::str::FromStr for ArconF32 {
+    type Err = ::std::num::ParseFloatError;
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        let f: f32 = s.parse::<f32>()?;
+        Ok(ArconF32(f))
+    }
+}
+
+impl Deref for ArconF32 {
+    type Target = f32;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+#[arcon]
+pub struct ArconF64(f64);
+
+impl Hash for ArconF64 {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        let s: u64 = self.0.trunc() as u64;
+        s.hash(state);
+    }
+}
+
+impl std::str::FromStr for ArconF64 {
+    type Err = ::std::num::ParseFloatError;
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        let f: f64 = s.parse::<f64>()?;
+        Ok(ArconF64(f))
+    }
+}
+
+impl Deref for ArconF64 {
+    type Target = f64;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 

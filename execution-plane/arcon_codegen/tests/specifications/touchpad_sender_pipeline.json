@@ -1,0 +1,74 @@
+{
+"id": "touchpad_sender_pipeline",
+"target": "x86-64-unknown-linux-gnu",
+"system_addr": "127.0.0.1:3004",
+"mode": "debug",
+"nodes": [
+    {
+        "id": "node_1",
+        "parallelism": 1,
+        "kind": {
+            "Source": {
+                "source_type": {
+                    "Struct": {
+                      "id": "TouchpadData",
+                      "field_tys" : [
+                        {
+                          "Scalar": "F64"
+                        },
+                        {
+                          "Scalar": "F64"
+                        },
+                        {
+                          "Scalar": "F64"
+                        }
+                      ]
+                    }
+                },
+                "successors": [
+                    {
+                        "Local": {
+                            "id": "node_2"
+                        }
+                    }
+                ],
+                "kind": {
+                    "Socket": { "addr": "127.0.0.1:5000", "kind": "udp"}
+                },
+                "timestamp_extraction": {
+                  "index": 0,
+                  "delimiter": ","
+                }
+            }
+        }
+    },
+    {
+        "id": "node_2",
+        "parallelism": 1,
+        "kind": {
+            "Sink": {
+                "sink_type": {
+                    "Struct": {
+                      "id": "TouchpadData",
+                      "field_tys" : [
+                        {
+                          "Scalar": "F64"
+                        },
+                        {
+                          "Scalar": "F64"
+                        },
+                        {
+                          "Scalar": "F64"
+                        }
+                      ]
+                    }
+                },
+                "predecessor": "node_2",
+                "kind": {
+                  "Socket": { "addr": "127.0.0.1:9500", "kind": "udp"}
+                }
+            }
+        }
+    }
+]
+}

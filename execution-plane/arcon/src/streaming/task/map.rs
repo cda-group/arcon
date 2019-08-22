@@ -50,8 +50,14 @@ where
     }
 
     fn handle_element(&mut self, event: &ArconElement<IN>) -> ArconResult<()> {
+        debug!(self.ctx.log(), "Got element {:?}", &event.data);
         if let Ok(result) = self.run_udf(&(event.data)) {
-            let _ = self.push_out(ArconEvent::Element(ArconElement::new(result)));
+            let timestamp = if let Some(ts) = event.timestamp {
+                ts
+            } else  {
+                0
+            };
+            let _ = self.push_out(ArconEvent::Element(ArconElement::with_timestamp(result, timestamp)));
         } else {
             // Just report the error for now...
             error!(self.ctx.log(), "Failed to execute UDF...",);
@@ -59,8 +65,8 @@ where
         Ok(())
     }
 
-    fn handle_watermark(&mut self, _w: Watermark) -> ArconResult<()> {
-        unimplemented!();
+    fn handle_watermark(&mut self, w: Watermark) -> ArconResult<()> {
+        self.push_out(ArconEvent::Watermark(w))
     }
 
     fn run_udf(&mut self, event: &IN) -> ArconResult<OUT> {
@@ -93,13 +99,12 @@ mod tests {
         });
 
         let channel = Channel::Local(sink_comp.actor_ref());
-        let channel_strategy: Box<ChannelStrategy<i32>> =
-            Box::new(Forward::new(channel));
+        let channel_strategy: Box<ChannelStrategy<i32>> = Box::new(Forward::new(channel));
 
         let weld_code = String::from("|x: i32| x + 10");
         let module = Arc::new(Module::new(weld_code).unwrap());
-        let filter_task =
-            system.create_and_start(move || Map::<i32, i32>::new(module, Vec::new(), channel_strategy));
+        let filter_task = system
+            .create_and_start(move || Map::<i32, i32>::new(module, Vec::new(), channel_strategy));
 
         let input_one = ArconEvent::Element(ArconElement::new(6 as i32));
         filter_task

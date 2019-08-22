@@ -1,8 +1,8 @@
-use kompact::KompactSystem;
 use crate::data::{ArconEvent, ArconType};
 use crate::error::*;
 use crate::streaming::channel::strategy::{channel_output, ChannelStrategy};
 use crate::streaming::channel::Channel;
+use kompact::KompactSystem;
 use std::marker::PhantomData;
 
 pub struct Forward<A>

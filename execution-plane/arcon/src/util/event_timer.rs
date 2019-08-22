@@ -142,7 +142,7 @@ impl<C: ComponentDefinition> EventTimer<C> {
     #[inline(always)]
     pub fn advance_to(&mut self, ts: u64) -> Vec<ExecuteAction<C>> {
         let mut vec = Vec::new();
-        if ts <= self.time {
+        if ts < self.time {
             eprintln!("advance_to called with lower timestamp than current time");
             return vec;
         }
