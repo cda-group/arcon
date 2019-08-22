@@ -152,7 +152,7 @@ where
                 // NOTE: Hacky...
                 if let Some(wm_index) = self.watermark_index {
                     // Just assume it is at first place
-                    let mut v: Vec<String> = byte_string
+                    let v: Vec<String> = byte_string
                         .trim()
                         .split(",")
                         .collect::<Vec<&str>>()
@@ -165,16 +165,17 @@ where
                             "Bad input data, should be delimited by comma"
                         );
                     } else {
-                        if let Ok(ts) = v.remove(wm_index as usize).parse::<u64>() {
-                            // parse the actual input data
-                            let remaining = v.join(",");
-                            if let Ok(data) = remaining.trim().parse::<OUT>() {
-                                self.output_event(data, Some(ts));
+                        if let Some(ts_str) = v.get(wm_index as usize) {
+                            if let Ok(ts) =  ts_str.parse::<u64>() {
+                                let input_data = v.join(",");
+                                debug!(self.ctx.log(), "Trying to parse str {}", input_data);
+                                match input_data.parse::<OUT>() {
+                                    Ok(data) => self.output_event(data, Some(ts)),
+                                    Err(_) => error!(self.ctx.log(), "Unable to parse string {:?}", input_data),
+                                }
                             } else {
-                                error!(self.ctx.log(), "Unable to parse string {}", byte_string);
+                                error!(self.ctx.log(), "Failed to extract timestamp at index {}", wm_index);
                             }
-                        } else {
-                            error!(self.ctx.log(), "Failed to extract Timestamp");
                         }
                     }
                 } else {

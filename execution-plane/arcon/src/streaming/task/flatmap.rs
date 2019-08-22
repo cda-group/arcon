@@ -57,8 +57,15 @@ where
         if let Ok(result) = self.run_udf(&(event.data)) {
             // Result should be an ArconVec of elements
             // iterate over it and send
+            let timestamp = if let Some(ts) = event.timestamp {
+                ts
+            } else  {
+                0
+            };
+
             for i in 0..result.len {
-                let _ = self.push_out(ArconEvent::Element(ArconElement::new(result[i as usize])));
+                debug!(self.ctx.log(), "Flatmap Sending element {:?}", result[i as usize]);
+                let _ = self.push_out(ArconEvent::Element(ArconElement::with_timestamp(result[i as usize], timestamp)));
             }
         } else {
             // Just report the error for now...

@@ -97,17 +97,10 @@ pub struct Source {
     pub channel_strategy: ChannelStrategy,
     pub successors: Vec<ChannelKind>,
     pub kind: SourceKind,
-    pub ts_extraction: Option<TimestampExtraction>,
     #[serde(default = "utf8")]
     pub format: Format,
     #[serde(default = "source_rate")]
     pub rate: u64,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct TimestampExtraction {
-    pub index: u32,
-    pub delimiter: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

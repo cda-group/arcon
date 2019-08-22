@@ -52,7 +52,12 @@ where
     fn handle_element(&mut self, event: &ArconElement<IN>) -> ArconResult<()> {
         debug!(self.ctx.log(), "Got element {:?}", &event.data);
         if let Ok(result) = self.run_udf(&(event.data)) {
-            let _ = self.push_out(ArconEvent::Element(ArconElement::new(result)));
+            let timestamp = if let Some(ts) = event.timestamp {
+                ts
+            } else  {
+                0
+            };
+            let _ = self.push_out(ArconEvent::Element(ArconElement::with_timestamp(result, timestamp)));
         } else {
             // Just report the error for now...
             error!(self.ctx.log(), "Failed to execute UDF...",);

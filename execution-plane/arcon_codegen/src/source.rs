@@ -1,9 +1,9 @@
 use crate::types::to_token_stream;
 use proc_macro2::{Ident, Span, TokenStream};
-use spec::{SocketKind, Source, SourceKind, TimestampExtraction};
+use spec::{SocketKind, Source, SourceKind};
 use crate::common::*;
 
-pub fn source(name: &str, target: &str, source: &Source, spec_id: &String) -> TokenStream {
+pub fn source(name: &str, target: &str, source: &Source, spec_id: &String, ts_extractor: u32) -> TokenStream {
     let source_name = Ident::new(&name, Span::call_site());
     let target = Ident::new(&target, Span::call_site());
     let input_type = to_token_stream(&source.source_type, spec_id);
@@ -16,7 +16,7 @@ pub fn source(name: &str, target: &str, source: &Source, spec_id: &String) -> To
             &addr,
             &kind,
             *&source.rate,
-            &source.ts_extraction,
+            ts_extractor,
         ),
         SourceKind::LocalFile { path } => {
             local_file_source(&source_name, &target, &input_type, &path, *&source.rate)
@@ -33,7 +33,7 @@ fn socket_source(
     addr: &str,
     kind: &SocketKind,
     rate: u64,
-    ts_extraction: &Option<TimestampExtraction>,
+    ts_extraction: u32,
 ) -> TokenStream {
     let verify = verify_and_start(source_name, "system");
 
@@ -44,15 +44,7 @@ fn socket_source(
         }
     };
 
-    let ts_quote = {
-        match ts_extraction {
-            Some(ext) => {
-                let i: u32 = ext.index;
-                quote! { Some(#i) }
-            }
-            None => quote! { None },
-        }
-    };
+    let ts_quote = quote! { Some(#ts_extraction) };
 
     quote! {
         let channel = Channel::Local(#target.actor_ref());
