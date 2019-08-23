@@ -228,7 +228,6 @@ pub mod tests {
 
         let self_addr = "0.0.0.0:0".parse().unwrap();
         let socket = UdpSocket::bind(&self_addr).expect("Failed to bind");
-        socket.connect(&sock).expect("Failed connection");
 
         let fmt_data = format!("{:?}\n", "test1");
         let bytes = bytes::Bytes::from(fmt_data);
