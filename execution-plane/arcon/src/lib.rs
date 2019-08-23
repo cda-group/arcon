@@ -45,7 +45,7 @@ pub mod prelude {
     pub use crate::streaming::sink::{
         debug::DebugSink, local_file::LocalFileSink, socket::SocketSink,
     };
-
+    pub use crate::data::Watermark;
     pub use crate::data::*;
     pub use crate::weld::module::{Module, ModuleRun};
     pub use weld_core::data::*;
