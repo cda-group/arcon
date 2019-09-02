@@ -254,7 +254,7 @@ mod tests {
         }
     }
 
-    #[test]
+    //#[test] Used for "manual testing" during developement
     fn kafka_source() -> Result<()> { 
         let system = KompactConfig::default().build().expect("KompactSystem");
 

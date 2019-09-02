@@ -38,7 +38,10 @@ fn normalise_pipeline_test() {
     let code = String :: from ( "|x: vec[i64]| let m = merger[i64, +]; result(for(x, m, |b: merger[i64, +], i, e| merge(b, e + i64(3))))" ) ;
     let module = std::sync::Arc::new(Module::new(code).unwrap());
     let node_4 = system.create_and_start(move || {
-        Map::<ArconVec<i64>, i64>::new(module, Vec::new(), channel_strategy)
+        Node::<ArconVec<i64>, i64>::new(
+            channel_strategy,
+            Box::new(Map::<ArconVec<i64>, i64>::new(module))
+        )
     });
 
     // Create Window Component
@@ -51,15 +54,17 @@ fn normalise_pipeline_test() {
         Box::new(Forward::new(Channel::Local(node_4.actor_ref())));
 
     let node_3 = system.create_and_start(move || {
-        EventTimeWindowAssigner::<i64, Appender<i64>, ArconVec<i64>>::new(
+        Node::<i64, ArconVec<i64>>::new(
             channel_strategy,
-            builder_code,
-            udf_code,
-            materialiser_code,
-            3,
-            3,
-            0,
-            false,
+            Box::new(EventTimeWindowAssigner::<i64, Appender<i64>, ArconVec<i64>>::new(
+                builder_code,
+                udf_code,
+                materialiser_code,
+                3,
+                3,
+                0,
+                false,
+            ))
         )
     });
 
@@ -68,8 +73,12 @@ fn normalise_pipeline_test() {
     let channel_strategy: Box<ChannelStrategy<i64>> = Box::new(Forward::new(channel));
     let code = String::from("|x: i64| x < i64(5)");
     let module = std::sync::Arc::new(Module::new(code).unwrap());
-    let node_2 =
-        system.create_and_start(move || Filter::<i64>::new(module, Vec::new(), channel_strategy));
+    let node_2 = system.create_and_start(move || {
+        Node::<i64, i64>::new(
+            channel_strategy,
+            Box::new(Filter::<i64>::new(module))
+        )
+    });
 
     // Define Source
     let channel = Channel::Local(node_2.actor_ref());

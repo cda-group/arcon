@@ -1,15 +1,10 @@
-use crate::data::{ArconElement, ArconEvent, ArconType, Watermark};
-use crate::error::ArconResult;
-use crate::streaming::channel::strategy::*;
-use crate::streaming::window::builder::{WindowBuilder, WindowFn, WindowModules};
-use crate::util::event_timer::{EventTimer, ExecuteAction};
-use crate::weld::module::Module;
-use arcon_macros::arcon_task;
-use kompact::*;
-use std::collections::hash_map::DefaultHasher;
-use std::collections::HashMap;
 use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
+use std::collections::HashMap;
+use crate::util::event_timer::EventTimer;
+use std::collections::hash_map::DefaultHasher;
+use crate::prelude::*;
 use std::sync::Arc;
+
 /*
     EventTimeWindowAssigner
         * Assigns messages to windows based on event timestamp
@@ -23,23 +18,19 @@ use std::sync::Arc;
 /// IN: Input event
 /// FUNC: ´WindowBuilder`s internal builder type
 /// OUT: Output of Window
-#[arcon_task]
-#[derive(ComponentDefinition)]
 pub struct EventTimeWindowAssigner<IN, FUNC, OUT>
 where
     IN: 'static + ArconType + Hash,
     FUNC: 'static + Clone,
     OUT: 'static + ArconType,
 {
-    ctx: ComponentContext<Self>,
-    channel_strategy: Box<ChannelStrategy<OUT>>,
     window_length: u64,
     window_slide: u64,
     late_arrival_time: u64,
     window_start: HashMap<u64, u64>,
     window_maps: HashMap<u64, HashMap<u64, WindowBuilder<IN, FUNC, OUT>>>,
     window_modules: WindowModules,
-    timer: Box<EventTimer<Self>>,
+    timer: Box<EventTimer<(u64, u64, u64)>>,  // Stores key, "index" and timestamp
     hasher: BuildHasherDefault<DefaultHasher>,
     keyed: bool,
 }
@@ -51,7 +42,6 @@ where
     OUT: 'static + ArconType,
 {
     pub fn new(
-        channel_strategy: Box<ChannelStrategy<OUT>>,
         init_builder_code: String,
         udf_code: String,
         result_code: String,
@@ -79,8 +69,6 @@ where
         }
 
         EventTimeWindowAssigner {
-            ctx: ComponentContext::new(),
-            channel_strategy,
             window_length: length,
             window_slide: slide,
             late_arrival_time: late,
@@ -102,49 +90,9 @@ where
             }
         };
         let ts = w_start + (index * self.window_slide) + self.window_length;
-        debug!(
-            self.ctx.log(),
-            "creating new window for key {}, timestamp {}", key, ts
-        );
 
-        // Schedule trigger
-        self.timer
-            .schedule_at(ts + self.late_arrival_time, move |self_c, _| {
-
-                if let Some(w_map) = self_c.window_maps.get_mut(&key) {
-                    match w_map.remove(&index) {
-                        Some(mut window) => {
-                            match window.result() {
-                                Ok(e) => {
-                                    debug!(self_c.ctx.log(), "Window {} result materialized!", ts);
-                                    if let Err(_err) = self_c
-                                        .channel_strategy
-                                        .output(ArconEvent::Element(ArconElement::new(e)), &self_c.ctx.system()) {
-                                            error!(
-                                                self_c.ctx.log(),
-                                                "Failed to send window result"
-                                            );
-                                        }
-                                }
-                                _ => {
-                                    error!(
-                                        self_c.ctx.log(),
-                                        "failed to get result, couldn't materialize from window_builder"
-                                    );
-                                }
-                            }
-                        }
-                        None => {
-                            error!(self_c.ctx.log(), "No window found for key {} and timestamp {}", key, ts);
-                        }
-                    }
-                } else {
-                    error!(
-                        self_c.ctx.log(),
-                        "failed to get result, couldn't find the w_map for key {}", key
-                    );
-                }
-            });
+        // Put the window identifier in the timer.
+        self.timer.schedule_at(ts + self.late_arrival_time, (key, index, ts));
     }
     // Extracts the key from ArconElements
     fn get_key(&mut self, e: ArconElement<IN>) -> u64 {
@@ -155,22 +103,27 @@ where
         e.data.hash(&mut h);
         return h.finish();
     }
-    fn handle_element(&mut self, e: &ArconElement<IN>) -> ArconResult<()> {
-        let ts = e.timestamp.unwrap_or(0);
+
+}
+
+impl<IN, OUT, FUNC> Task<IN, OUT> for EventTimeWindowAssigner<IN, FUNC, OUT>
+where
+    IN: 'static + ArconType + Hash,
+    FUNC: 'static + Clone,
+    OUT: 'static + ArconType,
+{
+    fn handle_element(&mut self, element: ArconElement<IN>) -> ArconResult<Vec<ArconEvent<OUT>>> {
+        let ts = element.timestamp.unwrap_or(0);
         if self.window_start.is_empty() {
             // First element received, set the internal timer
             self.timer.set_time(ts);
         }
         if ts < self.timer.get_time() - self.late_arrival_time {
-            // Discard late arrival
-            return Ok(());
+            // Late arrival: early return
+            return Ok(Vec::new());
         }
 
-        let key = self.get_key(*e);
-        debug!(
-            self.ctx.log(),
-            "handling element with timestamp: {}, key: {}", ts, key
-        );
+        let key = self.get_key(element);
 
         // Will store the index of the highest and lowest window it should go into
         let mut floor = 0;
@@ -197,16 +150,16 @@ where
             match w_map.get_mut(&i) {
                 Some(window) => {
                     // Just insert the element
-                    if let Err(_err) = window.on_element(e.data) {
-                        error!(self.ctx.log(), "Error inserting element");
+                    if let Err(err) = window.on_element(element.data) {
+                        return Err(err);
                     }
                 }
                 None => {
                     // Need to create new window,
                     let mut window: WindowBuilder<IN, FUNC, OUT> =
                         WindowBuilder::new(self.window_modules.clone()).unwrap();
-                    if let Err(_err) = window.on_element(e.data) {
-                        error!(self.ctx.log(), "Error inserting element");
+                    if let Err(err) = window.on_element(element.data) {
+                        return Err(err);
                     }
                     w_map.insert(i, window);
                     // Create the window trigger
@@ -215,43 +168,36 @@ where
             }
         }
         self.window_maps.insert(key, w_map);
-        Ok(())
+        Ok(Vec::new())
     }
-    fn handle_watermark(&mut self, w: Watermark) -> ArconResult<()> {
-        debug!(
-            self.ctx.log(),
-            "handling watermark with timestamp: {}", w.timestamp
-        );
-        let ts = w.timestamp;
-
+    fn handle_watermark(&mut self, w: Watermark) -> ArconResult<Vec<ArconEvent<OUT>>> {
         if self.window_start.is_empty() {
-            return Ok(());
+            // Early return
+            return Ok(Vec::new());
         }
+        let ts = w.timestamp;        
 
-        // timer returns a set of executable actions
-        let actions = self.timer.advance_to(ts);
-        for a in actions {
-            match a {
-                ExecuteAction::Once(id, action) => {
-                    action(self, id);
+        // timer returns a set of (key, index, timestamp) identifying what windows to close
+        let windows = self.timer.advance_to(ts);
+        let mut result = Vec::new();
+        for (key, index, timestamp) in windows {
+            if let Some(w_map) = self.window_maps.get_mut(&key) {
+                match w_map.remove(&index) {
+                    Some(mut window) => {
+                        match window.result() {
+                            Ok(e) => {
+                                result.push(ArconEvent::Element(
+                                    ArconElement::with_timestamp(e, timestamp)
+                                ))
+                            }
+                            _ => {}
+                        }
+                    }
+                    None => {}
                 }
-                ExecuteAction::Periodic(id, action) => {
-                    action(self, id);
-                }
-                ExecuteAction::None => {}
             }
         }
-        // fwd watermark
-        if let Err(err) = self
-            .channel_strategy
-            .output(ArconEvent::Watermark(w), &self.ctx.system())
-        {
-            error!(
-                self.ctx.log(),
-                "Unable to forward Watermark, error: {}", err
-            );
-        }
-        Ok(())
+        Ok(result)
     }
 }
 
@@ -330,8 +276,9 @@ mod tests {
         let builder_code = String::from("|| appender[u32]");
         let udf_code = String::from("|x: {u64, u32}, y: appender[u32]| merge(y, x.$1)");
         let udf_result = String::from("|y: appender[u32]| len(result(y))");
+        
+
         let window_assigner = EventTimeWindowAssigner::<Item, Appender<u32>, WindowOutput>::new(
-            channel_strategy,
             builder_code,
             udf_code,
             udf_result,
@@ -341,10 +288,16 @@ mod tests {
             true,
         );
 
-        let (assigner, _) = system.create_and_register(move || window_assigner);
-        let win_ref = assigner.actor_ref();
+        let window_node = system.create_and_start(move || {
+            Node::<Item, WindowOutput>::new(
+                channel_strategy,
+                Box::new(window_assigner)
+            )
+        });
+
+        let win_ref = window_node.actor_ref();
         system.start(&sink);
-        system.start(&assigner);
+        system.start(&window_node);
         return (win_ref, sink);
     }
     fn now() -> u64 {

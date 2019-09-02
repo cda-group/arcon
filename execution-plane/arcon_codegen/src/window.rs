@@ -81,7 +81,6 @@ fn tumbling(
         TimeKind::Event { slack } => {
             quote! {
              EventTimeWindowAssigner::<#input_type, #builder_type, #output_type>::new(
-                channel_strategy,
                 builder_code,
                 udf_code,
                 materialiser_code,
@@ -95,7 +94,6 @@ fn tumbling(
         TimeKind::Processing => {
             quote! {
              ProcessingTimeWindowAssigner::<#input_type, #builder_type, #output_type>::new(
-                channel_strategy,
                 builder_code,
                 udf_code,
                 materialiser_code,
@@ -109,7 +107,6 @@ fn tumbling(
         TimeKind::Ingestion => {
             quote! {
              EventTimeWindowAssigner::<#input_type, #builder_type, #output_type>::new(
-                channel_strategy,
                 builder_code,
                 udf_code,
                 materialiser_code,
@@ -129,7 +126,10 @@ fn tumbling(
             Box::new(Forward::new(Channel::Local(#successor.actor_ref())));
 
         let (#name, reg) = system.create_and_register(move || {
-            #component
+            Node::<#input_type, #output_type>::new(
+                channel_strategy,
+                Box::new(#component)
+            )
         });
         #verify
     }

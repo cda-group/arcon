@@ -13,7 +13,7 @@ Arcon's execution plane
 
 [features]
 default = []
-#kafka = ["rdkafka"]
+kafka = ["rdkafka"]
 
 [dependencies]
 arcon_macros = { version = "0.1", path = "arcon_macros" }
@@ -32,7 +32,7 @@ tokio = "0.1"
 tokio-codec = "0.1"
 bytes = "0.4"
 uuid = "0.7"
-rdkafka = { version = "~0.19", optional = false }
+rdkafka = { version = "~0.19", optional = true }
 
 # Logging
 slog = "2.2"

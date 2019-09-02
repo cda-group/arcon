@@ -147,7 +147,7 @@ mod tests {
         y: f32,
     }
 
-    #[test]
+    //#[test] Used for "manual testing" during developement
     fn kafka_sink() -> Result<()> { 
         let system = KompactConfig::default().build().expect("KompactSystem");
 

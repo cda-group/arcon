@@ -2,6 +2,9 @@ pub mod filter;
 pub mod flatmap;
 pub mod manager;
 pub mod map;
+pub mod node;
+
+use crate::prelude::*;
 
 pub struct TaskMetric {
     avg: u64,
@@ -29,6 +32,15 @@ impl TaskMetric {
     pub fn get_avg(&self) -> u64 {
         self.avg
     }
+}
+
+pub trait Task<IN, OUT>
+    where
+        IN: 'static + ArconType,
+        OUT: 'static + ArconType,
+{
+    fn handle_element(&mut self, element: ArconElement<IN>) -> ArconResult<Vec<ArconEvent<OUT>>>;
+    fn handle_watermark(&mut self, watermark: Watermark) -> ArconResult<Vec<ArconEvent<OUT>>>;
 }
 
 #[cfg(test)]

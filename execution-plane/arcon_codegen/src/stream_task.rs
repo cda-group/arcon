@@ -29,17 +29,17 @@ pub fn stream_task(
                     match &task.kind {
                         FlatMap => {
                             quote! {
-                                FlatMap::<#input_type, #output_type>::new(module, Vec::new(), channel_strategy)
+                                FlatMap::<#input_type, #output_type>::new(module)
                             }
                         }
                         Map => {
                             quote! {
-                                Map::<#input_type, #output_type>::new(module, Vec::new(), channel_strategy)
+                                Map::<#input_type, #output_type>::new(module)
                             }
                         }
                         Filter => {
                             quote! {
-                                Filter::<#input_type>::new(module, Vec::new(), channel_strategy)
+                                Filter::<#input_type>::new(module)
                             }
                         }
                     }
@@ -63,7 +63,12 @@ pub fn stream_task(
                     #channel_strategy_quote
                     let code = String::from(#weld_code);
                     let module = std::sync::Arc::new(Module::new(code).unwrap());
-                    let (#node_name, reg) = system.create_and_register(move || #task_signature);
+                    let (#node_name, reg) = system.create_and_register(move || {
+                        Node::<#input_type, #output_type>::new(
+                            channel_strategy,
+                            Box::new(#task_signature)
+                        )
+                    });
 
                     reg.wait_timeout(std::time::Duration::from_millis(1000))
                         .expect("Component never registered!")
