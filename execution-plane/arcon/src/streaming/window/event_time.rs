@@ -210,45 +210,6 @@ mod tests {
     use std::{thread, time};
     use weld::data::Appender;
 
-    // Stub for window-results
-    mod sink {
-        use super::*;
-
-        #[derive(ComponentDefinition)]
-        pub struct Sink {
-            ctx: ComponentContext<Sink>,
-            pub result: Vec<Option<i64>>,
-            pub watermarks: Vec<Option<u64>>,
-        }
-        impl Sink {
-            pub fn new() -> Sink {
-                Sink {
-                    ctx: ComponentContext::new(),
-                    result: Vec::new(),
-                    watermarks: Vec::new(),
-                }
-            }
-        }
-        impl Provide<ControlPort> for Sink {
-            fn handle(&mut self, _event: ControlEvent) -> () {}
-        }
-        impl Actor for Sink {
-            fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
-                if let Some(event) = msg.downcast_ref::<ArconEvent<WindowOutput>>() {
-                    match event {
-                        ArconEvent::Element(e) => {
-                            self.result.push(Some(e.data.len));
-                        }
-                        ArconEvent::Watermark(w) => {
-                            self.watermarks.push(Some(w.timestamp));
-                        }
-                    }
-                }
-            }
-            fn receive_message(&mut self, _sender: ActorPath, _ser_id: u64, _buf: &mut Buf) {}
-        }
-    }
-
     #[arcon]
     #[derive(Hash)]
     pub struct WindowOutput {
@@ -260,13 +221,13 @@ mod tests {
         length: u64,
         slide: u64,
         late: u64,
-    ) -> (ActorRef, Arc<kompact::Component<sink::Sink>>) {
+    ) -> (ActorRef, Arc<kompact::Component<DebugSink<WindowOutput>>>) {
         // Kompact set-up
         let cfg = KompactConfig::new();
         let system = KompactSystem::new(cfg).expect("KompactSystem");
 
         // Create a sink
-        let (sink, _) = system.create_and_register(move || sink::Sink::new());
+        let (sink, _) = system.create_and_register(move || DebugSink::new());
         let sink_ref = sink.actor_ref();
 
         let channel_strategy: Box<Forward<WindowOutput>> =
@@ -290,6 +251,8 @@ mod tests {
 
         let window_node = system.create_and_start(move || {
             Node::<Item, WindowOutput>::new(
+                "node1".to_string(),
+                vec!("test".to_string()),
                 channel_strategy,
                 Box::new(window_assigner)
             )
@@ -309,20 +272,14 @@ mod tests {
     fn wait(time: u64) -> () {
         thread::sleep(time::Duration::from_secs(time));
     }
-    fn watermark(time: u64) -> ArconEvent<Item> {
-        ArconEvent::Watermark(Watermark::new(time))
+    fn watermark(time: u64) -> ArconMessage<Item> {
+        ArconMessage::watermark(time, "test".to_string())
     }
-    fn timestamped_event(ts: u64) -> Box<ArconEvent<Item>> {
-        return Box::new(ArconEvent::Element(ArconElement {
-            data: Item { id: 1, price: 1 },
-            timestamp: Some(ts),
-        }));
+    fn timestamped_event(ts: u64) -> Box<ArconMessage<Item>> {
+        Box::new(ArconMessage::element(Item{id:1, price: 1}, Some(ts), "test".to_string()))
     }
-    fn timestamped_keyed_event(ts: u64, id: u64) -> Box<ArconEvent<Item>> {
-        return Box::new(ArconEvent::Element(ArconElement {
-            data: Item { id, price: 1 },
-            timestamp: Some(ts),
-        }));
+    fn timestamped_keyed_event(ts: u64, id: u64) -> Box<ArconMessage<Item>> {
+        Box::new(ArconMessage::element(Item{id, price: 1}, Some(ts), "test".to_string()))
     }
     #[key_by(id)]
     #[arcon]
@@ -347,15 +304,15 @@ mod tests {
         wait(1);
         assigner_ref.tell(Box::new(watermark(moment + 12)), &assigner_ref);
         wait(1);
-        let mut sink_inspect = sink.definition().lock().unwrap();
+        let sink_inspect = sink.definition().lock().unwrap();
 
-        let r1 = &sink_inspect.result.len();
+        let r1 = &sink_inspect.data.len();
         assert_eq!(r1, &3); // 3 windows received
-        let r2 = &sink_inspect.result[0].take().unwrap();
+        let r2 = &sink_inspect.data[0].data.len;
         assert_eq!(r2, &2); // 1st window for key 1 has 2 elements
-        let r3 = &sink_inspect.result[1].take().unwrap();
+        let r3 = &sink_inspect.data[1].data.len;
         assert_eq!(r3, &3); // 2nd window receieved, key 2, has 3 elements
-        let r4 = &sink_inspect.result[2].take().unwrap();
+        let r4 = &sink_inspect.data[2].data.len;
         assert_eq!(r4, &1); // 3rd window receieved, for key 3, has 1 elements
     }
 
@@ -374,10 +331,10 @@ mod tests {
         assigner_ref.tell(timestamped_event(moment), &assigner_ref);
         wait(1);
         // Inspect and assert
-        let mut sink_inspect = sink.definition().lock().unwrap();
-        let r1 = &sink_inspect.result[0].take().unwrap();
+        let sink_inspect = sink.definition().lock().unwrap();
+        let r1 = &sink_inspect.data[0].data.len;
         assert_eq!(r1, &2);
-        let r2 = &sink_inspect.result.len();
+        let r2 = &sink_inspect.data.len();
         assert_eq!(r2, &1);
     }
     #[test]
@@ -394,9 +351,9 @@ mod tests {
         assigner_ref.tell(timestamped_event(moment), &assigner_ref);
         wait(1);
         // Inspect and assert
-        let mut sink_inspect = sink.definition().lock().unwrap();
-        let r0 = &sink_inspect.result[0].take().unwrap();
-        assert_eq!(&sink_inspect.result.len(), &(1 as usize));
+        let sink_inspect = sink.definition().lock().unwrap();
+        let r0 = &sink_inspect.data[0].data.len;
+        assert_eq!(&sink_inspect.data.len(), &(1 as usize));
         assert_eq!(r0, &2);
     }
     #[test]
@@ -415,10 +372,10 @@ mod tests {
         // Should only materialize first window
         assigner_ref.tell(Box::new(watermark(moment + 19999)), &assigner_ref);
         wait(1);
-        let mut sink_inspect = sink.definition().lock().unwrap();
-        let r0 = &sink_inspect.result[0].take().unwrap();
+        let sink_inspect = sink.definition().lock().unwrap();
+        let r0 = &sink_inspect.data[0].data.len;
         assert_eq!(r0, &1);
-        assert_eq!(&sink_inspect.result.len(), &(1 as usize));
+        assert_eq!(&sink_inspect.data.len(), &(1 as usize));
     }
     #[test]
     fn window_very_long_windows_2() {
@@ -436,11 +393,11 @@ mod tests {
         // Should only materialize first window
         assigner_ref.tell(Box::new(watermark(moment + 20000)), &assigner_ref);
         wait(1);
-        let mut sink_inspect = sink.definition().lock().unwrap();
-        let r0 = &sink_inspect.result[0].take().unwrap();
+        let sink_inspect = sink.definition().lock().unwrap();
+        let r0 = &sink_inspect.data[0].data.len;
         assert_eq!(r0, &1);
-        assert_eq!(&sink_inspect.result.len(), &(2 as usize));
-        let r1 = &sink_inspect.result[1].take().unwrap();
+        assert_eq!(&sink_inspect.data.len(), &(2 as usize));
+        let r1 = &sink_inspect.data[1].data.len;
         assert_eq!(r1, &1);
     }
     #[test]
@@ -458,12 +415,12 @@ mod tests {
         wait(1);
         //wait(1);
         // Inspect and assert
-        let mut sink_inspect = sink.definition().lock().unwrap();
-        let r2 = &sink_inspect.result.len();
+        let sink_inspect = sink.definition().lock().unwrap();
+        let r2 = &sink_inspect.data.len();
         assert_eq!(r2, &2);
-        let r0 = &sink_inspect.result[0].take().unwrap();
+        let r0 = &sink_inspect.data[0].data.len;
         assert_eq!(r0, &3);
-        let r1 = &sink_inspect.result[1].take().unwrap();
+        let r1 = &sink_inspect.data[1].data.len;
         assert_eq!(r1, &2);
     }
     #[test]
@@ -476,9 +433,9 @@ mod tests {
         wait(1);
         let sink_inspect = sink.definition().lock().unwrap();
         // The number of windows is hard to assert with dynamic window starts
-        //assert_eq!(&sink_inspect.result.len(), &(1 as usize));
+        //assert_eq!(&sink_inspect.data.len(), &(1 as usize));
         // We should've receieved at least one window which is empty
-        let r0 = &sink_inspect.result.len();
+        let r0 = &sink_inspect.data.len();
         assert_eq!(r0, &0);
     }
 }

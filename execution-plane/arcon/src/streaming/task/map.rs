@@ -51,10 +51,8 @@ where
     OUT: 'static + ArconType,
 {
     fn handle_element(&mut self, event: ArconElement<IN>) -> ArconResult<Vec<ArconEvent<OUT>>> {
-        if let result = self.run_udf(&(event.data))? {
-            return Ok(vec!(ArconEvent::Element(ArconElement{data: result, timestamp: event.timestamp})));
-        }
-        Ok(Vec::new())
+        let data = self.run_udf(&(event.data))?;
+        return Ok(vec!(ArconEvent::Element(ArconElement{data, timestamp: event.timestamp})));
     }
 
     fn handle_watermark(&mut self, _w: Watermark) -> ArconResult<Vec<ArconEvent<OUT>>> {
@@ -65,7 +63,6 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::streaming::task::tests::*;
 
     #[test]
     fn map_unit_test() {
@@ -102,7 +99,7 @@ mod tests {
         let system = KompactSystem::new(cfg).expect("KompactSystem");
 
         let sink_comp = system.create_and_start(move || {
-            let sink: TaskSink<i32> = TaskSink::new();
+            let sink: DebugSink<i32> = DebugSink::new();
             sink
         });
 
@@ -113,21 +110,23 @@ mod tests {
         let module = Arc::new(Module::new(weld_code).unwrap());
         let map_node = system.create_and_start(move || {
             Node::<i32, i32>::new(
+                "node1".to_string(),
+                vec!("test".to_string()),
                 channel_strategy,
                 Box::new(Map::<i32, i32>::new(module))
             )
         });
         
-        let input_one = ArconEvent::Element(ArconElement::new(6 as i32));
-        let input_two = ArconEvent::Element(ArconElement::new(7 as i32));
+        let input_one = ArconMessage::element(6 as i32, None, "test".to_string());
+        let input_two = ArconMessage::element(7 as i32, None, "test".to_string());
         let target_ref = map_node.actor_ref();
         target_ref.tell(Box::new(input_one), &system);
         target_ref.tell(Box::new(input_two), &system);
 
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        std::thread::sleep(std::time::Duration::from_secs(3));
         let comp_inspect = &sink_comp.definition().lock().unwrap();
-        assert_eq!(comp_inspect.result[0], 16);
-        assert_eq!(comp_inspect.result[1], 17);
+        assert_eq!(comp_inspect.data[0].data, 16);
+        assert_eq!(comp_inspect.data[1].data, 17);
         let _ = system.shutdown();
     }
 }

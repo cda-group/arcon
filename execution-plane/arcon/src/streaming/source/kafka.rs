@@ -11,8 +11,7 @@ use rdkafka::error::{KafkaResult, KafkaError};
 use serde::{Deserialize};
 
 /*
-    KafkaSource:
-        Will subscribe
+    KafkaSource: work in progress
 */
 #[derive(ComponentDefinition)]
 pub struct KafkaSource<OUT>
@@ -27,6 +26,7 @@ where
     max_timestamp: u64,
     batch_size: u32,
     consumer: StreamConsumer,
+    id: String,
 }
 
 impl<OUT> KafkaSource<OUT>
@@ -38,6 +38,7 @@ where
         bootstrap_server: String,
         topic: String,
         offset: u32,
+        id: String,
     ) -> KafkaSource<OUT> {
         let mut config = ClientConfig::new();
         config.set("group.id", "example_consumer_group_id")
@@ -61,6 +62,7 @@ where
                     max_timestamp: 0,
                     batch_size: 100,
                     consumer: consumer,
+                    id,
                 }
             }
             _ => {
@@ -70,7 +72,7 @@ where
     }
     pub fn output_event(&mut self, data: OUT, timestamp: Option<u64>) -> () {
         if let Err(err) = self.out_channels.output(
-            ArconEvent::Element(ArconElement{data, timestamp}),
+            ArconMessage::element(data, timestamp, self.id.clone()),
             &self.ctx.system()) {
                 error!(self.ctx.log(), "Unable to output Element, error {}", err);
         }
@@ -78,7 +80,7 @@ where
     pub fn output_watermark(&mut self) -> () {
         let ts = self.max_timestamp;
         if let Err(err) = self.out_channels.output(
-            ArconEvent::Watermark(Watermark{timestamp: ts}),
+            ArconMessage::watermark(ts, self.id.clone()),
             &self.ctx.system()) {
                 error!(self.ctx.log(), "Unable to output watermark, error {}", err);
         }
@@ -182,7 +184,6 @@ where
 mod tests {
     use super::*;
     use std::{thread, time};
-    // Stub for window-results
     #[arcon]
     struct Thing {
         id: u32,
@@ -195,70 +196,12 @@ mod tests {
         y: f32,
     }
     // JSON Example: {"id":1, "attribute":-13,"location":{"x":0.14124,"y":5882.231}}
-    mod sink {
-        use core::fmt::Debug;
-        use super::*;
-        use std::sync::Arc;
 
-        pub struct Sink<A: 'static + ArconType + Debug> {
-            ctx: ComponentContext<Sink<A>>,
-            pub result: Vec<ArconElement<A>>,
-            pub watermarks: Vec<Watermark>,
-        }
-        impl<A: ArconType + Debug> Sink<A> {
-            pub fn new() -> Sink<A> {
-                Sink {
-                    ctx: ComponentContext::new(),
-                    result: Vec::new(),
-                    watermarks: Vec::new(),
-                }
-            }
-        }
-        impl<A: ArconType + Debug> Provide<ControlPort> for Sink<A> {
-            fn handle(&mut self, _event: ControlEvent) -> () {}
-        }
-        impl<A: ArconType + Debug> Actor for Sink<A> {
-            fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
-                if let Some(event) = msg.downcast_ref::<ArconEvent<A>>() {
-                    match event {
-                        ArconEvent::Element(e) => {
-                            println!("Sink receieved element: {:?} // {:?}", e.data, e.timestamp);
-                            self.result.push(*e);
-                        }
-                        ArconEvent::Watermark(w) => {
-                            println!("Sink receieved watermark: {}", w.timestamp);
-                            self.watermarks.push(*w);
-                        }
-                    }
-                } else {
-                }
-            }
-            fn receive_message(&mut self, _sender: ActorPath, _ser_id: u64, _buf: &mut Buf) {}
-        }
-        impl<A: ArconType + Debug> ComponentDefinition for Sink<A> {
-            fn setup(&mut self, self_component: Arc<Component<Self>>) -> () {
-                self.ctx_mut().initialise(self_component);
-            }
-            fn execute(&mut self, _max_events: usize, skip: usize) -> ExecuteResult {
-                ExecuteResult::new(skip, skip)
-            }
-            fn ctx(&self) -> &ComponentContext<Self> {
-                &self.ctx
-            }
-            fn ctx_mut(&mut self) -> &mut ComponentContext<Self> {
-                &mut self.ctx
-            }
-            fn type_name() -> &'static str {
-                "EventTimeWindowAssigner"
-            }
-        }
-    }
-
-    //#[test] Used for "manual testing" during developement
+    //#[test] //Used for "manual testing" during developement
     fn kafka_source() -> Result<()> { 
         let system = KompactConfig::default().build().expect("KompactSystem");
 
-        let (sink, _) = system.create_and_register(move || sink::Sink::<Thing>::new());
+        let (sink, _) = system.create_and_register(move || DebugSink::<Thing>::new());
         let sink_ref = sink.actor_ref();
 
         let out_channels: Box<Forward<Thing>> =
@@ -269,6 +212,7 @@ mod tests {
             "localhost:9092".to_string(), 
             "test".to_string(),
             0,
+            1.to_string(),
         );
         let (source, _) = system.create_and_register(move || kafka_source);
 

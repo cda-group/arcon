@@ -9,7 +9,9 @@ pub struct Node<IN, OUT>
         OUT: 'static + ArconType,
 {
     ctx: ComponentContext<Node<IN, OUT>>,
+    id: String,
     out_channels: Box<ChannelStrategy<OUT>>,
+    in_channels: Vec<String>,
     task: Box<Task<IN, OUT>>,
 }
 
@@ -19,42 +21,43 @@ impl<IN, OUT> Node<IN, OUT>
         OUT: 'static + ArconType,
 {
     pub fn new(
+        id: String,
+        in_channels: Vec<String>,
         out_channels: Box<ChannelStrategy<OUT>>,
         task: Box<Task<IN, OUT>>,
     ) -> Node<IN, OUT> {
         Node {
             ctx: ComponentContext::new(),
+            id,
             out_channels,
+            in_channels,
             task,
         }
     }
-    fn handle_event(&mut self, event: &ArconEvent<IN>) -> () {
-        match event {
+    fn handle_message(&mut self, message: &ArconMessage<IN>) -> ArconResult<()> {
+        if !self.in_channels.contains(&message.sender) {
+            return arcon_err!("Message from invalid sender");
+        }
+        match message.event {
             ArconEvent::Element(e) => {
-                if let Ok(results) = self.task.handle_element(*e) {
-                    for result in results {
-                        self.output_event(result);
-                    }
-                } else {
-                    error!(self.ctx.log(), "Task failed to handle element");
+                let results = self.task.handle_element(e)?;
+                for result in results {
+                    self.output_event(result)?;
                 }
             }
             ArconEvent::Watermark(w) => {
-                if let Ok(results) = self.task.handle_watermark(*w) {
-                    for result in results {
-                        self.output_event(result);
-                    }
-                } else {
-                    error!(self.ctx.log(), "Task failed to handle watermark");
+                let results = self.task.handle_watermark(w)?;
+                for result in results {
+                    self.output_event(result)?;
                 }
-                self.output_event(ArconEvent::<OUT>::Watermark(*w)); // Forward the watermark
+                self.output_event(ArconEvent::<OUT>::Watermark(w))?; // Forward the watermark
             }
         }
+        Ok(())
     }
-    fn output_event(&mut self, event: ArconEvent<OUT>) -> () {
-        if let Err(e) = self.out_channels.output(event, &self.ctx.system()) {
-            error!(self.ctx.log(), "Node failed to send result, errror {}", e);
-        }
+    fn output_event(&mut self, event: ArconEvent<OUT>) -> ArconResult<()> {
+        let message = ArconMessage{event: event, sender: self.id.clone()};
+        self.out_channels.output(message, &self.ctx.system())
     }
 }
 
@@ -80,11 +83,31 @@ impl<IN, OUT> Actor for Node<IN, OUT>
         OUT: 'static + ArconType,
 {
     fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
-        if let Some(event) = msg.downcast_ref::<ArconEvent<IN>>() {
-            self.handle_event(event);
+        if let Some(message) = msg.downcast_ref::<ArconMessage<IN>>() {
+            if let Err(err) = self.handle_message(&message) {
+                error!(self.ctx.log(), "Failed to handle message: {}", err);
+            }
+        } else {
+            error!(self.ctx.log(), "Unknown message received");
         }
     }
-    fn receive_message(&mut self, _sender: ActorPath, _ser_id: u64, _buf: &mut Buf) {
+    fn receive_message(&mut self, sender: ActorPath, ser_id: u64, buf: &mut Buf) {
+        if ser_id == serialisation_ids::PBUF {
+            let r = ProtoSer::deserialise(buf);
+            if let Ok(msg) = r {
+                if let Ok(message) = ArconMessage::from_remote(msg) {
+                    if let Err(err) = self.handle_message(&message) {
+                        error!(self.ctx.log(), "Failed to handle message: {}", err);
+                    }
+                } else {
+                    error!(self.ctx.log(), "Failed to convert remote message to local");
+                }
+            } else {
+                error!(self.ctx.log(), "Failed to deserialise StreamTaskMessage",);
+            }
+        } else {
+            error!(self.ctx.log(), "Got unexpected message from {}", sender);
+        }
     }
 }
 

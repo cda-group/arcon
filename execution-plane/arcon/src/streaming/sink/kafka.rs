@@ -18,11 +18,9 @@ where
     IN: 'static + ArconType,
 {
     ctx: ComponentContext<KafkaSink<IN>>,
-//    out_channels: Box<ChannelStrategy<IN>>,
     bootstrap_server: String,
     topic: String,
     offset: u32,
-    //max_timestamp: u64,
     batch_size: u32,
     producer: FutureProducer,
     buffer: Vec<ArconElement<IN>>,
@@ -134,7 +132,6 @@ where
 mod tests {
     use super::*;
     use std::{thread, time};
-    // Stub for window-results
     #[arcon]
     struct Thing {
         id: u32,

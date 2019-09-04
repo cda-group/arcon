@@ -1,4 +1,4 @@
-use crate::data::{ArconElement, ArconEvent, ArconType, Watermark};
+use crate::data::{ArconElement, ArconEvent, ArconType, Watermark, ArconMessage};
 use crate::streaming::channel::strategy::ChannelStrategy;
 use crate::util::io::*;
 use kompact::*;
@@ -30,6 +30,7 @@ where
     watermark_interval: u64, // If 0: no watermarks/timestamps generated
     watermark_index: Option<u32>,
     max_timestamp: u64,
+    id: String,
 }
 
 impl<OUT> SocketSource<OUT>
@@ -42,6 +43,7 @@ where
         out_channels: Box<ChannelStrategy<OUT>>,
         watermark_interval: u64,
         watermark_index: Option<u32>,
+        id: String,
     ) -> SocketSource<OUT> {
         SocketSource {
             ctx: ComponentContext::new(),
@@ -52,15 +54,16 @@ where
             watermark_index,
             received: 0,
             max_timestamp: 0,
+            id,
         }
     }
     pub fn output_event(&mut self, data: OUT, ts: Option<u64>) -> () {
         self.received += 1;
         if self.watermark_interval > 0 {
-            if let Some(timestamp) = ts {
+            if let Some(_) = ts {
                 debug!(self.ctx.log(), "Extracted timestamp and using that");
                 if let Err(err) = self.out_channels.output(
-                    ArconEvent::Element(ArconElement::with_timestamp(data, timestamp)),
+                    ArconMessage::element(data, ts, self.id.clone()),
                     &self.ctx.system(),
                 ) {
                     error!(self.ctx.log(), "Unable to output event, error {}", err);
@@ -70,7 +73,7 @@ where
                 match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
                     Ok(ts) => {
                         if let Err(err) = self.out_channels.output(
-                            ArconEvent::Element(ArconElement::with_timestamp(data, ts.as_secs())),
+                            ArconMessage::element(data, Some(ts.as_secs()), self.id.clone()),
                             &self.ctx.system(),
                         ) {
                             error!(self.ctx.log(), "Unable to output event, error {}", err);
@@ -82,8 +85,9 @@ where
                 }
             }
         } else {
-            if let Err(err) = self.out_channels.output(
-                ArconEvent::Element(ArconElement::new(data)),
+            if let Err(err) = self.out_channels.output(ArconMessage{
+                event: ArconEvent::Element(ArconElement::new(data)),
+                sender: self.id.clone()},
                 &self.ctx.system(),
             ) {
                 error!(self.ctx.log(), "Unable to output event, error {}", err);
@@ -92,8 +96,9 @@ where
     }
     pub fn output_watermark(&mut self) -> () {
         if self.watermark_index.is_some() {
-            if let Err(err) = self.out_channels.output(
-                ArconEvent::Watermark(Watermark::new(self.max_timestamp)),
+            if let Err(err) = self.out_channels.output(ArconMessage{
+                event: ArconEvent::Watermark(Watermark::new(self.max_timestamp)),
+                sender: self.id.clone()},
                 &self.ctx.system(),
             ) {
                 error!(self.ctx.log(), "Unable to output watermark, error {}", err);
@@ -102,7 +107,7 @@ where
             match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
                 Ok(n) => {
                     if let Err(err) = self.out_channels.output(
-                        ArconEvent::Watermark(Watermark::new(n.as_secs())),
+                        ArconMessage::watermark(n.as_secs(), self.id.clone()),
                         &self.ctx.system(),
                     ) {
                         error!(self.ctx.log(), "Unable to output watermark, error {}", err);
@@ -224,47 +229,8 @@ mod tests {
     use std::{thread, time};
     use tokio::io;
     use tokio::net::TcpStream;
+    use crate::prelude::DebugSink;
 
-    mod sink {
-        use super::*;
-        use crate::data::ArconEvent::Element;
-        use crate::data::Watermark;
-
-        #[derive(ComponentDefinition)]
-        pub struct Sink<A: 'static + ArconType> {
-            ctx: ComponentContext<Sink<A>>,
-            pub result: Vec<ArconElement<A>>,
-            pub watermarks: Vec<Watermark>,
-        }
-        impl<A: ArconType> Sink<A> {
-            pub fn new() -> Sink<A> {
-                Sink {
-                    ctx: ComponentContext::new(),
-                    result: Vec::new(),
-                    watermarks: Vec::new(),
-                }
-            }
-        }
-        impl<A: ArconType> Provide<ControlPort> for Sink<A> {
-            fn handle(&mut self, _event: ControlEvent) -> () {}
-        }
-        impl<A: ArconType> Actor for Sink<A> {
-            fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
-                if let Some(event) = msg.downcast_ref::<ArconEvent<A>>() {
-                    match event {
-                        Element(e) => {
-                            self.result.push(*e);
-                        }
-                        ArconEvent::Watermark(w) => {
-                            self.watermarks.push(*w);
-                        }
-                    }
-                } else {
-                }
-            }
-            fn receive_message(&mut self, _sender: ActorPath, _ser_id: u64, _buf: &mut Buf) {}
-        }
-    }
     // Shared methods for test cases
     fn wait(time: u64) -> () {
         thread::sleep(time::Duration::from_secs(time));
@@ -278,14 +244,14 @@ mod tests {
         // Setup
         let system = KompactConfig::default().build().expect("KompactSystem");
 
-        let (sink, _) = system.create_and_register(move || sink::Sink::<u8>::new());
+        let (sink, _) = system.create_and_register(move || DebugSink::<u8>::new());
         let sink_ref = sink.actor_ref();
 
         let out_channels: Box<Forward<u8>> =
             Box::new(Forward::new(Channel::Local(sink_ref.clone())));
 
         let socket_source: SocketSource<u8> =
-            SocketSource::new(addr, SocketKind::Tcp, out_channels, 0, None);
+            SocketSource::new(addr, SocketKind::Tcp, out_channels, 0, None, "node1".to_string());
         let (source, _) = system.create_and_register(move || socket_source);
 
         system.start(&sink);
@@ -304,8 +270,8 @@ mod tests {
         let source_inspect = source.definition().lock().unwrap();
         assert_eq!(source_inspect.received, 1);
         let sink_inspect = sink.definition().lock().unwrap();
-        assert_eq!(sink_inspect.result.len(), (1 as usize));
-        let r0 = sink_inspect.result[0];
+        assert_eq!(sink_inspect.data.len(), (1 as usize));
+        let r0 = sink_inspect.data[0];
         assert_eq!(r0.data, 77 as u8);
     }
 
@@ -317,14 +283,14 @@ mod tests {
         // Setup
         let system = KompactConfig::default().build().expect("KompactSystem");
 
-        let (sink, _) = system.create_and_register(move || sink::Sink::<f32>::new());
+        let (sink, _) = system.create_and_register(move || DebugSink::<f32>::new());
         let sink_ref = sink.actor_ref();
 
         let out_channels: Box<Forward<f32>> =
             Box::new(Forward::new(Channel::Local(sink_ref.clone())));
 
         let socket_source: SocketSource<f32> =
-            SocketSource::new(addr, SocketKind::Tcp, out_channels, 0, None);
+            SocketSource::new(addr, SocketKind::Tcp, out_channels, 0, None, "node1".to_string());
         let (source, _) = system.create_and_register(move || socket_source);
 
         system.start(&sink);
@@ -356,10 +322,10 @@ mod tests {
         let source_inspect = source.definition().lock().unwrap();
         assert_eq!(source_inspect.received, 3);
         let sink_inspect = sink.definition().lock().unwrap();
-        assert_eq!(sink_inspect.result.len(), (3 as usize));
-        let r0 = sink_inspect.result[0];
-        let r1 = sink_inspect.result[1];
-        let r2 = sink_inspect.result[2];
+        assert_eq!(sink_inspect.data.len(), (3 as usize));
+        let r0 = sink_inspect.data[0];
+        let r1 = sink_inspect.data[1];
+        let r2 = sink_inspect.data[2];
         assert_eq!(r0.data, 123 as f32);
         assert_eq!(r1.data, 4.56 as f32);
         assert_eq!(r2.data, 78.9 as f32);
@@ -372,14 +338,14 @@ mod tests {
         // Setup
         let system = KompactConfig::default().build().expect("KompactSystem");
 
-        let (sink, _) = system.create_and_register(move || sink::Sink::<u8>::new());
+        let (sink, _) = system.create_and_register(move || DebugSink::<u8>::new());
         let sink_ref = sink.actor_ref();
 
         let out_channels: Box<Forward<u8>> =
             Box::new(Forward::new(Channel::Local(sink_ref.clone())));
 
         let socket_source: SocketSource<u8> =
-            SocketSource::new(addr, SocketKind::Tcp, out_channels, 3, None);
+            SocketSource::new(addr, SocketKind::Tcp, out_channels, 3, None, "node1".to_string());
         let (source, _) = system.create_and_register(move || socket_source);
 
         system.start(&sink);
@@ -398,8 +364,8 @@ mod tests {
         let source_inspect = source.definition().lock().unwrap();
         assert_eq!(source_inspect.received, 1);
         let sink_inspect = sink.definition().lock().unwrap();
-        assert_eq!(sink_inspect.result.len(), (1 as usize));
-        let r0 = sink_inspect.result[0];
+        assert_eq!(sink_inspect.data.len(), (1 as usize));
+        let r0 = sink_inspect.data[0];
         assert_eq!(r0.data, 77 as u8);
         assert_ne!(r0.timestamp, None); // Check that the timestamp is not None
         assert_eq!(sink_inspect.watermarks.len(), (2 as usize));

@@ -51,7 +51,7 @@ fn socket_source(
         let channel_strategy: Box<ChannelStrategy<#input_type>> = Box::new(Forward::new(channel));
         let (#source_name, reg) = system.create_and_register(move || {
             let sock_addr = #addr.parse().expect("Failed to parse SocketAddr");
-            let source: SocketSource<#input_type> = SocketSource::new(sock_addr, #sock_kind, channel_strategy, #rate, #ts_quote);
+            let source: SocketSource<#input_type> = SocketSource::new(sock_addr, #sock_kind, channel_strategy, #rate, #ts_quote, String::from(stringify!(#source_name)));
             source
         });
 
@@ -76,6 +76,7 @@ fn local_file_source(
                 String::from(#file_path),
                 channel_strategy,
                 #rate,
+                String::from(stringify!(#source_name)),
             );
             source
         });

@@ -1,4 +1,4 @@
-use crate::data::{ArconEvent, ArconType};
+use crate::data::{ArconType, ArconMessage};
 use crate::error::*;
 use crate::streaming::channel::strategy::*;
 use crate::streaming::channel::Channel;
@@ -30,15 +30,15 @@ impl<A> ChannelStrategy<A> for RoundRobin<A>
 where
     A: 'static + ArconType,
 {
-    fn output(&mut self, event: ArconEvent<A>, source: &KompactSystem) -> ArconResult<()> {
-        match event {
+    fn output(&mut self, message: ArconMessage<A>, source: &KompactSystem) -> ArconResult<()> {
+        match message.event {
             ArconEvent::Element(_) => {
                 if self.out_channels.is_empty() {
                     return arcon_err!("{}", "Vector of Channels is empty");
                 }
 
                 if let Some(channel) = self.out_channels.get(self.curr_index) {
-                    channel_output(channel, event, source)?;
+                    channel_output(channel, message, source)?;
                     self.curr_index += 1;
 
                     if self.curr_index >= self.out_channels.len() {
@@ -52,7 +52,7 @@ where
             }
             _ => {
                 for channel in &self.out_channels {
-                    channel_output(channel, event, source)?;
+                    channel_output(channel, message.clone(), source)?;
                 }
                 Ok(())
             }
@@ -69,8 +69,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use crate::streaming::sink::debug::DebugSink;
     use super::*;
-    use crate::data::ArconElement;
     use crate::streaming::channel::strategy::tests::*;
     use kompact::*;
     use std::sync::Arc;
@@ -84,11 +84,11 @@ mod tests {
         let total_msgs: u64 = components * 4;
 
         let mut channels: Vec<Channel> = Vec::new();
-        let mut comps: Vec<Arc<crate::prelude::Component<TestComp>>> = Vec::new();
+        let mut comps: Vec<Arc<crate::prelude::Component<DebugSink<Input>>>> = Vec::new();
 
         // Create half of the channels using ActorRefs
         for _i in 0..components {
-            let comp = system.create_and_start(move || TestComp::new());
+            let comp = system.create_and_start(move || DebugSink::<Input>::new());
             channels.push(Channel::Local(comp.actor_ref()));
             comps.push(comp);
         }
@@ -96,7 +96,7 @@ mod tests {
         let mut channel_strategy: Box<ChannelStrategy<Input>> = Box::new(RoundRobin::new(channels));
 
         for _i in 0..total_msgs {
-            let input = ArconEvent::Element(ArconElement::new(Input { id: 1 }));
+            let input = ArconMessage::element(Input{id:1}, None, "test".to_string());
             // Just assume it is all sent from same comp
             let _ = channel_strategy.output(input, &system);
         }
@@ -105,7 +105,7 @@ mod tests {
 
         for comp in comps {
             let comp_inspect = &comp.definition().lock().unwrap();
-            assert_eq!(comp_inspect.counter, total_msgs / components);
+            assert_eq!(comp_inspect.data.len() as u64, total_msgs / components);
         }
         let _ = system.shutdown();
     }

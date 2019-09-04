@@ -58,7 +58,6 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::streaming::task::tests::*;
 
     #[test]
     fn filter_unit_test() { 
@@ -95,7 +94,7 @@ mod tests {
         let system = KompactSystem::new(cfg).expect("KompactSystem");
 
         let sink_comp = system.create_and_start(move || {
-            let sink: TaskSink<i32> = TaskSink::new();
+            let sink: DebugSink<i32> = DebugSink::new();
             sink
         });
 
@@ -106,22 +105,24 @@ mod tests {
         let module = Arc::new(Module::new(weld_code).unwrap());
         let filter_task = system.create_and_start(move || {
             Node::<i32, i32>::new(
+                "node1".to_string(),
+                vec!("test".to_string()),
                 channel_strategy,
                 Box::new(Filter::<i32>::new(module))
             )
         });
 
-        let input_one = ArconElement::new(6 as i32);
-        let input_two = ArconElement::new(2 as i32);
+        let input_one = ArconMessage::element(6 as i32, None, "test".to_string());
+        let input_two = ArconMessage::element(2 as i32, None, "test".to_string());
 
         let target_ref = filter_task.actor_ref();
-        target_ref.tell(Box::new(ArconEvent::Element(input_one)), &target_ref);
-        target_ref.tell(Box::new(ArconEvent::Element(input_two)), &target_ref);
+        target_ref.tell(Box::new(input_one), &target_ref);
+        target_ref.tell(Box::new(input_two), &target_ref);
 
         std::thread::sleep(std::time::Duration::from_secs(1));
         let comp_inspect = &sink_comp.definition().lock().unwrap();
-        assert_eq!(comp_inspect.result[0], 6);
-        assert_eq!(comp_inspect.result.len(), 1);
+        assert_eq!(comp_inspect.data[0].data, 6);
+        assert_eq!(comp_inspect.data.len(), 1);
         let _ = system.shutdown();
         
     }

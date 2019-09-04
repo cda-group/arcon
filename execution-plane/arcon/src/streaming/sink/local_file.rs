@@ -11,13 +11,14 @@ where
 {
     ctx: ComponentContext<Self>,
     file: File,
+    in_channels: Vec<String>,
 }
 
 impl<A> LocalFileSink<A>
 where
     A: ArconType + 'static,
 {
-    pub fn new(file_path: &str) -> Self {
+    pub fn new(file_path: &str, in_channels: Vec<String>) -> Self {
         let file = OpenOptions::new()
             .write(true)
             .create(true)
@@ -28,6 +29,7 @@ where
         LocalFileSink {
             ctx: ComponentContext::new(),
             file,
+            in_channels,
         }
     }
 
@@ -59,9 +61,11 @@ where
     A: ArconType + 'static,
 {
     fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
-        if let Some(event) = msg.downcast_ref::<ArconEvent<A>>() {
-            debug!(self.ctx.log(), "Got event {:?}", event);
-            self.handle_event(event);
+        if let Some(message) = msg.downcast_ref::<ArconMessage<A>>() {
+            if self.in_channels.contains(&message.sender) {
+                debug!(self.ctx.log(), "Got event {:?}", message.event);
+                self.handle_event(&message.event);
+            }
         }
     }
     fn receive_message(&mut self, _sender: ActorPath, _ser_id: u64, _buf: &mut Buf) {
@@ -84,20 +88,20 @@ mod tests {
         let file_path = file.path().to_string_lossy().into_owned();
 
         let sink_comp = system.create_and_start(move || {
-            let sink: LocalFileSink<i32> = LocalFileSink::new(&file_path);
+            let sink: LocalFileSink<i32> = LocalFileSink::new(&file_path, vec!("test".to_string()));
             sink
         });
 
-        let input_one = ArconElement::new(6 as i32);
-        let input_two = ArconElement::new(2 as i32);
-        let input_three = ArconElement::new(15 as i32);
-        let input_four = ArconElement::new(30 as i32);
+        let input_one = ArconMessage::element(6 as i32, None, "test".to_string());
+        let input_two = ArconMessage::element(2 as i32, None, "test".to_string());
+        let input_three = ArconMessage::element(15 as i32, None, "test".to_string());
+        let input_four = ArconMessage::element(30 as i32, None, "test".to_string());
 
         let target_ref = sink_comp.actor_ref();
-        target_ref.tell(Box::new(ArconEvent::Element(input_one)), &target_ref);
-        target_ref.tell(Box::new(ArconEvent::Element(input_two)), &target_ref);
-        target_ref.tell(Box::new(ArconEvent::Element(input_three)), &target_ref);
-        target_ref.tell(Box::new(ArconEvent::Element(input_four)), &target_ref);
+        target_ref.tell(Box::new(input_one), &target_ref);
+        target_ref.tell(Box::new(input_two), &target_ref);
+        target_ref.tell(Box::new(input_three), &target_ref);
+        target_ref.tell(Box::new(input_four), &target_ref);
 
         std::thread::sleep(std::time::Duration::from_secs(1));
 

@@ -57,12 +57,11 @@ where
 
     fn handle_element(&mut self, element: ArconElement<IN>) -> ArconResult<Vec<ArconEvent<OUT>>> {
         let mut ret = Vec::new();
-        if let result = self.run_udf(&(element.data))? {
-            for i in 0..result.len {
-                ret.push(ArconEvent::Element(
-                    ArconElement{data: result[i as usize], timestamp: element.timestamp}
-                ));
-            }
+        let result = self.run_udf(&(element.data))?;
+        for i in 0..result.len {
+            ret.push(ArconEvent::Element(
+                ArconElement{data: result[i as usize], timestamp: element.timestamp}
+            ));
         }
         Ok(ret)
     }
@@ -71,7 +70,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::streaming::task::tests::*;
+    use crate::prelude::DebugSink;
 
     #[test]
     fn flatmap_unit_test() { 
@@ -103,7 +102,7 @@ mod tests {
         let system = KompactSystem::new(cfg).expect("KompactSystem");
 
         let sink_comp = system.create_and_start(move || {
-            let sink: TaskSink<i32> = TaskSink::new();
+            let sink: DebugSink<i32> = DebugSink::new();
             sink
         });
 
@@ -114,6 +113,8 @@ mod tests {
         let module = Arc::new(Module::new(weld_code).unwrap());
         let flatmap_node = system.create_and_start(move || {
             Node::<ArconVec<i32>, i32>::new(
+                "node1".to_string(),
+                vec!("test".to_string()),
                 channel_strategy,
                 Box::new(FlatMap::<ArconVec<i32>, i32>::new(module))
             )
@@ -121,15 +122,16 @@ mod tests {
 
         let vec: Vec<i32> = vec![1, 2, 3, 4, 5];
         let arcon_vec = ArconVec::new(vec);
-        let input = ArconElement::new(arcon_vec);
 
         let target_ref = flatmap_node.actor_ref();
-        target_ref.tell(Box::new(ArconEvent::Element(input)), &system);
+        target_ref.tell(Box::new(ArconMessage::<ArconVec<i32>>::element(arcon_vec, Some(0), "test".to_string())), &system);
 
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        std::thread::sleep(std::time::Duration::from_secs(3));
         let comp_inspect = &sink_comp.definition().lock().unwrap();
         let expected: Vec<i32> = vec![6, 7, 8, 9, 10];
-        assert_eq!(&comp_inspect.result, &expected);
+        for i in 0..5 {
+            assert_eq!(comp_inspect.data[i].data, expected[i]);
+        }
         let _ = system.shutdown();
     }
 }

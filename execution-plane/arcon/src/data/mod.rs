@@ -21,6 +21,31 @@ pub enum ArconEvent<A: 'static + ArconType> {
     Watermark(Watermark),
 }
 
+#[derive(Clone, Debug)]
+pub struct ArconMessage<A: 'static + ArconType> {
+    pub event: ArconEvent<A>,
+    pub sender: String,
+}
+
+// Convenience methods, "message factories"
+impl<A: 'static + ArconType> ArconMessage<A> {
+    pub fn watermark(timestamp: u64, sender: String) -> ArconMessage<A> {
+        ArconMessage{
+            event: ArconEvent::<A>::Watermark(Watermark{timestamp}),
+            sender,
+        }
+    }
+    pub fn element(data: A, timestamp: Option<u64>, sender: String) -> ArconMessage<A> {
+        ArconMessage{
+            event: ArconEvent::Element(ArconElement{
+                data,
+                timestamp
+            }),
+            sender
+        }
+    }
+}
+
 /// Watermark
 #[derive(Clone, Debug, Copy)]
 pub struct Watermark {
@@ -33,55 +58,42 @@ impl Watermark {
     }
 }
 
-impl<A: 'static + ArconType> ArconEvent<A> {
-    pub fn from_remote(event: StreamTaskMessage) -> ArconResult<Self> {
-        let payload = event.payload.unwrap();
-        match payload {
-            element(e) => {
-                let event: A = bincode::deserialize(e.get_data()).map_err(|e| {
-                    arcon_err_kind!("Failed to deserialise event with err {}", e.to_string())
-                })?;
-                let arcon_element = ArconElement::with_timestamp(event, e.get_timestamp());
-                Ok(ArconEvent::Element(arcon_element))
-            }
-            keyed_element(e) => {
-                // The key is implicit from the key_by
-                let event: A = bincode::deserialize(e.get_data()).map_err(|e| {
-                    arcon_err_kind!("Failed to deserialise event with err {}", e.to_string())
-                })?;
-                let arcon_element = ArconElement::with_timestamp(event, e.get_timestamp());
-                Ok(ArconEvent::Element(arcon_element))
-            }
-            watermark(w) => Ok(ArconEvent::Watermark(Watermark::new(w.timestamp))),
-            checkpoint(_) => {
-                unimplemented!();
-            }
-        }
-    }
+impl<A: 'static + ArconType> ArconMessage<A> {
     pub fn to_remote(&self) -> ArconResult<StreamTaskMessage> {
-        match self {
+        match self.event {
             ArconEvent::Element(e) => {
                 let serialised_event: Vec<u8> = bincode::serialize(&e.data).map_err(|e| {
                     arcon_err_kind!("Failed to serialise event with err {}", e.to_string())
                 })?;
 
                 let timestamp = e.timestamp.unwrap_or(0);
+                // TODO: Add Sender info to the StreamTaskMessage
                 Ok(create_element(serialised_event, timestamp))
-
-                /* How do we know if it's keyed or not?
-                if let Some(key) = key {
-                    create_keyed_element(serialised_event, timestamp, key);
-
-                } else {
-                    create_element(serialised_event, timestamp);
-                } */
             }
             ArconEvent::Watermark(w) => {
                 let mut msg = StreamTaskMessage::new();
                 let mut msg_watermark = messages::Watermark::new();
                 msg_watermark.set_timestamp(w.timestamp);
                 msg.set_watermark(msg_watermark);
+                msg.set_sender(self.sender.clone());
                 Ok(msg)
+            }
+        }
+    }
+
+    pub fn from_remote(message: StreamTaskMessage) -> ArconResult<Self> {
+        let sender = message.get_sender().to_string().clone();
+        let payload = message.payload.unwrap();
+        match payload {
+            element(e) => {
+                let data: A = bincode::deserialize(e.get_data()).map_err(|e| {
+                    arcon_err_kind!("Failed to deserialise event with err {}", e.to_string())
+                })?;
+                Ok(ArconMessage::<A>::element(data, Some(e.get_timestamp()), sender))
+            }
+            watermark(w) => Ok(ArconMessage::watermark(w.timestamp, sender)),
+            checkpoint(_) => {
+                unimplemented!();
             }
         }
     }
