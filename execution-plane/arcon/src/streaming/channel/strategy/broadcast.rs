@@ -1,5 +1,5 @@
-use crate::data::{ArconEvent, ArconType};
-use crate::error::*;
+use arcon_error::ArconResult;
+use crate::data::{ArconType, ArconMessage};
 use crate::streaming::channel::strategy::{channel_output, ChannelStrategy};
 use crate::streaming::channel::Channel;
 use kompact::KompactSystem;
@@ -29,9 +29,9 @@ impl<A> ChannelStrategy<A> for Broadcast<A>
 where
     A: 'static + ArconType,
 {
-    fn output(&mut self, event: ArconEvent<A>, source: &KompactSystem) -> ArconResult<()> {
+    fn output(&mut self, message: ArconMessage<A>, source: &KompactSystem) -> ArconResult<()> {
         for channel in &self.out_channels {
-            let _ = channel_output(channel, event, source)?;
+            let _ = channel_output(channel, message.clone(), source)?;
         }
         Ok(())
     }
@@ -46,8 +46,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use crate::streaming::sink::debug::DebugSink;
     use super::*;
-    use crate::data::ArconElement;
     use crate::streaming::channel::strategy::tests::*;
     use kompact::default_components::*;
     use kompact::*;
@@ -62,10 +62,10 @@ mod tests {
         let total_msgs: u64 = 10;
 
         let mut channels: Vec<Channel> = Vec::new();
-        let mut comps: Vec<Arc<crate::prelude::Component<TestComp>>> = Vec::new();
+        let mut comps: Vec<Arc<crate::prelude::Component<DebugSink<Input>>>> = Vec::new();
 
         for _i in 0..components {
-            let comp = system.create_and_start(move || TestComp::new());
+            let comp = system.create_and_start(move || DebugSink::<Input>::new());
             channels.push(Channel::Local(comp.actor_ref()));
             comps.push(comp);
         }
@@ -73,7 +73,7 @@ mod tests {
         let mut channel_strategy: Box<ChannelStrategy<Input>> = Box::new(Broadcast::new(channels));
 
         for _i in 0..total_msgs {
-            let input = ArconEvent::Element(ArconElement::new(Input { id: 1 }));
+            let input = ArconMessage::element(Input{id:1}, None, "test".to_string());
             // Just assume it is all sent from same comp
             let _ = channel_strategy.output(input, &system);
         }
@@ -83,7 +83,7 @@ mod tests {
         // Each of the 8 components should havesame amount of msgs..
         for comp in comps {
             let comp_inspect = &comp.definition().lock().unwrap();
-            assert_eq!(comp_inspect.counter, total_msgs);
+            assert_eq!(comp_inspect.data.len() as u64, total_msgs);
         }
         let _ = system.shutdown();
     }
@@ -104,18 +104,18 @@ mod tests {
         let total_msgs: u64 = 5;
 
         let mut channels: Vec<Channel> = Vec::new();
-        let mut comps: Vec<Arc<crate::prelude::Component<TestComp>>> = Vec::new();
+        let mut comps: Vec<Arc<crate::prelude::Component<DebugSink<Input>>>> = Vec::new();
 
         // Create local components
         for _i in 0..local_components {
-            let comp = system.create_and_start(move || TestComp::new());
+            let comp = system.create_and_start(move || DebugSink::<Input>::new());
             channels.push(Channel::Local(comp.actor_ref()));
             comps.push(comp);
         }
 
         // Create remote components
         for i in 0..remote_components {
-            let comp = remote.create_and_start(move || TestComp::new());
+            let comp = remote.create_and_start(move || DebugSink::<Input>::new());
             let comp_id = format!("comp_{}", i);
             let _ = remote.register_by_alias(&comp, comp_id.clone());
             remote.start(&comp);
@@ -132,9 +132,9 @@ mod tests {
         let mut channel_strategy: Box<ChannelStrategy<Input>> = Box::new(Broadcast::new(channels));
 
         for _i in 0..total_msgs {
-            let input = ArconElement::new(Input { id: 1 });
+            let input = ArconMessage::element(Input{id:1}, None, "test".to_string());
             // Just assume it is all sent from same comp
-            let _ = channel_strategy.output(ArconEvent::Element(input), &system);
+            let _ = channel_strategy.output(input, &system);
         }
 
         std::thread::sleep(std::time::Duration::from_secs(1));
@@ -142,7 +142,7 @@ mod tests {
         // Each of the 8 components should have same amount of msgs..
         for comp in comps {
             let comp_inspect = &comp.definition().lock().unwrap();
-            assert_eq!(comp_inspect.counter, total_msgs);
+            assert_eq!(comp_inspect.data.len() as u64, total_msgs);
         }
         let _ = system.shutdown();
     }

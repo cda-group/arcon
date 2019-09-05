@@ -11,6 +11,7 @@ pub fn stream_task(
     task: &Task,
     spec_id: &String,
 ) -> TokenStream {
+    let node_id = node_name.clone().to_string();
     let node_name = Ident::new(&node_name, Span::call_site());
     let input_type = to_token_stream(&task.input_type, spec_id);
     let output_type = to_token_stream(&task.output_type, spec_id);
@@ -18,6 +19,7 @@ pub fn stream_task(
     let weld_code: &str = &task.weld_code;
 
     let successors: &Vec<spec::ChannelKind> = &task.successors;
+    let predecessor = &task.predecessor;
 
     if *parallelism == 1 {
         assert_eq!(successors.len(), 1);
@@ -29,17 +31,17 @@ pub fn stream_task(
                     match &task.kind {
                         FlatMap => {
                             quote! {
-                                FlatMap::<#input_type, #output_type>::new(module, Vec::new(), channel_strategy)
+                                FlatMap::<#input_type, #output_type>::new(module)
                             }
                         }
                         Map => {
                             quote! {
-                                Map::<#input_type, #output_type>::new(module, Vec::new(), channel_strategy)
+                                Map::<#input_type, #output_type>::new(module)
                             }
                         }
                         Filter => {
                             quote! {
-                                Filter::<#input_type>::new(module, Vec::new(), channel_strategy)
+                                Filter::<#input_type>::new(module)
                             }
                         }
                     }
@@ -63,7 +65,14 @@ pub fn stream_task(
                     #channel_strategy_quote
                     let code = String::from(#weld_code);
                     let module = std::sync::Arc::new(Module::new(code).unwrap());
-                    let (#node_name, reg) = system.create_and_register(move || #task_signature);
+                    let (#node_name, reg) = system.create_and_register(move || {
+                        Node::<#input_type, #output_type>::new(
+                            String::from(#node_id),
+                            vec!(String::from(#predecessor)),
+                            channel_strategy,
+                            Box::new(#task_signature)
+                        )
+                    });
 
                     reg.wait_timeout(std::time::Duration::from_millis(1000))
                         .expect("Component never registered!")

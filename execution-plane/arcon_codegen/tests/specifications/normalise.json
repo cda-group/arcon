@@ -90,7 +90,11 @@
               "udf" : "|e:i64,w:appender[i64]| merge(w,e):appender[i64]",
               "materialiser" : "|e: appender[i64]| let elem = result(e); let sum = result(for(elem, merger[i64, +], |b: merger[i64, +], i: i64, e: i64| merge(b, e))); let count = len(elem); let avg = sum / count; result(for(elem, appender[i64], |b: appender[i64], i: i64, e: i64| merge(b, e / avg)))"
             },
-            "time_kind" : "Processing",
+            "time_kind" : {
+                "Event": {
+                  "slack": 0
+                }
+            },
             "window_kind" : "All"
           }
         }

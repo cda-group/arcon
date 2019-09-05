@@ -7,12 +7,14 @@ use spec::{
 use crate::common::verify_and_start;
 
 pub fn window(name: &str, window: &Window, spec_id: &String) -> TokenStream {
+    let node_id = name.clone().to_string();
     let input_type = to_token_stream(&window.window_function.input_type, spec_id);
     let output_type = to_token_stream(&window.window_function.output_type, spec_id);
     let builder_type = to_token_stream(&window.window_function.builder_type, spec_id);
     let name = Ident::new(&name, Span::call_site());
 
     let successors = &window.successors;
+    let predecessor = &window.predecessor.to_string();
 
     // NOTE: We just support 1 output channel for now
     assert_eq!(successors.len(), 1);
@@ -37,6 +39,8 @@ pub fn window(name: &str, window: &Window, spec_id: &String) -> TokenStream {
                 &input_type,
                 &output_type,
                 &builder_type,
+                node_id,
+                &predecessor,
             );
             crate::combine_token_streams(window_code, window_comp)
         }
@@ -71,6 +75,8 @@ fn tumbling(
     input_type: &TokenStream,
     output_type: &TokenStream,
     builder_type: &TokenStream,
+    node_id: String,
+    predecessor: &String,
 ) -> TokenStream {
     let keyed = match window_kind {
         Keyed => unimplemented!(),
@@ -81,7 +87,6 @@ fn tumbling(
         TimeKind::Event { slack } => {
             quote! {
              EventTimeWindowAssigner::<#input_type, #builder_type, #output_type>::new(
-                channel_strategy,
                 builder_code,
                 udf_code,
                 materialiser_code,
@@ -95,7 +100,6 @@ fn tumbling(
         TimeKind::Processing => {
             quote! {
              ProcessingTimeWindowAssigner::<#input_type, #builder_type, #output_type>::new(
-                channel_strategy,
                 builder_code,
                 udf_code,
                 materialiser_code,
@@ -109,7 +113,6 @@ fn tumbling(
         TimeKind::Ingestion => {
             quote! {
              EventTimeWindowAssigner::<#input_type, #builder_type, #output_type>::new(
-                channel_strategy,
                 builder_code,
                 udf_code,
                 materialiser_code,
@@ -129,7 +132,12 @@ fn tumbling(
             Box::new(Forward::new(Channel::Local(#successor.actor_ref())));
 
         let (#name, reg) = system.create_and_register(move || {
-            #component
+            Node::<#input_type, #output_type>::new(
+                String::from(#node_id),
+                vec!(String::from(#predecessor)),
+                channel_strategy,
+                Box::new(#component)
+            )
         });
         #verify
     }

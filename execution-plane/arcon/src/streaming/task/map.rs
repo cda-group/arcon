@@ -1,31 +1,22 @@
-use crate::data::{ArconElement, ArconEvent, ArconType, Watermark};
-use crate::error::*;
-use crate::streaming::channel::strategy::ChannelStrategy;
-use crate::streaming::channel::Channel;
-use crate::streaming::task::TaskMetric;
+use std::marker::PhantomData;
+use crate::prelude::*;
 use crate::weld::*;
-use arcon_macros::arcon_task;
-use kompact::*;
 use std::sync::Arc;
-use weld::*;
 
 /// Map task
 ///
 /// IN: Input Event
 /// OUT: Output Event
-#[arcon_task]
-#[derive(ComponentDefinition)]
 pub struct Map<IN, OUT>
 where
     IN: 'static + ArconType,
     OUT: 'static + ArconType,
 {
-    ctx: ComponentContext<Self>,
-    _in_channels: Vec<Channel>,
-    out_channels: Box<ChannelStrategy<OUT>>,
     udf: Arc<Module>,
     udf_ctx: WeldContext,
     metric: TaskMetric,
+    _in: PhantomData<IN>,
+    _out: PhantomData<OUT>,
 }
 
 impl<IN, OUT> Map<IN, OUT>
@@ -35,38 +26,15 @@ where
 {
     pub fn new(
         udf: Arc<Module>,
-        in_channels: Vec<Channel>,
-        out_channels: Box<ChannelStrategy<OUT>>,
     ) -> Self {
         let ctx = WeldContext::new(&udf.conf()).unwrap();
         Map {
-            ctx: ComponentContext::new(),
-            _in_channels: in_channels,
-            out_channels,
             udf: udf.clone(),
             udf_ctx: ctx,
             metric: TaskMetric::new(),
+            _in: PhantomData,
+            _out: PhantomData,
         }
-    }
-
-    fn handle_element(&mut self, event: &ArconElement<IN>) -> ArconResult<()> {
-        debug!(self.ctx.log(), "Got element {:?}", &event.data);
-        if let Ok(result) = self.run_udf(&(event.data)) {
-            let timestamp = if let Some(ts) = event.timestamp {
-                ts
-            } else  {
-                0
-            };
-            let _ = self.push_out(ArconEvent::Element(ArconElement::with_timestamp(result, timestamp)));
-        } else {
-            // Just report the error for now...
-            error!(self.ctx.log(), "Failed to execute UDF...",);
-        }
-        Ok(())
-    }
-
-    fn handle_watermark(&mut self, w: Watermark) -> ArconResult<()> {
-        self.push_out(ArconEvent::Watermark(w))
     }
 
     fn run_udf(&mut self, event: &IN) -> ArconResult<OUT> {
@@ -75,26 +43,63 @@ where
         self.metric.update_avg(ns);
         Ok(run.0)
     }
+}
 
-    fn push_out(&mut self, event: ArconEvent<OUT>) -> ArconResult<()> {
-        let _ = self.out_channels.output(event, &self.ctx.system())?;
-        Ok(())
+impl<IN, OUT> Task<IN, OUT> for Map<IN, OUT>
+where
+    IN: 'static + ArconType,
+    OUT: 'static + ArconType,
+{
+    fn handle_element(&mut self, event: ArconElement<IN>) -> ArconResult<Vec<ArconEvent<OUT>>> {
+        let data = self.run_udf(&(event.data))?;
+        return Ok(vec!(ArconEvent::Element(ArconElement{data, timestamp: event.timestamp})));
+    }
+
+    fn handle_watermark(&mut self, _w: Watermark) -> ArconResult<Vec<ArconEvent<OUT>>> {
+        Ok(Vec::new())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::prelude::*;
-    use crate::streaming::task::tests::*;
 
     #[test]
-    fn map_task_test_local() {
+    fn map_unit_test() {
+        let weld_code = String::from("|x: i32| x + 10");
+        let module = Arc::new(Module::new(weld_code).unwrap());
+        let mut map = Map::<i32, i32>::new(module);
+
+        let input_one = ArconElement::new(6 as i32);
+        let input_two = ArconElement::new(7 as i32);
+        let r1 = map.handle_element(input_one);
+        let r2 = map.handle_element(input_two);
+        let mut result_vec = Vec::new();
+        
+        result_vec.push(r1);
+        result_vec.push(r2);
+
+        let expected: Vec<i32> = vec![16,17];
+        let mut results = Vec::new();
+        for r in result_vec {
+            if let Ok(result) = r {
+                for event in result {
+                    if let ArconEvent::Element(element) = event {
+                        results.push(element.data)
+                    }
+                }
+            }
+        }
+        assert_eq!(results, expected);
+    }
+
+    #[test]
+    fn map_integration_test() {
         let cfg = KompactConfig::new();
         let system = KompactSystem::new(cfg).expect("KompactSystem");
 
         let sink_comp = system.create_and_start(move || {
-            let sink: TaskSink<i32> = TaskSink::new();
+            let sink: DebugSink<i32> = DebugSink::new();
             sink
         });
 
@@ -103,17 +108,25 @@ mod tests {
 
         let weld_code = String::from("|x: i32| x + 10");
         let module = Arc::new(Module::new(weld_code).unwrap());
-        let filter_task = system
-            .create_and_start(move || Map::<i32, i32>::new(module, Vec::new(), channel_strategy));
+        let map_node = system.create_and_start(move || {
+            Node::<i32, i32>::new(
+                "node1".to_string(),
+                vec!("test".to_string()),
+                channel_strategy,
+                Box::new(Map::<i32, i32>::new(module))
+            )
+        });
+        
+        let input_one = ArconMessage::element(6 as i32, None, "test".to_string());
+        let input_two = ArconMessage::element(7 as i32, None, "test".to_string());
+        let target_ref = map_node.actor_ref();
+        target_ref.tell(Box::new(input_one), &system);
+        target_ref.tell(Box::new(input_two), &system);
 
-        let input_one = ArconEvent::Element(ArconElement::new(6 as i32));
-        filter_task
-            .actor_ref()
-            .tell(Box::new(input_one), &filter_task);
-
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        std::thread::sleep(std::time::Duration::from_secs(3));
         let comp_inspect = &sink_comp.definition().lock().unwrap();
-        assert_eq!(comp_inspect.result[0], 16);
+        assert_eq!(comp_inspect.data[0].data, 16);
+        assert_eq!(comp_inspect.data[1].data, 17);
         let _ = system.shutdown();
     }
 }

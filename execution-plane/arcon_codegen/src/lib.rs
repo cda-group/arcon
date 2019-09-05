@@ -89,7 +89,7 @@ pub fn generate(spec: &ArconSpec, is_terminated: bool) -> Result<String, Codegen
                 stream.push(source::source(&node.id, &previous_node, &source, &spec.id, spec.timestamp_extractor));
             }
             Sink(sink) => {
-                stream.push(sink::sink(&node.id, &sink.sink_type, &sink.kind, &spec.id));
+                stream.push(sink::sink(&node.id, &sink.sink_type, &sink.kind, &spec.id, &sink.predecessor));
             }
             Task(task) => {
                 stream.push(stream_task::stream_task(
@@ -101,7 +101,11 @@ pub fn generate(spec: &ArconSpec, is_terminated: bool) -> Result<String, Codegen
                 ));
             }
             Window(window) => {
-                stream.push(window::window(&node.id, &window, &spec.id));
+                stream.push(window::window(
+                    &node.id,
+                    &window,
+                    &spec.id,
+                ));
             }
         }
 

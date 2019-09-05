@@ -2,6 +2,9 @@ pub mod filter;
 pub mod flatmap;
 pub mod manager;
 pub mod map;
+pub mod node;
+
+use crate::prelude::*;
 
 pub struct TaskMetric {
     avg: u64,
@@ -31,58 +34,11 @@ impl TaskMetric {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use crate::data::{ArconEvent, ArconType, Watermark};
-    use kompact::*;
-    /// A component that is used during testing of Tasks..
-    #[derive(ComponentDefinition)]
-    #[allow(dead_code)]
-    pub struct TaskSink<A>
+pub trait Task<IN, OUT>
     where
-        A: 'static + ArconType,
-    {
-        ctx: ComponentContext<Self>,
-        pub result: Vec<A>,
-        pub watermarks: Vec<Watermark>,
-    }
-
-    impl<A> TaskSink<A>
-    where
-        A: 'static + ArconType,
-    {
-        pub fn new() -> Self {
-            TaskSink {
-                ctx: ComponentContext::new(),
-                result: Vec::new(),
-                watermarks: Vec::new(),
-            }
-        }
-    }
-
-    impl<A> Provide<ControlPort> for TaskSink<A>
-    where
-        A: 'static + ArconType,
-    {
-        fn handle(&mut self, _event: ControlEvent) -> () {}
-    }
-
-    impl<A> Actor for TaskSink<A>
-    where
-        A: 'static + ArconType,
-    {
-        fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
-            if let Some(event) = msg.downcast_ref::<ArconEvent<A>>() {
-                match event {
-                    ArconEvent::Element(e) => {
-                        self.result.push(e.data);
-                    }
-                    ArconEvent::Watermark(w) => {
-                        self.watermarks.push(*w);
-                    }
-                }
-            }
-        }
-        fn receive_message(&mut self, _sender: ActorPath, _ser_id: u64, _buf: &mut Buf) {}
-    }
+        IN: 'static + ArconType,
+        OUT: 'static + ArconType,
+{
+    fn handle_element(&mut self, element: ArconElement<IN>) -> ArconResult<Vec<ArconEvent<OUT>>>;
+    fn handle_watermark(&mut self, watermark: Watermark) -> ArconResult<Vec<ArconEvent<OUT>>>;
 }

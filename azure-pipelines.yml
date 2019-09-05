@@ -14,6 +14,7 @@ jobs:
   pool:
     vmImage: 'macOS-10.13'
   steps:
+  - script: ulimit -n 20000 20000
   - template: ci/azure-execution-plane.yml
     parameters:
       name: macosx_arcon

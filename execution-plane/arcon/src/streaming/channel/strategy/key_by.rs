@@ -1,7 +1,6 @@
+use crate::streaming::channel::strategy::channel_output;
 use crate::data::{ArconEvent, ArconType};
-use crate::error::*;
-use crate::streaming::channel::strategy::{channel_output, ChannelStrategy};
-use crate::streaming::channel::Channel;
+use crate::prelude::*;
 use fnv::FnvHasher;
 use kompact::KompactSystem;
 use std::collections::HashMap;
@@ -64,8 +63,8 @@ impl<A> ChannelStrategy<A> for KeyBy<A>
 where
     A: 'static + ArconType + Hash,
 {
-    fn output(&mut self, event: ArconEvent<A>, source: &KompactSystem) -> ArconResult<()> {
-        match event {
+    fn output(&mut self, message: ArconMessage<A>, source: &KompactSystem) -> ArconResult<()> {
+        match message.event {
             ArconEvent::Element(element) => {
                 let mut h = self.builder.build_hasher();
                 element.data.hash(&mut h);
@@ -73,7 +72,7 @@ where
                 let id = (hash % self.parallelism) as i32;
                 if id >= 0 && id <= self.parallelism as i32 {
                     if let Some(channel) = self.map.get(&(id as usize)) {
-                        let _ = channel_output(channel, event, source)?;
+                        let _ = channel_output(channel, message, source)?;
                     }
                 } else {
                     // TODO: Fix
@@ -82,7 +81,7 @@ where
             }
             _ => {
                 for (_, channel) in self.map.iter() {
-                    let _ = channel_output(channel, event, source)?;
+                    let _ = channel_output(channel, message.clone(), source)?;
                 }
             }
         }
@@ -100,7 +99,6 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::data::ArconElement;
     use crate::streaming::channel::strategy::tests::*;
     use kompact::*;
     use rand::Rng;
@@ -115,10 +113,10 @@ mod tests {
         let total_msgs = 1000;
 
         let mut channels: Vec<Channel> = Vec::new();
-        let mut comps: Vec<Arc<crate::prelude::Component<TestComp>>> = Vec::new();
+        let mut comps: Vec<Arc<crate::prelude::Component<DebugSink<Input>>>> = Vec::new();
 
         for _i in 0..parallelism {
-            let comp = system.create_and_start(move || TestComp::new());
+            let comp = system.create_and_start(move || DebugSink::<Input>::new());
             channels.push(Channel::Local(comp.actor_ref()));
             comps.push(comp);
         }
@@ -128,12 +126,12 @@ mod tests {
 
         let mut rng = rand::thread_rng();
 
-        let mut inputs: Vec<ArconEvent<Input>> = Vec::new();
+        let mut inputs: Vec<ArconMessage<Input>> = Vec::new();
         for _i in 0..total_msgs {
             let input = Input {
                 id: rng.gen_range(0, 100),
             };
-            inputs.push(ArconEvent::Element(ArconElement::new(input)));
+            inputs.push(ArconMessage::element(input, None, "test".to_string()));
         }
 
         for input in inputs {
@@ -146,7 +144,7 @@ mod tests {
         // Each of the 8 components should at least get some hits
         for comp in comps {
             let comp_inspect = &comp.definition().lock().unwrap();
-            assert!(comp_inspect.counter > 0);
+            assert!(comp_inspect.data.len() > 0);
         }
         let _ = system.shutdown();
     }
