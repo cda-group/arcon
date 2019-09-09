@@ -1,4 +1,7 @@
 use crate::prelude::*;
+use arcon_backend::in_memory;
+use arcon_backend::StateBackend;
+use std::collections::BTreeMap;
 /*
     Node: contains Task which executes actions
 */
@@ -13,6 +16,9 @@ pub struct Node<IN, OUT>
     out_channels: Box<ChannelStrategy<OUT>>,
     in_channels: Vec<String>,
     task: Box<Task<IN, OUT>>,
+    watermarks: BTreeMap<String, Watermark>,
+    current_watermark: u64,
+    current_epoch: u64,
 }
 
 impl<IN, OUT> Node<IN, OUT>
@@ -26,12 +32,21 @@ impl<IN, OUT> Node<IN, OUT>
         out_channels: Box<ChannelStrategy<OUT>>,
         task: Box<Task<IN, OUT>>,
     ) -> Node<IN, OUT> {
+        // Initiate our watermarks
+        let mut watermarks = BTreeMap::new();
+        for channel in &in_channels {
+            watermarks.insert(channel.clone(), Watermark{timestamp: 0});
+        }
+
         Node {
             ctx: ComponentContext::new(),
             id,
             out_channels,
             in_channels,
             task,
+            watermarks,
+            current_watermark: 0,
+            current_epoch: 0,
         }
     }
     fn handle_message(&mut self, message: &ArconMessage<IN>) -> ArconResult<()> {
@@ -46,11 +61,35 @@ impl<IN, OUT> Node<IN, OUT>
                 }
             }
             ArconEvent::Watermark(w) => {
-                let results = self.task.handle_watermark(w)?;
-                for result in results {
-                    self.output_event(result)?;
+                // Insert the watermark and try early return
+                if let Some(old) = self.watermarks.insert(message.sender.clone(), w) {
+                    if old.timestamp > self.current_watermark {return Ok(())} 
                 }
-                self.output_event(ArconEvent::<OUT>::Watermark(w))?; // Forward the watermark
+                // A different early return
+                if w.timestamp <= self.current_watermark {return Ok(())}
+
+                // Let new_watermark take the value of the lowest watermark
+                let mut new_watermark = w;
+                for some_watermark in self.watermarks.values() {
+                    if some_watermark.timestamp < new_watermark.timestamp { new_watermark = *some_watermark; }
+                }
+
+                // Finally, handle the watermark:
+                if new_watermark.timestamp > self.current_watermark {
+                    // Update the stored watermark
+                    self.current_watermark = new_watermark.timestamp;
+                    
+                    // Handle the watermark
+                    for result in self.task.handle_watermark(new_watermark)? {
+                        self.output_event(result)?;
+                    }
+                    
+                    // Forward the watermark
+                    self.output_event(ArconEvent::Watermark(new_watermark))?; 
+                }
+            }
+            ArconEvent::Epoch(e) => {
+                
             }
         }
         Ok(())
@@ -58,6 +97,11 @@ impl<IN, OUT> Node<IN, OUT>
     fn output_event(&mut self, event: ArconEvent<OUT>) -> ArconResult<()> {
         let message = ArconMessage{event: event, sender: self.id.clone()};
         self.out_channels.output(message, &self.ctx.system())
+    }
+    fn save_state(&mut self) -> ArconResult<()> {
+        let epoch = &self.current_epoch;
+
+        Ok(())
     }
 }
 

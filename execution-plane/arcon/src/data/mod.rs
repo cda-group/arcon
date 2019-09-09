@@ -19,6 +19,7 @@ pub trait ArconType: Sync + Send + Clone + Copy + Debug + Serialize + Deserializ
 pub enum ArconEvent<A: 'static + ArconType> {
     Element(ArconElement<A>),
     Watermark(Watermark),
+    Epoch(Epoch),
 }
 
 #[derive(Clone, Debug)]
@@ -32,6 +33,12 @@ impl<A: 'static + ArconType> ArconMessage<A> {
     pub fn watermark(timestamp: u64, sender: String) -> ArconMessage<A> {
         ArconMessage{
             event: ArconEvent::<A>::Watermark(Watermark{timestamp}),
+            sender,
+        }
+    }
+    pub fn epoch(epoch: u64, sender: String) -> ArconMessage<A> {
+        ArconMessage{
+            event: ArconEvent::<A>::Epoch(Epoch{epoch}),
             sender,
         }
     }
@@ -58,6 +65,18 @@ impl Watermark {
     }
 }
 
+/// Epoch
+#[derive(Clone, Debug, Copy)]
+pub struct Epoch {
+    pub epoch: u64,
+}
+
+impl Epoch {
+    pub fn new(epoch: u64) -> Self {
+        Epoch { epoch }
+    }
+}
+
 impl<A: 'static + ArconType> ArconMessage<A> {
     pub fn to_remote(&self) -> ArconResult<StreamTaskMessage> {
         match self.event {
@@ -78,6 +97,14 @@ impl<A: 'static + ArconType> ArconMessage<A> {
                 msg.set_sender(self.sender.clone());
                 Ok(msg)
             }
+            ArconEvent::Epoch(e) => {
+                let mut msg = StreamTaskMessage::new();
+                let mut msg_checkpoint = messages::Checkpoint::new();
+                msg_checkpoint.set_epoch(e.epoch);
+                msg.set_checkpoint(msg_checkpoint);
+                msg.set_sender(self.sender.clone());
+                Ok(msg)
+            }
         }
     }
 
@@ -92,9 +119,7 @@ impl<A: 'static + ArconType> ArconMessage<A> {
                 Ok(ArconMessage::<A>::element(data, Some(e.get_timestamp()), sender))
             }
             watermark(w) => Ok(ArconMessage::watermark(w.timestamp, sender)),
-            checkpoint(_) => {
-                unimplemented!();
-            }
+            checkpoint(c) => Ok(ArconMessage::epoch(c.epoch, sender)),
         }
     }
 }

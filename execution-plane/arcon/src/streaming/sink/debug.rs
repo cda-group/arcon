@@ -10,6 +10,7 @@ where
     ctx: ComponentContext<Self>,
     pub data: Vec<ArconElement<A>>,
     pub watermarks: Vec<Watermark>,
+    pub epochs: Vec<Epoch>,
 }
 
 impl<A> DebugSink<A>
@@ -21,6 +22,7 @@ where
             ctx: ComponentContext::new(),
             data: Vec::new(),
             watermarks: Vec::new(),
+            epochs: Vec::new(),
         }
     }
 
@@ -32,6 +34,9 @@ where
             }
             ArconEvent::Watermark(w) => {
                 self.watermarks.push(*w);
+            }
+            ArconEvent::Epoch(e) => {
+                self.epochs.push(*e);
             }
         }
     }

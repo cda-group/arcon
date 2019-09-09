@@ -7,7 +7,9 @@ message Element {
   string task_id = 3;
 }
 
-message Checkpoint {}
+message Checkpoint {
+  uint64 epoch = 1;
+}
 
 message Watermark {
   uint64 timestamp = 1;
