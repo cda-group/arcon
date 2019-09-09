@@ -218,6 +218,173 @@ unsafe impl<IN, OUT> Sync for Node<IN, OUT>
 
 #[cfg(test)]
 mod tests {
-    // Tested implicitly in integration tests of the tasks.
+    // Tests the message logic of Node.
+    use super::*;
+    use std::sync::Arc;
+    use std::{thread, time};
+
+    // Helper functions for cleaner test-cases
+    fn node_test_setup() -> (ActorRef, Arc<kompact::Component<DebugSink<i32>>>) {
+        // Returns a filter Node with input channels: sender1..sender3
+        // And a debug sink receiving its results
+        let cfg = KompactConfig::new();
+        let system = KompactSystem::new(cfg).expect("KompactSystem");
+
+        let sink = system.create_and_start(move || DebugSink::<i32>::new());
+        let channel = Channel::Local(sink.actor_ref());
+        let channel_strategy: Box<ChannelStrategy<i32>> = Box::new(Forward::new(channel));
+
+        let weld_code = String::from("|x: i32| x >= 0");
+        let module = Arc::new(Module::new(weld_code).unwrap());
+        let filter_node = system.create_and_start(move || {
+            Node::<i32, i32>::new(
+                "node1".to_string(),
+                vec!("sender1".to_string(), "sender2".to_string(), "sender3".to_string()),
+                channel_strategy,
+                Box::new(Filter::<i32>::new(module))
+            )
+        });
+        
+        return (filter_node.actor_ref(), sink);
+    }
+    fn watermark(time: u64, sender: &str) -> Box<ArconMessage<i32>> {
+        Box::new(ArconMessage::watermark(time, sender.to_string()))
+    }
+    fn element(data: i32, time: u64, sender: &str) -> Box<ArconMessage<i32>> {
+        Box::new(ArconMessage::element(data, Some(time), sender.to_string()))
+    }
+    fn epoch(epoch: u64, sender: &str) -> Box<ArconMessage<i32>> {
+        Box::new(ArconMessage::epoch(epoch, sender.to_string()))
+    }
+    fn wait(time: u64) -> () {
+        thread::sleep(time::Duration::from_secs(time));
+    }
+
+    #[test]
+    fn node_no_watermark() {
+        let (node_ref, sink) = node_test_setup();
+        node_ref.tell(watermark(1, "sender1"), &node_ref);
+
+        wait(1);
+        let sink_inspect = sink.definition().lock().unwrap();
+
+        let data_len = sink_inspect.data.len();
+        let watermark_len = sink_inspect.watermarks.len();
+        assert_eq!(watermark_len, 0);
+        assert_eq!(data_len, 0);
+    }
+
+    #[test]
+    fn node_one_watermark() {
+        let (node_ref, sink) = node_test_setup();
+        node_ref.tell(watermark(1, "sender1"), &node_ref);
+        node_ref.tell(watermark(1, "sender2"), &node_ref);
+        node_ref.tell(watermark(1, "sender3"), &node_ref);
+
+        wait(1);
+        let sink_inspect = sink.definition().lock().unwrap();
+
+        let data_len = sink_inspect.data.len();
+        let watermark_len = sink_inspect.watermarks.len();
+        assert_eq!(watermark_len, 1);
+        assert_eq!(data_len, 0);
+    }
+    #[test]
+    fn node_outoforder_watermarks() {
+        let (node_ref, sink) = node_test_setup();
+        node_ref.tell(watermark(1, "sender1"), &node_ref);
+        node_ref.tell(watermark(3, "sender1"), &node_ref);
+        node_ref.tell(watermark(1, "sender2"), &node_ref);
+        node_ref.tell(watermark(2, "sender2"), &node_ref);
+        node_ref.tell(watermark(4, "sender3"), &node_ref);
+
+        wait(1);
+        let sink_inspect = sink.definition().lock().unwrap();
+
+        let data_len = sink_inspect.data.len();
+        let watermark_len = sink_inspect.watermarks.len();
+        assert_eq!(watermark_len, 1);
+        assert_eq!(sink_inspect.watermarks[0].timestamp, 2u64);
+    }
+    #[test]
+    fn node_epoch_block() {
+        let (node_ref, sink) = node_test_setup();
+        node_ref.tell(element(1, 1, "sender1"), &node_ref);
+        node_ref.tell(epoch(3, "sender1"), &node_ref);
+        // should be blocked:
+        node_ref.tell(element(2, 1, "sender1"), &node_ref); 
+        // should not be blocked
+        node_ref.tell(element(3, 1, "sender2"), &node_ref);
+
+        wait(1);
+        let sink_inspect = sink.definition().lock().unwrap();
+
+        let data_len = sink_inspect.data.len();
+        let watermark_len = sink_inspect.watermarks.len();
+        let epoch_len = sink_inspect.epochs.len();
+        assert_eq!(epoch_len, 0);
+        assert_eq!(sink_inspect.data[0].data, 1i32);
+        assert_eq!(sink_inspect.data[1].data, 3i32);
+        assert_eq!(data_len, 2);
+    }
+    #[test]
+    fn node_epoch_no_continue() {
+        let (node_ref, sink) = node_test_setup();
+        node_ref.tell(element(11, 1, "sender1"), &node_ref); // not blocked
+        node_ref.tell(epoch(1, "sender1"), &node_ref); // sender1 blocked
+        node_ref.tell(element(12, 1, "sender1"), &node_ref); // blocked
+        node_ref.tell(element(21, 1, "sender2"), &node_ref); // not blocked
+        node_ref.tell(epoch(2, "sender1"), &node_ref); // blocked
+        node_ref.tell(epoch(1, "sender2"), &node_ref); // sender2 blocked
+        node_ref.tell(epoch(2, "sender2"), &node_ref); // blocked
+        node_ref.tell(element(23, 1, "sender2"), &node_ref); // blocked
+        node_ref.tell(element(31, 1, "sender3"), &node_ref); // not blocked
+
+        wait(1);
+        let sink_inspect = sink.definition().lock().unwrap();
+
+        let data_len = sink_inspect.data.len();
+        let watermark_len = sink_inspect.watermarks.len();
+        let epoch_len = sink_inspect.epochs.len();
+        assert_eq!(epoch_len, 0); // no epochs should've completed
+        assert_eq!(sink_inspect.data[0].data, 11i32);
+        assert_eq!(sink_inspect.data[1].data, 21i32);
+        assert_eq!(sink_inspect.data[2].data, 31i32);
+        assert_eq!(data_len, 3);
+    }
+    #[test]
+    fn node_epoch_continue() {
+        // Same test as previous but we finnish it by sending the required epochs
+        let (node_ref, sink) = node_test_setup();
+        node_ref.tell(element(11, 1, "sender1"), &node_ref); // not blocked
+        node_ref.tell(epoch(1, "sender1"), &node_ref); // sender1 blocked
+        node_ref.tell(element(12, 1, "sender1"), &node_ref); // blocked
+        node_ref.tell(element(21, 1, "sender2"), &node_ref); // not blocked
+        node_ref.tell(epoch(2, "sender1"), &node_ref); // blocked
+        node_ref.tell(element(13, 1, "sender1"), &node_ref); // blocked
+        node_ref.tell(epoch(1, "sender2"), &node_ref); // sender2 blocked
+        node_ref.tell(epoch(2, "sender2"), &node_ref); // blocked
+        node_ref.tell(element(22, 1, "sender2"), &node_ref); // blocked
+        node_ref.tell(element(31, 1, "sender3"), &node_ref); // not blocked
+        // Unblock our epochs: 
+        node_ref.tell(epoch(1, "sender3"), &node_ref);
+        node_ref.tell(epoch(2, "sender3"), &node_ref);
+        // All the elements should now have been delivered in specific order
+
+        wait(1);
+        let sink_inspect = sink.definition().lock().unwrap();
+
+        let data_len = sink_inspect.data.len();
+        let watermark_len = sink_inspect.watermarks.len();
+        let epoch_len = sink_inspect.epochs.len();
+        assert_eq!(epoch_len, 2); // 3 epochs should've completed
+        assert_eq!(sink_inspect.data[0].data, 11i32);
+        assert_eq!(sink_inspect.data[1].data, 21i32);
+        assert_eq!(sink_inspect.data[2].data, 31i32);
+        assert_eq!(sink_inspect.data[3].data, 12i32); // First message in epoch1
+        assert_eq!(sink_inspect.data[4].data, 13i32); // First message in epoch2
+        assert_eq!(sink_inspect.data[5].data, 22i32); // 2nd message in epoch2
+        assert_eq!(data_len, 6);
+    }
 }
 

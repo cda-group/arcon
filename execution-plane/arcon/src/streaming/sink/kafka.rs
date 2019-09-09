@@ -12,7 +12,7 @@ use futures::{Future, Complete};
     KafkaSink:
         Will subscribe
 */
-#[derive(ComponentDefinition)]
+//#[derive(ComponentDefinition)]
 pub struct KafkaSink<IN>
 where
     IN: 'static + ArconType,
@@ -59,6 +59,7 @@ where
             }
         }
     }
+    /*
     pub fn handle_event(&mut self, event: ArconEvent<IN>) -> () {
         match event {
             ArconEvent::Element(e) => {
@@ -71,7 +72,7 @@ where
         }
         // Todo: strategy for commits
         self.commit_buffer();
-    }
+    }*/
 
     pub fn commit_buffer(&mut self) -> () {
         // Will asynchronously try to write all messages in the buffer
@@ -99,6 +100,22 @@ where
     }
 }
 
+impl<IN> Task<IN, IN> for KafkaSink<IN>
+where
+    IN: 'static + ArconType,
+{
+    fn handle_element(&mut self, element: ArconElement<IN>) -> ArconResult<Vec<ArconEvent<IN>>> {
+        self.buffer.push(element);
+    }
+    fn handle_watermark(&mut self, _w: Watermark) -> ArconResult<Vec<ArconEvent<IN>>> {
+        Ok(Vec::new())
+    }
+    fn handle_epoch(&mut self, epoch: Epoch) -> ArconResult<Vec<u8>> {
+        self.commit_buffer();
+        Ok(Vec::new())
+    }
+}
+
 impl<IN> Provide<ControlPort> for KafkaSink<IN>
 where
     IN: 'static + ArconType,
@@ -114,7 +131,7 @@ where
         }
     }
 }
-
+/*
 impl<IN> Actor for KafkaSink<IN>
 where
     IN: 'static + ArconType,
@@ -127,11 +144,12 @@ where
     fn receive_message(&mut self, _sender: ActorPath, _ser_id: u64, _buf: &mut Buf) {
     }
 }
-
+*/
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::{thread, time};
+    use streaming::channel::strategy::Mute;
     #[arcon]
     struct Thing {
         id: u32,
@@ -148,18 +166,25 @@ mod tests {
     fn kafka_sink() -> Result<()> { 
         let system = KompactConfig::default().build().expect("KompactSystem");
 
-        let kafka_source: KafkaSink<Thing> = KafkaSink::new(
+        let kafka_sink: KafkaSink<Thing> = KafkaSink::new(
             "localhost:9092".to_string(), 
             "test".to_string(),
             0,
         );
-        let (source, _) = system.create_and_register(move || kafka_source);
+        let (sink, _) = system.create_and_register(move || {
+            Node::<Thing, Thing>::new(
+                "node1".to_string(),
+                vec!("test".to_string()),
+                Mute::new(),
+                Box::new(kafka_sink)
+            )
+        });
 
-        system.start(&source);
+        system.start(&sink);
         let thing_a = Thing{id: 0, attribute: 100, location: Point{x: 0.52, y: 113.3233}};
         let thing_b = Thing{id: 1, attribute: 101, location: Point{x: -0.52, y: 15.0}};
-        source.actor_ref().tell(Box::new(ArconEvent::Element(ArconElement::new(thing_a))), &system);
-        source.actor_ref().tell(Box::new(ArconEvent::Element(ArconElement::new(thing_b))), &system);
+        source.actor_ref().tell(Box::new(ArconMessage::element((thing_a), "test".to_string())), &system);
+        source.actor_ref().tell(Box::new(ArconMessage::element((thing_b), "test".to_string())), &system);
         thread::sleep(time::Duration::from_secs(10));
         Ok(())
     }

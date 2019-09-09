@@ -8,6 +8,7 @@ pub mod forward;
 pub mod key_by;
 pub mod round_robin;
 pub mod shuffle;
+pub mod mute;
 
 /// `ChannelStrategy` is used to output events to one or more channels
 ///
