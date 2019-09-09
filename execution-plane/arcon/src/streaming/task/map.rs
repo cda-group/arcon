@@ -58,6 +58,9 @@ where
     fn handle_watermark(&mut self, _w: Watermark) -> ArconResult<Vec<ArconEvent<OUT>>> {
         Ok(Vec::new())
     }
+    fn handle_epoch(&mut self, epoch: Epoch) -> ArconResult<Vec<u8>> {
+        Ok(Vec::new())
+    }
 }
 
 #[cfg(test)]

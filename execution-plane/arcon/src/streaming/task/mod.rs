@@ -41,4 +41,5 @@ pub trait Task<IN, OUT>
 {
     fn handle_element(&mut self, element: ArconElement<IN>) -> ArconResult<Vec<ArconEvent<OUT>>>;
     fn handle_watermark(&mut self, watermark: Watermark) -> ArconResult<Vec<ArconEvent<OUT>>>;
+    fn handle_epoch(&mut self, epoch: Epoch) -> ArconResult<Vec<u8>>;
 }

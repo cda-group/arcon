@@ -199,6 +199,9 @@ where
         }
         Ok(result)
     }
+    fn handle_epoch(&mut self, epoch: Epoch) -> ArconResult<Vec<u8>> {
+        Ok(Vec::new())
+    }
 }
 
 #[cfg(test)]
