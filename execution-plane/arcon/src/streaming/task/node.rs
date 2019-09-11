@@ -1,18 +1,17 @@
 use crate::prelude::*;
+use std::collections::BTreeMap;
 use std::collections::HashSet; // Blocked-list
 use std::collections::LinkedList; // Message buffer
-use std::mem;
-use arcon_backend::in_memory::InMemory;
-use arcon_backend::StateBackend;
-use std::collections::BTreeMap; // Watermark-list
+use std::mem; // Watermark-list
+
 /*
-    Node: contains Task which executes actions
+  Node: contains Task which executes actions
 */
 #[derive(ComponentDefinition)]
 pub struct Node<IN, OUT>
-    where
-        IN: 'static + ArconType,
-        OUT: 'static + ArconType,
+where
+    IN: 'static + ArconType,
+    OUT: 'static + ArconType,
 {
     ctx: ComponentContext<Node<IN, OUT>>,
     id: String,
@@ -24,13 +23,12 @@ pub struct Node<IN, OUT>
     current_epoch: u64,
     blocked_channels: HashSet<String>,
     message_buffer: LinkedList<ArconMessage<IN>>,
-    state_backend: Box<StateBackend>,
 }
 
 impl<IN, OUT> Node<IN, OUT>
-    where
-        IN: 'static + ArconType,
-        OUT: 'static + ArconType,
+where
+    IN: 'static + ArconType,
+    OUT: 'static + ArconType,
 {
     pub fn new(
         id: String,
@@ -41,12 +39,11 @@ impl<IN, OUT> Node<IN, OUT>
         // Initiate our watermarks
         let mut watermarks = BTreeMap::new();
         for channel in &in_channels {
-            watermarks.insert(channel.clone(), Watermark{timestamp: 0});
+            watermarks.insert(channel.clone(), Watermark { timestamp: 0 });
         }
 
         Node {
             ctx: ComponentContext::new(),
-            state_backend: Box::new(InMemory::create(&id)),
             id,
             out_channels,
             in_channels,
@@ -80,29 +77,35 @@ impl<IN, OUT> Node<IN, OUT>
             ArconEvent::Watermark(w) => {
                 // Insert the watermark and try early return
                 if let Some(old) = self.watermarks.insert(message.sender.clone(), w) {
-                    if old.timestamp > self.current_watermark {return Ok(())} 
+                    if old.timestamp > self.current_watermark {
+                        return Ok(());
+                    }
                 }
                 // A different early return
-                if w.timestamp <= self.current_watermark {return Ok(())}
+                if w.timestamp <= self.current_watermark {
+                    return Ok(());
+                }
 
                 // Let new_watermark take the value of the lowest watermark
                 let mut new_watermark = w;
                 for some_watermark in self.watermarks.values() {
-                    if some_watermark.timestamp < new_watermark.timestamp { new_watermark = *some_watermark; }
+                    if some_watermark.timestamp < new_watermark.timestamp {
+                        new_watermark = *some_watermark;
+                    }
                 }
 
                 // Finally, handle the watermark:
                 if new_watermark.timestamp > self.current_watermark {
                     // Update the stored watermark
                     self.current_watermark = new_watermark.timestamp;
-                    
+
                     // Handle the watermark
                     for result in self.task.handle_watermark(new_watermark)? {
                         self.output_event(result)?;
                     }
-                    
+
                     // Forward the watermark
-                    self.output_event(ArconEvent::Watermark(new_watermark))?; 
+                    self.output_event(ArconEvent::Watermark(new_watermark))?;
                 }
             }
             ArconEvent::Epoch(e) => {
@@ -115,10 +118,10 @@ impl<IN, OUT> Node<IN, OUT>
                     self.current_epoch = e.epoch;
 
                     // call handle_epoch on our task
-                    let task_state = self.task.handle_epoch(e)?;
+                    let _task_state = self.task.handle_epoch(e)?;
 
                     // store the state
-                    self.state_backend.put(b"task", &task_state);
+                    self.save_state()?;
 
                     // forward the epoch
                     self.output_event(ArconEvent::Epoch(e))?;
@@ -134,34 +137,35 @@ impl<IN, OUT> Node<IN, OUT>
                         mem::swap(&mut message_buffer, &mut self.message_buffer);
                         // Iterate over the message-buffer until empty
                         while let Some(message) = message_buffer.pop_front() {
-                            self.handle_message(message);
+                            self.handle_message(message)?;
                         }
                     }
-                } 
+                }
             }
         }
         Ok(())
     }
     fn output_event(&mut self, event: ArconEvent<OUT>) -> ArconResult<()> {
-        let message = ArconMessage{event: event, sender: self.id.clone()};
+        let message = ArconMessage {
+            event: event,
+            sender: self.id.clone(),
+        };
         self.out_channels.output(message, &self.ctx.system())
     }
     fn save_state(&mut self) -> ArconResult<()> {
-        let epoch = &self.current_epoch;
-
+        // todo
         Ok(())
     }
 }
 
 impl<IN, OUT> Provide<ControlPort> for Node<IN, OUT>
-    where
-        IN: 'static + ArconType,
-        OUT: 'static + ArconType,
+where
+    IN: 'static + ArconType,
+    OUT: 'static + ArconType,
 {
     fn handle(&mut self, event: ControlEvent) -> () {
         match event {
-            ControlEvent::Start => {
-            }
+            ControlEvent::Start => {}
             _ => {
                 error!(self.ctx.log(), "bad ControlEvent");
             }
@@ -170,9 +174,9 @@ impl<IN, OUT> Provide<ControlPort> for Node<IN, OUT>
 }
 
 impl<IN, OUT> Actor for Node<IN, OUT>
-    where
-        IN: 'static + ArconType,
-        OUT: 'static + ArconType,
+where
+    IN: 'static + ArconType,
+    OUT: 'static + ArconType,
 {
     fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
         if let Some(message) = msg.downcast_ref::<ArconMessage<IN>>() {
@@ -204,17 +208,18 @@ impl<IN, OUT> Actor for Node<IN, OUT>
 }
 
 unsafe impl<IN, OUT> Send for Node<IN, OUT>
-    where
-        IN: 'static + ArconType,
-        OUT: 'static + ArconType,
-{}
+where
+    IN: 'static + ArconType,
+    OUT: 'static + ArconType,
+{
+}
 
 unsafe impl<IN, OUT> Sync for Node<IN, OUT>
-    where
-        IN: 'static + ArconType,
-        OUT: 'static + ArconType,
-{}
-
+where
+    IN: 'static + ArconType,
+    OUT: 'static + ArconType,
+{
+}
 
 #[cfg(test)]
 mod tests {
@@ -239,12 +244,16 @@ mod tests {
         let filter_node = system.create_and_start(move || {
             Node::<i32, i32>::new(
                 "node1".to_string(),
-                vec!("sender1".to_string(), "sender2".to_string(), "sender3".to_string()),
+                vec![
+                    "sender1".to_string(),
+                    "sender2".to_string(),
+                    "sender3".to_string(),
+                ],
                 channel_strategy,
-                Box::new(Filter::<i32>::new(module))
+                Box::new(Filter::<i32>::new(module)),
             )
         });
-        
+
         return (filter_node.actor_ref(), sink);
     }
     fn watermark(time: u64, sender: &str) -> Box<ArconMessage<i32>> {
@@ -301,7 +310,6 @@ mod tests {
         wait(1);
         let sink_inspect = sink.definition().lock().unwrap();
 
-        let data_len = sink_inspect.data.len();
         let watermark_len = sink_inspect.watermarks.len();
         assert_eq!(watermark_len, 1);
         assert_eq!(sink_inspect.watermarks[0].timestamp, 2u64);
@@ -312,7 +320,7 @@ mod tests {
         node_ref.tell(element(1, 1, "sender1"), &node_ref);
         node_ref.tell(epoch(3, "sender1"), &node_ref);
         // should be blocked:
-        node_ref.tell(element(2, 1, "sender1"), &node_ref); 
+        node_ref.tell(element(2, 1, "sender1"), &node_ref);
         // should not be blocked
         node_ref.tell(element(3, 1, "sender2"), &node_ref);
 
@@ -320,7 +328,6 @@ mod tests {
         let sink_inspect = sink.definition().lock().unwrap();
 
         let data_len = sink_inspect.data.len();
-        let watermark_len = sink_inspect.watermarks.len();
         let epoch_len = sink_inspect.epochs.len();
         assert_eq!(epoch_len, 0);
         assert_eq!(sink_inspect.data[0].data, 1i32);
@@ -344,7 +351,6 @@ mod tests {
         let sink_inspect = sink.definition().lock().unwrap();
 
         let data_len = sink_inspect.data.len();
-        let watermark_len = sink_inspect.watermarks.len();
         let epoch_len = sink_inspect.epochs.len();
         assert_eq!(epoch_len, 0); // no epochs should've completed
         assert_eq!(sink_inspect.data[0].data, 11i32);
@@ -366,8 +372,7 @@ mod tests {
         node_ref.tell(epoch(2, "sender2"), &node_ref); // blocked
         node_ref.tell(element(22, 1, "sender2"), &node_ref); // blocked
         node_ref.tell(element(31, 1, "sender3"), &node_ref); // not blocked
-        // Unblock our epochs: 
-        node_ref.tell(epoch(1, "sender3"), &node_ref);
+        node_ref.tell(epoch(1, "sender3"), &node_ref); // Complete our epochs
         node_ref.tell(epoch(2, "sender3"), &node_ref);
         // All the elements should now have been delivered in specific order
 
@@ -375,7 +380,6 @@ mod tests {
         let sink_inspect = sink.definition().lock().unwrap();
 
         let data_len = sink_inspect.data.len();
-        let watermark_len = sink_inspect.watermarks.len();
         let epoch_len = sink_inspect.epochs.len();
         assert_eq!(epoch_len, 2); // 3 epochs should've completed
         assert_eq!(sink_inspect.data[0].data, 11i32);
@@ -387,4 +391,3 @@ mod tests {
         assert_eq!(data_len, 6);
     }
 }
-

@@ -31,7 +31,9 @@ pub mod prelude {
     };
 
     pub use crate::streaming::channel::Channel;
-    pub use crate::streaming::task::{Task, TaskMetric, node::Node, filter::Filter, flatmap::FlatMap, map::Map};
+    pub use crate::streaming::task::{
+        filter::Filter, flatmap::FlatMap, map::Map, node::Node, Task, TaskMetric,
+    };
     pub use crate::streaming::window::{
         builder::WindowBuilder, builder::WindowFn, builder::WindowModules,
         event_time::EventTimeWindowAssigner,
@@ -46,10 +48,10 @@ pub mod prelude {
         debug::DebugSink, local_file::LocalFileSink, socket::SocketSink,
     };
 
-    pub use error::ArconResult;
     pub use crate::data::Watermark;
     pub use crate::data::*;
     pub use crate::weld::module::{Module, ModuleRun};
+    pub use error::ArconResult;
     pub use weld_core::data::*;
 
     pub use kompact::default_components::*;

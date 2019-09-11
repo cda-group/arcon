@@ -1,6 +1,6 @@
-use crate::streaming::channel::strategy::channel_output;
 use crate::data::{ArconEvent, ArconType};
 use crate::prelude::*;
+use crate::streaming::channel::strategy::channel_output;
 use fnv::FnvHasher;
 use kompact::KompactSystem;
 use std::collections::HashMap;

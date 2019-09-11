@@ -1,6 +1,6 @@
 use crate::data::ArconEvent;
-use crate::prelude::*;
 use crate::messages::protobuf::ProtoSer;
+use crate::prelude::*;
 
 #[derive(ComponentDefinition)]
 pub struct DebugSink<A>

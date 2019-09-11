@@ -1,7 +1,7 @@
-use arcon_error::ArconResult;
-use crate::data::{ArconType, ArconMessage};
+use crate::data::{ArconMessage, ArconType};
 use crate::streaming::channel::strategy::{channel_output, ChannelStrategy};
 use crate::streaming::channel::Channel;
+use arcon_error::ArconResult;
 use kompact::KompactSystem;
 use std::marker::PhantomData;
 
@@ -46,9 +46,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::streaming::sink::debug::DebugSink;
     use super::*;
     use crate::streaming::channel::strategy::tests::*;
+    use crate::streaming::sink::debug::DebugSink;
     use kompact::default_components::*;
     use kompact::*;
     use std::sync::Arc;
@@ -73,7 +73,7 @@ mod tests {
         let mut channel_strategy: Box<ChannelStrategy<Input>> = Box::new(Broadcast::new(channels));
 
         for _i in 0..total_msgs {
-            let input = ArconMessage::element(Input{id:1}, None, "test".to_string());
+            let input = ArconMessage::element(Input { id: 1 }, None, "test".to_string());
             // Just assume it is all sent from same comp
             let _ = channel_strategy.output(input, &system);
         }
@@ -132,7 +132,7 @@ mod tests {
         let mut channel_strategy: Box<ChannelStrategy<Input>> = Box::new(Broadcast::new(channels));
 
         for _i in 0..total_msgs {
-            let input = ArconMessage::element(Input{id:1}, None, "test".to_string());
+            let input = ArconMessage::element(Input { id: 1 }, None, "test".to_string());
             // Just assume it is all sent from same comp
             let _ = channel_strategy.output(input, &system);
         }

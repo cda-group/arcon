@@ -1,8 +1,8 @@
-use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
-use std::collections::HashMap;
+use crate::prelude::*;
 use crate::util::event_timer::EventTimer;
 use std::collections::hash_map::DefaultHasher;
-use crate::prelude::*;
+use std::collections::HashMap;
+use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
 use std::sync::Arc;
 
 /*
@@ -30,7 +30,7 @@ where
     window_start: HashMap<u64, u64>,
     window_maps: HashMap<u64, HashMap<u64, WindowBuilder<IN, FUNC, OUT>>>,
     window_modules: WindowModules,
-    timer: Box<EventTimer<(u64, u64, u64)>>,  // Stores key, "index" and timestamp
+    timer: Box<EventTimer<(u64, u64, u64)>>, // Stores key, "index" and timestamp
     hasher: BuildHasherDefault<DefaultHasher>,
     keyed: bool,
 }
@@ -92,7 +92,8 @@ where
         let ts = w_start + (index * self.window_slide) + self.window_length;
 
         // Put the window identifier in the timer.
-        self.timer.schedule_at(ts + self.late_arrival_time, (key, index, ts));
+        self.timer
+            .schedule_at(ts + self.late_arrival_time, (key, index, ts));
     }
     // Extracts the key from ArconElements
     fn get_key(&mut self, e: ArconElement<IN>) -> u64 {
@@ -103,7 +104,6 @@ where
         e.data.hash(&mut h);
         return h.finish();
     }
-
 }
 
 impl<IN, OUT, FUNC> Task<IN, OUT> for EventTimeWindowAssigner<IN, FUNC, OUT>
@@ -175,7 +175,7 @@ where
             // Early return
             return Ok(Vec::new());
         }
-        let ts = w.timestamp;        
+        let ts = w.timestamp;
 
         // timer returns a set of (key, index, timestamp) identifying what windows to close
         let windows = self.timer.advance_to(ts);
@@ -183,23 +183,19 @@ where
         for (key, index, timestamp) in windows {
             if let Some(w_map) = self.window_maps.get_mut(&key) {
                 match w_map.remove(&index) {
-                    Some(mut window) => {
-                        match window.result() {
-                            Ok(e) => {
-                                result.push(ArconEvent::Element(
-                                    ArconElement::with_timestamp(e, timestamp)
-                                ))
-                            }
-                            _ => {}
-                        }
-                    }
+                    Some(mut window) => match window.result() {
+                        Ok(e) => result.push(ArconEvent::Element(ArconElement::with_timestamp(
+                            e, timestamp,
+                        ))),
+                        _ => {}
+                    },
                     None => {}
                 }
             }
         }
         Ok(result)
     }
-    fn handle_epoch(&mut self, epoch: Epoch) -> ArconResult<Vec<u8>> {
+    fn handle_epoch(&mut self, _epoch: Epoch) -> ArconResult<Vec<u8>> {
         Ok(Vec::new())
     }
 }
@@ -240,7 +236,6 @@ mod tests {
         let builder_code = String::from("|| appender[u32]");
         let udf_code = String::from("|x: {u64, u32}, y: appender[u32]| merge(y, x.$1)");
         let udf_result = String::from("|y: appender[u32]| len(result(y))");
-        
 
         let window_assigner = EventTimeWindowAssigner::<Item, Appender<u32>, WindowOutput>::new(
             builder_code,
@@ -255,9 +250,9 @@ mod tests {
         let window_node = system.create_and_start(move || {
             Node::<Item, WindowOutput>::new(
                 "node1".to_string(),
-                vec!("test".to_string()),
+                vec!["test".to_string()],
                 channel_strategy,
-                Box::new(window_assigner)
+                Box::new(window_assigner),
             )
         });
 
@@ -279,10 +274,18 @@ mod tests {
         ArconMessage::watermark(time, "test".to_string())
     }
     fn timestamped_event(ts: u64) -> Box<ArconMessage<Item>> {
-        Box::new(ArconMessage::element(Item{id:1, price: 1}, Some(ts), "test".to_string()))
+        Box::new(ArconMessage::element(
+            Item { id: 1, price: 1 },
+            Some(ts),
+            "test".to_string(),
+        ))
     }
     fn timestamped_keyed_event(ts: u64, id: u64) -> Box<ArconMessage<Item>> {
-        Box::new(ArconMessage::element(Item{id, price: 1}, Some(ts), "test".to_string()))
+        Box::new(ArconMessage::element(
+            Item { id, price: 1 },
+            Some(ts),
+            "test".to_string(),
+        ))
     }
     #[key_by(id)]
     #[arcon]

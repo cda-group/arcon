@@ -88,7 +88,7 @@ mod tests {
         let file_path = file.path().to_string_lossy().into_owned();
 
         let sink_comp = system.create_and_start(move || {
-            let sink: LocalFileSink<i32> = LocalFileSink::new(&file_path, vec!("test".to_string()));
+            let sink: LocalFileSink<i32> = LocalFileSink::new(&file_path, vec!["test".to_string()]);
             sink
         });
 

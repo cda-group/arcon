@@ -31,24 +31,21 @@ pub struct ArconMessage<A: 'static + ArconType> {
 // Convenience methods, "message factories"
 impl<A: 'static + ArconType> ArconMessage<A> {
     pub fn watermark(timestamp: u64, sender: String) -> ArconMessage<A> {
-        ArconMessage{
-            event: ArconEvent::<A>::Watermark(Watermark{timestamp}),
+        ArconMessage {
+            event: ArconEvent::<A>::Watermark(Watermark { timestamp }),
             sender,
         }
     }
     pub fn epoch(epoch: u64, sender: String) -> ArconMessage<A> {
-        ArconMessage{
-            event: ArconEvent::<A>::Epoch(Epoch{epoch}),
+        ArconMessage {
+            event: ArconEvent::<A>::Epoch(Epoch { epoch }),
             sender,
         }
     }
     pub fn element(data: A, timestamp: Option<u64>, sender: String) -> ArconMessage<A> {
-        ArconMessage{
-            event: ArconEvent::Element(ArconElement{
-                data,
-                timestamp
-            }),
-            sender
+        ArconMessage {
+            event: ArconEvent::Element(ArconElement { data, timestamp }),
+            sender,
         }
     }
 }
@@ -116,7 +113,11 @@ impl<A: 'static + ArconType> ArconMessage<A> {
                 let data: A = bincode::deserialize(e.get_data()).map_err(|e| {
                     arcon_err_kind!("Failed to deserialise event with err {}", e.to_string())
                 })?;
-                Ok(ArconMessage::<A>::element(data, Some(e.get_timestamp()), sender))
+                Ok(ArconMessage::<A>::element(
+                    data,
+                    Some(e.get_timestamp()),
+                    sender,
+                ))
             }
             watermark(w) => Ok(ArconMessage::watermark(w.timestamp, sender)),
             checkpoint(c) => Ok(ArconMessage::epoch(c.epoch, sender)),

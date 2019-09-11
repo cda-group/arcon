@@ -58,9 +58,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::streaming::sink::debug::DebugSink;
     use super::*;
     use crate::streaming::channel::strategy::tests::*;
+    use crate::streaming::sink::debug::DebugSink;
     use kompact::*;
     use std::sync::Arc;
 
@@ -85,7 +85,7 @@ mod tests {
         let mut channel_strategy: Box<ChannelStrategy<Input>> = Box::new(Shuffle::new(channels));
 
         for _i in 0..total_msgs {
-            let input = ArconMessage::element(Input{id:1}, None, "test".to_string());
+            let input = ArconMessage::element(Input { id: 1 }, None, "test".to_string());
             // Just assume it is all sent from same comp
             let _ = channel_strategy.output(input, &system);
         }

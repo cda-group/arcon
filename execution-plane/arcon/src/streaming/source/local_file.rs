@@ -1,4 +1,4 @@
-use crate::data::{ArconType, ArconMessage};
+use crate::data::{ArconMessage, ArconType};
 use crate::streaming::channel::strategy::ChannelStrategy;
 use kompact::*;
 use std::fs::File;
@@ -24,7 +24,12 @@ pub struct LocalFileSource<A: 'static + ArconType + FromStr> {
 }
 
 impl<A: ArconType + FromStr> LocalFileSource<A> {
-    pub fn new(file_path: String, strategy: Box<ChannelStrategy<A>>, watermark_interval: u64, id: String) -> LocalFileSource<A> {
+    pub fn new(
+        file_path: String,
+        strategy: Box<ChannelStrategy<A>>,
+        watermark_interval: u64,
+        id: String,
+    ) -> LocalFileSource<A> {
         LocalFileSource {
             ctx: ComponentContext::new(),
             channel_strategy: strategy,
@@ -45,16 +50,26 @@ impl<A: ArconType + FromStr> LocalFileSource<A> {
                             match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
                                 Ok(ts) => {
                                     if let Err(err) = self.channel_strategy.output(
-                                        ArconMessage::element(v, Some(ts.as_secs()), self.id.clone()),
+                                        ArconMessage::element(
+                                            v,
+                                            Some(ts.as_secs()),
+                                            self.id.clone(),
+                                        ),
                                         &self.ctx.system(),
                                     ) {
-                                        error!(self.ctx.log(), "Unable to output event, error {}", err);
+                                        error!(
+                                            self.ctx.log(),
+                                            "Unable to output event, error {}", err
+                                        );
                                     } else {
                                         counter += 1;
                                         if counter == self.watermark_interval {
                                             let _ = self.channel_strategy.output(
-                                                ArconMessage::watermark(ts.as_secs(), self.id.clone()),
-                                                &self.ctx.system()
+                                                ArconMessage::watermark(
+                                                    ts.as_secs(),
+                                                    self.id.clone(),
+                                                ),
+                                                &self.ctx.system(),
                                             );
                                             counter = 0;
                                         }
@@ -93,7 +108,7 @@ impl<A: ArconType + FromStr> LocalFileSource<A> {
             Ok(ts) => {
                 if let Err(err) = self.channel_strategy.output(
                     ArconMessage::watermark(ts.as_secs(), self.id.clone()),
-                    &self.ctx.system()
+                    &self.ctx.system(),
                 ) {
                     error!(self.ctx.log(), "Unable to output watermark, error {}", err);
                 }
@@ -168,8 +183,12 @@ mod tests {
         let channel = Channel::Local(sink.actor_ref());
         let channel_strategy = Box::new(Forward::new(channel));
 
-        let file_source: LocalFileSource<u64> =
-            LocalFileSource::new(String::from(&file_path), channel_strategy, 5, "node1".to_string());
+        let file_source: LocalFileSource<u64> = LocalFileSource::new(
+            String::from(&file_path),
+            channel_strategy,
+            5,
+            "node1".to_string(),
+        );
         let (source, _) = system.create_and_register(move || file_source);
         system.start(&source);
         wait(1);
@@ -192,8 +211,12 @@ mod tests {
         let channel = Channel::Local(sink.actor_ref());
         let channel_strategy = Box::new(Forward::new(channel));
 
-        let file_source: LocalFileSource<u64> =
-            LocalFileSource::new(String::from(&file_path), channel_strategy, 5, "node1".to_string());
+        let file_source: LocalFileSource<u64> = LocalFileSource::new(
+            String::from(&file_path),
+            channel_strategy,
+            5,
+            "node1".to_string(),
+        );
         let (source, _) = system.create_and_register(move || file_source);
         system.start(&source);
         wait(1);
@@ -213,8 +236,12 @@ mod tests {
         let channel = Channel::Local(sink.actor_ref());
         let channel_strategy = Box::new(Forward::new(channel));
 
-        let file_source: LocalFileSource<f32> =
-            LocalFileSource::new(String::from(&file_path), channel_strategy, 5, "node1".to_string());
+        let file_source: LocalFileSource<f32> = LocalFileSource::new(
+            String::from(&file_path),
+            channel_strategy,
+            5,
+            "node1".to_string(),
+        );
         let (source, _) = system.create_and_register(move || file_source);
         system.start(&source);
         wait(1);
@@ -236,8 +263,12 @@ mod tests {
         let channel = Channel::Local(sink.actor_ref());
         let channel_strategy = Box::new(Forward::new(channel));
 
-        let file_source: LocalFileSource<f32> =
-            LocalFileSource::new(String::from(&file_path), channel_strategy, 5, "node1".to_string());
+        let file_source: LocalFileSource<f32> = LocalFileSource::new(
+            String::from(&file_path),
+            channel_strategy,
+            5,
+            "node1".to_string(),
+        );
         let (source, _) = system.create_and_register(move || file_source);
         system.start(&source);
         wait(1);

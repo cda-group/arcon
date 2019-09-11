@@ -1,7 +1,7 @@
-use std::marker::PhantomData;
 use crate::prelude::*;
-use weld::WeldContext;
+use std::marker::PhantomData;
 use std::sync::Arc;
+use weld::WeldContext;
 
 pub struct Filter<IN>
 where
@@ -17,9 +17,7 @@ impl<IN> Filter<IN>
 where
     IN: 'static + ArconType,
 {
-    pub fn new(
-        udf: Arc<Module>,
-    ) -> Self {
+    pub fn new(udf: Arc<Module>) -> Self {
         let ctx = WeldContext::new(&udf.conf()).unwrap();
         Filter {
             udf: udf.clone(),
@@ -48,12 +46,12 @@ where
     fn handle_element(&mut self, element: ArconElement<IN>) -> ArconResult<Vec<ArconEvent<IN>>> {
         let result = self.run_udf(&(element.data))?;
         if result == 1 {
-            return Ok(vec!(ArconEvent::Element(element)));
+            return Ok(vec![ArconEvent::Element(element)]);
         } else {
             Ok(Vec::new())
         }
     }
-    fn handle_epoch(&mut self, epoch: Epoch) -> ArconResult<Vec<u8>> {
+    fn handle_epoch(&mut self, _epoch: Epoch) -> ArconResult<Vec<u8>> {
         Ok(Vec::new())
     }
 }
@@ -63,7 +61,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn filter_unit_test() { 
+    fn filter_unit_test() {
         let weld_code = String::from("|x: i32| x > 5");
         let module = Arc::new(Module::new(weld_code).unwrap());
         let mut filter = Filter::<i32>::new(module);
@@ -109,9 +107,9 @@ mod tests {
         let filter_task = system.create_and_start(move || {
             Node::<i32, i32>::new(
                 "node1".to_string(),
-                vec!("test".to_string()),
+                vec!["test".to_string()],
                 channel_strategy,
-                Box::new(Filter::<i32>::new(module))
+                Box::new(Filter::<i32>::new(module)),
             )
         });
 
@@ -127,6 +125,5 @@ mod tests {
         assert_eq!(comp_inspect.data[0].data, 6);
         assert_eq!(comp_inspect.data.len(), 1);
         let _ = system.shutdown();
-        
     }
 }
