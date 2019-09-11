@@ -1,17 +1,14 @@
 use crate::prelude::*;
 use futures::Future;
-//use kompact::*;
 use rdkafka::config::ClientConfig;
 use rdkafka::error::KafkaResult;
 use rdkafka::message::*;
 use rdkafka::producer::{FutureProducer, FutureRecord};
-//use serde::Deserialize;
 
 /*
     KafkaSink: Buffers received elements
     Writes and commits buffers on epoch
 */
-//#[derive(ComponentDefinition)]
 #[allow(dead_code)]
 pub struct KafkaSink<IN>
 where
