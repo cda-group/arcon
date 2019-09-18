@@ -93,7 +93,6 @@ mod tests {
         assert_eq!(results, expected);
     }
 
-    /*
     #[test]
     fn map_integration_test() {
         let system = KompactConfig::default().build().expect("KompactSystem");
@@ -125,10 +124,11 @@ mod tests {
         target_ref.tell(input_two);
 
         std::thread::sleep(std::time::Duration::from_secs(3));
-        let comp_inspect = &sink_comp.definition().lock().unwrap();
-        assert_eq!(comp_inspect.data[0].data, 16);
-        assert_eq!(comp_inspect.data[1].data, 17);
+        {
+            let comp_inspect = &sink_comp.definition().lock().unwrap();
+            assert_eq!(comp_inspect.data[0].data, 16);
+            assert_eq!(comp_inspect.data[1].data, 17);
+        }
         let _ = system.shutdown();
     }
-    */
 }

@@ -120,9 +120,11 @@ mod tests {
         target_ref.tell(input_two);
 
         std::thread::sleep(std::time::Duration::from_secs(1));
-        let comp_inspect = &sink_comp.definition().lock().unwrap();
-        assert_eq!(comp_inspect.data[0].data, 6);
-        assert_eq!(comp_inspect.data.len(), 1);
+        {
+            let comp_inspect = &sink_comp.definition().lock().unwrap();
+            assert_eq!(comp_inspect.data[0].data, 6);
+            assert_eq!(comp_inspect.data.len(), 1);
+        }
         let _ = system.shutdown();
         
     }

@@ -96,7 +96,6 @@ mod tests {
         assert_eq!(result_vec, expected);
     }
 
-    /*
     #[test]
     fn flatmap_integration_test() {
         let system = KompactConfig::default().build().expect("KompactSystem");
@@ -128,12 +127,13 @@ mod tests {
         target_ref.tell(ArconMessage::<ArconVec<i32>>::element(arcon_vec, Some(0), "test".to_string()));
 
         std::thread::sleep(std::time::Duration::from_secs(3));
-        let comp_inspect = &sink_comp.definition().lock().unwrap();
-        let expected: Vec<i32> = vec![6, 7, 8, 9, 10];
-        for i in 0..5 {
-            assert_eq!(comp_inspect.data[i].data, expected[i]);
+        {
+            let comp_inspect = &sink_comp.definition().lock().unwrap();
+            let expected: Vec<i32> = vec![6, 7, 8, 9, 10];
+            for i in 0..5 {
+                assert_eq!(comp_inspect.data[i].data, expected[i]);
+            }
         }
         let _ = system.shutdown();
     }
-    */
 }
