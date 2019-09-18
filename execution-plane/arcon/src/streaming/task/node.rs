@@ -82,32 +82,25 @@ impl<IN, OUT> Actor for Node<IN, OUT>
         IN: 'static + ArconType,
         OUT: 'static + ArconType,
 {
-    fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
-        if let Some(message) = msg.downcast_ref::<ArconMessage<IN>>() {
-            if let Err(err) = self.handle_message(&message) {
-                error!(self.ctx.log(), "Failed to handle message: {}", err);
-            }
-        } else {
-            error!(self.ctx.log(), "Unknown message received");
+    type Message = ArconMessage<IN>;
+
+    fn receive_local(&mut self, msg: Self::Message) {
+        if let Err(err) = self.handle_message(&msg) {
+            error!(self.ctx.log(), "Failed to handle message: {}", err);
         }
     }
-    fn receive_message(&mut self, sender: ActorPath, ser_id: u64, buf: &mut Buf) {
-        if ser_id == serialisation_ids::PBUF {
-            let r = ProtoSer::deserialise(buf);
-            if let Ok(msg) = r {
-                if let Ok(message) = ArconMessage::from_remote(msg) {
-                    if let Err(err) = self.handle_message(&message) {
-                        error!(self.ctx.log(), "Failed to handle message: {}", err);
-                    }
-                } else {
-                    error!(self.ctx.log(), "Failed to convert remote message to local");
+    fn receive_network(&mut self, _msg: NetMessage) {
+        unimplemented!();
+        /*
+        match msg.try_deserialise::<ArconMessage<IN>, ProtoSer>() {
+            Ok(node_msg) => {
+                if let Err(err) = self.handle_message(&node_msg) {
+                    error!(self.ctx.log(), "Failed to handle node message: {}", err);
                 }
-            } else {
-                error!(self.ctx.log(), "Failed to deserialise StreamTaskMessage",);
             }
-        } else {
-            error!(self.ctx.log(), "Got unexpected message from {}", sender);
+            Err(e) => error!(self.ctx.log(), "Error deserialising ArconMessage: {:?}", e),
         }
+        */
     }
 }
 

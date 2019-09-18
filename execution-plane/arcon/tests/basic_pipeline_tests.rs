@@ -14,8 +14,7 @@ use tempfile::NamedTempFile;
 /// LocalFileSource -> Filter -> Window -> Map -> LocalFileSink
 #[test]
 fn normalise_pipeline_test() {
-    let cfg = KompactConfig::default();
-    let system = KompactSystem::new(cfg).expect("Failed to create KompactSystem");
+    let system = KompactConfig::default().build().expect("KompactSystem");
 
     // Set up Source File
     let mut source_file = NamedTempFile::new().unwrap();
@@ -33,7 +32,8 @@ fn normalise_pipeline_test() {
     });
 
     // Create Map Task
-    let channel = Channel::Local(node_5.actor_ref());
+    let actor_ref: ActorRef<ArconMessage<i64>> = node_5.actor_ref();
+    let channel = Channel::Local(actor_ref);
     let channel_strategy: Box<ChannelStrategy<i64>> = Box::new(Forward::new(channel));
     let code = String :: from ( "|x: vec[i64]| let m = merger[i64, +]; result(for(x, m, |b: merger[i64, +], i, e| merge(b, e + i64(3))))" ) ;
     let module = std::sync::Arc::new(Module::new(code).unwrap());
@@ -87,7 +87,8 @@ fn normalise_pipeline_test() {
     });
 
     // Define Source
-    let channel = Channel::Local(node_2.actor_ref());
+    let actor_ref: ActorRef<ArconMessage<i64>> = node_2.actor_ref();
+    let channel = Channel::Local(actor_ref);
     let channel_strategy: Box<ChannelStrategy<i64>> = Box::new(Forward::new(channel));
 
     // Watermark per 5 lines in the file 

@@ -95,12 +95,11 @@ impl<A> Actor for SocketSink<A>
 where
     A: ArconType + 'static,
 {
-    fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
-        if let Some(event) = msg.downcast_ref::<ArconEvent<A>>() {
-            self.handle_event(event);
-        }
+    type Message = ArconMessage<A>;
+    fn receive_local(&mut self, msg: Self::Message) {
+        self.handle_event(&msg.event);
     }
-    fn receive_message(&mut self, _sender: ActorPath, _ser_id: u64, _buf: &mut Buf) {
+    fn receive_network(&mut self, _msg: NetMessage) {
         unimplemented!();
     }
 }
@@ -111,8 +110,7 @@ mod tests {
 
     #[test]
     fn udp_sink_test() {
-        let cfg = KompactConfig::new();
-        let system = KompactSystem::new(cfg).expect("KompactSystem");
+        let system = KompactConfig::default().build().expect("KompactSystem");
 
         let addr = "127.0.0.1:9999".parse().unwrap();
         let socket = UdpSocket::bind(&addr).unwrap();
@@ -123,9 +121,9 @@ mod tests {
 
         std::thread::sleep(std::time::Duration::from_millis(100));
 
-        let target = socket_sink.actor_ref();
+        let target: ActorRef<ArconMessage<i64>> = socket_sink.actor_ref();
         let e1 = ArconElement::new(10 as i64);
-        target.tell(Box::new(ArconEvent::Element(e1)), &target);
+        target.tell(ArconMessage::element(10 as i64, None, "test".to_string()));
 
         const MAX_DATAGRAM_SIZE: usize = 65_507;
 

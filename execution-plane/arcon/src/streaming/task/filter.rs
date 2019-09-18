@@ -90,15 +90,15 @@ mod tests {
 
     #[test]
     fn filter_integration_test() {
-        let cfg = KompactConfig::new();
-        let system = KompactSystem::new(cfg).expect("KompactSystem");
+        let system = KompactConfig::default().build().expect("KompactSystem");
 
         let sink_comp = system.create_and_start(move || {
             let sink: DebugSink<i32> = DebugSink::new();
             sink
         });
 
-        let channel = Channel::Local(sink_comp.actor_ref());
+        let actor_ref: ActorRef<ArconMessage<i32>> = sink_comp.actor_ref();
+        let channel = Channel::Local(actor_ref);
         let channel_strategy: Box<ChannelStrategy<i32>> = Box::new(Forward::new(channel));
 
         let weld_code = String::from("|x: i32| x > 5");
@@ -116,8 +116,8 @@ mod tests {
         let input_two = ArconMessage::element(2 as i32, None, "test".to_string());
 
         let target_ref = filter_task.actor_ref();
-        target_ref.tell(Box::new(input_one), &target_ref);
-        target_ref.tell(Box::new(input_two), &target_ref);
+        target_ref.tell(input_one);
+        target_ref.tell(input_two);
 
         std::thread::sleep(std::time::Duration::from_secs(1));
         let comp_inspect = &sink_comp.definition().lock().unwrap();

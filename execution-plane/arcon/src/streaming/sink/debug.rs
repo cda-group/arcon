@@ -1,6 +1,5 @@
 use crate::data::ArconEvent;
 use crate::prelude::*;
-use crate::messages::protobuf::ProtoSer;
 
 #[derive(ComponentDefinition)]
 pub struct DebugSink<A>
@@ -48,12 +47,14 @@ impl<A> Actor for DebugSink<A>
 where
     A: ArconType + 'static,
 {
-    fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
-        if let Some(message) = msg.downcast_ref::<ArconMessage<A>>() {
-            self.handle_event(&message.event);
-        }
+    type Message = ArconMessage<A>;
+
+    fn receive_local(&mut self, msg: Self::Message) {
+        self.handle_event(&msg.event);
     }
-    fn receive_message(&mut self, sender: ActorPath, ser_id: u64, buf: &mut Buf) {
+    fn receive_network(&mut self, _msg: NetMessage) {
+        //unimplemented!();
+        /*
         if ser_id == serialisation_ids::PBUF {
             let r = ProtoSer::deserialise(buf);
             if let Ok(msg) = r {
@@ -68,5 +69,6 @@ where
         } else {
             error!(self.ctx.log(), "Got unexpected message from {}", sender);
         }
+        */
     }
 }

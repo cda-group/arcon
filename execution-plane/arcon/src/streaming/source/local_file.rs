@@ -1,6 +1,6 @@
 use crate::data::{ArconType, ArconMessage};
 use crate::streaming::channel::strategy::ChannelStrategy;
-use kompact::*;
+use kompact::prelude::*;
 use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
@@ -117,21 +117,21 @@ impl<A: ArconType + FromStr> Provide<ControlPort> for LocalFileSource<A> {
 }
 
 impl<A: ArconType + FromStr> Actor for LocalFileSource<A> {
-    fn receive_local(&mut self, _sender: ActorRef, _msg: &Any) {}
-
-    fn receive_message(&mut self, _sender: ActorPath, _ser_id: u64, _buf: &mut Buf) {}
+    type Message = Box<dyn Any + Send>;
+    fn receive_local(&mut self, _msg: Self::Message) {}
+    fn receive_network(&mut self, _msg: NetMessage) {}
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::prelude::DebugSink;
-    use crate::prelude::{Channel, Forward};
+    use crate::prelude::{Channel, Forward, DebugSink};
     use kompact::default_components::DeadletterBox;
     use std::io::prelude::*;
     use std::sync::Arc;
     use std::{thread, time};
     use tempfile::NamedTempFile;
+    use kompact::prelude::KompactSystem;
 
     // Shared methods for test cases
     fn wait(time: u64) -> () {
@@ -139,13 +139,13 @@ mod tests {
     }
 
     fn test_setup<A: ArconType>() -> (
-        kompact::KompactSystem,
-        Arc<kompact::Component<DebugSink<A>>>,
+        KompactSystem,
+        Arc<Component<DebugSink<A>>>,
     ) {
         // Kompact set-up
         let mut cfg = KompactConfig::new();
         cfg.system_components(DeadletterBox::new, NetworkConfig::default().build());
-        let system = KompactSystem::new(cfg).expect("KompactSystem");
+        let system = cfg.build().expect("KompactSystem");
 
         let (sink, _) = system.create_and_register(move || {
             let s: DebugSink<A> = DebugSink::new();

@@ -1,7 +1,7 @@
 use crate::data::{ArconElement, ArconEvent, ArconType, Watermark, ArconMessage};
 use crate::streaming::channel::strategy::ChannelStrategy;
 use crate::util::io::*;
-use kompact::*;
+use kompact::prelude::*;
 use std::net::SocketAddr;
 use std::str::from_utf8;
 use std::str::FromStr;
@@ -160,7 +160,8 @@ impl<OUT> Actor for SocketSource<OUT>
 where
     OUT: 'static + ArconType + FromStr,
 {
-    fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
+    type Message = Box<dyn Any + Send>;
+    fn receive_local(&mut self, msg: Self::Message) {
         if let Some(ref recv) = msg.downcast_ref::<BytesRecv>() {
             debug!(self.ctx.log(), "{:?}", recv.bytes);
             // Try to cast into our type from bytes
@@ -214,9 +215,11 @@ where
         } else {
             error!(self.ctx.log(), "Unrecognized Message");
         }
+
     }
-    fn receive_message(&mut self, sender: ActorPath, _ser_id: u64, _buf: &mut Buf) {
-        error!(self.ctx.log(), "Got unexpected message from {}", sender);
+
+    fn receive_network(&mut self, _msg: NetMessage) {
+        error!(self.ctx.log(), "Got unexpected message");
     }
 }
 

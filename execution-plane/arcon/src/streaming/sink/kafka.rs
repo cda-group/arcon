@@ -1,5 +1,5 @@
 use crate::prelude::*;
-use kompact::*;
+use kompact::prelude::*;
 use std::str::FromStr;
 use std::time::Duration;
 use rdkafka::producer::{FutureProducer, FutureRecord};
@@ -119,12 +119,14 @@ impl<IN> Actor for KafkaSink<IN>
 where
     IN: 'static + ArconType,
 {
-    fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
-        if let Some(event) = msg.downcast_ref::<ArconEvent<IN>>() {
-            self.handle_event(*event);
-        }
+    // TODO: should probably be changed to ArconMessage?
+    type Message = Box<ArconEvent<IN>>;
+    fn receive_local(&mut self, msg: Self::Message) {
+        self.handle_event(*msg);
     }
-    fn receive_message(&mut self, _sender: ActorPath, _ser_id: u64, _buf: &mut Buf) {
+
+    fn receive_network(&mut self, _msg: NetMessage) {
+        unimplemented!();
     }
 }
 

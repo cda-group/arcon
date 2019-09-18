@@ -1,6 +1,6 @@
 use serde::de::DeserializeOwned;
 use crate::prelude::*;
-use kompact::*;
+use kompact::prelude::*;
 use std::str::FromStr;
 use std::time::Duration;
 use rdkafka::consumer::stream_consumer::StreamConsumer;
@@ -174,10 +174,9 @@ impl<OUT> Actor for KafkaSource<OUT>
 where
     OUT: 'static + ArconType + DeserializeOwned,
 {
-    fn receive_local(&mut self, _sender: ActorRef, _msg: &Any) {
-    }
-    fn receive_message(&mut self, _sender: ActorPath, _ser_id: u64, _buf: &mut Buf) {
-    }
+    type Message = Box<dyn Any + Send>;
+    fn receive_local(&mut self, msg: Self::Message) {}
+    fn receive_network(&mut self, msg: NetMessage) {}
 }
 
 #[cfg(test)]

@@ -38,7 +38,7 @@ pub mod prelude {
     };
 
     pub use crate::streaming::source::{
-        collection::CollectionSource, local_file::LocalFileSource, socket::SocketKind,
+        local_file::LocalFileSource, socket::SocketKind,
         socket::SocketSource,
     };
 
@@ -53,7 +53,7 @@ pub mod prelude {
     pub use weld_core::data::*;
 
     pub use kompact::default_components::*;
-    pub use kompact::*;
+    pub use kompact::prelude::*;
     pub use slog::*;
 
     pub use futures::future;

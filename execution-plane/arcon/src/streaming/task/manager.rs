@@ -1,5 +1,5 @@
 use fnv::FnvHashMap;
-use kompact::*;
+use kompact::prelude::*;
 
 #[derive(Clone, Debug)]
 pub struct Metric {
@@ -55,8 +55,11 @@ impl Provide<MetricPort> for Manager {
 }
 
 impl Actor for Manager {
-    fn receive_local(&mut self, _sender: ActorRef, _msg: &Any) {}
-    fn receive_message(&mut self, _sender: ActorPath, _ser_id: u64, _buf: &mut Buf) {
-        unimplemented!();
+    type Message = Box<dyn Any + Send>;
+
+    fn receive_local(&mut self, _msg: Self::Message) {
+    }
+
+    fn receive_network(&mut self, _msg: NetMessage) {
     }
 }
