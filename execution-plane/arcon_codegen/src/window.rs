@@ -1,10 +1,10 @@
+use crate::common::verify_and_start;
 use crate::types::to_token_stream;
 use proc_macro2::{Ident, Span, TokenStream};
 use spec::{
     ChannelKind, TimeKind, Window, WindowAssigner, WindowFunction, WindowKind, WindowKind::All,
     WindowKind::Keyed,
 };
-use crate::common::verify_and_start;
 
 pub fn window(name: &str, window: &Window, spec_id: &String) -> TokenStream {
     let node_id = name.clone().to_string();
@@ -128,8 +128,10 @@ fn tumbling(
     let verify = verify_and_start(name, "system");
 
     quote! {
+        let actor_ref: ActorRef<ArconMessage<#output_type>> = #successor.actor_ref();
+        let channel = Channel::Local(actor_ref);
         let channel_strategy: Box<Forward<#output_type>> =
-            Box::new(Forward::new(Channel::Local(#successor.actor_ref())));
+            Box::new(Forward::new(channel));
 
         let (#name, reg) = system.create_and_register(move || {
             Node::<#input_type, #output_type>::new(

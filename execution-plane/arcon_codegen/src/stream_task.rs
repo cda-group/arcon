@@ -1,3 +1,4 @@
+use crate::common::verify_and_start;
 use crate::types::to_token_stream;
 use proc_macro2::{Ident, Span, TokenStream};
 use spec::ChannelKind::*;
@@ -50,18 +51,21 @@ pub fn stream_task(
                 let channel_strategy_quote = match &task.kind {
                     Filter => {
                         quote! {
-                        let channel_strategy: Box<ChannelStrategy<#input_type>> = Box::new(Forward::new(channel));
+                            let channel_strategy: Box<ChannelStrategy<#input_type>> = Box::new(Forward::new(channel));
+                        }
                     }
-                    },
                     _ => {
                         quote! {
-                        let channel_strategy: Box<ChannelStrategy<#output_type>> = Box::new(Forward::new(channel));
-                    }
+                            let channel_strategy: Box<ChannelStrategy<#output_type>> = Box::new(Forward::new(channel));
+                        }
                     }
                 };
 
+                let verify = verify_and_start(&node_name, "system");
+
                 quote! {
-                    let channel = Channel::Local(#target.actor_ref());
+                    let actor_ref: ActorRef<ArconMessage<#output_type>> = #target.actor_ref();
+                    let channel = Channel::Local(actor_ref);
                     #channel_strategy_quote
                     let code = String::from(#weld_code);
                     let module = std::sync::Arc::new(Module::new(code).unwrap());
@@ -74,10 +78,7 @@ pub fn stream_task(
                         )
                     });
 
-                    reg.wait_timeout(std::time::Duration::from_millis(1000))
-                        .expect("Component never registered!")
-                        .expect("Component failed to register!");
-                    system.start(&#node_name);
+                    #verify
                 }
             }
             Remote { id: _, addr: _ } => {
