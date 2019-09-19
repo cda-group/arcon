@@ -27,7 +27,7 @@ fn normalise_pipeline_test() {
 
     // Create Sink Component
     let node_5 = system.create_and_start(move || {
-        let sink: LocalFileSink<i64> = LocalFileSink::new(&sink_path, vec!(4.to_string()));
+        let sink: LocalFileSink<i64> = LocalFileSink::new(&sink_path, vec![4.to_string()]);
         sink
     });
 
@@ -40,9 +40,9 @@ fn normalise_pipeline_test() {
     let node_4 = system.create_and_start(move || {
         Node::<ArconVec<i64>, i64>::new(
             4.to_string(),
-            vec!(3.to_string()),
+            vec![3.to_string()],
             channel_strategy,
-            Box::new(Map::<ArconVec<i64>, i64>::new(module))
+            Box::new(Map::<ArconVec<i64>, i64>::new(module)),
         )
     });
 
@@ -58,17 +58,19 @@ fn normalise_pipeline_test() {
     let node_3 = system.create_and_start(move || {
         Node::<i64, ArconVec<i64>>::new(
             3.to_string(),
-            vec!(2.to_string()),
+            vec![2.to_string()],
             channel_strategy,
-            Box::new(EventTimeWindowAssigner::<i64, Appender<i64>, ArconVec<i64>>::new(
-                builder_code,
-                udf_code,
-                materialiser_code,
-                3,
-                3,
-                0,
-                false,
-            ))
+            Box::new(
+                EventTimeWindowAssigner::<i64, Appender<i64>, ArconVec<i64>>::new(
+                    builder_code,
+                    udf_code,
+                    materialiser_code,
+                    3,
+                    3,
+                    0,
+                    false,
+                ),
+            ),
         )
     });
 
@@ -80,9 +82,9 @@ fn normalise_pipeline_test() {
     let node_2 = system.create_and_start(move || {
         Node::<i64, i64>::new(
             2.to_string(),
-            vec!(1.to_string()),
+            vec![1.to_string()],
             channel_strategy,
-            Box::new(Filter::<i64>::new(module))
+            Box::new(Filter::<i64>::new(module)),
         )
     });
 
@@ -91,11 +93,15 @@ fn normalise_pipeline_test() {
     let channel = Channel::Local(actor_ref);
     let channel_strategy: Box<ChannelStrategy<i64>> = Box::new(Forward::new(channel));
 
-    // Watermark per 5 lines in the file 
+    // Watermark per 5 lines in the file
     let wm_interval = 5;
     let _ = system.create_and_start(move || {
-        let source: LocalFileSource<i64> =
-            LocalFileSource::new(String::from(&source_path), channel_strategy, wm_interval, 1.to_string());
+        let source: LocalFileSource<i64> = LocalFileSource::new(
+            String::from(&source_path),
+            channel_strategy,
+            wm_interval,
+            1.to_string(),
+        );
         source
     });
 

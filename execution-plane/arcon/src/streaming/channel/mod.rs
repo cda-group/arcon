@@ -1,5 +1,5 @@
-use kompact::prelude::{ActorPath, ActorRef};
 use crate::data::{ArconMessage, ArconType};
+use kompact::prelude::{ActorPath, ActorRef};
 
 pub mod strategy;
 

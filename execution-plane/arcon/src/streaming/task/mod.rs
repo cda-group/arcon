@@ -35,9 +35,9 @@ impl TaskMetric {
 }
 
 pub trait Task<IN, OUT>
-    where
-        IN: 'static + ArconType,
-        OUT: 'static + ArconType,
+where
+    IN: 'static + ArconType,
+    OUT: 'static + ArconType,
 {
     fn handle_element(&mut self, element: ArconElement<IN>) -> ArconResult<Vec<ArconEvent<OUT>>>;
     fn handle_watermark(&mut self, watermark: Watermark) -> ArconResult<Vec<ArconEvent<OUT>>>;

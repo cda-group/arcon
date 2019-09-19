@@ -122,7 +122,6 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(100));
 
         let target: ActorRef<ArconMessage<i64>> = socket_sink.actor_ref();
-        let e1 = ArconElement::new(10 as i64);
         target.tell(ArconMessage::element(10 as i64, None, "test".to_string()));
 
         const MAX_DATAGRAM_SIZE: usize = 65_507;

@@ -1,8 +1,8 @@
-use crate::streaming::channel::strategy::channel_output;
 use crate::data::{ArconEvent, ArconType};
-use crate::prelude::*;
-use fnv::FnvHasher;
 use crate::prelude::KompactSystem;
+use crate::prelude::*;
+use crate::streaming::channel::strategy::channel_output;
+use fnv::FnvHasher;
 use std::collections::HashMap;
 use std::default::Default;
 use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};

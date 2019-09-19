@@ -176,8 +176,7 @@ pub mod tests {
             }
         }
 
-        fn receive_network(&mut self, _msg: NetMessage) {
-        }
+        fn receive_network(&mut self, _msg: NetMessage) {}
     }
 
     impl Provide<ControlPort> for IOSource {

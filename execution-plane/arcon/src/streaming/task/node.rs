@@ -4,9 +4,9 @@ use crate::prelude::*;
 */
 #[derive(ComponentDefinition)]
 pub struct Node<IN, OUT>
-    where
-        IN: 'static + ArconType,
-        OUT: 'static + ArconType,
+where
+    IN: 'static + ArconType,
+    OUT: 'static + ArconType,
 {
     ctx: ComponentContext<Node<IN, OUT>>,
     id: String,
@@ -16,9 +16,9 @@ pub struct Node<IN, OUT>
 }
 
 impl<IN, OUT> Node<IN, OUT>
-    where
-        IN: 'static + ArconType,
-        OUT: 'static + ArconType,
+where
+    IN: 'static + ArconType,
+    OUT: 'static + ArconType,
 {
     pub fn new(
         id: String,
@@ -56,20 +56,22 @@ impl<IN, OUT> Node<IN, OUT>
         Ok(())
     }
     fn output_event(&mut self, event: ArconEvent<OUT>) -> ArconResult<()> {
-        let message = ArconMessage{event: event, sender: self.id.clone()};
+        let message = ArconMessage {
+            event: event,
+            sender: self.id.clone(),
+        };
         self.out_channels.output(message, &self.ctx.system())
     }
 }
 
 impl<IN, OUT> Provide<ControlPort> for Node<IN, OUT>
-    where
-        IN: 'static + ArconType,
-        OUT: 'static + ArconType,
+where
+    IN: 'static + ArconType,
+    OUT: 'static + ArconType,
 {
     fn handle(&mut self, event: ControlEvent) -> () {
         match event {
-            ControlEvent::Start => {
-            }
+            ControlEvent::Start => {}
             _ => {
                 error!(self.ctx.log(), "bad ControlEvent");
             }
@@ -78,9 +80,9 @@ impl<IN, OUT> Provide<ControlPort> for Node<IN, OUT>
 }
 
 impl<IN, OUT> Actor for Node<IN, OUT>
-    where
-        IN: 'static + ArconType,
-        OUT: 'static + ArconType,
+where
+    IN: 'static + ArconType,
+    OUT: 'static + ArconType,
 {
     type Message = ArconMessage<IN>;
 
@@ -105,20 +107,20 @@ impl<IN, OUT> Actor for Node<IN, OUT>
 }
 
 unsafe impl<IN, OUT> Send for Node<IN, OUT>
-    where
-        IN: 'static + ArconType,
-        OUT: 'static + ArconType,
-{}
+where
+    IN: 'static + ArconType,
+    OUT: 'static + ArconType,
+{
+}
 
 unsafe impl<IN, OUT> Sync for Node<IN, OUT>
-    where
-        IN: 'static + ArconType,
-        OUT: 'static + ArconType,
-{}
-
+where
+    IN: 'static + ArconType,
+    OUT: 'static + ArconType,
+{
+}
 
 #[cfg(test)]
 mod tests {
     // Tested implicitly in integration tests of the tasks.
 }
-

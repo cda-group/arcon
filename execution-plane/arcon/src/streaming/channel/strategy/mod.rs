@@ -1,7 +1,7 @@
 use crate::data::*;
 use crate::error::*;
-use crate::streaming::channel::Channel;
 use crate::prelude::KompactSystem;
+use crate::streaming::channel::Channel;
 
 pub mod broadcast;
 pub mod forward;

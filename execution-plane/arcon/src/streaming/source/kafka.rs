@@ -1,14 +1,14 @@
-use serde::de::DeserializeOwned;
 use crate::prelude::*;
 use kompact::prelude::*;
+use rdkafka::config::ClientConfig;
+use rdkafka::consumer::stream_consumer::StreamConsumer;
+use rdkafka::consumer::Consumer;
+use rdkafka::error::{KafkaError, KafkaResult};
+use rdkafka::message::*;
+use serde::de::DeserializeOwned;
+use serde::Deserialize;
 use std::str::FromStr;
 use std::time::Duration;
-use rdkafka::consumer::stream_consumer::StreamConsumer;
-use rdkafka::consumer::{Consumer};
-use rdkafka::message::*;
-use rdkafka::config::ClientConfig;
-use rdkafka::error::{KafkaResult, KafkaError};
-use serde::{Deserialize};
 
 /*
     KafkaSource: work in progress
@@ -41,16 +41,20 @@ where
         id: String,
     ) -> KafkaSource<OUT> {
         let mut config = ClientConfig::new();
-        config.set("group.id", "example_consumer_group_id")
-        .set("bootstrap.servers", &bootstrap_server)
-        .set("enable.partition.eof", "false")
-        .set("session.timeout.ms", "6000")
-        .set("enable.auto.commit", "false");
+        config
+            .set("group.id", "example_consumer_group_id")
+            .set("bootstrap.servers", &bootstrap_server)
+            .set("enable.partition.eof", "false")
+            .set("session.timeout.ms", "6000")
+            .set("enable.auto.commit", "false");
         let result: KafkaResult<StreamConsumer> = config.create();
         match result {
             Ok(consumer) => {
                 if let Err(e) = consumer.subscribe(&[&topic]) {
-                    panic!("KafkaSource unable to subscribe to topic {}\nerror:{:?}", topic, e);
+                    panic!(
+                        "KafkaSource unable to subscribe to topic {}\nerror:{:?}",
+                        topic, e
+                    );
                 }
                 //let stream = consumer.start_with(Duration::from_millis(100), true);
                 KafkaSource {
@@ -73,16 +77,18 @@ where
     pub fn output_event(&mut self, data: OUT, timestamp: Option<u64>) -> () {
         if let Err(err) = self.out_channels.output(
             ArconMessage::element(data, timestamp, self.id.clone()),
-            &self.ctx.system()) {
-                error!(self.ctx.log(), "Unable to output Element, error {}", err);
+            &self.ctx.system(),
+        ) {
+            error!(self.ctx.log(), "Unable to output Element, error {}", err);
         }
     }
     pub fn output_watermark(&mut self) -> () {
         let ts = self.max_timestamp;
         if let Err(err) = self.out_channels.output(
             ArconMessage::watermark(ts, self.id.clone()),
-            &self.ctx.system()) {
-                error!(self.ctx.log(), "Unable to output watermark, error {}", err);
+            &self.ctx.system(),
+        ) {
+            error!(self.ctx.log(), "Unable to output watermark, error {}", err);
         }
     }
 
@@ -109,18 +115,21 @@ where
                 None => "",
                 Some(Ok(s)) => s,
                 Some(Err(e)) => {
-                    error!(self.ctx.log(), "Error while deserializing message payload: {:?}", e);
+                    error!(
+                        self.ctx.log(),
+                        "Error while deserializing message payload: {:?}", e
+                    );
                     ""
-                },
+                }
             }; /*
-            let key = match m.key_view::<str>() {
-                None => "",
-                Some(Ok(s)) => s,
-                Some(Err(e)) => {
-                    error!(self.ctx.log(), "Error while deserializing message key: {:?}", e);
-                    ""
-                },
-            }; */
+               let key = match m.key_view::<str>() {
+                   None => "",
+                   Some(Ok(s)) => s,
+                   Some(Err(e)) => {
+                       error!(self.ctx.log(), "Error while deserializing message key: {:?}", e);
+                       ""
+                   },
+               }; */
             let mut timestamp: Option<u64> = None;
             if let Some(ts) = m.timestamp().to_millis() {
                 timestamp = Some(ts as u64);
@@ -141,7 +150,7 @@ where
                     println!("  Header {:#?}: {:?}", header.0, header.1);
                 }
             }
-            // todo (somewhere else) 
+            // todo (somewhere else)
             consumer.commit_message(&m, CommitMode::Async).unwrap(); auto-committing
             */
         }
@@ -150,7 +159,9 @@ where
             // Store Offset manage epoch here.
         }
         // Schedule next batch
-        self.schedule_once(Duration::from_millis(1000), move |self_c, _|{self_c.receive()});
+        self.schedule_once(Duration::from_millis(1000), move |self_c, _| {
+            self_c.receive()
+        });
     }
 }
 
@@ -197,7 +208,7 @@ mod tests {
     // JSON Example: {"id":1, "attribute":-13,"location":{"x":0.14124,"y":5882.231}}
 
     //#[test] //Used for "manual testing" during developement
-    fn kafka_source() -> Result<()> { 
+    fn kafka_source() -> Result<()> {
         let system = KompactConfig::default().build().expect("KompactSystem");
 
         let (sink, _) = system.create_and_register(move || DebugSink::<Thing>::new());
@@ -207,8 +218,8 @@ mod tests {
             Box::new(Forward::new(Channel::Local(sink_ref.clone())));
 
         let kafka_source: KafkaSource<Thing> = KafkaSource::new(
-            out_channels, 
-            "localhost:9092".to_string(), 
+            out_channels,
+            "localhost:9092".to_string(),
             "test".to_string(),
             0,
             1.to_string(),
@@ -221,4 +232,3 @@ mod tests {
         Ok(())
     }
 }
-

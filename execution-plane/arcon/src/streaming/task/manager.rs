@@ -57,9 +57,7 @@ impl Provide<MetricPort> for Manager {
 impl Actor for Manager {
     type Message = Box<dyn Any + Send>;
 
-    fn receive_local(&mut self, _msg: Self::Message) {
-    }
+    fn receive_local(&mut self, _msg: Self::Message) {}
 
-    fn receive_network(&mut self, _msg: NetMessage) {
-    }
+    fn receive_network(&mut self, _msg: NetMessage) {}
 }

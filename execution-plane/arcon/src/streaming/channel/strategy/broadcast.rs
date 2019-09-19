@@ -1,8 +1,8 @@
-use arcon_error::ArconResult;
-use crate::data::{ArconType, ArconMessage};
+use crate::data::{ArconMessage, ArconType};
+use crate::prelude::KompactSystem;
 use crate::streaming::channel::strategy::{channel_output, ChannelStrategy};
 use crate::streaming::channel::Channel;
-use crate::prelude::KompactSystem;
+use arcon_error::ArconResult;
 
 pub struct Broadcast<A>
 where
@@ -16,9 +16,7 @@ where
     A: 'static + ArconType,
 {
     pub fn new(out_channels: Vec<Channel<A>>) -> Broadcast<A> {
-        Broadcast {
-            out_channels,
-        }
+        Broadcast { out_channels }
     }
 }
 
@@ -43,10 +41,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::streaming::sink::debug::DebugSink;
     use super::*;
     use crate::streaming::channel::strategy::tests::*;
-    use kompact::default_components::*;
+    use crate::streaming::sink::debug::DebugSink;
     use kompact::prelude::*;
     use std::sync::Arc;
 
@@ -70,7 +67,7 @@ mod tests {
         let mut channel_strategy: Box<ChannelStrategy<Input>> = Box::new(Broadcast::new(channels));
 
         for _i in 0..total_msgs {
-            let input = ArconMessage::element(Input{id:1}, None, "test".to_string());
+            let input = ArconMessage::element(Input { id: 1 }, None, "test".to_string());
             // Just assume it is all sent from same comp
             let _ = channel_strategy.output(input, &system);
         }
