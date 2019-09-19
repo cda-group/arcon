@@ -82,7 +82,6 @@ mod tests {
         let _ = system.shutdown();
     }
 
-    /*
     #[test]
     fn broadcast_local_and_remote() {
         let (system, remote) = {
@@ -104,7 +103,8 @@ mod tests {
         // Create local components
         for _i in 0..local_components {
             let comp = system.create_and_start(move || DebugSink::<Input>::new());
-            channels.push(Channel::Local(comp.actor_ref()));
+            let actor_ref: ActorRef<ArconMessage<Input>> = comp.actor_ref();
+            channels.push(Channel::Local(actor_ref));
             comps.push(comp);
         }
 
@@ -141,5 +141,4 @@ mod tests {
         }
         let _ = system.shutdown();
     }
-    */
 }

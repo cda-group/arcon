@@ -91,18 +91,19 @@ where
             error!(self.ctx.log(), "Failed to handle message: {}", err);
         }
     }
-    fn receive_network(&mut self, _msg: NetMessage) {
-        unimplemented!();
-        /*
-        match msg.try_deserialise::<ArconMessage<IN>, ProtoSer>() {
-            Ok(node_msg) => {
-                if let Err(err) = self.handle_message(&node_msg) {
-                    error!(self.ctx.log(), "Failed to handle node message: {}", err);
+    fn receive_network(&mut self, msg: NetMessage) {
+        match msg.try_deserialise::<StreamTaskMessage, ProtoSer>() {
+            Ok(deser_msg) => {
+                if let Ok(message) = ArconMessage::from_remote(deser_msg) {
+                    if let Err(err) = self.handle_message(&message) {
+                        error!(self.ctx.log(), "Failed to handle node message: {}", err);
+                    }
+                } else {
+                    error!(self.ctx.log(), "Failed to convert remote message to local");
                 }
             }
-            Err(e) => error!(self.ctx.log(), "Error deserialising ArconMessage: {:?}", e),
+            Err(e) => error!(self.ctx.log(), "Error StreamTaskMessage : {:?}", e),
         }
-        */
     }
 }
 
