@@ -86,14 +86,14 @@ pub fn generate(spec: &ArconSpec, is_terminated: bool) -> Result<String, Codegen
 
         match node.kind {
             Source(source) => {
-                stream.push(source::source(&node.id, &previous_node, &source, &spec.id, spec.timestamp_extractor));
+                stream.push(source::source(node.id, &previous_node, &source, &spec.id, spec.timestamp_extractor));
             }
             Sink(sink) => {
-                stream.push(sink::sink(&node.id, &sink.sink_type, &sink.kind, &spec.id, &sink.predecessor));
+                stream.push(sink::sink(node.id, &sink.sink_type, &sink.kind, &spec.id, sink.predecessor));
             }
             Task(task) => {
                 stream.push(stream_task::stream_task(
-                    &node.id,
+                    node.id,
                     &previous_node,
                     &node.parallelism,
                     &task,
@@ -102,14 +102,14 @@ pub fn generate(spec: &ArconSpec, is_terminated: bool) -> Result<String, Codegen
             }
             Window(window) => {
                 stream.push(window::window(
-                    &node.id,
+                    node.id,
                     &window,
                     &spec.id,
                 ));
             }
         }
 
-        previous_node = node.id.clone();
+        previous_node = "node".to_string()+&node.id.to_string();
     }
 
     let final_stream = stream

@@ -35,7 +35,7 @@ pub struct ArconSpec {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Node {
-    pub id: String,
+    pub id: u32,
     #[serde(default = "parallelism")]
     pub parallelism: u32,
     pub kind: NodeKind,
@@ -54,7 +54,7 @@ pub struct Window {
     #[serde(default = "forward")]
     pub channel_strategy: ChannelStrategy,
     pub successors: Vec<ChannelKind>,
-    pub predecessor: String,
+    pub predecessor: u32,
     pub assigner: WindowAssigner,
     pub window_kind: WindowKind,
     pub window_function: WindowFunction,
@@ -118,7 +118,7 @@ pub enum SourceKind {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Sink {
     pub sink_type: Type,
-    pub predecessor: String,
+    pub predecessor: u32,
     pub kind: SinkKind,
     #[serde(default = "utf8")]
     pub format: Format,
@@ -151,7 +151,7 @@ pub struct Task {
     pub input_type: Type,
     pub output_type: Type,
     pub weld_code: String,
-    pub predecessor: String,
+    pub predecessor: u32,
     #[serde(default = "forward")]
     pub channel_strategy: ChannelStrategy,
     pub successors: Vec<ChannelKind>,
