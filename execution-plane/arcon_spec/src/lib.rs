@@ -319,7 +319,7 @@ mod tests {
             "target": "x86-64-unknown-linux-gnu",
             "nodes": [
                 {
-                    "id": "node_1",
+                    "id": 1,
                     "parallelism": 1,
                     "kind": {
                         "Source": {
@@ -340,7 +340,7 @@ mod tests {
                     }
                 },
                 {
-                    "id": "node_2",
+                    "id": 2,
                     "parallelism": 1,
                     "kind": {
                         "Task": {
@@ -352,11 +352,11 @@ mod tests {
                             },
                             "weld_code": "|x: u32| x + u32(5)",
                             "channel_strategy": "Forward",
-                            "predecessor": "node_1",
+                            "predecessor": 1,
                             "successors": [
                                 {
                                     "Local": {
-                                        "id": "node_3"
+                                        "id": "node3"
                                     }
                                 }
                             ],
@@ -365,15 +365,15 @@ mod tests {
                     }
                 },
                 {
-                    "id": "node_3",
+                    "id": 3,
                     "parallelism": 1,
                     "kind": {
                         "Window": {
-                            "predecessor": "node_2",
+                            "predecessor": 2,
                             "successors" : [
                                 {
                                     "Local": {
-                                        "id": "node_4"
+                                        "id": "node4"
                                     }
                                 }
                             ],
@@ -406,14 +406,14 @@ mod tests {
                     }
                 },
                 {
-                    "id": "node_4",
+                    "id": 4,
                     "parallelism": 1,
                     "kind": {
                         "Sink": {
                             "sink_type": {
                                 "Scalar": "I64"
                             },
-                            "predecessor": "node_3",
+                            "predecessor": 3,
                             "kind": "Debug"
                         }
                     }
