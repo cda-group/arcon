@@ -106,15 +106,15 @@ mod tests {
         let module = Arc::new(Module::new(weld_code).unwrap());
         let filter_task = system.create_and_start(move || {
             Node::<i32, i32>::new(
-                "node1".to_string(),
-                vec!["test".to_string()],
+                1.into(),
+                vec![0.into()],
                 channel_strategy,
                 Box::new(Filter::<i32>::new(module)),
             )
         });
 
-        let input_one = ArconMessage::element(6 as i32, None, "test".to_string());
-        let input_two = ArconMessage::element(2 as i32, None, "test".to_string());
+        let input_one = ArconMessage::element(6 as i32, None, 0.into());
+        let input_two = ArconMessage::element(2 as i32, None, 0.into());
 
         let target_ref = filter_task.actor_ref();
         target_ref.tell(Box::new(input_one), &target_ref);

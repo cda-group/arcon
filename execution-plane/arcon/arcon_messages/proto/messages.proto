@@ -3,8 +3,6 @@ syntax = "proto3";
 message Element {
   uint64 timestamp = 1;
   bytes data = 2;
-  // Id to help identify correct Weld module
-  string task_id = 3;
 }
 
 message Checkpoint {
@@ -15,8 +13,8 @@ message Watermark {
   uint64 timestamp = 1;
 }
 
-message StreamTaskMessage {
-  string sender = 1;
+message ArconNetworkMessage {
+  uint32 sender = 1;
   oneof payload {
     Element element = 2;
     Watermark watermark = 3;

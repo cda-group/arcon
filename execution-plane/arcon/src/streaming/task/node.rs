@@ -14,14 +14,14 @@ where
     OUT: 'static + ArconType,
 {
     ctx: ComponentContext<Node<IN, OUT>>,
-    id: String,
+    id: NodeID,
     out_channels: Box<ChannelStrategy<OUT>>,
-    in_channels: Vec<String>,
+    in_channels: Vec<NodeID>,
     task: Box<Task<IN, OUT>>,
-    watermarks: BTreeMap<String, Watermark>,
+    watermarks: BTreeMap<NodeID, Watermark>,
     current_watermark: u64,
     current_epoch: u64,
-    blocked_channels: HashSet<String>,
+    blocked_channels: HashSet<NodeID>,
     message_buffer: LinkedList<ArconMessage<IN>>,
 }
 
@@ -31,8 +31,8 @@ where
     OUT: 'static + ArconType,
 {
     pub fn new(
-        id: String,
-        in_channels: Vec<String>,
+        id: NodeID,
+        in_channels: Vec<NodeID>,
         out_channels: Box<ChannelStrategy<OUT>>,
         task: Box<Task<IN, OUT>>,
     ) -> Node<IN, OUT> {
@@ -243,11 +243,11 @@ mod tests {
         let module = Arc::new(Module::new(weld_code).unwrap());
         let filter_node = system.create_and_start(move || {
             Node::<i32, i32>::new(
-                "node1".to_string(),
+                0.into(),
                 vec![
-                    "sender1".to_string(),
-                    "sender2".to_string(),
-                    "sender3".to_string(),
+                    1.into(),
+                    2.into(),
+                    3.into(),
                 ],
                 channel_strategy,
                 Box::new(Filter::<i32>::new(module)),
@@ -256,14 +256,14 @@ mod tests {
 
         return (filter_node.actor_ref(), sink);
     }
-    fn watermark(time: u64, sender: &str) -> Box<ArconMessage<i32>> {
-        Box::new(ArconMessage::watermark(time, sender.to_string()))
+    fn watermark(time: u64, sender: u32) -> Box<ArconMessage<i32>> {
+        Box::new(ArconMessage::watermark(time, sender.into()))
     }
-    fn element(data: i32, time: u64, sender: &str) -> Box<ArconMessage<i32>> {
-        Box::new(ArconMessage::element(data, Some(time), sender.to_string()))
+    fn element(data: i32, time: u64, sender: u32) -> Box<ArconMessage<i32>> {
+        Box::new(ArconMessage::element(data, Some(time), sender.into()))
     }
-    fn epoch(epoch: u64, sender: &str) -> Box<ArconMessage<i32>> {
-        Box::new(ArconMessage::epoch(epoch, sender.to_string()))
+    fn epoch(epoch: u64, sender: u32) -> Box<ArconMessage<i32>> {
+        Box::new(ArconMessage::epoch(epoch, sender.into()))
     }
     fn wait(time: u64) -> () {
         thread::sleep(time::Duration::from_secs(time));
@@ -272,7 +272,7 @@ mod tests {
     #[test]
     fn node_no_watermark() {
         let (node_ref, sink) = node_test_setup();
-        node_ref.tell(watermark(1, "sender1"), &node_ref);
+        node_ref.tell(watermark(1, 1), &node_ref);
 
         wait(1);
         let sink_inspect = sink.definition().lock().unwrap();
@@ -286,9 +286,9 @@ mod tests {
     #[test]
     fn node_one_watermark() {
         let (node_ref, sink) = node_test_setup();
-        node_ref.tell(watermark(1, "sender1"), &node_ref);
-        node_ref.tell(watermark(1, "sender2"), &node_ref);
-        node_ref.tell(watermark(1, "sender3"), &node_ref);
+        node_ref.tell(watermark(1, 1), &node_ref);
+        node_ref.tell(watermark(1, 2), &node_ref);
+        node_ref.tell(watermark(1, 3), &node_ref);
 
         wait(1);
         let sink_inspect = sink.definition().lock().unwrap();
@@ -301,11 +301,11 @@ mod tests {
     #[test]
     fn node_outoforder_watermarks() {
         let (node_ref, sink) = node_test_setup();
-        node_ref.tell(watermark(1, "sender1"), &node_ref);
-        node_ref.tell(watermark(3, "sender1"), &node_ref);
-        node_ref.tell(watermark(1, "sender2"), &node_ref);
-        node_ref.tell(watermark(2, "sender2"), &node_ref);
-        node_ref.tell(watermark(4, "sender3"), &node_ref);
+        node_ref.tell(watermark(1, 1), &node_ref);
+        node_ref.tell(watermark(3, 1), &node_ref);
+        node_ref.tell(watermark(1, 2), &node_ref);
+        node_ref.tell(watermark(2, 2), &node_ref);
+        node_ref.tell(watermark(4, 3), &node_ref);
 
         wait(1);
         let sink_inspect = sink.definition().lock().unwrap();
@@ -317,12 +317,12 @@ mod tests {
     #[test]
     fn node_epoch_block() {
         let (node_ref, sink) = node_test_setup();
-        node_ref.tell(element(1, 1, "sender1"), &node_ref);
-        node_ref.tell(epoch(3, "sender1"), &node_ref);
+        node_ref.tell(element(1, 1, 1), &node_ref);
+        node_ref.tell(epoch(3, 1), &node_ref);
         // should be blocked:
-        node_ref.tell(element(2, 1, "sender1"), &node_ref);
+        node_ref.tell(element(2, 1, 1), &node_ref);
         // should not be blocked
-        node_ref.tell(element(3, 1, "sender2"), &node_ref);
+        node_ref.tell(element(3, 1, 2), &node_ref);
 
         wait(1);
         let sink_inspect = sink.definition().lock().unwrap();
@@ -337,15 +337,15 @@ mod tests {
     #[test]
     fn node_epoch_no_continue() {
         let (node_ref, sink) = node_test_setup();
-        node_ref.tell(element(11, 1, "sender1"), &node_ref); // not blocked
-        node_ref.tell(epoch(1, "sender1"), &node_ref); // sender1 blocked
-        node_ref.tell(element(12, 1, "sender1"), &node_ref); // blocked
-        node_ref.tell(element(21, 1, "sender2"), &node_ref); // not blocked
-        node_ref.tell(epoch(2, "sender1"), &node_ref); // blocked
-        node_ref.tell(epoch(1, "sender2"), &node_ref); // sender2 blocked
-        node_ref.tell(epoch(2, "sender2"), &node_ref); // blocked
-        node_ref.tell(element(23, 1, "sender2"), &node_ref); // blocked
-        node_ref.tell(element(31, 1, "sender3"), &node_ref); // not blocked
+        node_ref.tell(element(11, 1, 1), &node_ref); // not blocked
+        node_ref.tell(epoch(1, 1), &node_ref); // sender1 blocked
+        node_ref.tell(element(12, 1, 1), &node_ref); // blocked
+        node_ref.tell(element(21, 1, 2), &node_ref); // not blocked
+        node_ref.tell(epoch(2, 1), &node_ref); // blocked
+        node_ref.tell(epoch(1, 2), &node_ref); // sender2 blocked
+        node_ref.tell(epoch(2, 2), &node_ref); // blocked
+        node_ref.tell(element(23, 1, 2), &node_ref); // blocked
+        node_ref.tell(element(31, 1, 3), &node_ref); // not blocked
 
         wait(1);
         let sink_inspect = sink.definition().lock().unwrap();
@@ -362,18 +362,18 @@ mod tests {
     fn node_epoch_continue() {
         // Same test as previous but we finnish it by sending the required epochs
         let (node_ref, sink) = node_test_setup();
-        node_ref.tell(element(11, 1, "sender1"), &node_ref); // not blocked
-        node_ref.tell(epoch(1, "sender1"), &node_ref); // sender1 blocked
-        node_ref.tell(element(12, 1, "sender1"), &node_ref); // blocked
-        node_ref.tell(element(21, 1, "sender2"), &node_ref); // not blocked
-        node_ref.tell(epoch(2, "sender1"), &node_ref); // blocked
-        node_ref.tell(element(13, 1, "sender1"), &node_ref); // blocked
-        node_ref.tell(epoch(1, "sender2"), &node_ref); // sender2 blocked
-        node_ref.tell(epoch(2, "sender2"), &node_ref); // blocked
-        node_ref.tell(element(22, 1, "sender2"), &node_ref); // blocked
-        node_ref.tell(element(31, 1, "sender3"), &node_ref); // not blocked
-        node_ref.tell(epoch(1, "sender3"), &node_ref); // Complete our epochs
-        node_ref.tell(epoch(2, "sender3"), &node_ref);
+        node_ref.tell(element(11, 1, 1), &node_ref); // not blocked
+        node_ref.tell(epoch(1, 1), &node_ref); // sender1 blocked
+        node_ref.tell(element(12, 1, 1), &node_ref); // blocked
+        node_ref.tell(element(21, 1, 2), &node_ref); // not blocked
+        node_ref.tell(epoch(2, 1), &node_ref); // blocked
+        node_ref.tell(element(13, 1, 1), &node_ref); // blocked
+        node_ref.tell(epoch(1, 2), &node_ref); // sender2 blocked
+        node_ref.tell(epoch(2, 2), &node_ref); // blocked
+        node_ref.tell(element(22, 1, 2), &node_ref); // blocked
+        node_ref.tell(element(31, 1, 3), &node_ref); // not blocked
+        node_ref.tell(epoch(1, 3), &node_ref); // Complete our epochs
+        node_ref.tell(epoch(2, 3), &node_ref);
         // All the elements should now have been delivered in specific order
 
         wait(1);

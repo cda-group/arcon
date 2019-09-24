@@ -1,3 +1,4 @@
+use crate::streaming::task::NodeID;
 use crate::data::{ArconElement, ArconEvent, ArconMessage, ArconType, Watermark};
 use crate::streaming::channel::strategy::ChannelStrategy;
 use crate::util::io::*;
@@ -30,7 +31,7 @@ where
     watermark_interval: u64, // If 0: no watermarks/timestamps generated
     watermark_index: Option<u32>,
     max_timestamp: u64,
-    id: String,
+    id: NodeID,
 }
 
 impl<OUT> SocketSource<OUT>
@@ -43,7 +44,7 @@ where
         out_channels: Box<ChannelStrategy<OUT>>,
         watermark_interval: u64,
         watermark_index: Option<u32>,
-        id: String,
+        id: NodeID,
     ) -> SocketSource<OUT> {
         SocketSource {
             ctx: ComponentContext::new(),
@@ -63,7 +64,7 @@ where
             if let Some(_) = ts {
                 debug!(self.ctx.log(), "Extracted timestamp and using that");
                 if let Err(err) = self.out_channels.output(
-                    ArconMessage::element(data, ts, self.id.clone()),
+                    ArconMessage::element(data, ts, self.id),
                     &self.ctx.system(),
                 ) {
                     error!(self.ctx.log(), "Unable to output event, error {}", err);
@@ -73,7 +74,7 @@ where
                 match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
                     Ok(ts) => {
                         if let Err(err) = self.out_channels.output(
-                            ArconMessage::element(data, Some(ts.as_secs()), self.id.clone()),
+                            ArconMessage::element(data, Some(ts.as_secs()), self.id),
                             &self.ctx.system(),
                         ) {
                             error!(self.ctx.log(), "Unable to output event, error {}", err);
@@ -88,7 +89,7 @@ where
             if let Err(err) = self.out_channels.output(
                 ArconMessage {
                     event: ArconEvent::Element(ArconElement::new(data)),
-                    sender: self.id.clone(),
+                    sender: self.id,
                 },
                 &self.ctx.system(),
             ) {
@@ -101,7 +102,7 @@ where
             if let Err(err) = self.out_channels.output(
                 ArconMessage {
                     event: ArconEvent::Watermark(Watermark::new(self.max_timestamp)),
-                    sender: self.id.clone(),
+                    sender: self.id,
                 },
                 &self.ctx.system(),
             ) {
@@ -111,7 +112,7 @@ where
             match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
                 Ok(n) => {
                     if let Err(err) = self.out_channels.output(
-                        ArconMessage::watermark(n.as_secs(), self.id.clone()),
+                        ArconMessage::watermark(n.as_secs(), self.id),
                         &self.ctx.system(),
                     ) {
                         error!(self.ctx.log(), "Unable to output watermark, error {}", err);
@@ -266,7 +267,7 @@ mod tests {
             out_channels,
             0,
             None,
-            "node1".to_string(),
+            1.into(),
         );
         let (source, _) = system.create_and_register(move || socket_source);
 
@@ -311,7 +312,7 @@ mod tests {
             out_channels,
             0,
             None,
-            "node1".to_string(),
+            1.into(),
         );
         let (source, _) = system.create_and_register(move || socket_source);
 
@@ -372,7 +373,7 @@ mod tests {
             out_channels,
             3,
             None,
-            "node1".to_string(),
+            1.into(),
         );
         let (source, _) = system.create_and_register(move || socket_source);
 

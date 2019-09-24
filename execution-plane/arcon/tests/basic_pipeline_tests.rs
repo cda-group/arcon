@@ -28,7 +28,7 @@ fn normalise_pipeline_test() {
 
     // Create Sink Component
     let node_5 = system.create_and_start(move || {
-        let sink: LocalFileSink<i64> = LocalFileSink::new(&sink_path, vec![4.to_string()]);
+        let sink: LocalFileSink<i64> = LocalFileSink::new(&sink_path, vec![4.into()]);
         sink
     });
 
@@ -39,8 +39,8 @@ fn normalise_pipeline_test() {
     let module = std::sync::Arc::new(Module::new(code).unwrap());
     let node_4 = system.create_and_start(move || {
         Node::<ArconVec<i64>, i64>::new(
-            4.to_string(),
-            vec![3.to_string()],
+            4.into(),
+            vec![3.into()],
             channel_strategy,
             Box::new(Map::<ArconVec<i64>, i64>::new(module)),
         )
@@ -57,8 +57,8 @@ fn normalise_pipeline_test() {
 
     let node_3 = system.create_and_start(move || {
         Node::<i64, ArconVec<i64>>::new(
-            3.to_string(),
-            vec![2.to_string()],
+            3.into(),
+            vec![2.into()],
             channel_strategy,
             Box::new(
                 EventTimeWindowAssigner::<i64, Appender<i64>, ArconVec<i64>>::new(
@@ -81,8 +81,8 @@ fn normalise_pipeline_test() {
     let module = std::sync::Arc::new(Module::new(code).unwrap());
     let node_2 = system.create_and_start(move || {
         Node::<i64, i64>::new(
-            2.to_string(),
-            vec![1.to_string()],
+            2.into(),
+            vec![1.into()],
             channel_strategy,
             Box::new(Filter::<i64>::new(module)),
         )
@@ -99,7 +99,7 @@ fn normalise_pipeline_test() {
             String::from(&source_path),
             channel_strategy,
             wm_interval,
-            1.to_string(),
+            1.into(),
         );
         source
     });
