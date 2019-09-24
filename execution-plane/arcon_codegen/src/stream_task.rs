@@ -1,3 +1,4 @@
+use crate::common::id_to_ident;
 use crate::types::to_token_stream;
 use proc_macro2::{Ident, Span, TokenStream};
 use spec::ChannelKind::*;
@@ -5,14 +6,14 @@ use spec::Task;
 use spec::TaskKind::{Filter, FlatMap, Map};
 
 pub fn stream_task(
-    node_name: &str,
+    id: u32,
     _target_name: &str,
     parallelism: &u32,
     task: &Task,
     spec_id: &String,
 ) -> TokenStream {
-    let node_id = node_name.clone().to_string();
-    let node_name = Ident::new(&node_name, Span::call_site());
+    let node_id = id;
+    let node_name = id_to_ident(id);
     let input_type = to_token_stream(&task.input_type, spec_id);
     let output_type = to_token_stream(&task.output_type, spec_id);
 
@@ -67,8 +68,8 @@ pub fn stream_task(
                     let module = std::sync::Arc::new(Module::new(code).unwrap());
                     let (#node_name, reg) = system.create_and_register(move || {
                         Node::<#input_type, #output_type>::new(
-                            String::from(#node_id),
-                            vec!(String::from(#predecessor)),
+                            #node_id.into(),
+                            vec!(#predecessor.into()),
                             channel_strategy,
                             Box::new(#task_signature)
                         )

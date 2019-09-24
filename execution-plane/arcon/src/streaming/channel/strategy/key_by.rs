@@ -1,6 +1,6 @@
-use crate::streaming::channel::strategy::channel_output;
 use crate::data::{ArconEvent, ArconType};
 use crate::prelude::*;
+use crate::streaming::channel::strategy::channel_output;
 use fnv::FnvHasher;
 use kompact::KompactSystem;
 use std::collections::HashMap;
@@ -131,7 +131,7 @@ mod tests {
             let input = Input {
                 id: rng.gen_range(0, 100),
             };
-            inputs.push(ArconMessage::element(input, None, "test".to_string()));
+            inputs.push(ArconMessage::element(input, None, 1.into()));
         }
 
         for input in inputs {

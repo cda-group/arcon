@@ -42,8 +42,7 @@ impl<E: Clone> EventTimer<E> {
         }
     }
     // Basic scheduling function
-    fn schedule_once(&mut self, timeout: Duration, entry: E) -> ()
-    {
+    fn schedule_once(&mut self, timeout: Duration, entry: E) -> () {
         let id = Uuid::new_v4();
         self.handles.insert(id, entry);
 
@@ -61,8 +60,7 @@ impl<E: Clone> EventTimer<E> {
         }
     }
     // Schedule at a specific time in the future
-    pub fn schedule_at(&mut self, time: u64, entry: E) -> ()
-    {
+    pub fn schedule_at(&mut self, time: u64, entry: E) -> () {
         // Check for bad target time
         if time < self.time {
             eprintln!("tried to schedule event which has already happened");
@@ -78,7 +76,7 @@ impl<E: Clone> EventTimer<E> {
     pub fn get_time(&mut self) -> u64 {
         self.time
     }
-    // 
+    //
     #[inline(always)]
     pub fn advance_to(&mut self, ts: u64) -> Vec<E> {
         let mut vec = Vec::new();
@@ -107,9 +105,7 @@ impl<E: Clone> EventTimer<E> {
                 let mut res = self.timer.tick();
                 for e in res.drain(..) {
                     match self.execute(e) {
-                        Some(entry) => {
-                            vec.push(entry)
-                        }
+                        Some(entry) => vec.push(entry),
                         _ => {}
                     }
                 }

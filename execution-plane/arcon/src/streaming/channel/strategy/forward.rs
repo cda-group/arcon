@@ -1,4 +1,3 @@
-
 use crate::prelude::*;
 use crate::streaming::channel::strategy::{channel_output, ChannelStrategy};
 use crate::streaming::channel::Channel;
@@ -58,7 +57,7 @@ mod tests {
 
         for _i in 0..total_msgs {
             // NOTE: second parameter is a fake channel...
-            let input = ArconMessage::element(Input{id:1}, None, "test".to_string());
+            let input = ArconMessage::element(Input { id: 1 }, None, 1.into());
             let _ = channel_strategy.output(input, &system);
         }
 

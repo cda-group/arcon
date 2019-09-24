@@ -6,6 +6,7 @@ use kompact::KompactSystem;
 pub mod broadcast;
 pub mod forward;
 pub mod key_by;
+pub mod mute;
 pub mod round_robin;
 pub mod shuffle;
 

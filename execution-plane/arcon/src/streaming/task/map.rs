@@ -1,6 +1,6 @@
-use std::marker::PhantomData;
 use crate::prelude::*;
 use crate::weld::*;
+use std::marker::PhantomData;
 use std::sync::Arc;
 
 /// Map task
@@ -24,9 +24,7 @@ where
     IN: 'static + ArconType,
     OUT: 'static + ArconType,
 {
-    pub fn new(
-        udf: Arc<Module>,
-    ) -> Self {
+    pub fn new(udf: Arc<Module>) -> Self {
         let ctx = WeldContext::new(&udf.conf()).unwrap();
         Map {
             udf: udf.clone(),
@@ -52,10 +50,16 @@ where
 {
     fn handle_element(&mut self, event: ArconElement<IN>) -> ArconResult<Vec<ArconEvent<OUT>>> {
         let data = self.run_udf(&(event.data))?;
-        return Ok(vec!(ArconEvent::Element(ArconElement{data, timestamp: event.timestamp})));
+        return Ok(vec![ArconEvent::Element(ArconElement {
+            data,
+            timestamp: event.timestamp,
+        })]);
     }
 
     fn handle_watermark(&mut self, _w: Watermark) -> ArconResult<Vec<ArconEvent<OUT>>> {
+        Ok(Vec::new())
+    }
+    fn handle_epoch(&mut self, _epoch: Epoch) -> ArconResult<Vec<u8>> {
         Ok(Vec::new())
     }
 }
@@ -75,11 +79,11 @@ mod tests {
         let r1 = map.handle_element(input_one);
         let r2 = map.handle_element(input_two);
         let mut result_vec = Vec::new();
-        
+
         result_vec.push(r1);
         result_vec.push(r2);
 
-        let expected: Vec<i32> = vec![16,17];
+        let expected: Vec<i32> = vec![16, 17];
         let mut results = Vec::new();
         for r in result_vec {
             if let Ok(result) = r {
@@ -110,15 +114,15 @@ mod tests {
         let module = Arc::new(Module::new(weld_code).unwrap());
         let map_node = system.create_and_start(move || {
             Node::<i32, i32>::new(
-                "node1".to_string(),
-                vec!("test".to_string()),
+                1.into(),
+                vec![0.into()],
                 channel_strategy,
-                Box::new(Map::<i32, i32>::new(module))
+                Box::new(Map::<i32, i32>::new(module)),
             )
         });
-        
-        let input_one = ArconMessage::element(6 as i32, None, "test".to_string());
-        let input_two = ArconMessage::element(7 as i32, None, "test".to_string());
+
+        let input_one = ArconMessage::element(6 as i32, None, 0.into());
+        let input_two = ArconMessage::element(7 as i32, None, 0.into());
         let target_ref = map_node.actor_ref();
         target_ref.tell(Box::new(input_one), &system);
         target_ref.tell(Box::new(input_two), &system);

@@ -5,7 +5,7 @@
 "mode": "debug",
 "nodes": [
     {
-        "id": "node_1",
+        "id": 1,
         "parallelism": 1,
         "kind": {
             "Source": {
@@ -15,7 +15,7 @@
                 "successors": [
                     {
                         "Local": {
-                            "id": "node_2"
+                            "id": "node2"
                         }
                     }
                 ],
@@ -26,7 +26,7 @@
         }
     },
     {
-        "id": "node_2",
+        "id": 2,
         "parallelism": 1,
         "kind": {
             "Task": {
@@ -40,26 +40,26 @@
                 "successors": [
                     {
                         "Local": {
-                            "id": "node_3"
+                            "id": "node3"
                         }
                     }
                 ],
-                "predecessor": "node_1",
+                "predecessor": 1,
                 "kind": "Filter"
             }
         }
     },
     {
-      "id" : "node_3",
+      "id" : 3,
       "parallelism" : 1,
       "kind" : {
         "Window": {
             "channel_strategy" : "Forward",
-            "predecessor" : "node2",
+            "predecessor" : 2,
             "successors" : [
               {
                 "Local" : {
-                  "id" : "node_4"
+                  "id" : "node4"
                 }
               }
             ],
@@ -100,7 +100,7 @@
         }
     },
     {
-        "id": "node_4",
+        "id": 4,
         "parallelism": 1,
         "kind": {
             "Task": {
@@ -118,24 +118,24 @@
                 "successors": [
                     {
                         "Local": {
-                            "id": "node_5"
+                            "id": "node5"
                         }
                     }
                 ],
-                "predecessor": "node_3",
+                "predecessor": 3,
                 "kind": "Map"
             }
         }
     },
     {
-        "id": "node_5",
+        "id": 5,
         "parallelism": 1,
         "kind": {
             "Sink": {
                 "sink_type": {
                     "Scalar": "I64"
                 },
-                "predecessor": "node_4",
+                "predecessor": 4,
                 "kind": {
                   "LocalFile": { "path": "/tmp/normalise_sink"}
                 }

@@ -3,7 +3,7 @@
 "target": "x86-64-unknown-linux-gnu",
 "nodes": [
     {
-        "id": "node_1",
+        "id": 1,
         "parallelism": 1,
         "kind": {
             "Source": {
@@ -13,7 +13,7 @@
                 "successors": [
                     {
                         "Local": {
-                            "id": "node_2"
+                            "id": "node2"
                         }
                     }
                 ],
@@ -24,7 +24,7 @@
         }
     },
     {
-        "id": "node_2",
+        "id": 2,
         "parallelism": 1,
         "kind": {
             "Task": {
@@ -38,24 +38,24 @@
                 "successors": [
                     {
                         "Local": {
-                            "id": "node_3"
+                            "id": "node3"
                         }
                     }
                 ],
-                "predecessor": "node_1",
+                "predecessor": 1,
                 "kind": "Map"
             }
         }
     },
     {
-        "id": "node_3",
+        "id": 3,
         "parallelism": 1,
         "kind": {
             "Sink": {
                 "sink_type": {
                     "Scalar": "U32"
                 },
-                "predecessor": "node_2",
+                "predecessor": 2,
                 "kind": "Debug"
             }
         }

@@ -1,4 +1,5 @@
-use crate::data::{ArconElement, ArconEvent, ArconType, Watermark, ArconMessage};
+use crate::streaming::task::NodeID;
+use crate::data::{ArconElement, ArconEvent, ArconMessage, ArconType, Watermark};
 use crate::streaming::channel::strategy::ChannelStrategy;
 use crate::util::io::*;
 use kompact::*;
@@ -30,7 +31,7 @@ where
     watermark_interval: u64, // If 0: no watermarks/timestamps generated
     watermark_index: Option<u32>,
     max_timestamp: u64,
-    id: String,
+    id: NodeID,
 }
 
 impl<OUT> SocketSource<OUT>
@@ -43,7 +44,7 @@ where
         out_channels: Box<ChannelStrategy<OUT>>,
         watermark_interval: u64,
         watermark_index: Option<u32>,
-        id: String,
+        id: NodeID,
     ) -> SocketSource<OUT> {
         SocketSource {
             ctx: ComponentContext::new(),
@@ -63,7 +64,7 @@ where
             if let Some(_) = ts {
                 debug!(self.ctx.log(), "Extracted timestamp and using that");
                 if let Err(err) = self.out_channels.output(
-                    ArconMessage::element(data, ts, self.id.clone()),
+                    ArconMessage::element(data, ts, self.id),
                     &self.ctx.system(),
                 ) {
                     error!(self.ctx.log(), "Unable to output event, error {}", err);
@@ -73,7 +74,7 @@ where
                 match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
                     Ok(ts) => {
                         if let Err(err) = self.out_channels.output(
-                            ArconMessage::element(data, Some(ts.as_secs()), self.id.clone()),
+                            ArconMessage::element(data, Some(ts.as_secs()), self.id),
                             &self.ctx.system(),
                         ) {
                             error!(self.ctx.log(), "Unable to output event, error {}", err);
@@ -85,9 +86,11 @@ where
                 }
             }
         } else {
-            if let Err(err) = self.out_channels.output(ArconMessage{
-                event: ArconEvent::Element(ArconElement::new(data)),
-                sender: self.id.clone()},
+            if let Err(err) = self.out_channels.output(
+                ArconMessage {
+                    event: ArconEvent::Element(ArconElement::new(data)),
+                    sender: self.id,
+                },
                 &self.ctx.system(),
             ) {
                 error!(self.ctx.log(), "Unable to output event, error {}", err);
@@ -96,9 +99,11 @@ where
     }
     pub fn output_watermark(&mut self) -> () {
         if self.watermark_index.is_some() {
-            if let Err(err) = self.out_channels.output(ArconMessage{
-                event: ArconEvent::Watermark(Watermark::new(self.max_timestamp)),
-                sender: self.id.clone()},
+            if let Err(err) = self.out_channels.output(
+                ArconMessage {
+                    event: ArconEvent::Watermark(Watermark::new(self.max_timestamp)),
+                    sender: self.id,
+                },
                 &self.ctx.system(),
             ) {
                 error!(self.ctx.log(), "Unable to output watermark, error {}", err);
@@ -107,7 +112,7 @@ where
             match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
                 Ok(n) => {
                     if let Err(err) = self.out_channels.output(
-                        ArconMessage::watermark(n.as_secs(), self.id.clone()),
+                        ArconMessage::watermark(n.as_secs(), self.id),
                         &self.ctx.system(),
                     ) {
                         error!(self.ctx.log(), "Unable to output watermark, error {}", err);
@@ -182,7 +187,7 @@ where
                         );
                     } else {
                         if let Some(ts_str) = v.get(wm_index as usize) {
-                            if let Ok(ts) =  ts_str.parse::<u64>() {
+                            if let Ok(ts) = ts_str.parse::<u64>() {
                                 if ts > self.max_timestamp {
                                     self.max_timestamp = ts;
                                 }
@@ -190,10 +195,16 @@ where
                                 debug!(self.ctx.log(), "Trying to parse str {}", input_data);
                                 match input_data.parse::<OUT>() {
                                     Ok(data) => self.output_event(data, Some(ts)),
-                                    Err(_) => error!(self.ctx.log(), "Unable to parse string {:?}", input_data),
+                                    Err(_) => error!(
+                                        self.ctx.log(),
+                                        "Unable to parse string {:?}", input_data
+                                    ),
                                 }
                             } else {
-                                error!(self.ctx.log(), "Failed to extract timestamp at index {}", wm_index);
+                                error!(
+                                    self.ctx.log(),
+                                    "Failed to extract timestamp at index {}", wm_index
+                                );
                             }
                         }
                     }
@@ -223,13 +234,13 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::prelude::DebugSink;
     use crate::streaming::channel::strategy::forward::Forward;
     use crate::streaming::channel::Channel;
     use crate::tokio::prelude::Future;
     use std::{thread, time};
     use tokio::io;
     use tokio::net::TcpStream;
-    use crate::prelude::DebugSink;
 
     // Shared methods for test cases
     fn wait(time: u64) -> () {
@@ -250,8 +261,14 @@ mod tests {
         let out_channels: Box<Forward<u8>> =
             Box::new(Forward::new(Channel::Local(sink_ref.clone())));
 
-        let socket_source: SocketSource<u8> =
-            SocketSource::new(addr, SocketKind::Tcp, out_channels, 0, None, "node1".to_string());
+        let socket_source: SocketSource<u8> = SocketSource::new(
+            addr,
+            SocketKind::Tcp,
+            out_channels,
+            0,
+            None,
+            1.into(),
+        );
         let (source, _) = system.create_and_register(move || socket_source);
 
         system.start(&sink);
@@ -289,8 +306,14 @@ mod tests {
         let out_channels: Box<Forward<f32>> =
             Box::new(Forward::new(Channel::Local(sink_ref.clone())));
 
-        let socket_source: SocketSource<f32> =
-            SocketSource::new(addr, SocketKind::Tcp, out_channels, 0, None, "node1".to_string());
+        let socket_source: SocketSource<f32> = SocketSource::new(
+            addr,
+            SocketKind::Tcp,
+            out_channels,
+            0,
+            None,
+            1.into(),
+        );
         let (source, _) = system.create_and_register(move || socket_source);
 
         system.start(&sink);
@@ -344,8 +367,14 @@ mod tests {
         let out_channels: Box<Forward<u8>> =
             Box::new(Forward::new(Channel::Local(sink_ref.clone())));
 
-        let socket_source: SocketSource<u8> =
-            SocketSource::new(addr, SocketKind::Tcp, out_channels, 3, None, "node1".to_string());
+        let socket_source: SocketSource<u8> = SocketSource::new(
+            addr,
+            SocketKind::Tcp,
+            out_channels,
+            3,
+            None,
+            1.into(),
+        );
         let (source, _) = system.create_and_register(move || socket_source);
 
         system.start(&sink);

@@ -1,8 +1,7 @@
+use crate::prelude::*;
+use core::marker::PhantomData;
 use std::sync::Arc;
 use weld::WeldContext;
-use core::marker::PhantomData;
-use crate::prelude::*;
-
 
 /// FlatMap task
 ///
@@ -25,9 +24,7 @@ where
     IN: 'static + ArconType,
     OUT: 'static + ArconType,
 {
-    pub fn new(
-        udf: Arc<Module>,
-    ) -> Self {
+    pub fn new(udf: Arc<Module>) -> Self {
         let ctx = WeldContext::new(&udf.conf()).unwrap();
         FlatMap {
             udf: udf.clone(),
@@ -59,11 +56,15 @@ where
         let mut ret = Vec::new();
         let result = self.run_udf(&(element.data))?;
         for i in 0..result.len {
-            ret.push(ArconEvent::Element(
-                ArconElement{data: result[i as usize], timestamp: element.timestamp}
-            ));
+            ret.push(ArconEvent::Element(ArconElement {
+                data: result[i as usize],
+                timestamp: element.timestamp,
+            }));
         }
         Ok(ret)
+    }
+    fn handle_epoch(&mut self, _epoch: Epoch) -> ArconResult<Vec<u8>> {
+        Ok(Vec::new())
     }
 }
 
@@ -73,7 +74,7 @@ mod tests {
     use crate::prelude::DebugSink;
 
     #[test]
-    fn flatmap_unit_test() { 
+    fn flatmap_unit_test() {
         let weld_code = String::from("|x: vec[i32]| map(x, |a: i32| a + i32(5))");
         let module = Arc::new(Module::new(weld_code).unwrap());
         let mut flatmap = FlatMap::<ArconVec<i32>, i32>::new(module);
@@ -113,10 +114,10 @@ mod tests {
         let module = Arc::new(Module::new(weld_code).unwrap());
         let flatmap_node = system.create_and_start(move || {
             Node::<ArconVec<i32>, i32>::new(
-                "node1".to_string(),
-                vec!("test".to_string()),
+                1.into(),
+                vec![0.into()],
                 channel_strategy,
-                Box::new(FlatMap::<ArconVec<i32>, i32>::new(module))
+                Box::new(FlatMap::<ArconVec<i32>, i32>::new(module)),
             )
         });
 
@@ -124,7 +125,14 @@ mod tests {
         let arcon_vec = ArconVec::new(vec);
 
         let target_ref = flatmap_node.actor_ref();
-        target_ref.tell(Box::new(ArconMessage::<ArconVec<i32>>::element(arcon_vec, Some(0), "test".to_string())), &system);
+        target_ref.tell(
+            Box::new(ArconMessage::<ArconVec<i32>>::element(
+                arcon_vec,
+                Some(0),
+                0.into(),
+            )),
+            &system,
+        );
 
         std::thread::sleep(std::time::Duration::from_secs(3));
         let comp_inspect = &sink_comp.definition().lock().unwrap();
