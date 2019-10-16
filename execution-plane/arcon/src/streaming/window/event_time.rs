@@ -195,6 +195,9 @@ where
         }
         Ok(result)
     }
+    fn handle_epoch(&mut self, _epoch: Epoch) -> ArconResult<Vec<u8>> {
+        Ok(Vec::new())
+    }
 }
 
 #[cfg(test)]
@@ -249,8 +252,8 @@ mod tests {
 
         let window_node = system.create_and_start(move || {
             Node::<Item, WindowOutput>::new(
-                "node1".to_string(),
-                vec!["test".to_string()],
+                1.into(),
+                vec![0.into()],
                 channel_strategy,
                 Box::new(window_assigner),
             )
@@ -271,13 +274,13 @@ mod tests {
         thread::sleep(time::Duration::from_secs(time));
     }
     fn watermark(time: u64) -> ArconMessage<Item> {
-        ArconMessage::watermark(time, "test".to_string())
+        ArconMessage::watermark(time, 0.into())
     }
     fn timestamped_event(ts: u64) -> ArconMessage<Item> {
-        ArconMessage::element(Item { id: 1, price: 1 }, Some(ts), "test".to_string())
+        ArconMessage::element(Item { id: 1, price: 1 }, Some(ts), 0.into())
     }
     fn timestamped_keyed_event(ts: u64, id: u64) -> ArconMessage<Item> {
-        ArconMessage::element(Item { id, price: 1 }, Some(ts), "test".to_string())
+        ArconMessage::element(Item { id, price: 1 }, Some(ts), 0.into())
     }
     #[key_by(id)]
     #[arcon]

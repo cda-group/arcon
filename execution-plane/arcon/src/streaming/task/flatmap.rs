@@ -63,6 +63,9 @@ where
         }
         Ok(ret)
     }
+    fn handle_epoch(&mut self, _epoch: Epoch) -> ArconResult<Vec<u8>> {
+        Ok(Vec::new())
+    }
 }
 
 #[cfg(test)]
@@ -111,8 +114,8 @@ mod tests {
         let module = Arc::new(Module::new(weld_code).unwrap());
         let flatmap_node = system.create_and_start(move || {
             Node::<ArconVec<i32>, i32>::new(
-                "node1".to_string(),
-                vec!["test".to_string()],
+                1.into(),
+                vec![0.into()],
                 channel_strategy,
                 Box::new(FlatMap::<ArconVec<i32>, i32>::new(module)),
             )
@@ -125,7 +128,7 @@ mod tests {
         target_ref.tell(ArconMessage::<ArconVec<i32>>::element(
             arcon_vec,
             Some(0),
-            "test".to_string(),
+            0.into(),
         ));
 
         std::thread::sleep(std::time::Duration::from_secs(3));

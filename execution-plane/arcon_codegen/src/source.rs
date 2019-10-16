@@ -4,13 +4,13 @@ use proc_macro2::{Ident, Span, TokenStream};
 use spec::{SocketKind, Source, SourceKind};
 
 pub fn source(
-    name: &str,
+    id: u32,
     target: &str,
     source: &Source,
     spec_id: &String,
     ts_extractor: u32,
 ) -> TokenStream {
-    let source_name = Ident::new(&name, Span::call_site());
+    let source_name = id_to_ident(id);
     let target = Ident::new(&target, Span::call_site());
     let input_type = to_token_stream(&source.source_type, spec_id);
 
@@ -23,9 +23,10 @@ pub fn source(
             &kind,
             *&source.rate,
             ts_extractor,
+            id,
         ),
         SourceKind::LocalFile { path } => {
-            local_file_source(&source_name, &target, &input_type, &path, *&source.rate)
+            local_file_source(&source_name, &target, &input_type, &path, *&source.rate, id)
         }
     };
 
@@ -40,6 +41,7 @@ fn socket_source(
     kind: &SocketKind,
     rate: u64,
     ts_extraction: u32,
+    id: u32,
 ) -> TokenStream {
     let verify = verify_and_start(source_name, "system");
 
@@ -57,7 +59,7 @@ fn socket_source(
         let channel_strategy: Box<ChannelStrategy<#input_type>> = Box::new(Forward::new(channel));
         let (#source_name, reg) = system.create_and_register(move || {
             let sock_addr = #addr.parse().expect("Failed to parse SocketAddr");
-            let source: SocketSource<#input_type> = SocketSource::new(sock_addr, #sock_kind, channel_strategy, #rate, #ts_quote, String::from(stringify!(#source_name)));
+            let source: SocketSource<#input_type> = SocketSource::new(sock_addr, #sock_kind, channel_strategy, #rate, #ts_quote, #id.into());
             source
         });
 
@@ -71,6 +73,7 @@ fn local_file_source(
     input_type: &TokenStream,
     file_path: &str,
     rate: u64,
+    id: u32,
 ) -> TokenStream {
     let verify = verify_and_start(source_name, "system");
 
@@ -83,7 +86,7 @@ fn local_file_source(
                 String::from(#file_path),
                 channel_strategy,
                 #rate,
-                String::from(stringify!(#source_name)),
+                #id.into(),
             );
             source
         });

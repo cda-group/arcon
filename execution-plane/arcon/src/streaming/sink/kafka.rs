@@ -1,23 +1,19 @@
 use crate::prelude::*;
-use futures::{Complete, Future};
-use kompact::prelude::*;
+use futures::Future;
 use rdkafka::config::ClientConfig;
-use rdkafka::error::{KafkaError, KafkaResult, RDKafkaError};
+use rdkafka::error::KafkaResult;
 use rdkafka::message::*;
 use rdkafka::producer::{FutureProducer, FutureRecord};
-use serde::Deserialize;
-use std::str::FromStr;
-use std::time::Duration;
+
 /*
-    KafkaSink:
-        Will subscribe
+    KafkaSink: Buffers received elements
+    Writes and commits buffers on epoch
 */
-#[derive(ComponentDefinition)]
+#[allow(dead_code)]
 pub struct KafkaSink<IN>
 where
     IN: 'static + ArconType,
 {
-    ctx: ComponentContext<KafkaSink<IN>>,
     bootstrap_server: String,
     topic: String,
     offset: u32,
@@ -39,38 +35,22 @@ where
             .set("message.timeout.ms", "5000");
         let result: KafkaResult<FutureProducer> = config.create();
         match result {
-            Ok(producer) => {
-                KafkaSink {
-                    ctx: ComponentContext::new(),
-                    bootstrap_server,
-                    topic,
-                    offset,
-                    //max_timestamp: 0,
-                    batch_size: 100,
-                    producer: producer,
-                    buffer: Vec::new(),
-                }
-            }
+            Ok(producer) => KafkaSink {
+                bootstrap_server,
+                topic,
+                offset,
+                batch_size: 100,
+                producer: producer,
+                buffer: Vec::new(),
+            },
             _ => {
                 panic!("Failed to start KafkaSink");
             }
         }
     }
-    pub fn handle_event(&mut self, event: ArconEvent<IN>) -> () {
-        match event {
-            ArconEvent::Element(e) => {
-                // Buffer the element
-                self.buffer.push(e);
-            }
-            ArconEvent::Watermark(w) => {
-                // Do nothing
-            }
-        }
-        // Todo: strategy for commits
-        self.commit_buffer();
-    }
 
     pub fn commit_buffer(&mut self) -> () {
+        //println!("sink committing buffer");
         // Will asynchronously try to write all messages in the buffer
         // But will block the thread until all commits are complete
         let mut futures = Vec::new();
@@ -82,91 +62,30 @@ where
                 ));
             }
         }
-        //let mut new_buffer = Vec::new();
+
+        // Write synchronously
         for future in futures {
-            match future.wait() {
-                Complete => {}
-            }
+            future.wait();
         }
     }
 }
 
-impl<IN> Provide<ControlPort> for KafkaSink<IN>
+impl<IN> Task<IN, IN> for KafkaSink<IN>
 where
     IN: 'static + ArconType,
 {
-    fn handle(&mut self, event: ControlEvent) -> () {
-        match event {
-            ControlEvent::Start => {}
-            _ => {
-                error!(self.ctx.log(), "bad ControlEvent");
-            }
-        }
+    fn handle_element(&mut self, element: ArconElement<IN>) -> ArconResult<Vec<ArconEvent<IN>>> {
+        //println!("sink buffering element");
+        self.buffer.push(element);
+        Ok(Vec::new())
+    }
+    fn handle_watermark(&mut self, _w: Watermark) -> ArconResult<Vec<ArconEvent<IN>>> {
+        Ok(Vec::new())
+    }
+    fn handle_epoch(&mut self, _epoch: Epoch) -> ArconResult<Vec<u8>> {
+        self.commit_buffer();
+        Ok(Vec::new())
     }
 }
 
-impl<IN> Actor for KafkaSink<IN>
-where
-    IN: 'static + ArconType,
-{
-    // TODO: should probably be changed to ArconMessage?
-    type Message = Box<ArconEvent<IN>>;
-    fn receive_local(&mut self, msg: Self::Message) {
-        self.handle_event(*msg);
-    }
-
-    fn receive_network(&mut self, _msg: NetMessage) {
-        unimplemented!();
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::{thread, time};
-    #[arcon]
-    struct Thing {
-        id: u32,
-        attribute: i32,
-        location: Point,
-    }
-    #[arcon]
-    struct Point {
-        x: f32,
-        y: f32,
-    }
-
-    //#[test] Used for "manual testing" during developement
-    fn kafka_sink() -> Result<()> {
-        let system = KompactConfig::default().build().expect("KompactSystem");
-
-        let kafka_source: KafkaSink<Thing> =
-            KafkaSink::new("localhost:9092".to_string(), "test".to_string(), 0);
-        let (source, _) = system.create_and_register(move || kafka_source);
-
-        system.start(&source);
-        let thing_a = Thing {
-            id: 0,
-            attribute: 100,
-            location: Point {
-                x: 0.52,
-                y: 113.3233,
-            },
-        };
-        let thing_b = Thing {
-            id: 1,
-            attribute: 101,
-            location: Point { x: -0.52, y: 15.0 },
-        };
-        source.actor_ref().tell(
-            Box::new(ArconEvent::Element(ArconElement::new(thing_a))),
-            &system,
-        );
-        source.actor_ref().tell(
-            Box::new(ArconEvent::Element(ArconElement::new(thing_b))),
-            &system,
-        );
-        thread::sleep(time::Duration::from_secs(10));
-        Ok(())
-    }
-}
+// Tested via kafka_source

@@ -67,7 +67,7 @@ mod tests {
         let mut channel_strategy: Box<ChannelStrategy<Input>> = Box::new(Broadcast::new(channels));
 
         for _i in 0..total_msgs {
-            let input = ArconMessage::element(Input { id: 1 }, None, "test".to_string());
+            let input = ArconMessage::element(Input { id: 1 }, None, 1.into());
             // Just assume it is all sent from same comp
             let _ = channel_strategy.output(input, &system);
         }
@@ -127,7 +127,7 @@ mod tests {
         let mut channel_strategy: Box<ChannelStrategy<Input>> = Box::new(Broadcast::new(channels));
 
         for _i in 0..total_msgs {
-            let input = ArconMessage::element(Input { id: 1 }, None, "test".to_string());
+            let input = ArconMessage::element(Input { id: 1 }, None, 1.into());
             // Just assume it is all sent from same comp
             let _ = channel_strategy.output(input, &system);
         }

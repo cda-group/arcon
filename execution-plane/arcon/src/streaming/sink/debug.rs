@@ -1,4 +1,5 @@
 use crate::data::ArconEvent;
+use crate::messages::protobuf::ProtoSer;
 use crate::prelude::*;
 
 #[derive(ComponentDefinition)]
@@ -9,6 +10,7 @@ where
     ctx: ComponentContext<Self>,
     pub data: Vec<ArconElement<A>>,
     pub watermarks: Vec<Watermark>,
+    pub epochs: Vec<Epoch>,
 }
 
 impl<A> DebugSink<A>
@@ -20,6 +22,7 @@ where
             ctx: ComponentContext::new(),
             data: Vec::new(),
             watermarks: Vec::new(),
+            epochs: Vec::new(),
         }
     }
 
@@ -31,6 +34,9 @@ where
             }
             ArconEvent::Watermark(w) => {
                 self.watermarks.push(*w);
+            }
+            ArconEvent::Epoch(e) => {
+                self.epochs.push(*e);
             }
         }
     }
@@ -53,7 +59,7 @@ where
         self.handle_event(&msg.event);
     }
     fn receive_network(&mut self, msg: NetMessage) {
-        match msg.try_deserialise::<StreamTaskMessage, ProtoSer>() {
+        match msg.try_deserialise::<ArconNetworkMessage, ProtoSer>() {
             Ok(deser_msg) => {
                 if let Ok(message) = ArconMessage::from_remote(deser_msg) {
                     self.handle_event(&message.event);
@@ -61,7 +67,7 @@ where
                     error!(self.ctx.log(), "Failed to convert remote message to local");
                 }
             }
-            Err(e) => error!(self.ctx.log(), "Error StreamTaskMessage : {:?}", e),
+            Err(e) => error!(self.ctx.log(), "Error ArconNetworkMessage : {:?}", e),
         }
     }
 }

@@ -1,4 +1,3 @@
-use crate::prelude::KompactSystem;
 use crate::prelude::*;
 use crate::streaming::channel::strategy::{channel_output, ChannelStrategy};
 use crate::streaming::channel::Channel;
@@ -51,7 +50,7 @@ mod tests {
             Box::new(Forward::new(Channel::Local(actor_ref)));
 
         for _i in 0..total_msgs {
-            let input = ArconMessage::element(Input { id: 1 }, None, "test".to_string());
+            let input = ArconMessage::element(Input { id: 1 }, None, 1.into());
             let _ = channel_strategy.output(input, &system);
         }
 

@@ -127,7 +127,7 @@ mod tests {
             let input = Input {
                 id: rng.gen_range(0, 100),
             };
-            inputs.push(ArconMessage::element(input, None, "test".to_string()));
+            inputs.push(ArconMessage::element(input, None, 1.into()));
         }
 
         for input in inputs {

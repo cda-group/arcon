@@ -13,7 +13,5 @@ Extra features for Arcon
 
 [features]
 default = []
-kafka = ["rdkafka"]
 
 [dependencies]
-rdkafka = { version = "~0.19", optional = true }

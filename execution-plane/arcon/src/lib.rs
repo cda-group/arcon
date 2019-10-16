@@ -32,7 +32,7 @@ pub mod prelude {
 
     pub use crate::streaming::channel::Channel;
     pub use crate::streaming::task::{
-        filter::Filter, flatmap::FlatMap, map::Map, node::Node, Task, TaskMetric,
+        filter::Filter, flatmap::FlatMap, map::Map, node::Node, NodeID, Task, TaskMetric,
     };
     pub use crate::streaming::window::{
         builder::WindowBuilder, builder::WindowFn, builder::WindowModules,

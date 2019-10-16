@@ -11,7 +11,7 @@ impl ProtoSer {
     const SID: SerId = 21;
 }
 
-impl Serialisable for StreamTaskMessage {
+impl Serialisable for ArconNetworkMessage {
     fn ser_id(&self) -> u64 {
         21
     }
@@ -34,18 +34,18 @@ impl Serialisable for StreamTaskMessage {
     }
 }
 
-impl Deserialiser<StreamTaskMessage> for ProtoSer {
+impl Deserialiser<ArconNetworkMessage> for ProtoSer {
     const SER_ID: SerId = Self::SID;
 
-    fn deserialise(buf: &mut Buf) -> Result<StreamTaskMessage, SerError> {
+    fn deserialise(buf: &mut Buf) -> Result<ArconNetworkMessage, SerError> {
         let parsed = protobuf::parse_from_bytes(buf.bytes())
             .map_err(|err| SerError::InvalidData(err.to_string()))?;
         Ok(parsed)
     }
 }
 
-pub fn create_element(data: Vec<u8>, ts: u64) -> StreamTaskMessage {
-    let mut msg = StreamTaskMessage::new();
+pub fn create_element(data: Vec<u8>, ts: u64) -> ArconNetworkMessage {
+    let mut msg = ArconNetworkMessage::new();
     let mut element = Element::new();
     element.set_data(data);
     element.set_timestamp(ts);

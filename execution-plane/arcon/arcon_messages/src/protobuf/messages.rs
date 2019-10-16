@@ -31,7 +31,6 @@ pub struct Element {
     // message fields
     pub timestamp: u64,
     pub data: ::std::vec::Vec<u8>,
-    pub task_id: ::std::string::String,
     // special fields
     pub unknown_fields: ::protobuf::UnknownFields,
     pub cached_size: ::protobuf::CachedSize,
@@ -88,32 +87,6 @@ impl Element {
     pub fn take_data(&mut self) -> ::std::vec::Vec<u8> {
         ::std::mem::replace(&mut self.data, ::std::vec::Vec::new())
     }
-
-    // string task_id = 3;
-
-
-    pub fn get_task_id(&self) -> &str {
-        &self.task_id
-    }
-    pub fn clear_task_id(&mut self) {
-        self.task_id.clear();
-    }
-
-    // Param is passed by value, moved
-    pub fn set_task_id(&mut self, v: ::std::string::String) {
-        self.task_id = v;
-    }
-
-    // Mutable pointer to the field.
-    // If field is not initialized, it is initialized with default value first.
-    pub fn mut_task_id(&mut self) -> &mut ::std::string::String {
-        &mut self.task_id
-    }
-
-    // Take field
-    pub fn take_task_id(&mut self) -> ::std::string::String {
-        ::std::mem::replace(&mut self.task_id, ::std::string::String::new())
-    }
 }
 
 impl ::protobuf::Message for Element {
@@ -135,9 +108,6 @@ impl ::protobuf::Message for Element {
                 2 => {
                     ::protobuf::rt::read_singular_proto3_bytes_into(wire_type, is, &mut self.data)?;
                 },
-                3 => {
-                    ::protobuf::rt::read_singular_proto3_string_into(wire_type, is, &mut self.task_id)?;
-                },
                 _ => {
                     ::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields())?;
                 },
@@ -156,9 +126,6 @@ impl ::protobuf::Message for Element {
         if !self.data.is_empty() {
             my_size += ::protobuf::rt::bytes_size(2, &self.data);
         }
-        if !self.task_id.is_empty() {
-            my_size += ::protobuf::rt::string_size(3, &self.task_id);
-        }
         my_size += ::protobuf::rt::unknown_fields_size(self.get_unknown_fields());
         self.cached_size.set(my_size);
         my_size
@@ -170,9 +137,6 @@ impl ::protobuf::Message for Element {
         }
         if !self.data.is_empty() {
             os.write_bytes(2, &self.data)?;
-        }
-        if !self.task_id.is_empty() {
-            os.write_string(3, &self.task_id)?;
         }
         os.write_unknown_fields(self.get_unknown_fields())?;
         ::std::result::Result::Ok(())
@@ -226,11 +190,6 @@ impl ::protobuf::Message for Element {
                     |m: &Element| { &m.data },
                     |m: &mut Element| { &mut m.data },
                 ));
-                fields.push(::protobuf::reflect::accessor::make_simple_field_accessor::<_, ::protobuf::types::ProtobufTypeString>(
-                    "task_id",
-                    |m: &Element| { &m.task_id },
-                    |m: &mut Element| { &mut m.task_id },
-                ));
                 ::protobuf::reflect::MessageDescriptor::new::<Element>(
                     "Element",
                     fields,
@@ -255,7 +214,6 @@ impl ::protobuf::Clear for Element {
     fn clear(&mut self) {
         self.timestamp = 0;
         self.data.clear();
-        self.task_id.clear();
         self.unknown_fields.clear();
     }
 }
@@ -274,6 +232,8 @@ impl ::protobuf::reflect::ProtobufValue for Element {
 
 #[derive(PartialEq,Clone,Default)]
 pub struct Checkpoint {
+    // message fields
+    pub epoch: u64,
     // special fields
     pub unknown_fields: ::protobuf::UnknownFields,
     pub cached_size: ::protobuf::CachedSize,
@@ -289,6 +249,21 @@ impl Checkpoint {
     pub fn new() -> Checkpoint {
         ::std::default::Default::default()
     }
+
+    // uint64 epoch = 1;
+
+
+    pub fn get_epoch(&self) -> u64 {
+        self.epoch
+    }
+    pub fn clear_epoch(&mut self) {
+        self.epoch = 0;
+    }
+
+    // Param is passed by value, moved
+    pub fn set_epoch(&mut self, v: u64) {
+        self.epoch = v;
+    }
 }
 
 impl ::protobuf::Message for Checkpoint {
@@ -300,6 +275,13 @@ impl ::protobuf::Message for Checkpoint {
         while !is.eof()? {
             let (field_number, wire_type) = is.read_tag_unpack()?;
             match field_number {
+                1 => {
+                    if wire_type != ::protobuf::wire_format::WireTypeVarint {
+                        return ::std::result::Result::Err(::protobuf::rt::unexpected_wire_type(wire_type));
+                    }
+                    let tmp = is.read_uint64()?;
+                    self.epoch = tmp;
+                },
                 _ => {
                     ::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields())?;
                 },
@@ -312,12 +294,18 @@ impl ::protobuf::Message for Checkpoint {
     #[allow(unused_variables)]
     fn compute_size(&self) -> u32 {
         let mut my_size = 0;
+        if self.epoch != 0 {
+            my_size += ::protobuf::rt::value_size(1, self.epoch, ::protobuf::wire_format::WireTypeVarint);
+        }
         my_size += ::protobuf::rt::unknown_fields_size(self.get_unknown_fields());
         self.cached_size.set(my_size);
         my_size
     }
 
     fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream) -> ::protobuf::ProtobufResult<()> {
+        if self.epoch != 0 {
+            os.write_uint64(1, self.epoch)?;
+        }
         os.write_unknown_fields(self.get_unknown_fields())?;
         ::std::result::Result::Ok(())
     }
@@ -359,7 +347,12 @@ impl ::protobuf::Message for Checkpoint {
         };
         unsafe {
             descriptor.get(|| {
-                let fields = ::std::vec::Vec::new();
+                let mut fields = ::std::vec::Vec::new();
+                fields.push(::protobuf::reflect::accessor::make_simple_field_accessor::<_, ::protobuf::types::ProtobufTypeUint64>(
+                    "epoch",
+                    |m: &Checkpoint| { &m.epoch },
+                    |m: &mut Checkpoint| { &mut m.epoch },
+                ));
                 ::protobuf::reflect::MessageDescriptor::new::<Checkpoint>(
                     "Checkpoint",
                     fields,
@@ -382,6 +375,7 @@ impl ::protobuf::Message for Checkpoint {
 
 impl ::protobuf::Clear for Checkpoint {
     fn clear(&mut self) {
+        self.epoch = 0;
         self.unknown_fields.clear();
     }
 }
@@ -561,58 +555,47 @@ impl ::protobuf::reflect::ProtobufValue for Watermark {
 }
 
 #[derive(PartialEq,Clone,Default)]
-pub struct StreamTaskMessage {
+pub struct ArconNetworkMessage {
     // message fields
-    pub sender: ::std::string::String,
+    pub sender: u32,
     // message oneof groups
-    pub payload: ::std::option::Option<StreamTaskMessage_oneof_payload>,
+    pub payload: ::std::option::Option<ArconNetworkMessage_oneof_payload>,
     // special fields
     pub unknown_fields: ::protobuf::UnknownFields,
     pub cached_size: ::protobuf::CachedSize,
 }
 
-impl<'a> ::std::default::Default for &'a StreamTaskMessage {
-    fn default() -> &'a StreamTaskMessage {
-        <StreamTaskMessage as ::protobuf::Message>::default_instance()
+impl<'a> ::std::default::Default for &'a ArconNetworkMessage {
+    fn default() -> &'a ArconNetworkMessage {
+        <ArconNetworkMessage as ::protobuf::Message>::default_instance()
     }
 }
 
 #[derive(Clone,PartialEq,Debug)]
-pub enum StreamTaskMessage_oneof_payload {
+pub enum ArconNetworkMessage_oneof_payload {
     element(Element),
     watermark(Watermark),
     checkpoint(Checkpoint),
 }
 
-impl StreamTaskMessage {
-    pub fn new() -> StreamTaskMessage {
+impl ArconNetworkMessage {
+    pub fn new() -> ArconNetworkMessage {
         ::std::default::Default::default()
     }
 
-    // string sender = 1;
+    // uint32 sender = 1;
 
 
-    pub fn get_sender(&self) -> &str {
-        &self.sender
+    pub fn get_sender(&self) -> u32 {
+        self.sender
     }
     pub fn clear_sender(&mut self) {
-        self.sender.clear();
+        self.sender = 0;
     }
 
     // Param is passed by value, moved
-    pub fn set_sender(&mut self, v: ::std::string::String) {
+    pub fn set_sender(&mut self, v: u32) {
         self.sender = v;
-    }
-
-    // Mutable pointer to the field.
-    // If field is not initialized, it is initialized with default value first.
-    pub fn mut_sender(&mut self) -> &mut ::std::string::String {
-        &mut self.sender
-    }
-
-    // Take field
-    pub fn take_sender(&mut self) -> ::std::string::String {
-        ::std::mem::replace(&mut self.sender, ::std::string::String::new())
     }
 
     // .Element element = 2;
@@ -620,7 +603,7 @@ impl StreamTaskMessage {
 
     pub fn get_element(&self) -> &Element {
         match self.payload {
-            ::std::option::Option::Some(StreamTaskMessage_oneof_payload::element(ref v)) => v,
+            ::std::option::Option::Some(ArconNetworkMessage_oneof_payload::element(ref v)) => v,
             _ => Element::default_instance(),
         }
     }
@@ -630,24 +613,24 @@ impl StreamTaskMessage {
 
     pub fn has_element(&self) -> bool {
         match self.payload {
-            ::std::option::Option::Some(StreamTaskMessage_oneof_payload::element(..)) => true,
+            ::std::option::Option::Some(ArconNetworkMessage_oneof_payload::element(..)) => true,
             _ => false,
         }
     }
 
     // Param is passed by value, moved
     pub fn set_element(&mut self, v: Element) {
-        self.payload = ::std::option::Option::Some(StreamTaskMessage_oneof_payload::element(v))
+        self.payload = ::std::option::Option::Some(ArconNetworkMessage_oneof_payload::element(v))
     }
 
     // Mutable pointer to the field.
     pub fn mut_element(&mut self) -> &mut Element {
-        if let ::std::option::Option::Some(StreamTaskMessage_oneof_payload::element(_)) = self.payload {
+        if let ::std::option::Option::Some(ArconNetworkMessage_oneof_payload::element(_)) = self.payload {
         } else {
-            self.payload = ::std::option::Option::Some(StreamTaskMessage_oneof_payload::element(Element::new()));
+            self.payload = ::std::option::Option::Some(ArconNetworkMessage_oneof_payload::element(Element::new()));
         }
         match self.payload {
-            ::std::option::Option::Some(StreamTaskMessage_oneof_payload::element(ref mut v)) => v,
+            ::std::option::Option::Some(ArconNetworkMessage_oneof_payload::element(ref mut v)) => v,
             _ => panic!(),
         }
     }
@@ -656,7 +639,7 @@ impl StreamTaskMessage {
     pub fn take_element(&mut self) -> Element {
         if self.has_element() {
             match self.payload.take() {
-                ::std::option::Option::Some(StreamTaskMessage_oneof_payload::element(v)) => v,
+                ::std::option::Option::Some(ArconNetworkMessage_oneof_payload::element(v)) => v,
                 _ => panic!(),
             }
         } else {
@@ -669,7 +652,7 @@ impl StreamTaskMessage {
 
     pub fn get_watermark(&self) -> &Watermark {
         match self.payload {
-            ::std::option::Option::Some(StreamTaskMessage_oneof_payload::watermark(ref v)) => v,
+            ::std::option::Option::Some(ArconNetworkMessage_oneof_payload::watermark(ref v)) => v,
             _ => Watermark::default_instance(),
         }
     }
@@ -679,24 +662,24 @@ impl StreamTaskMessage {
 
     pub fn has_watermark(&self) -> bool {
         match self.payload {
-            ::std::option::Option::Some(StreamTaskMessage_oneof_payload::watermark(..)) => true,
+            ::std::option::Option::Some(ArconNetworkMessage_oneof_payload::watermark(..)) => true,
             _ => false,
         }
     }
 
     // Param is passed by value, moved
     pub fn set_watermark(&mut self, v: Watermark) {
-        self.payload = ::std::option::Option::Some(StreamTaskMessage_oneof_payload::watermark(v))
+        self.payload = ::std::option::Option::Some(ArconNetworkMessage_oneof_payload::watermark(v))
     }
 
     // Mutable pointer to the field.
     pub fn mut_watermark(&mut self) -> &mut Watermark {
-        if let ::std::option::Option::Some(StreamTaskMessage_oneof_payload::watermark(_)) = self.payload {
+        if let ::std::option::Option::Some(ArconNetworkMessage_oneof_payload::watermark(_)) = self.payload {
         } else {
-            self.payload = ::std::option::Option::Some(StreamTaskMessage_oneof_payload::watermark(Watermark::new()));
+            self.payload = ::std::option::Option::Some(ArconNetworkMessage_oneof_payload::watermark(Watermark::new()));
         }
         match self.payload {
-            ::std::option::Option::Some(StreamTaskMessage_oneof_payload::watermark(ref mut v)) => v,
+            ::std::option::Option::Some(ArconNetworkMessage_oneof_payload::watermark(ref mut v)) => v,
             _ => panic!(),
         }
     }
@@ -705,7 +688,7 @@ impl StreamTaskMessage {
     pub fn take_watermark(&mut self) -> Watermark {
         if self.has_watermark() {
             match self.payload.take() {
-                ::std::option::Option::Some(StreamTaskMessage_oneof_payload::watermark(v)) => v,
+                ::std::option::Option::Some(ArconNetworkMessage_oneof_payload::watermark(v)) => v,
                 _ => panic!(),
             }
         } else {
@@ -718,7 +701,7 @@ impl StreamTaskMessage {
 
     pub fn get_checkpoint(&self) -> &Checkpoint {
         match self.payload {
-            ::std::option::Option::Some(StreamTaskMessage_oneof_payload::checkpoint(ref v)) => v,
+            ::std::option::Option::Some(ArconNetworkMessage_oneof_payload::checkpoint(ref v)) => v,
             _ => Checkpoint::default_instance(),
         }
     }
@@ -728,24 +711,24 @@ impl StreamTaskMessage {
 
     pub fn has_checkpoint(&self) -> bool {
         match self.payload {
-            ::std::option::Option::Some(StreamTaskMessage_oneof_payload::checkpoint(..)) => true,
+            ::std::option::Option::Some(ArconNetworkMessage_oneof_payload::checkpoint(..)) => true,
             _ => false,
         }
     }
 
     // Param is passed by value, moved
     pub fn set_checkpoint(&mut self, v: Checkpoint) {
-        self.payload = ::std::option::Option::Some(StreamTaskMessage_oneof_payload::checkpoint(v))
+        self.payload = ::std::option::Option::Some(ArconNetworkMessage_oneof_payload::checkpoint(v))
     }
 
     // Mutable pointer to the field.
     pub fn mut_checkpoint(&mut self) -> &mut Checkpoint {
-        if let ::std::option::Option::Some(StreamTaskMessage_oneof_payload::checkpoint(_)) = self.payload {
+        if let ::std::option::Option::Some(ArconNetworkMessage_oneof_payload::checkpoint(_)) = self.payload {
         } else {
-            self.payload = ::std::option::Option::Some(StreamTaskMessage_oneof_payload::checkpoint(Checkpoint::new()));
+            self.payload = ::std::option::Option::Some(ArconNetworkMessage_oneof_payload::checkpoint(Checkpoint::new()));
         }
         match self.payload {
-            ::std::option::Option::Some(StreamTaskMessage_oneof_payload::checkpoint(ref mut v)) => v,
+            ::std::option::Option::Some(ArconNetworkMessage_oneof_payload::checkpoint(ref mut v)) => v,
             _ => panic!(),
         }
     }
@@ -754,7 +737,7 @@ impl StreamTaskMessage {
     pub fn take_checkpoint(&mut self) -> Checkpoint {
         if self.has_checkpoint() {
             match self.payload.take() {
-                ::std::option::Option::Some(StreamTaskMessage_oneof_payload::checkpoint(v)) => v,
+                ::std::option::Option::Some(ArconNetworkMessage_oneof_payload::checkpoint(v)) => v,
                 _ => panic!(),
             }
         } else {
@@ -763,19 +746,19 @@ impl StreamTaskMessage {
     }
 }
 
-impl ::protobuf::Message for StreamTaskMessage {
+impl ::protobuf::Message for ArconNetworkMessage {
     fn is_initialized(&self) -> bool {
-        if let Some(StreamTaskMessage_oneof_payload::element(ref v)) = self.payload {
+        if let Some(ArconNetworkMessage_oneof_payload::element(ref v)) = self.payload {
             if !v.is_initialized() {
                 return false;
             }
         }
-        if let Some(StreamTaskMessage_oneof_payload::watermark(ref v)) = self.payload {
+        if let Some(ArconNetworkMessage_oneof_payload::watermark(ref v)) = self.payload {
             if !v.is_initialized() {
                 return false;
             }
         }
-        if let Some(StreamTaskMessage_oneof_payload::checkpoint(ref v)) = self.payload {
+        if let Some(ArconNetworkMessage_oneof_payload::checkpoint(ref v)) = self.payload {
             if !v.is_initialized() {
                 return false;
             }
@@ -788,25 +771,29 @@ impl ::protobuf::Message for StreamTaskMessage {
             let (field_number, wire_type) = is.read_tag_unpack()?;
             match field_number {
                 1 => {
-                    ::protobuf::rt::read_singular_proto3_string_into(wire_type, is, &mut self.sender)?;
+                    if wire_type != ::protobuf::wire_format::WireTypeVarint {
+                        return ::std::result::Result::Err(::protobuf::rt::unexpected_wire_type(wire_type));
+                    }
+                    let tmp = is.read_uint32()?;
+                    self.sender = tmp;
                 },
                 2 => {
                     if wire_type != ::protobuf::wire_format::WireTypeLengthDelimited {
                         return ::std::result::Result::Err(::protobuf::rt::unexpected_wire_type(wire_type));
                     }
-                    self.payload = ::std::option::Option::Some(StreamTaskMessage_oneof_payload::element(is.read_message()?));
+                    self.payload = ::std::option::Option::Some(ArconNetworkMessage_oneof_payload::element(is.read_message()?));
                 },
                 3 => {
                     if wire_type != ::protobuf::wire_format::WireTypeLengthDelimited {
                         return ::std::result::Result::Err(::protobuf::rt::unexpected_wire_type(wire_type));
                     }
-                    self.payload = ::std::option::Option::Some(StreamTaskMessage_oneof_payload::watermark(is.read_message()?));
+                    self.payload = ::std::option::Option::Some(ArconNetworkMessage_oneof_payload::watermark(is.read_message()?));
                 },
                 4 => {
                     if wire_type != ::protobuf::wire_format::WireTypeLengthDelimited {
                         return ::std::result::Result::Err(::protobuf::rt::unexpected_wire_type(wire_type));
                     }
-                    self.payload = ::std::option::Option::Some(StreamTaskMessage_oneof_payload::checkpoint(is.read_message()?));
+                    self.payload = ::std::option::Option::Some(ArconNetworkMessage_oneof_payload::checkpoint(is.read_message()?));
                 },
                 _ => {
                     ::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields())?;
@@ -820,20 +807,20 @@ impl ::protobuf::Message for StreamTaskMessage {
     #[allow(unused_variables)]
     fn compute_size(&self) -> u32 {
         let mut my_size = 0;
-        if !self.sender.is_empty() {
-            my_size += ::protobuf::rt::string_size(1, &self.sender);
+        if self.sender != 0 {
+            my_size += ::protobuf::rt::value_size(1, self.sender, ::protobuf::wire_format::WireTypeVarint);
         }
         if let ::std::option::Option::Some(ref v) = self.payload {
             match v {
-                &StreamTaskMessage_oneof_payload::element(ref v) => {
+                &ArconNetworkMessage_oneof_payload::element(ref v) => {
                     let len = v.compute_size();
                     my_size += 1 + ::protobuf::rt::compute_raw_varint32_size(len) + len;
                 },
-                &StreamTaskMessage_oneof_payload::watermark(ref v) => {
+                &ArconNetworkMessage_oneof_payload::watermark(ref v) => {
                     let len = v.compute_size();
                     my_size += 1 + ::protobuf::rt::compute_raw_varint32_size(len) + len;
                 },
-                &StreamTaskMessage_oneof_payload::checkpoint(ref v) => {
+                &ArconNetworkMessage_oneof_payload::checkpoint(ref v) => {
                     let len = v.compute_size();
                     my_size += 1 + ::protobuf::rt::compute_raw_varint32_size(len) + len;
                 },
@@ -845,22 +832,22 @@ impl ::protobuf::Message for StreamTaskMessage {
     }
 
     fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream) -> ::protobuf::ProtobufResult<()> {
-        if !self.sender.is_empty() {
-            os.write_string(1, &self.sender)?;
+        if self.sender != 0 {
+            os.write_uint32(1, self.sender)?;
         }
         if let ::std::option::Option::Some(ref v) = self.payload {
             match v {
-                &StreamTaskMessage_oneof_payload::element(ref v) => {
+                &ArconNetworkMessage_oneof_payload::element(ref v) => {
                     os.write_tag(2, ::protobuf::wire_format::WireTypeLengthDelimited)?;
                     os.write_raw_varint32(v.get_cached_size())?;
                     v.write_to_with_cached_sizes(os)?;
                 },
-                &StreamTaskMessage_oneof_payload::watermark(ref v) => {
+                &ArconNetworkMessage_oneof_payload::watermark(ref v) => {
                     os.write_tag(3, ::protobuf::wire_format::WireTypeLengthDelimited)?;
                     os.write_raw_varint32(v.get_cached_size())?;
                     v.write_to_with_cached_sizes(os)?;
                 },
-                &StreamTaskMessage_oneof_payload::checkpoint(ref v) => {
+                &ArconNetworkMessage_oneof_payload::checkpoint(ref v) => {
                     os.write_tag(4, ::protobuf::wire_format::WireTypeLengthDelimited)?;
                     os.write_raw_varint32(v.get_cached_size())?;
                     v.write_to_with_cached_sizes(os)?;
@@ -897,8 +884,8 @@ impl ::protobuf::Message for StreamTaskMessage {
         Self::descriptor_static()
     }
 
-    fn new() -> StreamTaskMessage {
-        StreamTaskMessage::new()
+    fn new() -> ArconNetworkMessage {
+        ArconNetworkMessage::new()
     }
 
     fn descriptor_static() -> &'static ::protobuf::reflect::MessageDescriptor {
@@ -909,28 +896,28 @@ impl ::protobuf::Message for StreamTaskMessage {
         unsafe {
             descriptor.get(|| {
                 let mut fields = ::std::vec::Vec::new();
-                fields.push(::protobuf::reflect::accessor::make_simple_field_accessor::<_, ::protobuf::types::ProtobufTypeString>(
+                fields.push(::protobuf::reflect::accessor::make_simple_field_accessor::<_, ::protobuf::types::ProtobufTypeUint32>(
                     "sender",
-                    |m: &StreamTaskMessage| { &m.sender },
-                    |m: &mut StreamTaskMessage| { &mut m.sender },
+                    |m: &ArconNetworkMessage| { &m.sender },
+                    |m: &mut ArconNetworkMessage| { &mut m.sender },
                 ));
                 fields.push(::protobuf::reflect::accessor::make_singular_message_accessor::<_, Element>(
                     "element",
-                    StreamTaskMessage::has_element,
-                    StreamTaskMessage::get_element,
+                    ArconNetworkMessage::has_element,
+                    ArconNetworkMessage::get_element,
                 ));
                 fields.push(::protobuf::reflect::accessor::make_singular_message_accessor::<_, Watermark>(
                     "watermark",
-                    StreamTaskMessage::has_watermark,
-                    StreamTaskMessage::get_watermark,
+                    ArconNetworkMessage::has_watermark,
+                    ArconNetworkMessage::get_watermark,
                 ));
                 fields.push(::protobuf::reflect::accessor::make_singular_message_accessor::<_, Checkpoint>(
                     "checkpoint",
-                    StreamTaskMessage::has_checkpoint,
-                    StreamTaskMessage::get_checkpoint,
+                    ArconNetworkMessage::has_checkpoint,
+                    ArconNetworkMessage::get_checkpoint,
                 ));
-                ::protobuf::reflect::MessageDescriptor::new::<StreamTaskMessage>(
-                    "StreamTaskMessage",
+                ::protobuf::reflect::MessageDescriptor::new::<ArconNetworkMessage>(
+                    "ArconNetworkMessage",
                     fields,
                     file_descriptor_proto()
                 )
@@ -938,20 +925,20 @@ impl ::protobuf::Message for StreamTaskMessage {
         }
     }
 
-    fn default_instance() -> &'static StreamTaskMessage {
-        static mut instance: ::protobuf::lazy::Lazy<StreamTaskMessage> = ::protobuf::lazy::Lazy {
+    fn default_instance() -> &'static ArconNetworkMessage {
+        static mut instance: ::protobuf::lazy::Lazy<ArconNetworkMessage> = ::protobuf::lazy::Lazy {
             lock: ::protobuf::lazy::ONCE_INIT,
-            ptr: 0 as *const StreamTaskMessage,
+            ptr: 0 as *const ArconNetworkMessage,
         };
         unsafe {
-            instance.get(StreamTaskMessage::new)
+            instance.get(ArconNetworkMessage::new)
         }
     }
 }
 
-impl ::protobuf::Clear for StreamTaskMessage {
+impl ::protobuf::Clear for ArconNetworkMessage {
     fn clear(&mut self) {
-        self.sender.clear();
+        self.sender = 0;
         self.payload = ::std::option::Option::None;
         self.payload = ::std::option::Option::None;
         self.payload = ::std::option::Option::None;
@@ -959,24 +946,24 @@ impl ::protobuf::Clear for StreamTaskMessage {
     }
 }
 
-impl ::std::fmt::Debug for StreamTaskMessage {
+impl ::std::fmt::Debug for ArconNetworkMessage {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
         ::protobuf::text_format::fmt(self, f)
     }
 }
 
-impl ::protobuf::reflect::ProtobufValue for StreamTaskMessage {
+impl ::protobuf::reflect::ProtobufValue for ArconNetworkMessage {
     fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef {
         ::protobuf::reflect::ProtobufValueRef::Message(self)
     }
 }
 
 static file_descriptor_proto_data: &'static [u8] = b"\
-    \n\x0emessages.proto\"T\n\x07Element\x12\x1c\n\ttimestamp\x18\x01\x20\
-    \x01(\x04R\ttimestamp\x12\x12\n\x04data\x18\x02\x20\x01(\x0cR\x04data\
-    \x12\x17\n\x07task_id\x18\x03\x20\x01(\tR\x06taskId\"\x0c\n\nCheckpoint\
-    \")\n\tWatermark\x12\x1c\n\ttimestamp\x18\x01\x20\x01(\x04R\ttimestamp\"\
-    \xb7\x01\n\x11StreamTaskMessage\x12\x16\n\x06sender\x18\x01\x20\x01(\tR\
+    \n\x0emessages.proto\";\n\x07Element\x12\x1c\n\ttimestamp\x18\x01\x20\
+    \x01(\x04R\ttimestamp\x12\x12\n\x04data\x18\x02\x20\x01(\x0cR\x04data\"\
+    \"\n\nCheckpoint\x12\x14\n\x05epoch\x18\x01\x20\x01(\x04R\x05epoch\")\n\
+    \tWatermark\x12\x1c\n\ttimestamp\x18\x01\x20\x01(\x04R\ttimestamp\"\xb9\
+    \x01\n\x13ArconNetworkMessage\x12\x16\n\x06sender\x18\x01\x20\x01(\rR\
     \x06sender\x12$\n\x07element\x18\x02\x20\x01(\x0b2\x08.ElementH\0R\x07el\
     ement\x12*\n\twatermark\x18\x03\x20\x01(\x0b2\n.WatermarkH\0R\twatermark\
     \x12-\n\ncheckpoint\x18\x04\x20\x01(\x0b2\x0b.CheckpointH\0R\ncheckpoint\

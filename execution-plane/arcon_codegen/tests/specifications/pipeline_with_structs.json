@@ -4,7 +4,7 @@
 "mode": "debug",
 "nodes": [
     {
-        "id": "node_1",
+        "id": 1,
         "parallelism": 1,
         "kind": {
             "Source": {
@@ -14,7 +14,7 @@
                 "successors": [
                     {
                         "Local": {
-                            "id": "node_2"
+                            "id": "node2"
                         }
                     }
                 ],
@@ -25,7 +25,7 @@
         }
     },
     {
-        "id": "node_2",
+        "id": 2,
         "parallelism": 1,
         "kind": {
             "Task": {
@@ -49,17 +49,17 @@
                 "successors": [
                     {
                         "Local": {
-                            "id": "node_3"
+                            "id": "node3"
                         }
                     }
                 ],
-                "predecessor": "node_1",
+                "predecessor": 1,
                 "kind": "Map"
             }
         }
     },
     {
-        "id": "node_3",
+        "id": 3,
         "parallelism": 1,
         "kind": {
             "Sink": {
@@ -76,7 +76,7 @@
                       ]
                     }
                 },
-                "predecessor": "node_2",
+                "predecessor": 2,
                 "kind": {
                   "Socket": { "addr": "127.0.0.1:9500", "kind": "udp"}
                 }

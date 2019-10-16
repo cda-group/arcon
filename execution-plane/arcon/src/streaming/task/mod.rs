@@ -5,6 +5,38 @@ pub mod map;
 pub mod node;
 
 use crate::prelude::*;
+use std::cmp::Ordering;
+
+#[derive(Eq, Hash, Copy, Clone, Debug)]
+pub struct NodeID {
+    pub id: u32,
+}
+
+impl NodeID {
+    pub fn new(new_id: u32) -> NodeID {
+        NodeID { id: new_id }
+    }
+}
+impl From<u32> for NodeID {
+    fn from(id: u32) -> Self {
+        NodeID::new(id)
+    }
+}
+impl Ord for NodeID {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.id.cmp(&other.id)
+    }
+}
+impl PartialOrd for NodeID {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl PartialEq for NodeID {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
 
 pub struct TaskMetric {
     avg: u64,
@@ -41,4 +73,5 @@ where
 {
     fn handle_element(&mut self, element: ArconElement<IN>) -> ArconResult<Vec<ArconEvent<OUT>>>;
     fn handle_watermark(&mut self, watermark: Watermark) -> ArconResult<Vec<ArconEvent<OUT>>>;
+    fn handle_epoch(&mut self, epoch: Epoch) -> ArconResult<Vec<u8>>;
 }

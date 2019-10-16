@@ -35,7 +35,7 @@ pub struct ArconSpec {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Node {
-    pub id: String,
+    pub id: u32,
     #[serde(default = "parallelism")]
     pub parallelism: u32,
     pub kind: NodeKind,
@@ -54,7 +54,7 @@ pub struct Window {
     #[serde(default = "forward")]
     pub channel_strategy: ChannelStrategy,
     pub successors: Vec<ChannelKind>,
-    pub predecessor: String,
+    pub predecessor: u32,
     pub assigner: WindowAssigner,
     pub window_kind: WindowKind,
     pub window_function: WindowFunction,
@@ -118,7 +118,7 @@ pub enum SourceKind {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Sink {
     pub sink_type: Type,
-    pub predecessor: String,
+    pub predecessor: u32,
     pub kind: SinkKind,
     #[serde(default = "utf8")]
     pub format: Format,
@@ -151,7 +151,7 @@ pub struct Task {
     pub input_type: Type,
     pub output_type: Type,
     pub weld_code: String,
-    pub predecessor: String,
+    pub predecessor: u32,
     #[serde(default = "forward")]
     pub channel_strategy: ChannelStrategy,
     pub successors: Vec<ChannelKind>,
@@ -319,7 +319,7 @@ mod tests {
             "target": "x86-64-unknown-linux-gnu",
             "nodes": [
                 {
-                    "id": "node_1",
+                    "id": 1,
                     "parallelism": 1,
                     "kind": {
                         "Source": {
@@ -340,7 +340,7 @@ mod tests {
                     }
                 },
                 {
-                    "id": "node_2",
+                    "id": 2,
                     "parallelism": 1,
                     "kind": {
                         "Task": {
@@ -352,11 +352,11 @@ mod tests {
                             },
                             "weld_code": "|x: u32| x + u32(5)",
                             "channel_strategy": "Forward",
-                            "predecessor": "node_1",
+                            "predecessor": 1,
                             "successors": [
                                 {
                                     "Local": {
-                                        "id": "node_3"
+                                        "id": "node3"
                                     }
                                 }
                             ],
@@ -365,15 +365,15 @@ mod tests {
                     }
                 },
                 {
-                    "id": "node_3",
+                    "id": 3,
                     "parallelism": 1,
                     "kind": {
                         "Window": {
-                            "predecessor": "node_2",
+                            "predecessor": 2,
                             "successors" : [
                                 {
                                     "Local": {
-                                        "id": "node_4"
+                                        "id": "node4"
                                     }
                                 }
                             ],
@@ -406,14 +406,14 @@ mod tests {
                     }
                 },
                 {
-                    "id": "node_4",
+                    "id": 4,
                     "parallelism": 1,
                     "kind": {
                         "Sink": {
                             "sink_type": {
                                 "Scalar": "I64"
                             },
-                            "predecessor": "node_3",
+                            "predecessor": 3,
                             "kind": "Debug"
                         }
                     }

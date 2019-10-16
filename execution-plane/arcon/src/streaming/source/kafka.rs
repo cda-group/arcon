@@ -1,18 +1,19 @@
 use crate::prelude::*;
-use kompact::prelude::*;
+use kompact::*;
 use rdkafka::config::ClientConfig;
 use rdkafka::consumer::stream_consumer::StreamConsumer;
-use rdkafka::consumer::Consumer;
+use rdkafka::consumer::{CommitMode, Consumer};
 use rdkafka::error::{KafkaError, KafkaResult};
 use rdkafka::message::*;
+use rdkafka::topic_partition_list::Offset;
 use serde::de::DeserializeOwned;
-use serde::Deserialize;
-use std::str::FromStr;
+use std::collections::HashMap;
 use std::time::Duration;
 
 /*
     KafkaSource: work in progress
 */
+#[allow(dead_code)]
 #[derive(ComponentDefinition)]
 pub struct KafkaSource<OUT>
 where
@@ -22,11 +23,15 @@ where
     out_channels: Box<ChannelStrategy<OUT>>,
     bootstrap_server: String,
     topic: String,
-    offset: u32,
+    offset: Offset,
     max_timestamp: u64,
     batch_size: u32,
     consumer: StreamConsumer,
-    id: String,
+    id: NodeID,
+    epoch: u64,
+    commit_epoch: Option<u64>,
+    epoch_offset: HashMap<u64, Offset>, // Maps epochs to offsets
+    increment_epoch: bool,
 }
 
 impl<OUT> KafkaSource<OUT>
@@ -37,8 +42,8 @@ where
         out_channels: Box<ChannelStrategy<OUT>>,
         bootstrap_server: String,
         topic: String,
-        offset: u32,
-        id: String,
+        offset: i64,
+        id: NodeID,
     ) -> KafkaSource<OUT> {
         let mut config = ClientConfig::new();
         config
@@ -56,17 +61,20 @@ where
                         topic, e
                     );
                 }
-                //let stream = consumer.start_with(Duration::from_millis(100), true);
                 KafkaSource {
                     ctx: ComponentContext::new(),
                     out_channels,
                     bootstrap_server,
                     topic,
-                    offset,
+                    offset: Offset::from_raw(offset),
                     max_timestamp: 0,
                     batch_size: 100,
                     consumer: consumer,
                     id,
+                    epoch: 0,
+                    commit_epoch: None,
+                    epoch_offset: HashMap::new(),
+                    increment_epoch: false,
                 }
             }
             _ => {
@@ -76,7 +84,7 @@ where
     }
     pub fn output_event(&mut self, data: OUT, timestamp: Option<u64>) -> () {
         if let Err(err) = self.out_channels.output(
-            ArconMessage::element(data, timestamp, self.id.clone()),
+            ArconMessage::element(data, timestamp, self.id),
             &self.ctx.system(),
         ) {
             error!(self.ctx.log(), "Unable to output Element, error {}", err);
@@ -84,18 +92,51 @@ where
     }
     pub fn output_watermark(&mut self) -> () {
         let ts = self.max_timestamp;
-        if let Err(err) = self.out_channels.output(
-            ArconMessage::watermark(ts, self.id.clone()),
-            &self.ctx.system(),
-        ) {
+        if let Err(err) = self
+            .out_channels
+            .output(ArconMessage::watermark(ts, self.id), &self.ctx.system())
+        {
             error!(self.ctx.log(), "Unable to output watermark, error {}", err);
         }
+    }
+    pub fn commit_epoch(&mut self, epoch: &u64) -> () {
+        if let Some(commit_offset) = self.epoch_offset.get(epoch) {
+            if let Ok(borrowed_tpl) = self.consumer.assignment() {
+                let mut tpl = borrowed_tpl.clone();
+                //println!("committing offset: {}", commit_offset.to_raw());
+                tpl.set_all_offsets(*commit_offset);
+                if let Err(err) = self.consumer.commit(&tpl, CommitMode::Sync) {
+                    error!(self.ctx.log(), "Failed to commit offset: {}", err);
+                }
+            } else {
+                error!(
+                    self.ctx.log(),
+                    "Failed to get consumer assignment when committing"
+                );
+            }
+        } else {
+            error!(
+                self.ctx.log(),
+                "Unable to commit epoch, no corresponding Offset stored"
+            );
+        }
+    }
+    pub fn new_epoch(&mut self) -> () {
+        self.epoch_offset.insert(self.epoch, self.offset);
+        if let Err(err) = self.out_channels.output(
+            ArconMessage::epoch(self.epoch, self.id.clone()),
+            &self.ctx.system(),
+        ) {
+            error!(self.ctx.log(), "Unable to output Epoch, error {}", err);
+        }
+        self.epoch = self.epoch + 1;
     }
 
     pub fn receive(&mut self) -> () {
         let mut messages = Vec::new();
         let stream = self.consumer.start_with(Duration::from_millis(100), true);
         let mut counter = 0;
+
         // Fetch the batch
         for message in stream.wait() {
             match message {
@@ -121,15 +162,24 @@ where
                     );
                     ""
                 }
-            }; /*
-               let key = match m.key_view::<str>() {
-                   None => "",
-                   Some(Ok(s)) => s,
-                   Some(Err(e)) => {
-                       error!(self.ctx.log(), "Error while deserializing message key: {:?}", e);
-                       ""
-                   },
-               }; */
+            };
+            /*
+            // Ignoring key and header stuff for now
+            let key = match m.key_view::<str>() {
+                None => "",
+                Some(Ok(s)) => s,
+                Some(Err(e)) => {
+                   error!(self.ctx.log(), "Error while deserializing message key: {:?}", e);
+                   ""
+                },
+            };
+            if let Some(headers) = m.headers() {
+                for i in 0..headers.count() {
+                    let header = headers.get(i).unwrap();
+                    println!("  Header {:#?}: {:?}", header.0, header.1);
+                }
+            }
+            */
             let mut timestamp: Option<u64> = None;
             if let Some(ts) = m.timestamp().to_millis() {
                 timestamp = Some(ts as u64);
@@ -138,30 +188,27 @@ where
                 }
             }
             if let Ok(data) = serde_json::from_str(&payload) {
+                //println!("source outputting {}, offset {}", &payload, m.offset());
+                self.offset = Offset::from_raw(m.offset() + 1); // Store the offset+1 locally
                 self.output_event(data, timestamp);
             } else {
                 error!(self.ctx.log(), "Unable to deserialize message:\nkey: '{:?}', payload: '{}', topic: {}, partition: {}, offset: {}, timestamp: {:?}",
                       m.key(), payload, m.topic(), m.partition(), m.offset(), m.timestamp());
             }
-            /*
-            if let Some(headers) = m.headers() {
-                for i in 0..headers.count() {
-                    let header = headers.get(i).unwrap();
-                    println!("  Header {:#?}: {:?}", header.0, header.1);
-                }
-            }
-            // todo (somewhere else)
-            consumer.commit_message(&m, CommitMode::Async).unwrap(); auto-committing
-            */
-        }
-        if counter > 0 {
-            self.output_watermark();
-            // Store Offset manage epoch here.
         }
         // Schedule next batch
         self.schedule_once(Duration::from_millis(1000), move |self_c, _| {
             self_c.receive()
         });
+
+        // Output watermark and manage Epochs.
+        if counter > 0 {
+            self.output_watermark();
+            // We do one epoch per batch for now
+            self.new_epoch();
+            // We commit epochs when initializing new epoch for now
+            self.commit_epoch(&(self.epoch - 1));
+        }
     }
 }
 
@@ -193,7 +240,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::streaming::channel::strategy::mute::Mute;
+    use crate::streaming::sink::kafka::KafkaSink;
     use std::{thread, time};
+
     #[arcon]
     struct Thing {
         id: u32,
@@ -207,8 +257,12 @@ mod tests {
     }
     // JSON Example: {"id":1, "attribute":-13,"location":{"x":0.14124,"y":5882.231}}
 
-    //#[test] //Used for "manual testing" during developement
+    // Run with cargo test kafka --features kafka
+    // requires local instance of kafka running on port 9092 with topic "test" created
+    #[test]
     fn kafka_source() -> Result<()> {
+        // Boot up a sink which will write 2 Things to kafka
+        kafka_sink();
         let system = KompactConfig::default().build().expect("KompactSystem");
 
         let (sink, _) = system.create_and_register(move || DebugSink::<Thing>::new());
@@ -222,13 +276,56 @@ mod tests {
             "localhost:9092".to_string(),
             "test".to_string(),
             0,
-            1.to_string(),
+            1.into(),
         );
         let (source, _) = system.create_and_register(move || kafka_source);
 
         system.start(&sink);
         system.start(&source);
-        thread::sleep(time::Duration::from_secs(10));
+        thread::sleep(time::Duration::from_secs(15));
+
+        let sink_inspect = sink.definition().lock().unwrap();
+        // thing_a and thing_b should've been received from KafkaSink test
+        assert_eq!(sink_inspect.data[0].data.id, 0u32); // thing 1
+        assert_eq!(sink_inspect.data[0].data.attribute, 100i32);
+        assert_eq!(sink_inspect.data[1].data.id, 1u32); // thing 2
+        assert_eq!(sink_inspect.data[1].data.attribute, 101i32);
         Ok(())
+    }
+
+    fn kafka_sink() -> () {
+        let system = KompactConfig::default().build().expect("KompactSystem");
+
+        let kafka_sink: KafkaSink<Thing> =
+            KafkaSink::new("localhost:9092".to_string(), "test".to_string(), 0);
+        let (sink, _) = system.create_and_register(move || {
+            Node::<Thing, Thing>::new(
+                1.into(),
+                vec![0.into()],
+                Box::new(Mute::new()),
+                Box::new(kafka_sink),
+            )
+        });
+
+        system.start(&sink);
+        let thing_1 = Thing {
+            id: 0,
+            attribute: 100,
+            location: Point {
+                x: 0.52,
+                y: 113.3233,
+            },
+        };
+        let thing_2 = Thing {
+            id: 1,
+            attribute: 101,
+            location: Point { x: -0.52, y: 15.0 },
+        };
+        sink.actor_ref()
+            .tell(ArconMessage::element(thing_1, Some(10), 0.into()));
+        sink.actor_ref()
+            .tell(ArconMessage::element(thing_2, Some(11), 0.into()));
+        sink.actor_ref()
+            .tell(ArconMessage::<Thing>::epoch(1, 0.into()));
     }
 }
