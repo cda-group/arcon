@@ -32,7 +32,7 @@ pub mod prelude {
 
     pub use crate::streaming::channel::Channel;
     pub use crate::streaming::task::{
-        NodeID, filter::Filter, flatmap::FlatMap, map::Map, node::Node, Task, TaskMetric,
+        filter::Filter, flatmap::FlatMap, map::Map, node::Node, NodeID, Task, TaskMetric,
     };
     pub use crate::streaming::window::{
         builder::WindowBuilder, builder::WindowFn, builder::WindowModules,
@@ -40,8 +40,7 @@ pub mod prelude {
     };
 
     pub use crate::streaming::source::{
-        collection::CollectionSource, local_file::LocalFileSource, socket::SocketKind,
-        socket::SocketSource,
+        local_file::LocalFileSource, socket::SocketKind, socket::SocketSource,
     };
 
     pub use crate::streaming::sink::{
@@ -55,7 +54,7 @@ pub mod prelude {
     pub use weld_core::data::*;
 
     pub use kompact::default_components::*;
-    pub use kompact::*;
+    pub use kompact::prelude::*;
     pub use slog::*;
 
     pub use futures::future;

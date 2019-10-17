@@ -3,25 +3,20 @@ use crate::error::*;
 use crate::streaming::channel::strategy::*;
 use crate::streaming::channel::Channel;
 use rand::seq::SliceRandom;
-use std::marker::PhantomData;
 
 pub struct Shuffle<A>
 where
     A: 'static + ArconType,
 {
-    out_channels: Vec<Channel>,
-    phantom_a: PhantomData<A>,
+    out_channels: Vec<Channel<A>>,
 }
 
 impl<A> Shuffle<A>
 where
     A: 'static + ArconType,
 {
-    pub fn new(out_channels: Vec<Channel>) -> Shuffle<A> {
-        Shuffle {
-            out_channels,
-            phantom_a: PhantomData,
-        }
+    pub fn new(out_channels: Vec<Channel<A>>) -> Shuffle<A> {
+        Shuffle { out_channels }
     }
 }
 
@@ -48,10 +43,10 @@ where
         }
     }
 
-    fn add_channel(&mut self, channel: Channel) {
+    fn add_channel(&mut self, channel: Channel<A>) {
         self.out_channels.push(channel);
     }
-    fn remove_channel(&mut self, _channel: Channel) {
+    fn remove_channel(&mut self, _channel: Channel<A>) {
         //self.out_channels.retain(|c| c == &channel);
     }
 }
@@ -61,24 +56,23 @@ mod tests {
     use super::*;
     use crate::streaming::channel::strategy::tests::*;
     use crate::streaming::sink::debug::DebugSink;
-    use kompact::*;
+    use kompact::prelude::*;
     use std::sync::Arc;
 
     #[test]
     fn shuffle_local_test() {
-        let cfg = KompactConfig::new();
-        let system = KompactSystem::new(cfg).expect("KompactSystem");
+        let system = KompactConfig::default().build().expect("KompactSystem");
 
         let components: u32 = 4;
         let total_msgs: u64 = 50;
 
-        let mut channels: Vec<Channel> = Vec::new();
+        let mut channels: Vec<Channel<Input>> = Vec::new();
         let mut comps: Vec<Arc<crate::prelude::Component<DebugSink<Input>>>> = Vec::new();
 
-        // Create half of the channels using ActorRefs
         for _i in 0..components {
             let comp = system.create_and_start(move || DebugSink::<Input>::new());
-            channels.push(Channel::Local(comp.actor_ref()));
+            let actor_ref: ActorRef<ArconMessage<Input>> = comp.actor_ref();
+            channels.push(Channel::Local(actor_ref));
             comps.push(comp);
         }
 

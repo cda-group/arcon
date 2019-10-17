@@ -53,25 +53,21 @@ impl<A> Actor for DebugSink<A>
 where
     A: ArconType + 'static,
 {
-    fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
-        if let Some(message) = msg.downcast_ref::<ArconMessage<A>>() {
-            self.handle_event(&message.event);
-        }
+    type Message = ArconMessage<A>;
+
+    fn receive_local(&mut self, msg: Self::Message) {
+        self.handle_event(&msg.event);
     }
-    fn receive_message(&mut self, sender: ActorPath, ser_id: u64, buf: &mut Buf) {
-        if ser_id == serialisation_ids::PBUF {
-            let r = ProtoSer::deserialise(buf);
-            if let Ok(msg) = r {
-                if let Ok(message) = ArconMessage::from_remote(msg) {
+    fn receive_network(&mut self, msg: NetMessage) {
+        match msg.try_deserialise::<ArconNetworkMessage, ProtoSer>() {
+            Ok(deser_msg) => {
+                if let Ok(message) = ArconMessage::from_remote(deser_msg) {
                     self.handle_event(&message.event);
                 } else {
                     error!(self.ctx.log(), "Failed to convert remote message to local");
                 }
-            } else {
-                error!(self.ctx.log(), "Failed to deserialise StreamTaskMessage",);
             }
-        } else {
-            error!(self.ctx.log(), "Got unexpected message from {}", sender);
+            Err(e) => error!(self.ctx.log(), "Error ArconNetworkMessage : {:?}", e),
         }
     }
 }

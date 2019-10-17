@@ -20,10 +20,7 @@ pub fn to_token_stream(t: &Type, spec_id: &String) -> TokenStream {
             let struct_ident = Ident::new(id, Span::call_site());
             if let Some(map) = struct_map.get_mut(spec_id) {
                 if !map.contains_key(id) {
-                    map.insert(
-                        String::from(id),
-                        generated,
-                    );
+                    map.insert(String::from(id), generated);
                 }
             }
             quote! { #struct_ident }

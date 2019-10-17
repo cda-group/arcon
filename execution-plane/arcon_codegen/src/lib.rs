@@ -9,11 +9,11 @@ extern crate rustfmt_nightly;
 #[macro_use]
 extern crate lazy_static;
 
+mod common;
 mod sink;
 mod source;
 mod stream_task;
 mod system;
-mod common;
 mod types;
 mod window;
 
@@ -86,10 +86,22 @@ pub fn generate(spec: &ArconSpec, is_terminated: bool) -> Result<String, Codegen
 
         match node.kind {
             Source(source) => {
-                stream.push(source::source(node.id, &previous_node, &source, &spec.id, spec.timestamp_extractor));
+                stream.push(source::source(
+                    node.id,
+                    &previous_node,
+                    &source,
+                    &spec.id,
+                    spec.timestamp_extractor,
+                ));
             }
             Sink(sink) => {
-                stream.push(sink::sink(node.id, &sink.sink_type, &sink.kind, &spec.id, sink.predecessor));
+                stream.push(sink::sink(
+                    node.id,
+                    &sink.sink_type,
+                    &sink.kind,
+                    &spec.id,
+                    sink.predecessor,
+                ));
             }
             Task(task) => {
                 stream.push(stream_task::stream_task(
@@ -101,15 +113,11 @@ pub fn generate(spec: &ArconSpec, is_terminated: bool) -> Result<String, Codegen
                 ));
             }
             Window(window) => {
-                stream.push(window::window(
-                    node.id,
-                    &window,
-                    &spec.id,
-                ));
+                stream.push(window::window(node.id, &window, &spec.id));
             }
         }
 
-        previous_node = "node".to_string()+&node.id.to_string();
+        previous_node = "node".to_string() + &node.id.to_string();
     }
 
     let final_stream = stream

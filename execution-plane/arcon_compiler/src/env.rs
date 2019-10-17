@@ -34,7 +34,7 @@ impl CompilerEnv {
                 debug!("Using existing workspace: {}", root);
                 config
             } else {
-                debug!("Creating new workspace at path {}", root);;
+                debug!("Creating new workspace at path {}", root);
                 fs::create_dir_all(&root)?;
                 let default_manifest = r#"
                 [workspace]
@@ -97,7 +97,7 @@ impl CompilerEnv {
             String::from("path = \"../../arcon\"")
         } else {
             format!("version = \"{}\"", crate::ARCON_VER)
-        };;
+        };
 
         let manifest = format!(
             "[package] \

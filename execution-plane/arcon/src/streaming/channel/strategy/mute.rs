@@ -27,6 +27,6 @@ where
     fn output(&mut self, _message: ArconMessage<A>, _source: &KompactSystem) -> ArconResult<()> {
         Ok(())
     }
-    fn add_channel(&mut self, _channel: Channel) {}
-    fn remove_channel(&mut self, _channel: Channel) {}
+    fn add_channel(&mut self, _channel: Channel<A>) {}
+    fn remove_channel(&mut self, _channel: Channel<A>) {}
 }

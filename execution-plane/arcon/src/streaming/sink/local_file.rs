@@ -60,15 +60,15 @@ impl<A> Actor for LocalFileSink<A>
 where
     A: ArconType + 'static,
 {
-    fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
-        if let Some(message) = msg.downcast_ref::<ArconMessage<A>>() {
-            if self.in_channels.contains(&message.sender) {
-                debug!(self.ctx.log(), "Got event {:?}", message.event);
-                self.handle_event(&message.event);
-            }
+    type Message = ArconMessage<A>;
+
+    fn receive_local(&mut self, msg: Self::Message) {
+        if self.in_channels.contains(&msg.sender) {
+            debug!(self.ctx.log(), "Got event {:?}", msg.event);
+            self.handle_event(&msg.event);
         }
     }
-    fn receive_message(&mut self, _sender: ActorPath, _ser_id: u64, _buf: &mut Buf) {
+    fn receive_network(&mut self, _msg: NetMessage) {
         unimplemented!();
     }
 }
@@ -81,8 +81,7 @@ mod tests {
 
     #[test]
     fn local_file_sink_test() {
-        let cfg = KompactConfig::new();
-        let system = KompactSystem::new(cfg).expect("KompactSystem");
+        let system = KompactConfig::default().build().expect("KompactSystem");
 
         let file = NamedTempFile::new().unwrap();
         let file_path = file.path().to_string_lossy().into_owned();
@@ -97,11 +96,11 @@ mod tests {
         let input_three = ArconMessage::element(15 as i32, None, node_id);
         let input_four = ArconMessage::element(30 as i32, None, node_id);
 
-        let target_ref = sink_comp.actor_ref();
-        target_ref.tell(Box::new(input_one), &target_ref);
-        target_ref.tell(Box::new(input_two), &target_ref);
-        target_ref.tell(Box::new(input_three), &target_ref);
-        target_ref.tell(Box::new(input_four), &target_ref);
+        let target_ref: ActorRef<ArconMessage<i32>> = sink_comp.actor_ref();
+        target_ref.tell(input_one);
+        target_ref.tell(input_two);
+        target_ref.tell(input_three);
+        target_ref.tell(input_four);
 
         std::thread::sleep(std::time::Duration::from_secs(1));
 

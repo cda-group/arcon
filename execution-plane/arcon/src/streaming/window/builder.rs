@@ -205,7 +205,6 @@ where
 mod tests {
     use super::*;
     use crate::data::Pair;
-    use kompact::*;
     use std::sync::Arc;
     use weld::data::Appender;
     use weld::data::DictMerger;
@@ -517,86 +516,6 @@ mod tests {
                     window_data[i as usize][x as usize] + window_data[i as usize][x as usize] + 5
                 );
             }
-        }
-    }
-
-    #[derive(ComponentDefinition)]
-    pub struct WindowComponent {
-        ctx: ComponentContext<WindowComponent>,
-        window_builder: WindowBuilder<u32, Appender<u32>, ArconVec<u32>>,
-        pub result: Option<ArconVec<u32>>,
-    }
-
-    impl WindowComponent {
-        pub fn new(udf: Arc<Module>, materializer: Arc<Module>) -> WindowComponent {
-            let init_builder_code = String::from("|| appender[u32]");
-            let init_builder = Arc::new(Module::new(init_builder_code).unwrap());
-
-            let window_modules = WindowModules {
-                init_builder,
-                udf,
-                materializer,
-            };
-
-            let window_builder: WindowBuilder<u32, Appender<u32>, ArconVec<u32>> =
-                WindowBuilder::new(window_modules).unwrap();
-
-            WindowComponent {
-                ctx: ComponentContext::new(),
-                window_builder,
-                result: None,
-            }
-        }
-    }
-
-    impl Provide<ControlPort> for WindowComponent {
-        fn handle(&mut self, _event: ControlEvent) -> () {}
-    }
-
-    impl Actor for WindowComponent {
-        fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
-            if let Some(payload) = msg.downcast_ref::<Item>() {
-                let _ = self.window_builder.on_element(payload.price);
-            }
-
-            if let Some(_) = msg.downcast_ref::<String>() {
-                self.result = Some(self.window_builder.result().unwrap());
-            }
-        }
-        fn receive_message(&mut self, _sender: ActorPath, _ser_id: u64, _buf: &mut Buf) {}
-    }
-
-    #[test]
-    fn window_builder_component_test() {
-        let cfg = KompactConfig::new();
-        let system = KompactSystem::new(cfg).expect("KompactSystem");
-
-        let udf_code = String::from("|x: u32, y: appender[u32]| merge(y, x)");
-        let udf_result = String::from("|y: appender[u32]| result(y)");
-        let code_udf = Arc::new(Module::new(udf_code).unwrap());
-        let result_udf = Arc::new(Module::new(udf_result).unwrap());
-
-        let (window_comp, _) = system.create_and_register(move || {
-            WindowComponent::new(code_udf.clone(), result_udf.clone())
-        });
-        system.start(&window_comp);
-        let window_comp_ref = window_comp.actor_ref();
-
-        let items = 1000;
-
-        for i in 0..items {
-            let item = Item { id: i, price: 100 };
-            window_comp_ref.tell(Box::new(item), &window_comp_ref);
-        }
-        window_comp_ref.tell(Box::new(String::from("done")), &window_comp_ref);
-
-        std::thread::sleep(std::time::Duration::from_secs(1));
-        let mut window_c = window_comp.definition().lock().unwrap();
-        let result = window_c.result.take().unwrap();
-        assert_eq!(result.len, items as i64);
-        for i in 0..(result.len as isize) {
-            let price = unsafe { *result.ptr.offset(i) };
-            assert_eq!(price, 100);
         }
     }
 }

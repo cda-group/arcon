@@ -1,9 +1,15 @@
+use crate::common::*;
 use crate::types::to_token_stream;
 use proc_macro2::{Ident, Span, TokenStream};
 use spec::{SocketKind, Source, SourceKind};
-use crate::common::*;
 
-pub fn source(id: u32, target: &str, source: &Source, spec_id: &String, ts_extractor: u32) -> TokenStream {
+pub fn source(
+    id: u32,
+    target: &str,
+    source: &Source,
+    spec_id: &String,
+    ts_extractor: u32,
+) -> TokenStream {
     let source_name = id_to_ident(id);
     let target = Ident::new(&target, Span::call_site());
     let input_type = to_token_stream(&source.source_type, spec_id);
@@ -72,7 +78,8 @@ fn local_file_source(
     let verify = verify_and_start(source_name, "system");
 
     quote! {
-        let channel = Channel::Local(#target.actor_ref());
+        let actor_ref: ActorRef<ArconMessage<#input_type>> = #target.actor_ref();
+        let channel = Channel::Local(actor_ref);
         let channel_strategy: Box<ChannelStrategy<#input_type>> = Box::new(Forward::new(channel));
         let (#source_name, reg) = system.create_and_register(move || {
             let source: LocalFileSource<#input_type> = LocalFileSource::new(

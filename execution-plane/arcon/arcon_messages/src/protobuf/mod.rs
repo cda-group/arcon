@@ -3,15 +3,17 @@ extern crate protobuf;
 pub mod messages;
 
 pub use self::messages::*;
-use kompact::prelude::BufMut;
-use kompact::*;
+use kompact::prelude::*;
 use protobuf::Message;
 
 pub struct ProtoSer;
+impl ProtoSer {
+    const SID: SerId = 21;
+}
 
 impl Serialisable for ArconNetworkMessage {
-    fn serid(&self) -> u64 {
-        serialisation_ids::PBUF
+    fn ser_id(&self) -> u64 {
+        21
     }
     fn size_hint(&self) -> Option<usize> {
         if let Ok(bytes) = self.write_to_bytes() {
@@ -33,6 +35,8 @@ impl Serialisable for ArconNetworkMessage {
 }
 
 impl Deserialiser<ArconNetworkMessage> for ProtoSer {
+    const SER_ID: SerId = Self::SID;
+
     fn deserialise(buf: &mut Buf) -> Result<ArconNetworkMessage, SerError> {
         let parsed = protobuf::parse_from_bytes(buf.bytes())
             .map_err(|err| SerError::InvalidData(err.to_string()))?;

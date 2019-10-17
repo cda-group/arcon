@@ -27,7 +27,7 @@ where
     max_timestamp: u64,
     batch_size: u32,
     consumer: StreamConsumer,
-    id: String,
+    id: NodeID,
     epoch: u64,
     commit_epoch: Option<u64>,
     epoch_offset: HashMap<u64, Offset>, // Maps epochs to offsets
@@ -43,7 +43,7 @@ where
         bootstrap_server: String,
         topic: String,
         offset: i64,
-        id: String,
+        id: NodeID,
     ) -> KafkaSource<OUT> {
         let mut config = ClientConfig::new();
         config
@@ -84,7 +84,7 @@ where
     }
     pub fn output_event(&mut self, data: OUT, timestamp: Option<u64>) -> () {
         if let Err(err) = self.out_channels.output(
-            ArconMessage::element(data, timestamp, self.id.clone()),
+            ArconMessage::element(data, timestamp, self.id),
             &self.ctx.system(),
         ) {
             error!(self.ctx.log(), "Unable to output Element, error {}", err);
@@ -92,10 +92,10 @@ where
     }
     pub fn output_watermark(&mut self) -> () {
         let ts = self.max_timestamp;
-        if let Err(err) = self.out_channels.output(
-            ArconMessage::watermark(ts, self.id.clone()),
-            &self.ctx.system(),
-        ) {
+        if let Err(err) = self
+            .out_channels
+            .output(ArconMessage::watermark(ts, self.id), &self.ctx.system())
+        {
             error!(self.ctx.log(), "Unable to output watermark, error {}", err);
         }
     }
@@ -232,8 +232,9 @@ impl<OUT> Actor for KafkaSource<OUT>
 where
     OUT: 'static + ArconType + DeserializeOwned,
 {
-    fn receive_local(&mut self, _sender: ActorRef, _msg: &Any) {}
-    fn receive_message(&mut self, _sender: ActorPath, _ser_id: u64, _buf: &mut Buf) {}
+    type Message = Box<dyn Any + Send>;
+    fn receive_local(&mut self, msg: Self::Message) {}
+    fn receive_network(&mut self, msg: NetMessage) {}
 }
 
 #[cfg(test)]
@@ -275,7 +276,7 @@ mod tests {
             "localhost:9092".to_string(),
             "test".to_string(),
             0,
-            1.to_string(),
+            1.into(),
         );
         let (source, _) = system.create_and_register(move || kafka_source);
 
@@ -299,8 +300,8 @@ mod tests {
             KafkaSink::new("localhost:9092".to_string(), "test".to_string(), 0);
         let (sink, _) = system.create_and_register(move || {
             Node::<Thing, Thing>::new(
-                "node1".to_string(),
-                vec!["test".to_string()],
+                1.into(),
+                vec![0.into()],
                 Box::new(Mute::new()),
                 Box::new(kafka_sink),
             )
@@ -320,17 +321,11 @@ mod tests {
             attribute: 101,
             location: Point { x: -0.52, y: 15.0 },
         };
-        sink.actor_ref().tell(
-            Box::new(ArconMessage::element(thing_1, Some(10), "test".to_string())),
-            &system,
-        );
-        sink.actor_ref().tell(
-            Box::new(ArconMessage::element(thing_2, Some(11), "test".to_string())),
-            &system,
-        );
-        sink.actor_ref().tell(
-            Box::new(ArconMessage::<Thing>::epoch(1, "test".to_string())),
-            &system,
-        );
+        sink.actor_ref()
+            .tell(ArconMessage::element(thing_1, Some(10), 0.into()));
+        sink.actor_ref()
+            .tell(ArconMessage::element(thing_2, Some(11), 0.into()));
+        sink.actor_ref()
+            .tell(ArconMessage::<Thing>::epoch(1, 0.into()));
     }
 }

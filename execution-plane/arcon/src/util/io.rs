@@ -1,6 +1,5 @@
 extern crate tokio_codec;
 use kompact::prelude::*;
-use kompact::*;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -22,6 +21,7 @@ pub enum IOKind {
     Udp,
 }
 
+#[derive(Debug)]
 pub struct BytesRecv {
     pub bytes: BytesMut,
 }
@@ -35,7 +35,7 @@ pub struct IO {
 }
 
 impl IO {
-    pub fn udp(sock_addr: SocketAddr, subscriber: ActorRef) -> IO {
+    pub fn udp(sock_addr: SocketAddr, subscriber: ActorRef<Box<dyn Any + Send>>) -> IO {
         let subscriber = Arc::new(subscriber);
         let th = Builder::new()
             .name(String::from("IOThread"))
@@ -47,7 +47,7 @@ impl IO {
                 let handler = reader
                     .for_each(move |(bytes, _from)| {
                         let actor_ref = &*subscriber;
-                        actor_ref.tell(Box::new(BytesRecv { bytes }), actor_ref);
+                        actor_ref.tell(Box::new(BytesRecv { bytes }) as Box<dyn Any + Send>);
                         Ok(())
                     })
                     .map_err(|_| ());
@@ -64,7 +64,7 @@ impl IO {
         }
     }
 
-    pub fn tcp(sock_addr: SocketAddr, subscriber: ActorRef) -> IO {
+    pub fn tcp(sock_addr: SocketAddr, subscriber: ActorRef<Box<dyn Any + Send>>) -> IO {
         let subscriber = Arc::new(subscriber);
         let th = Builder::new()
             .name(String::from("IOThread"))
@@ -87,17 +87,17 @@ impl IO {
                             .for_each(move |bytes| {
                                 let tcp_recv = BytesRecv { bytes };
                                 let actor_ref = &*recv_sub;
-                                actor_ref.tell(Box::new(tcp_recv), actor_ref);
+                                actor_ref.tell(Box::new(tcp_recv) as Box<dyn Any + Send>);
                                 Ok(())
                             })
                             .and_then(move |()| {
                                 let actor_ref = &*close_sub;
-                                actor_ref.tell(Box::new(SockClosed {}), actor_ref);
+                                actor_ref.tell(Box::new(SockClosed {}) as Box<dyn Any + Send>);
                                 Ok(())
                             })
                             .or_else(move |err| {
                                 let actor_ref = &*err_sub;
-                                actor_ref.tell(Box::new(SockErr {}), actor_ref);
+                                actor_ref.tell(Box::new(SockErr {}) as Box<dyn Any + Send>);
                                 Err(err)
                             })
                             .then(|_result| Ok(()));
@@ -127,10 +127,9 @@ impl Provide<ControlPort> for IO {
 }
 
 impl Actor for IO {
-    fn receive_local(&mut self, _sender: ActorRef, _msg: &Any) {}
-    fn receive_message(&mut self, sender: ActorPath, _ser_id: u64, _buf: &mut Buf) {
-        error!(self.ctx.log(), "Got unexpected message from {}", sender);
-    }
+    type Message = Box<dyn Any + Send>;
+    fn receive_local(&mut self, _msg: Self::Message) {}
+    fn receive_network(&mut self, _msg: NetMessage) {}
 }
 
 #[cfg(test)]
@@ -164,7 +163,9 @@ pub mod tests {
     }
 
     impl Actor for IOSource {
-        fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
+        type Message = Box<dyn Any + Send>;
+
+        fn receive_local(&mut self, msg: Self::Message) {
             if let Some(ref recv) = msg.downcast_ref::<BytesRecv>() {
                 debug!(self.ctx.log(), "{:?}", recv.bytes);
                 self.received += 1;
@@ -174,9 +175,8 @@ pub mod tests {
                 error!(self.ctx.log(), " Sock IO Error");
             }
         }
-        fn receive_message(&mut self, sender: ActorPath, _ser_id: u64, _buf: &mut Buf) {
-            error!(self.ctx.log(), "Got unexpected message from {}", sender);
-        }
+
+        fn receive_network(&mut self, _msg: NetMessage) {}
     }
 
     impl Provide<ControlPort> for IOSource {

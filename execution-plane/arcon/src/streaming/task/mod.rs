@@ -4,20 +4,20 @@ pub mod manager;
 pub mod map;
 pub mod node;
 
-use std::cmp::Ordering;
 use crate::prelude::*;
+use std::cmp::Ordering;
 
 #[derive(Eq, Hash, Copy, Clone, Debug)]
 pub struct NodeID {
     pub id: u32,
 }
 
-impl NodeID{
+impl NodeID {
     pub fn new(new_id: u32) -> NodeID {
-        NodeID{id: new_id}
+        NodeID { id: new_id }
     }
 }
-impl From<u32> for NodeID{
+impl From<u32> for NodeID {
     fn from(id: u32) -> Self {
         NodeID::new(id)
     }

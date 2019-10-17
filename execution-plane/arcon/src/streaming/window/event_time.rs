@@ -205,6 +205,7 @@ mod tests {
     use super::*;
     use crate::streaming::channel::strategy::forward::*;
     use crate::streaming::channel::Channel;
+    use kompact::prelude::Component;
     use std::time::UNIX_EPOCH;
     use std::{thread, time};
     use weld::data::Appender;
@@ -220,10 +221,12 @@ mod tests {
         length: u64,
         slide: u64,
         late: u64,
-    ) -> (ActorRef, Arc<kompact::Component<DebugSink<WindowOutput>>>) {
+    ) -> (
+        ActorRef<ArconMessage<Item>>,
+        Arc<Component<DebugSink<WindowOutput>>>,
+    ) {
         // Kompact set-up
-        let cfg = KompactConfig::new();
-        let system = KompactSystem::new(cfg).expect("KompactSystem");
+        let system = KompactConfig::default().build().expect("KompactSystem");
 
         // Create a sink
         let (sink, _) = system.create_and_register(move || DebugSink::new());
@@ -273,19 +276,11 @@ mod tests {
     fn watermark(time: u64) -> ArconMessage<Item> {
         ArconMessage::watermark(time, 0.into())
     }
-    fn timestamped_event(ts: u64) -> Box<ArconMessage<Item>> {
-        Box::new(ArconMessage::element(
-            Item { id: 1, price: 1 },
-            Some(ts),
-            0.into(),
-        ))
+    fn timestamped_event(ts: u64) -> ArconMessage<Item> {
+        ArconMessage::element(Item { id: 1, price: 1 }, Some(ts), 0.into())
     }
-    fn timestamped_keyed_event(ts: u64, id: u64) -> Box<ArconMessage<Item>> {
-        Box::new(ArconMessage::element(
-            Item { id, price: 1 },
-            Some(ts),
-            0.into(),
-        ))
+    fn timestamped_keyed_event(ts: u64, id: u64) -> ArconMessage<Item> {
+        ArconMessage::element(Item { id, price: 1 }, Some(ts), 0.into())
     }
     #[key_by(id)]
     #[arcon]
@@ -300,15 +295,15 @@ mod tests {
         let (assigner_ref, sink) = window_assigner_test_setup(10, 5, 0);
         wait(1);
         let moment = now();
-        assigner_ref.tell(timestamped_keyed_event(moment, 1), &assigner_ref);
-        assigner_ref.tell(timestamped_keyed_event(moment + 1, 2), &assigner_ref);
-        assigner_ref.tell(timestamped_keyed_event(moment + 2, 3), &assigner_ref);
-        assigner_ref.tell(timestamped_keyed_event(moment + 3, 2), &assigner_ref);
-        assigner_ref.tell(timestamped_keyed_event(moment + 5, 2), &assigner_ref);
-        assigner_ref.tell(timestamped_keyed_event(moment + 4, 1), &assigner_ref);
+        assigner_ref.tell(timestamped_keyed_event(moment, 1));
+        assigner_ref.tell(timestamped_keyed_event(moment + 1, 2));
+        assigner_ref.tell(timestamped_keyed_event(moment + 2, 3));
+        assigner_ref.tell(timestamped_keyed_event(moment + 3, 2));
+        assigner_ref.tell(timestamped_keyed_event(moment + 5, 2));
+        assigner_ref.tell(timestamped_keyed_event(moment + 4, 1));
 
         wait(1);
-        assigner_ref.tell(Box::new(watermark(moment + 12)), &assigner_ref);
+        assigner_ref.tell(watermark(moment + 12));
         wait(1);
         let sink_inspect = sink.definition().lock().unwrap();
 
@@ -330,11 +325,11 @@ mod tests {
         wait(1);
         // Send messages
         let moment = now();
-        assigner_ref.tell(timestamped_event(moment), &assigner_ref);
-        assigner_ref.tell(timestamped_event(moment), &assigner_ref);
-        assigner_ref.tell(Box::new(watermark(moment + 10)), &assigner_ref);
+        assigner_ref.tell(timestamped_event(moment));
+        assigner_ref.tell(timestamped_event(moment));
+        assigner_ref.tell(watermark(moment + 10));
         wait(1);
-        assigner_ref.tell(timestamped_event(moment), &assigner_ref);
+        assigner_ref.tell(timestamped_event(moment));
         wait(1);
         // Inspect and assert
         let sink_inspect = sink.definition().lock().unwrap();
@@ -350,11 +345,11 @@ mod tests {
         wait(1);
         // Send messages
         let moment = now();
-        assigner_ref.tell(timestamped_event(moment), &assigner_ref);
-        assigner_ref.tell(timestamped_event(moment), &assigner_ref);
-        assigner_ref.tell(Box::new(watermark(moment + 21)), &assigner_ref);
+        assigner_ref.tell(timestamped_event(moment));
+        assigner_ref.tell(timestamped_event(moment));
+        assigner_ref.tell(watermark(moment + 21));
         wait(1);
-        assigner_ref.tell(timestamped_event(moment), &assigner_ref);
+        assigner_ref.tell(timestamped_event(moment));
         wait(1);
         // Inspect and assert
         let sink_inspect = sink.definition().lock().unwrap();
@@ -370,13 +365,13 @@ mod tests {
         let moment = now();
 
         // Spawns first window
-        assigner_ref.tell(timestamped_event(moment), &assigner_ref);
+        assigner_ref.tell(timestamped_event(moment));
 
         // Spawns second window
-        assigner_ref.tell(timestamped_event(moment + 10001), &assigner_ref);
+        assigner_ref.tell(timestamped_event(moment + 10001));
 
         // Should only materialize first window
-        assigner_ref.tell(Box::new(watermark(moment + 19999)), &assigner_ref);
+        assigner_ref.tell(watermark(moment + 19999));
         wait(1);
         let sink_inspect = sink.definition().lock().unwrap();
         let r0 = &sink_inspect.data[0].data.len;
@@ -391,13 +386,13 @@ mod tests {
         let moment = now();
 
         // Spawns first window
-        assigner_ref.tell(timestamped_event(moment), &assigner_ref);
+        assigner_ref.tell(timestamped_event(moment));
 
         // Spawns second window
-        assigner_ref.tell(timestamped_event(moment + 10001), &assigner_ref);
+        assigner_ref.tell(timestamped_event(moment + 10001));
 
         // Should only materialize first window
-        assigner_ref.tell(Box::new(watermark(moment + 20000)), &assigner_ref);
+        assigner_ref.tell(watermark(moment + 20000));
         wait(1);
         let sink_inspect = sink.definition().lock().unwrap();
         let r0 = &sink_inspect.data[0].data.len;
@@ -413,11 +408,10 @@ mod tests {
         wait(1);
         // Send messages
         let moment = now();
-        assigner_ref.tell(timestamped_event(moment), &assigner_ref);
-        assigner_ref.tell(timestamped_event(moment + 6), &assigner_ref);
-        assigner_ref.tell(timestamped_event(moment + 6), &assigner_ref);
-        //assigner_ref.tell(Box::new(watermark(moment + 12)), &assigner_ref);
-        assigner_ref.tell(Box::new(watermark(moment + 23)), &assigner_ref);
+        assigner_ref.tell(timestamped_event(moment));
+        assigner_ref.tell(timestamped_event(moment + 6));
+        assigner_ref.tell(timestamped_event(moment + 6));
+        assigner_ref.tell(watermark(moment + 23));
         wait(1);
         //wait(1);
         // Inspect and assert
@@ -434,8 +428,8 @@ mod tests {
         // check that we receive correct number windows from fast forwarding
         let (assigner_ref, sink) = window_assigner_test_setup(5, 5, 0);
         wait(1);
-        assigner_ref.tell(Box::new(watermark(now() + 1)), &assigner_ref);
-        assigner_ref.tell(Box::new(watermark(now() + 7)), &assigner_ref);
+        assigner_ref.tell(watermark(now() + 1));
+        assigner_ref.tell(watermark(now() + 7));
         wait(1);
         let sink_inspect = sink.definition().lock().unwrap();
         // The number of windows is hard to assert with dynamic window starts

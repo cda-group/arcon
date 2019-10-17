@@ -13,7 +13,7 @@ pub fn system(
 
         #kompact_extra_options
 
-        let system = KompactSystem::new(cfg).expect("Failed to create KompactSystem");
+        let system = cfg.build().expect("Failed to create KompactSystem");
 
         // Connect Components, Create ActorPaths, Create Tasks
 

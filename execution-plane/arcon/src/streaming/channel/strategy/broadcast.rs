@@ -1,27 +1,22 @@
 use crate::data::{ArconMessage, ArconType};
+use crate::prelude::KompactSystem;
 use crate::streaming::channel::strategy::{channel_output, ChannelStrategy};
 use crate::streaming::channel::Channel;
 use arcon_error::ArconResult;
-use kompact::KompactSystem;
-use std::marker::PhantomData;
 
 pub struct Broadcast<A>
 where
     A: 'static + ArconType,
 {
-    out_channels: Vec<Channel>,
-    phantom_a: PhantomData<A>,
+    out_channels: Vec<Channel<A>>,
 }
 
 impl<A> Broadcast<A>
 where
     A: 'static + ArconType,
 {
-    pub fn new(out_channels: Vec<Channel>) -> Broadcast<A> {
-        Broadcast {
-            out_channels,
-            phantom_a: PhantomData,
-        }
+    pub fn new(out_channels: Vec<Channel<A>>) -> Broadcast<A> {
+        Broadcast { out_channels }
     }
 }
 
@@ -36,10 +31,10 @@ where
         Ok(())
     }
 
-    fn add_channel(&mut self, channel: Channel) {
+    fn add_channel(&mut self, channel: Channel<A>) {
         self.out_channels.push(channel);
     }
-    fn remove_channel(&mut self, _channel: Channel) {
+    fn remove_channel(&mut self, _channel: Channel<A>) {
         unimplemented!();
     }
 }
@@ -49,24 +44,23 @@ mod tests {
     use super::*;
     use crate::streaming::channel::strategy::tests::*;
     use crate::streaming::sink::debug::DebugSink;
-    use kompact::default_components::*;
-    use kompact::*;
+    use kompact::prelude::*;
     use std::sync::Arc;
 
     #[test]
     fn broadcast_local_test() {
-        let cfg = KompactConfig::new();
-        let system = KompactSystem::new(cfg).expect("KompactSystem");
+        let system = KompactConfig::default().build().expect("KompactSystem");
 
         let components: u32 = 8;
         let total_msgs: u64 = 10;
 
-        let mut channels: Vec<Channel> = Vec::new();
+        let mut channels: Vec<Channel<Input>> = Vec::new();
         let mut comps: Vec<Arc<crate::prelude::Component<DebugSink<Input>>>> = Vec::new();
 
         for _i in 0..components {
             let comp = system.create_and_start(move || DebugSink::<Input>::new());
-            channels.push(Channel::Local(comp.actor_ref()));
+            let actor_ref: ActorRef<ArconMessage<Input>> = comp.actor_ref();
+            channels.push(Channel::Local(actor_ref));
             comps.push(comp);
         }
 
@@ -94,7 +88,7 @@ mod tests {
             let system = || {
                 let mut cfg = KompactConfig::new();
                 cfg.system_components(DeadletterBox::new, NetworkConfig::default().build());
-                KompactSystem::new(cfg).expect("KompactSystem")
+                cfg.build().expect("KompactSystem")
             };
             (system(), system())
         };
@@ -103,13 +97,14 @@ mod tests {
         let remote_components: u32 = 4;
         let total_msgs: u64 = 5;
 
-        let mut channels: Vec<Channel> = Vec::new();
+        let mut channels: Vec<Channel<Input>> = Vec::new();
         let mut comps: Vec<Arc<crate::prelude::Component<DebugSink<Input>>>> = Vec::new();
 
         // Create local components
         for _i in 0..local_components {
             let comp = system.create_and_start(move || DebugSink::<Input>::new());
-            channels.push(Channel::Local(comp.actor_ref()));
+            let actor_ref: ActorRef<ArconMessage<Input>> = comp.actor_ref();
+            channels.push(Channel::Local(actor_ref));
             comps.push(comp);
         }
 

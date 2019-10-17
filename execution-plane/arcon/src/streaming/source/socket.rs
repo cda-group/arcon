@@ -1,8 +1,8 @@
-use crate::streaming::task::NodeID;
 use crate::data::{ArconElement, ArconEvent, ArconMessage, ArconType, Watermark};
 use crate::streaming::channel::strategy::ChannelStrategy;
+use crate::streaming::task::NodeID;
 use crate::util::io::*;
-use kompact::*;
+use kompact::prelude::*;
 use std::net::SocketAddr;
 use std::str::from_utf8;
 use std::str::FromStr;
@@ -63,10 +63,10 @@ where
         if self.watermark_interval > 0 {
             if let Some(_) = ts {
                 debug!(self.ctx.log(), "Extracted timestamp and using that");
-                if let Err(err) = self.out_channels.output(
-                    ArconMessage::element(data, ts, self.id),
-                    &self.ctx.system(),
-                ) {
+                if let Err(err) = self
+                    .out_channels
+                    .output(ArconMessage::element(data, ts, self.id), &self.ctx.system())
+                {
                     error!(self.ctx.log(), "Unable to output event, error {}", err);
                 }
             } else {
@@ -165,7 +165,8 @@ impl<OUT> Actor for SocketSource<OUT>
 where
     OUT: 'static + ArconType + FromStr,
 {
-    fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
+    type Message = Box<dyn Any + Send>;
+    fn receive_local(&mut self, msg: Self::Message) {
         if let Some(ref recv) = msg.downcast_ref::<BytesRecv>() {
             debug!(self.ctx.log(), "{:?}", recv.bytes);
             // Try to cast into our type from bytes
@@ -226,8 +227,9 @@ where
             error!(self.ctx.log(), "Unrecognized Message");
         }
     }
-    fn receive_message(&mut self, sender: ActorPath, _ser_id: u64, _buf: &mut Buf) {
-        error!(self.ctx.log(), "Got unexpected message from {}", sender);
+
+    fn receive_network(&mut self, _msg: NetMessage) {
+        error!(self.ctx.log(), "Got unexpected message");
     }
 }
 
@@ -261,14 +263,8 @@ mod tests {
         let out_channels: Box<Forward<u8>> =
             Box::new(Forward::new(Channel::Local(sink_ref.clone())));
 
-        let socket_source: SocketSource<u8> = SocketSource::new(
-            addr,
-            SocketKind::Tcp,
-            out_channels,
-            0,
-            None,
-            1.into(),
-        );
+        let socket_source: SocketSource<u8> =
+            SocketSource::new(addr, SocketKind::Tcp, out_channels, 0, None, 1.into());
         let (source, _) = system.create_and_register(move || socket_source);
 
         system.start(&sink);
@@ -306,14 +302,8 @@ mod tests {
         let out_channels: Box<Forward<f32>> =
             Box::new(Forward::new(Channel::Local(sink_ref.clone())));
 
-        let socket_source: SocketSource<f32> = SocketSource::new(
-            addr,
-            SocketKind::Tcp,
-            out_channels,
-            0,
-            None,
-            1.into(),
-        );
+        let socket_source: SocketSource<f32> =
+            SocketSource::new(addr, SocketKind::Tcp, out_channels, 0, None, 1.into());
         let (source, _) = system.create_and_register(move || socket_source);
 
         system.start(&sink);
@@ -367,14 +357,8 @@ mod tests {
         let out_channels: Box<Forward<u8>> =
             Box::new(Forward::new(Channel::Local(sink_ref.clone())));
 
-        let socket_source: SocketSource<u8> = SocketSource::new(
-            addr,
-            SocketKind::Tcp,
-            out_channels,
-            3,
-            None,
-            1.into(),
-        );
+        let socket_source: SocketSource<u8> =
+            SocketSource::new(addr, SocketKind::Tcp, out_channels, 3, None, 1.into());
         let (source, _) = system.create_and_register(move || socket_source);
 
         system.start(&sink);

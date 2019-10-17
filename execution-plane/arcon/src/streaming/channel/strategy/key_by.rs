@@ -1,12 +1,11 @@
 use crate::data::{ArconEvent, ArconType};
+use crate::prelude::KompactSystem;
 use crate::prelude::*;
 use crate::streaming::channel::strategy::channel_output;
 use fnv::FnvHasher;
-use kompact::KompactSystem;
 use std::collections::HashMap;
 use std::default::Default;
 use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
-use std::marker::PhantomData;
 
 /// A hash based partitioner
 ///
@@ -18,8 +17,7 @@ where
 {
     builder: D,
     parallelism: u32,
-    map: HashMap<usize, Channel, D>,
-    phantom_a: PhantomData<A>,
+    map: HashMap<usize, Channel<A>, D>,
 }
 
 impl<A> KeyBy<A>
@@ -29,7 +27,7 @@ where
     pub fn with_hasher<H: BuildHasher + Default>(
         builder: H,
         parallelism: u32,
-        channels: Vec<Channel>,
+        channels: Vec<Channel<A>>,
     ) -> KeyBy<A, H> {
         assert_eq!(channels.len(), parallelism as usize);
         let mut map = HashMap::with_capacity_and_hasher(parallelism as usize, Default::default());
@@ -40,11 +38,10 @@ where
             builder: builder.into(),
             parallelism,
             map,
-            phantom_a: PhantomData,
         }
     }
 
-    pub fn with_default_hasher(parallelism: u32, channels: Vec<Channel>) -> Self {
+    pub fn with_default_hasher(parallelism: u32, channels: Vec<Channel<A>>) -> Self {
         assert_eq!(channels.len(), parallelism as usize);
         let mut map = HashMap::with_capacity_and_hasher(parallelism as usize, Default::default());
         for (i, channel) in channels.into_iter().enumerate() {
@@ -54,7 +51,6 @@ where
             builder: BuildHasherDefault::<FnvHasher>::default(),
             parallelism,
             map,
-            phantom_a: PhantomData,
         }
     }
 }
@@ -88,10 +84,10 @@ where
         Ok(())
     }
 
-    fn add_channel(&mut self, _channel: Channel) {
+    fn add_channel(&mut self, _channel: Channel<A>) {
         unimplemented!();
     }
-    fn remove_channel(&mut self, _channel: Channel) {
+    fn remove_channel(&mut self, _channel: Channel<A>) {
         unimplemented!();
     }
 }
@@ -100,24 +96,24 @@ where
 mod tests {
     use super::*;
     use crate::streaming::channel::strategy::tests::*;
-    use kompact::*;
+    use kompact::prelude::*;
     use rand::Rng;
     use std::sync::Arc;
 
     #[test]
     fn partitioner_parallelism_8_test() {
-        let cfg = KompactConfig::new();
-        let system = KompactSystem::new(cfg).expect("KompactSystem");
+        let system = KompactConfig::default().build().expect("KompactSystem");
 
         let parallelism: u32 = 8;
         let total_msgs = 1000;
 
-        let mut channels: Vec<Channel> = Vec::new();
+        let mut channels: Vec<Channel<Input>> = Vec::new();
         let mut comps: Vec<Arc<crate::prelude::Component<DebugSink<Input>>>> = Vec::new();
 
         for _i in 0..parallelism {
             let comp = system.create_and_start(move || DebugSink::<Input>::new());
-            channels.push(Channel::Local(comp.actor_ref()));
+            let actor_ref: ActorRef<ArconMessage<Input>> = comp.actor_ref();
+            channels.push(Channel::Local(actor_ref));
             comps.push(comp);
         }
 

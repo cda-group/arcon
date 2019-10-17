@@ -1,9 +1,9 @@
-use crate::streaming::task::NodeID;
-use arcon_messages::protobuf::ArconNetworkMessage_oneof_payload::*;
 use crate::error::ArconResult;
 use crate::macros::*;
 use crate::messages::protobuf::messages::ArconNetworkMessage;
 use crate::messages::protobuf::*;
+use crate::streaming::task::NodeID;
+use arcon_messages::protobuf::ArconNetworkMessage_oneof_payload::*;
 use serde::de::{DeserializeOwned, Deserializer, SeqAccess, Visitor};
 use serde::ser::SerializeSeq;
 use serde::*;
