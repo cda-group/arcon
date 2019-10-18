@@ -165,9 +165,14 @@ where
 {
     fn handle(&mut self, event: ControlEvent) -> () {
         match event {
-            ControlEvent::Start => {}
-            _ => {
-                error!(self.ctx.log(), "bad ControlEvent");
+            ControlEvent::Start => {
+                debug!(self.ctx.log(), "Started Arcon Node");
+            }
+            ControlEvent::Stop => {
+                // TODO
+            }
+            ControlEvent::Kill => {
+                // TODO
             }
         }
     }
