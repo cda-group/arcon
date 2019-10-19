@@ -1,6 +1,6 @@
 // Benchmarks for Arcon Nodes
 //
-// NOTE: Some of the code is shamelessly stolen from:
+// NOTE: Most of the code is shamelessly stolen from:
 // https://github.com/kompics/kompact/blob/master/experiments/dynamic-benches/src/network_latency.rs
 
 use arcon::prelude::*;
@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 const NODE_MSGS: usize = 100000;
 
 fn arcon_node_latency(c: &mut Criterion) {
-    let mut group = c.benchmark_group("node_throughput");
+    let mut group = c.benchmark_group("arcon_node_latency");
     group.bench_function("Forward Map Test", node_latency_forward);
 
     group.finish()
@@ -24,12 +24,8 @@ fn setup_system(name: &'static str, throughput: usize) -> KompactSystem {
     cfg.build().expect("KompactSystem")
 }
 
-
 pub fn node_latency_forward(b: &mut Bencher) {
-    node_run(
-        b,
-        NODE_MSGS,
-    );
+    node_run(b, NODE_MSGS);
 }
 
 pub fn node_run(b: &mut Bencher, messages: usize) {
@@ -37,7 +33,7 @@ pub fn node_run(b: &mut Bencher, messages: usize) {
 
     let timeout = Duration::from_millis(500);
 
-    let node_receiver = sys.create(move || NodeReceiver::new(messages as u64));
+    let node_receiver = sys.create(move || NodeReceiver::new());
 
     let actor_ref: ActorRef<ArconMessage<i32>> = node_receiver.actor_ref();
     let channel = Channel::Local(actor_ref);
@@ -54,6 +50,9 @@ pub fn node_run(b: &mut Bencher, messages: usize) {
 
     let node = sys.create(|| node_comp);
 
+    // Bit hacky, but since we depend on the receiver to create the node itself.
+    let _ = node_receiver.on_definition(|cd| cd.set_node(node.actor_ref()));
+
     let experiment_port = node_receiver.on_definition(|cd| cd.experiment_port.share());
 
     sys.start_notify(&node_receiver)
@@ -64,17 +63,9 @@ pub fn node_run(b: &mut Bencher, messages: usize) {
         .wait_timeout(timeout)
         .expect("node never started!");
 
-    let node_ref: ActorRef<ArconMessage<i32>> = node.actor_ref();
-    let sender_id: NodeID = 1.into();
-
     b.iter_custom(|num_iterations| {
         let (promise, future) = kpromise();
         sys.trigger_r(Run::new(num_iterations, promise), &experiment_port);
-        std::thread::sleep(Duration::from_millis(50));
-        for i in 0..messages {
-            let msg = ArconMessage::element(i as i32, None, sender_id);
-            node_ref.tell(msg);
-        }
         let res = future.wait();
         res
     });
@@ -115,20 +106,26 @@ pub struct NodeReceiver {
     ctx: ComponentContext<Self>,
     pub experiment_port: ProvidedPort<ExperimentPort, Self>,
     done: Option<KPromise<Duration>>,
-    expected_messages: u64,
-    msg_counter: u64,
+    node: Option<ActorRef<ArconMessage<i32>>>,
+    remaining_send: u64,
+    remaining_recv: u64,
     start: Instant,
 }
 impl NodeReceiver {
-    pub fn new(expected_messages: u64) -> NodeReceiver {
+    pub fn new() -> NodeReceiver {
         NodeReceiver {
             ctx: ComponentContext::new(),
             experiment_port: ProvidedPort::new(),
             done: None,
-            expected_messages,
-            msg_counter: 0,
+            node: None,
+            remaining_send: 0,
+            remaining_recv: 0,
             start: Instant::now(),
         }
+    }
+
+    pub fn set_node(&mut self, node: ActorRef<ArconMessage<i32>>) {
+        self.node = Some(node);
     }
 }
 
@@ -140,9 +137,8 @@ impl Actor for NodeReceiver {
     type Message = ArconMessage<i32>;
 
     fn receive_local(&mut self, _msg: Self::Message) -> () {
-        self.msg_counter += 1;
-
-        if self.msg_counter >= self.expected_messages {
+        self.remaining_recv -= 1u64;
+        if self.remaining_recv <= 0u64 {
             let time = self.start.elapsed();
             let promise = self.done.take().expect("No promise to reply to?");
             promise.fulfill(time).expect("Promise was dropped");
@@ -156,9 +152,20 @@ impl Actor for NodeReceiver {
 
 impl Provide<ExperimentPort> for NodeReceiver {
     fn handle(&mut self, event: Run) -> () {
-        self.msg_counter = 0;
+        self.remaining_send = event.num_iterations;
+        self.remaining_recv = event.num_iterations;
         self.done = Some(event.promise);
         self.start = Instant::now();
+
+        let sender_id: NodeID = 1.into();
+
+        let node = self.node.as_ref().expect("ActorRef not set");
+
+        while self.remaining_send > 0u64 {
+            self.remaining_send -= 1u64;
+            let msg = ArconMessage::element(100 as i32, None, sender_id);
+            node.tell(msg);
+        }
     }
 }
 
