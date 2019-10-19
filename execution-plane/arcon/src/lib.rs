@@ -55,6 +55,8 @@ pub mod prelude {
 
     pub use kompact::default_components::*;
     pub use kompact::prelude::*;
+    #[cfg(feature = "thread_pinning")]
+    pub use kompact::{get_core_ids, CoreId};
     pub use slog::*;
 
     pub use futures::future;
