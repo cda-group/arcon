@@ -17,20 +17,20 @@ pub trait ArconType: Sync + Send + Clone + Copy + Debug + Serialize + Deserializ
 
 /// Wrapper for unifying passing of Elements and other stream messages (watermarks)
 #[derive(Clone, Debug, Copy)]
-pub enum ArconEvent<A: 'static + ArconType> {
+pub enum ArconEvent<A: ArconType> {
     Element(ArconElement<A>),
     Watermark(Watermark),
     Epoch(Epoch),
 }
 
 #[derive(Clone, Debug)]
-pub struct ArconMessage<A: 'static + ArconType> {
+pub struct ArconMessage<A: ArconType> {
     pub event: ArconEvent<A>,
     pub sender: NodeID,
 }
 
 // Convenience methods, "message factories"
-impl<A: 'static + ArconType> ArconMessage<A> {
+impl<A: ArconType> ArconMessage<A> {
     pub fn watermark(timestamp: u64, sender: NodeID) -> ArconMessage<A> {
         ArconMessage {
             event: ArconEvent::<A>::Watermark(Watermark { timestamp }),
@@ -75,7 +75,7 @@ impl Epoch {
     }
 }
 
-impl<A: 'static + ArconType> ArconMessage<A> {
+impl<A: ArconType> ArconMessage<A> {
     pub fn to_remote(&self) -> ArconResult<ArconNetworkMessage> {
         match self.event {
             ArconEvent::Element(e) => {
@@ -130,7 +130,7 @@ impl<A: 'static + ArconType> ArconMessage<A> {
 #[derive(Clone, Debug, Copy)]
 pub struct ArconElement<A>
 where
-    A: 'static + ArconType,
+    A: ArconType,
 {
     pub data: A,
     pub timestamp: Option<u64>,
@@ -138,7 +138,7 @@ where
 
 impl<A> ArconElement<A>
 where
-    A: 'static + ArconType,
+    A: ArconType,
 {
     pub fn new(data: A) -> Self {
         ArconElement {
