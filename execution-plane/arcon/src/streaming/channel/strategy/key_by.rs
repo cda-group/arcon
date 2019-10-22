@@ -7,24 +7,40 @@ use std::collections::HashMap;
 use std::default::Default;
 use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
 
+type DefaultHashBuilder = BuildHasherDefault<FnvHasher>;
+
 /// A hash based partitioner
 ///
 /// `KeyBy` may be constructed with
 /// either a custom hasher or the default `FnvHasher`
-pub struct KeyBy<A, D = BuildHasherDefault<FnvHasher>>
+#[derive(Default)]
+pub struct KeyBy<A, H = DefaultHashBuilder>
 where
     A: 'static + ArconType + Hash,
 {
-    builder: D,
+    builder: H,
     parallelism: u32,
-    map: HashMap<usize, Channel<A>, D>,
+    map: HashMap<usize, Channel<A>>,
 }
 
 impl<A> KeyBy<A>
 where
     A: 'static + ArconType + Hash,
 {
-    pub fn with_default_hasher<B>(
+    pub fn new(parallelism: u32, channels: Vec<Channel<A>>) -> KeyBy<A> {
+        assert_eq!(channels.len(), parallelism as usize);
+        let mut map = HashMap::with_capacity_and_hasher(parallelism as usize, Default::default());
+        for (i, channel) in channels.into_iter().enumerate() {
+            map.insert(i, channel);
+        }
+        KeyBy {
+            builder: Default::default(),
+            parallelism,
+            map,
+        }
+    }
+
+    pub fn with_hasher<B>(
         parallelism: u32,
         channels: Vec<Channel<A>>,
     ) -> KeyBy<A, BuildHasherDefault<B>>
@@ -44,9 +60,10 @@ where
     }
 }
 
-impl<A> ChannelStrategy<A> for KeyBy<A>
+impl<A, B> ChannelStrategy<A> for KeyBy<A, B>
 where
     A: 'static + ArconType + Hash,
+    B: BuildHasher + Send + Sync,
 {
     fn output(&mut self, message: ArconMessage<A>, source: &KompactSystem) -> ArconResult<()> {
         match message.event {
@@ -107,7 +124,7 @@ mod tests {
         }
 
         let mut channel_strategy: Box<ChannelStrategy<Input>> =
-            Box::new(KeyBy::with_default_hasher(parallelism, channels));
+            Box::new(KeyBy::new(parallelism, channels));
 
         let mut rng = rand::thread_rng();
 
