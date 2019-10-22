@@ -24,31 +24,20 @@ impl<A> KeyBy<A>
 where
     A: 'static + ArconType + Hash,
 {
-    pub fn with_hasher<H: BuildHasher + Default>(
-        builder: H,
+    pub fn with_default_hasher<B>(
         parallelism: u32,
         channels: Vec<Channel<A>>,
-    ) -> KeyBy<A, H> {
+    ) -> KeyBy<A, BuildHasherDefault<B>>
+    where
+        B: Hasher + Default,
+    {
         assert_eq!(channels.len(), parallelism as usize);
         let mut map = HashMap::with_capacity_and_hasher(parallelism as usize, Default::default());
         for (i, channel) in channels.into_iter().enumerate() {
             map.insert(i, channel);
         }
         KeyBy {
-            builder: builder.into(),
-            parallelism,
-            map,
-        }
-    }
-
-    pub fn with_default_hasher(parallelism: u32, channels: Vec<Channel<A>>) -> Self {
-        assert_eq!(channels.len(), parallelism as usize);
-        let mut map = HashMap::with_capacity_and_hasher(parallelism as usize, Default::default());
-        for (i, channel) in channels.into_iter().enumerate() {
-            map.insert(i, channel);
-        }
-        KeyBy {
-            builder: BuildHasherDefault::<FnvHasher>::default(),
+            builder: BuildHasherDefault::<B>::default(),
             parallelism,
             map,
         }
