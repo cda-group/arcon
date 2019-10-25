@@ -10,7 +10,7 @@ Installing:
 $ cargo +nightly install arcon_compiler
 ```
 
-**NOTE**: requires LLVM (6.0) and Protobuf. Instructions can be found [here](https://github.com/cda-group/arcon/tree/master/execution-plane)
+**NOTE**: requires Protobuf. Instructions can be found [here](https://github.com/cda-group/arcon/tree/master/execution-plane)
 
 ## Building
 
