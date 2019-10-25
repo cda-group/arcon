@@ -1,4 +1,5 @@
 pub mod event_timer;
+#[cfg(feature = "socket")]
 pub mod io;
 
 use std::time::{SystemTime, UNIX_EPOCH};

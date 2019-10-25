@@ -1,6 +1,4 @@
 #![allow(bare_trait_objects)]
-extern crate futures;
-extern crate tokio;
 
 #[cfg_attr(test, macro_use)]
 extern crate arcon_macros;
@@ -39,13 +37,15 @@ pub mod prelude {
     };
     */
 
-    pub use crate::streaming::source::{
-        local_file::LocalFileSource, socket::SocketKind, socket::SocketSource,
+    pub use crate::streaming::source::local_file::LocalFileSource;
+
+    #[cfg(feature = "socket")]
+    pub use crate::streaming::{
+        sink::socket::SocketSink,
+        source::socket::{SocketKind, SocketSource},
     };
 
-    pub use crate::streaming::sink::{
-        debug::DebugSink, local_file::LocalFileSink, socket::SocketSink,
-    };
+    pub use crate::streaming::sink::{debug::DebugSink, local_file::LocalFileSink};
 
     pub use crate::data::Watermark;
     pub use crate::data::*;
@@ -56,10 +56,6 @@ pub mod prelude {
     #[cfg(feature = "thread_pinning")]
     pub use kompact::{get_core_ids, CoreId};
     pub use slog::*;
-
-    pub use futures::future;
-    pub use futures::future::ok;
-    pub use futures::prelude::*;
 
     pub use arcon_messages::protobuf::*;
 }
