@@ -1,7 +1,6 @@
 #![allow(bare_trait_objects)]
 extern crate futures;
 extern crate tokio;
-extern crate weld as weld_core;
 
 #[cfg_attr(test, macro_use)]
 extern crate arcon_macros;
@@ -16,7 +15,6 @@ extern crate serde;
 pub mod data;
 pub mod streaming;
 pub mod util;
-pub mod weld;
 
 pub mod macros {
     pub use crate::data::ArconType;
@@ -31,13 +29,15 @@ pub mod prelude {
     };
 
     pub use crate::streaming::channel::Channel;
-    pub use crate::streaming::task::{
-        filter::Filter, flatmap::FlatMap, map::Map, node::Node, NodeID, Task, TaskMetric,
+    pub use crate::streaming::node::{
+        operator::Filter, operator::Map, operator::Operator, Node, NodeID,
     };
+    /*
     pub use crate::streaming::window::{
         builder::WindowBuilder, builder::WindowFn, builder::WindowModules,
         event_time::EventTimeWindowAssigner,
     };
+    */
 
     pub use crate::streaming::source::{
         local_file::LocalFileSource, socket::SocketKind, socket::SocketSource,
@@ -49,9 +49,7 @@ pub mod prelude {
 
     pub use crate::data::Watermark;
     pub use crate::data::*;
-    pub use crate::weld::module::{Module, ModuleRun};
     pub use error::ArconResult;
-    pub use weld_core::data::*;
 
     pub use kompact::default_components::*;
     pub use kompact::prelude::*;

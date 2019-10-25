@@ -1,6 +1,6 @@
 use crate::data::{ArconElement, ArconEvent, ArconMessage, ArconType, Watermark};
 use crate::streaming::channel::strategy::ChannelStrategy;
-use crate::streaming::task::NodeID;
+use crate::streaming::node::NodeID;
 use crate::util::io::*;
 use kompact::prelude::*;
 use std::net::SocketAddr;

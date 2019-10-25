@@ -27,7 +27,7 @@ where
     }
 
     fn handle_event(&mut self, event: &ArconEvent<A>) {
-        match event {
+        match &event {
             ArconEvent::Element(e) => {
                 info!(self.ctx.log(), "Sink element: {:?}", e.data);
                 self.data.push(*e);

@@ -39,13 +39,14 @@ pub fn node_run(b: &mut Bencher, messages: usize) {
     let channel = Channel::Local(actor_ref);
     let channel_strategy: Box<dyn ChannelStrategy<i32>> = Box::new(Forward::new(channel));
 
-    let code = String::from("|x: i32| x + 10");
-    let module = std::sync::Arc::new(Module::new(code).unwrap());
+    fn map_fn(x: &i32) -> i32 {
+        x + 10
+    }
     let node_comp = Node::<i32, i32>::new(
         0.into(),
         vec![1.into()],
         channel_strategy,
-        Box::new(Map::new(module)),
+        Box::new(Map::<i32, i32>::new(&map_fn)),
     );
 
     let node = sys.create(|| node_comp);

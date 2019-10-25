@@ -66,7 +66,7 @@ where
     B: BuildHasher + Send + Sync,
 {
     fn output(&mut self, message: ArconMessage<A>, source: &KompactSystem) -> ArconResult<()> {
-        match message.event {
+        match &message.event {
             ArconEvent::Element(element) => {
                 let mut h = self.builder.build_hasher();
                 element.data.hash(&mut h);
