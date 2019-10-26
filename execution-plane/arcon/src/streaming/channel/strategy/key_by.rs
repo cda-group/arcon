@@ -3,7 +3,6 @@ use crate::prelude::KompactSystem;
 use crate::prelude::*;
 use crate::streaming::channel::strategy::channel_output;
 use fnv::FnvHasher;
-use std::collections::HashMap;
 use std::default::Default;
 use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
 
@@ -20,7 +19,7 @@ where
 {
     builder: H,
     parallelism: u32,
-    map: HashMap<usize, Channel<A>>,
+    nodes: Vec<Channel<A>>,
 }
 
 impl<A> KeyBy<A>
@@ -29,14 +28,10 @@ where
 {
     pub fn new(parallelism: u32, channels: Vec<Channel<A>>) -> KeyBy<A> {
         assert_eq!(channels.len(), parallelism as usize);
-        let mut map = HashMap::with_capacity_and_hasher(parallelism as usize, Default::default());
-        for (i, channel) in channels.into_iter().enumerate() {
-            map.insert(i, channel);
-        }
         KeyBy {
             builder: Default::default(),
             parallelism,
-            map,
+            nodes: channels,
         }
     }
 
@@ -48,14 +43,10 @@ where
         B: Hasher + Default,
     {
         assert_eq!(channels.len(), parallelism as usize);
-        let mut map = HashMap::with_capacity_and_hasher(parallelism as usize, Default::default());
-        for (i, channel) in channels.into_iter().enumerate() {
-            map.insert(i, channel);
-        }
         KeyBy {
             builder: BuildHasherDefault::<B>::default(),
             parallelism,
-            map,
+            nodes: channels,
         }
     }
 }
@@ -71,18 +62,15 @@ where
                 let mut h = self.builder.build_hasher();
                 element.data.hash(&mut h);
                 let hash = h.finish() as u32;
-                let id = (hash % self.parallelism) as i32;
-                if id >= 0 && id <= self.parallelism as i32 {
-                    if let Some(channel) = self.map.get(&(id as usize)) {
-                        let _ = channel_output(channel, message, source)?;
-                    }
+                let index = (hash % self.parallelism) as usize;
+                if let Some(channel) = self.nodes.get(index) {
+                    let _ = channel_output(channel, message, source)?;
                 } else {
-                    // TODO: Fix
-                    panic!("Failed to hash to channel properly..");
+                    panic!("Something went wrong while finding channel!..");
                 }
             }
             _ => {
-                for (_, channel) in self.map.iter() {
+                for channel in self.nodes.iter() {
                     let _ = channel_output(channel, message.clone(), source)?;
                 }
             }
