@@ -1,12 +1,12 @@
 pub mod operator;
 
 use crate::prelude::*;
+use operator::Operator;
+use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::collections::HashSet; // Blocked-list
 use std::collections::LinkedList; // Message buffer
 use std::mem; // Watermark-list
-use std::cmp::Ordering;
-use operator::Operator;
 
 #[derive(Eq, Hash, Copy, Clone, Debug)]
 pub struct NodeID {
@@ -259,9 +259,9 @@ where
 mod tests {
     // Tests the message logic of Node.
     use super::*;
+    use operator::filter::Filter;
     use std::sync::Arc;
     use std::{thread, time};
-    use operator::filter::Filter; 
 
     fn node_test_setup() -> (ActorRef<ArconMessage<i32>>, Arc<Component<DebugSink<i32>>>) {
         // Returns a filter Node with input channels: sender1..sender3

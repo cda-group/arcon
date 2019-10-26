@@ -1,5 +1,6 @@
-use crate::prelude::*;
-use std::marker::PhantomData;
+use crate::data::{ArconElement, ArconEvent, ArconType, Epoch, Watermark};
+use crate::streaming::node::operator::Operator;
+use arcon_error::ArconResult;
 
 /// IN: Input Event
 /// OUT: Output Event
@@ -8,8 +9,6 @@ where
     IN: 'static + ArconType,
     OUT: 'static + ArconType,
 {
-    _in: PhantomData<IN>,
-    _out: PhantomData<OUT>,
     udf: &'static Fn(&IN) -> OUT,
 }
 
@@ -19,11 +18,7 @@ where
     OUT: 'static + ArconType,
 {
     pub fn new(udf: &'static Fn(&IN) -> OUT) -> Self {
-        Map {
-            _in: PhantomData,
-            _out: PhantomData,
-            udf,
-        }
+        Map { udf }
     }
 
     #[inline]
@@ -58,7 +53,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn map_unit_test() {
+    fn map_test() {
         fn map_fn(x: &i32) -> i32 {
             x + 10
         }
