@@ -106,7 +106,8 @@ mod tests {
 
         for _i in 0..parallelism {
             let comp = system.create_and_start(move || DebugSink::<Input>::new());
-            let actor_ref: ActorRef<ArconMessage<Input>> = comp.actor_ref();
+            let actor_ref: ActorRefStrong<ArconMessage<Input>> =
+                comp.actor_ref().hold().expect("failed to fetch");
             channels.push(Channel::Local(actor_ref));
             comps.push(comp);
         }

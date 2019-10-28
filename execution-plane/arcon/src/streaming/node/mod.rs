@@ -269,7 +269,9 @@ mod tests {
         let system = KompactConfig::default().build().expect("KompactSystem");
 
         let sink = system.create_and_start(move || DebugSink::<i32>::new());
-        let channel = Channel::Local(sink.actor_ref());
+        let actor_ref: ActorRefStrong<ArconMessage<i32>> =
+            sink.actor_ref().hold().expect("Failed to fetch");
+        let channel = Channel::Local(actor_ref);
         let channel_strategy: Box<ChannelStrategy<i32>> = Box::new(Forward::new(channel));
 
         fn node_fn(x: &i32) -> bool {

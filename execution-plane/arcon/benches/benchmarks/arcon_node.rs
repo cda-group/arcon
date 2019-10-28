@@ -11,7 +11,8 @@ const NODE_MSGS: usize = 100000;
 
 fn arcon_node_latency(c: &mut Criterion) {
     let mut group = c.benchmark_group("arcon_node_latency");
-    group.bench_function("Forward Map Test", node_latency_forward);
+    group.bench_function("Forward Test", node_latency_forward);
+    group.bench_function("KeyBy Test", node_latency_keyby);
 
     group.finish()
 }
@@ -25,34 +26,95 @@ fn setup_system(name: &'static str, throughput: usize) -> KompactSystem {
 }
 
 pub fn node_latency_forward(b: &mut Bencher) {
-    node_run(b, NODE_MSGS);
+    node_forward_bench(b, NODE_MSGS);
 }
 
-pub fn node_run(b: &mut Bencher, messages: usize) {
-    let sys = setup_system("node_system", messages);
+pub fn node_latency_keyby(b: &mut Bencher) {
+    node_keyby_bench(b, NODE_MSGS);
+}
+
+pub fn node_forward_bench(b: &mut Bencher, messages: usize) {
+    let sys = setup_system("node_forward", messages);
 
     let timeout = Duration::from_millis(500);
 
     let node_receiver = sys.create(move || NodeReceiver::new());
 
-    let actor_ref: ActorRef<ArconMessage<i32>> = node_receiver.actor_ref();
+    let actor_ref: ActorRefStrong<ArconMessage<i32>> = node_receiver
+        .actor_ref()
+        .hold()
+        .expect("failed to fetch ref");
     let channel = Channel::Local(actor_ref);
     let channel_strategy: Box<dyn ChannelStrategy<i32>> = Box::new(Forward::new(channel));
 
     fn map_fn(x: &i32) -> i32 {
         x + 10
     }
+
     let node_comp = Node::<i32, i32>::new(
         0.into(),
         vec![1.into()],
         channel_strategy,
-        Box::new(Map::<i32, i32>::new(&map_fn)),
+        Box::new(Map::new(&map_fn)),
     );
 
     let node = sys.create(|| node_comp);
 
     // Bit hacky, but since we depend on the receiver to create the node itself.
-    let _ = node_receiver.on_definition(|cd| cd.set_node(node.actor_ref()));
+    let _ = node_receiver.on_definition(|cd| cd.set_node(node.actor_ref().hold().expect("fail")));
+
+    let experiment_port = node_receiver.on_definition(|cd| cd.experiment_port.share());
+
+    sys.start_notify(&node_receiver)
+        .wait_timeout(timeout)
+        .expect("node_receiver never started!");
+
+    sys.start_notify(&node)
+        .wait_timeout(timeout)
+        .expect("node never started!");
+
+    b.iter_custom(|num_iterations| {
+        let (promise, future) = kpromise();
+        sys.trigger_r(Run::new(num_iterations, promise), &experiment_port);
+        let res = future.wait();
+        res
+    });
+
+    drop(experiment_port);
+    drop(node_receiver);
+    drop(node);
+    sys.shutdown().expect("System did not shutdown!");
+}
+
+pub fn node_keyby_bench(b: &mut Bencher, messages: usize) {
+    let sys = setup_system("node_keyby", messages);
+
+    let timeout = Duration::from_millis(500);
+
+    let node_receiver = sys.create(move || NodeReceiver::new());
+
+    let actor_ref: ActorRefStrong<ArconMessage<i32>> = node_receiver
+        .actor_ref()
+        .hold()
+        .expect("failed to fetch ref");
+    let channel = Channel::Local(actor_ref);
+    let channel_strategy: Box<dyn ChannelStrategy<i32>> = Box::new(KeyBy::new(1, vec![channel]));
+
+    fn map_fn(x: &i32) -> i32 {
+        x + 10
+    }
+
+    let node_comp = Node::<i32, i32>::new(
+        0.into(),
+        vec![1.into()],
+        channel_strategy,
+        Box::new(Map::new(&map_fn)),
+    );
+
+    let node = sys.create(|| node_comp);
+
+    // Bit hacky, but since we depend on the receiver to create the node itself.
+    let _ = node_receiver.on_definition(|cd| cd.set_node(node.actor_ref().hold().expect("fail")));
 
     let experiment_port = node_receiver.on_definition(|cd| cd.experiment_port.share());
 
@@ -107,7 +169,7 @@ pub struct NodeReceiver {
     ctx: ComponentContext<Self>,
     pub experiment_port: ProvidedPort<ExperimentPort, Self>,
     done: Option<KPromise<Duration>>,
-    node: Option<ActorRef<ArconMessage<i32>>>,
+    node: Option<ActorRefStrong<ArconMessage<i32>>>,
     remaining_send: u64,
     remaining_recv: u64,
     start: Instant,
@@ -125,7 +187,7 @@ impl NodeReceiver {
         }
     }
 
-    pub fn set_node(&mut self, node: ActorRef<ArconMessage<i32>>) {
+    pub fn set_node(&mut self, node: ActorRefStrong<ArconMessage<i32>>) {
         self.node = Some(node);
     }
 }

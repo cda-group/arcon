@@ -171,7 +171,8 @@ mod tests {
 
         file.write_all(b"123").unwrap();
 
-        let channel = Channel::Local(sink.actor_ref());
+        let actor_ref = sink.actor_ref().hold().expect("fail");
+        let channel = Channel::Local(actor_ref);
         let channel_strategy = Box::new(Forward::new(channel));
         let file_source: LocalFileSource<u64> =
             LocalFileSource::new(String::from(&file_path), channel_strategy, 5, 1.into());
@@ -194,7 +195,8 @@ mod tests {
 
         file.write_all(b"123.5").unwrap();
 
-        let channel = Channel::Local(sink.actor_ref());
+        let actor_ref = sink.actor_ref().hold().expect("fail");
+        let channel = Channel::Local(actor_ref);
         let channel_strategy = Box::new(Forward::new(channel));
 
         let file_source: LocalFileSource<u64> =
@@ -215,7 +217,8 @@ mod tests {
 
         file.write_all(b"123").unwrap();
 
-        let channel = Channel::Local(sink.actor_ref());
+        let actor_ref = sink.actor_ref().hold().expect("fail");
+        let channel = Channel::Local(actor_ref);
         let channel_strategy = Box::new(Forward::new(channel));
 
         let file_source: LocalFileSource<f32> =
@@ -238,7 +241,8 @@ mod tests {
 
         file.write_all(b"123.5").unwrap();
 
-        let channel = Channel::Local(sink.actor_ref());
+        let actor_ref = sink.actor_ref().hold().expect("fail");
+        let channel = Channel::Local(actor_ref);
         let channel_strategy = Box::new(Forward::new(channel));
 
         let file_source: LocalFileSource<f32> =
