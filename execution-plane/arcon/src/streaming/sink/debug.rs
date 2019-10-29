@@ -26,17 +26,17 @@ where
         }
     }
 
-    fn handle_event(&mut self, event: &ArconEvent<A>) {
-        match &event {
+    fn handle_event(&mut self, event: ArconEvent<A>) {
+        match event {
             ArconEvent::Element(e) => {
                 info!(self.ctx.log(), "Sink element: {:?}", e.data);
-                self.data.push(*e);
+                self.data.push(e);
             }
             ArconEvent::Watermark(w) => {
-                self.watermarks.push(*w);
+                self.watermarks.push(w);
             }
             ArconEvent::Epoch(e) => {
-                self.epochs.push(*e);
+                self.epochs.push(e);
             }
         }
     }
@@ -56,13 +56,13 @@ where
     type Message = ArconMessage<A>;
 
     fn receive_local(&mut self, msg: Self::Message) {
-        self.handle_event(&msg.event);
+        self.handle_event(msg.event);
     }
     fn receive_network(&mut self, msg: NetMessage) {
         match msg.try_deserialise::<ArconNetworkMessage, ProtoSer>() {
             Ok(deser_msg) => {
                 if let Ok(message) = ArconMessage::from_remote(deser_msg) {
-                    self.handle_event(&message.event);
+                    self.handle_event(message.event);
                 } else {
                     error!(self.ctx.log(), "Failed to convert remote message to local");
                 }

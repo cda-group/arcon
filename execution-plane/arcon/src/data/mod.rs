@@ -11,7 +11,7 @@ use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 
 /// Type that can be passed through the Arcon runtime
-pub trait ArconType: Sync + Send + Copy + Clone + Debug + Serialize + DeserializeOwned {}
+pub trait ArconType: Sync + Send + Clone + Debug + Serialize + DeserializeOwned {}
 
 /// Wrapper for unifying passing of Elements and other stream messages (watermarks)
 #[derive(Clone, Debug, Copy)]
@@ -221,4 +221,5 @@ impl ArconType for i64 {}
 impl ArconType for f32 {}
 impl ArconType for f64 {}
 impl ArconType for bool {}
-//impl<A: ArconType> ArconType for Vec<A> {}
+impl<A: ArconType> ArconType for Vec<A> {}
+impl ArconType for String {}
