@@ -47,7 +47,7 @@ pub fn node_forward_bench(b: &mut Bencher, messages: usize) {
     let channel = Channel::Local(actor_ref);
     let channel_strategy: Box<dyn ChannelStrategy<i32>> = Box::new(Forward::new(channel));
 
-    fn map_fn(x: &i32) -> i32 {
+    fn map_fn(x: i32) -> i32 {
         x + 10
     }
 
@@ -100,7 +100,7 @@ pub fn node_keyby_bench(b: &mut Bencher, messages: usize) {
     let channel = Channel::Local(actor_ref);
     let channel_strategy: Box<dyn ChannelStrategy<i32>> = Box::new(KeyBy::new(1, vec![channel]));
 
-    fn map_fn(x: &i32) -> i32 {
+    fn map_fn(x: i32) -> i32 {
         x + 10
     }
 

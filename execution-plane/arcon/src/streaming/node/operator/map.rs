@@ -9,7 +9,7 @@ where
     IN: 'static + ArconType,
     OUT: 'static + ArconType,
 {
-    udf: &'static Fn(&IN) -> OUT,
+    udf: &'static Fn(IN) -> OUT,
 }
 
 impl<IN, OUT> Map<IN, OUT>
@@ -17,12 +17,12 @@ where
     IN: 'static + ArconType,
     OUT: 'static + ArconType,
 {
-    pub fn new(udf: &'static Fn(&IN) -> OUT) -> Self {
+    pub fn new(udf: &'static Fn(IN) -> OUT) -> Self {
         Map { udf }
     }
 
     #[inline]
-    pub fn run_udf(&self, event: &IN) -> OUT {
+    pub fn run_udf(&self, event: IN) -> OUT {
         (self.udf)(event)
     }
 }
@@ -32,11 +32,11 @@ where
     IN: 'static + ArconType,
     OUT: 'static + ArconType,
 {
-    fn handle_element(&mut self, event: ArconElement<IN>) -> ArconResult<Vec<ArconEvent<OUT>>> {
-        let data = self.run_udf(&(event.data));
+    fn handle_element(&mut self, element: ArconElement<IN>) -> ArconResult<Vec<ArconEvent<OUT>>> {
+        let data = self.run_udf(element.data);
         return Ok(vec![ArconEvent::Element(ArconElement {
             data,
-            timestamp: event.timestamp,
+            timestamp: element.timestamp,
         })]);
     }
 
@@ -54,7 +54,7 @@ mod tests {
 
     #[test]
     fn map_test() {
-        fn map_fn(x: &i32) -> i32 {
+        fn map_fn(x: i32) -> i32 {
             x + 10
         }
 
