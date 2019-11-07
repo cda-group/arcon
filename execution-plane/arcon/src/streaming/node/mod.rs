@@ -45,8 +45,8 @@ impl PartialEq for NodeID {
 #[derive(ComponentDefinition)]
 pub struct Node<IN, OUT>
 where
-    IN: 'static + ArconType,
-    OUT: 'static + ArconType,
+    IN: ArconType,
+    OUT: ArconType,
 {
     ctx: ComponentContext<Node<IN, OUT>>,
     id: NodeID,
@@ -62,8 +62,8 @@ where
 
 impl<IN, OUT> Node<IN, OUT>
 where
-    IN: 'static + ArconType,
-    OUT: 'static + ArconType,
+    IN: ArconType,
+    OUT: ArconType,
 {
     pub fn new(
         id: NodeID,
@@ -195,8 +195,8 @@ where
 
 impl<IN, OUT> Provide<ControlPort> for Node<IN, OUT>
 where
-    IN: 'static + ArconType,
-    OUT: 'static + ArconType,
+    IN: ArconType,
+    OUT: ArconType,
 {
     fn handle(&mut self, event: ControlEvent) -> () {
         match event {
@@ -215,8 +215,8 @@ where
 
 impl<IN, OUT> Actor for Node<IN, OUT>
 where
-    IN: 'static + ArconType,
-    OUT: 'static + ArconType,
+    IN: ArconType,
+    OUT: ArconType,
 {
     type Message = ArconMessage<IN>;
 
@@ -243,15 +243,15 @@ where
 
 unsafe impl<IN, OUT> Send for Node<IN, OUT>
 where
-    IN: 'static + ArconType,
-    OUT: 'static + ArconType,
+    IN: ArconType,
+    OUT: ArconType,
 {
 }
 
 unsafe impl<IN, OUT> Sync for Node<IN, OUT>
 where
-    IN: 'static + ArconType,
-    OUT: 'static + ArconType,
+    IN: ArconType,
+    OUT: ArconType,
 {
 }
 

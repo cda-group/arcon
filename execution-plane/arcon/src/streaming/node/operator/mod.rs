@@ -11,8 +11,8 @@ use arcon_error::ArconResult;
 
 pub trait Operator<IN, OUT>
 where
-    IN: 'static + ArconType,
-    OUT: 'static + ArconType,
+    IN: ArconType,
+    OUT: ArconType,
 {
     fn handle_element(&mut self, element: ArconElement<IN>) -> ArconResult<Vec<ArconEvent<OUT>>>;
     fn handle_watermark(&mut self, watermark: Watermark) -> ArconResult<Vec<ArconEvent<OUT>>>;

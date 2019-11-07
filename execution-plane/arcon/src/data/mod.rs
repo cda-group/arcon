@@ -11,10 +11,14 @@ use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 
 /// Type that can be passed through the Arcon runtime
-pub trait ArconType: Sync + Send + Clone + Debug + Serialize + DeserializeOwned {}
+pub trait ArconType: Clone + Debug + Sync + Send + Serialize + DeserializeOwned + 'static
+where
+    Self: std::marker::Sized,
+{
+}
 
 /// Wrapper for unifying passing of Elements and other stream messages (watermarks)
-#[derive(Clone, Debug, Copy)]
+#[derive(Clone, Debug)]
 pub enum ArconEvent<A: ArconType> {
     Element(ArconElement<A>),
     Watermark(Watermark),
@@ -46,30 +50,6 @@ impl<A: ArconType> ArconMessage<A> {
             event: ArconEvent::Element(ArconElement { data, timestamp }),
             sender,
         }
-    }
-}
-
-/// Watermark
-#[derive(Clone, Debug, Copy)]
-pub struct Watermark {
-    pub timestamp: u64,
-}
-
-impl Watermark {
-    pub fn new(timestamp: u64) -> Self {
-        Watermark { timestamp }
-    }
-}
-
-/// Epoch
-#[derive(Clone, Debug, Copy)]
-pub struct Epoch {
-    pub epoch: u64,
-}
-
-impl Epoch {
-    pub fn new(epoch: u64) -> Self {
-        Epoch { epoch }
     }
 }
 
@@ -124,20 +104,38 @@ impl<A: ArconType> ArconMessage<A> {
     }
 }
 
-/// A stream element that contains an `ArconType` and an optional timestamp
+/// Watermark
 #[derive(Clone, Debug, Copy)]
-pub struct ArconElement<A>
-where
-    A: ArconType,
-{
+pub struct Watermark {
+    pub timestamp: u64,
+}
+
+impl Watermark {
+    pub fn new(timestamp: u64) -> Self {
+        Watermark { timestamp }
+    }
+}
+
+/// Epoch
+#[derive(Clone, Debug, Copy)]
+pub struct Epoch {
+    pub epoch: u64,
+}
+
+impl Epoch {
+    pub fn new(epoch: u64) -> Self {
+        Epoch { epoch }
+    }
+}
+
+/// A stream element that contains an `ArconType` and an optional timestamp
+#[derive(Clone, Debug)]
+pub struct ArconElement<A: ArconType> {
     pub data: A,
     pub timestamp: Option<u64>,
 }
 
-impl<A> ArconElement<A>
-where
-    A: ArconType,
-{
+impl<A: ArconType> ArconElement<A> {
     pub fn new(data: A) -> Self {
         ArconElement {
             data,
