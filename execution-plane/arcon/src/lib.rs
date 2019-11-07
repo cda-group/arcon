@@ -27,15 +27,11 @@ pub mod prelude {
     };
 
     pub use crate::streaming::channel::Channel;
-    pub use crate::streaming::node::{
-        operator::Filter, operator::Map, operator::Operator, Node, NodeID,
-    };
-    /*
+    pub use crate::streaming::node::{Node, NodeID};
+    pub use crate::streaming::operator::{Filter, Map, Operator};
     pub use crate::streaming::window::{
-        builder::WindowBuilder, builder::WindowFn, builder::WindowModules,
-        event_time::EventTimeWindowAssigner,
+        event_time::EventTimeWindowAssigner, AppenderWindow, IncrementalWindow, Window,
     };
-    */
 
     pub use crate::streaming::source::local_file::LocalFileSource;
 

@@ -1,7 +1,6 @@
-pub mod operator;
 
 use crate::prelude::*;
-use operator::Operator;
+use crate::streaming::operator::Operator;
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::collections::HashSet; // Blocked-list
@@ -63,8 +62,7 @@ where
 impl<IN, OUT> Node<IN, OUT>
 where
     IN: ArconType,
-    OUT: ArconType,
-{
+    OUT: ArconType, {
     pub fn new(
         id: NodeID,
         in_channels: Vec<NodeID>,
@@ -259,7 +257,7 @@ where
 mod tests {
     // Tests the message logic of Node.
     use super::*;
-    use operator::filter::Filter;
+    use crate::streaming::operator::Filter;
     use std::sync::Arc;
     use std::{thread, time};
 

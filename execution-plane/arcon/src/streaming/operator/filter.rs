@@ -1,5 +1,5 @@
 use crate::data::{ArconElement, ArconEvent, ArconType, Epoch, Watermark};
-use crate::streaming::node::operator::Operator;
+use crate::streaming::operator::Operator;
 use arcon_error::ArconResult;
 
 /// IN: Input Event
