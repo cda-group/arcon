@@ -1,4 +1,4 @@
-use crate::StateBackend;
+use crate::state_backend::StateBackend;
 use arcon_error::*;
 use std::collections::HashMap;
 
@@ -7,8 +7,8 @@ pub struct InMemory {
 }
 
 impl StateBackend for InMemory {
-    fn create(_name: &str) -> InMemory {
-        InMemory { db: HashMap::new() }
+    fn create(_name: &str) -> ArconResult<InMemory> {
+        Ok(InMemory { db: HashMap::new() })
     }
 
     fn put(&mut self, key: &[u8], value: &[u8]) -> ArconResult<()> {
@@ -17,8 +17,8 @@ impl StateBackend for InMemory {
     }
 
     fn get(&self, key: &[u8]) -> ArconResult<Vec<u8>> {
-        if let Some(v) = self.db.get(key) {
-            Ok(v.to_vec())
+        if let Some(data) = self.db.get(key) {
+            Ok(data.to_vec())
         } else {
             return arcon_err!("{}", "Value not found");
         }
@@ -35,7 +35,7 @@ mod tests {
 
     #[test]
     fn in_mem_test() {
-        let mut db = InMemory::create("test");
+        let mut db = InMemory::create("test").unwrap();
         let key = "key";
         let value = "hej";
         let _ = db.put(key.as_bytes(), value.as_bytes()).unwrap();

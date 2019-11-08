@@ -12,6 +12,7 @@ extern crate serde;
 
 pub mod data;
 pub mod streaming;
+pub mod state_backend;
 pub mod util;
 
 pub mod macros {
