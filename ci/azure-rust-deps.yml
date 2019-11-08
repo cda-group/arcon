@@ -2,5 +2,4 @@ steps:
   - script: |
       set -e
       ./ci/scripts/install_protobuf.sh
-      ./ci/scripts/install_capnproto.sh
     displayName: "Install Rust Dependencies"

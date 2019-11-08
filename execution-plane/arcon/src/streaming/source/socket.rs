@@ -239,8 +239,8 @@ mod tests {
     use crate::prelude::DebugSink;
     use crate::streaming::channel::strategy::forward::Forward;
     use crate::streaming::channel::Channel;
-    use crate::tokio::prelude::Future;
     use std::{thread, time};
+    use futures::future::Future;
     use tokio::io;
     use tokio::net::TcpStream;
 
@@ -258,7 +258,7 @@ mod tests {
         let system = KompactConfig::default().build().expect("KompactSystem");
 
         let (sink, _) = system.create_and_register(move || DebugSink::<u8>::new());
-        let sink_ref = sink.actor_ref();
+        let sink_ref = sink.actor_ref().hold().expect("Failed to fetch strong ref");
 
         let out_channels: Box<Forward<u8>> =
             Box::new(Forward::new(Channel::Local(sink_ref.clone())));
@@ -284,7 +284,7 @@ mod tests {
         assert_eq!(source_inspect.received, 1);
         let sink_inspect = sink.definition().lock().unwrap();
         assert_eq!(sink_inspect.data.len(), (1 as usize));
-        let r0 = sink_inspect.data[0];
+        let r0 = &sink_inspect.data[0];
         assert_eq!(r0.data, 77 as u8);
     }
 
@@ -297,7 +297,7 @@ mod tests {
         let system = KompactConfig::default().build().expect("KompactSystem");
 
         let (sink, _) = system.create_and_register(move || DebugSink::<f32>::new());
-        let sink_ref = sink.actor_ref();
+        let sink_ref = sink.actor_ref().hold().expect("failed to fetch strong ref");
 
         let out_channels: Box<Forward<f32>> =
             Box::new(Forward::new(Channel::Local(sink_ref.clone())));
@@ -336,9 +336,9 @@ mod tests {
         assert_eq!(source_inspect.received, 3);
         let sink_inspect = sink.definition().lock().unwrap();
         assert_eq!(sink_inspect.data.len(), (3 as usize));
-        let r0 = sink_inspect.data[0];
-        let r1 = sink_inspect.data[1];
-        let r2 = sink_inspect.data[2];
+        let r0 = &sink_inspect.data[0];
+        let r1 = &sink_inspect.data[1];
+        let r2 = &sink_inspect.data[2];
         assert_eq!(r0.data, 123 as f32);
         assert_eq!(r1.data, 4.56 as f32);
         assert_eq!(r2.data, 78.9 as f32);
@@ -352,7 +352,8 @@ mod tests {
         let system = KompactConfig::default().build().expect("KompactSystem");
 
         let (sink, _) = system.create_and_register(move || DebugSink::<u8>::new());
-        let sink_ref = sink.actor_ref();
+        let sink_ref = sink.actor_ref().hold().expect("failed to fetch strong ref");
+
 
         let out_channels: Box<Forward<u8>> =
             Box::new(Forward::new(Channel::Local(sink_ref.clone())));
@@ -378,7 +379,7 @@ mod tests {
         assert_eq!(source_inspect.received, 1);
         let sink_inspect = sink.definition().lock().unwrap();
         assert_eq!(sink_inspect.data.len(), (1 as usize));
-        let r0 = sink_inspect.data[0];
+        let r0 = &sink_inspect.data[0];
         assert_eq!(r0.data, 77 as u8);
         assert_ne!(r0.timestamp, None); // Check that the timestamp is not None
         assert_eq!(sink_inspect.watermarks.len(), (2 as usize));
