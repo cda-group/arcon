@@ -3,7 +3,7 @@
 
 # Arcon
 
-Arcon is a data programming system for building continuous applications. The system is made up of two parts: (1) [Arc](https://cda-group.github.io/papers/Arc_DBPL_2019.pdf), an IR for batch and stream programming;
+Arcon is a data programming system for building continuous analytic applications. The system is made up of two parts: (1) [Arc](https://cda-group.github.io/papers/Arc_DBPL_2019.pdf), an IR for batch and stream programming;
 2) the Arcon runtime, a distributed dataflow runtime that executes applications constructed through Arc.
 
 **Note**: The project is still in an early development stage.

@@ -3,12 +3,14 @@ extern crate arcon_codegen;
 
 use arcon_codegen::*;
 use arcon_spec::*;
-use std::fs;
+//use std::fs;
 
 pub const RUN_PASS_MODE: &str = "run-pass";
 pub const RUN_PASS_PATH: &str = "tests/run-pass";
 pub const SPECIFICATION_PATH: &str = "tests/specifications";
 
+// Disabled for now until Rust codegen is fixed
+/*
 #[test]
 fn codegen_test() {
     // makes sure that tests/run-pass does not exist
@@ -28,8 +30,9 @@ fn codegen_test() {
     let specs = format!("{}/{}", RUN_PASS_PATH, "*.rs");
     t.pass(&specs);
 }
+*/
 
-fn add_test_spec(name: &str) {
+fn _add_test_spec(name: &str) {
     let json_path = format!("{}/{}.json", SPECIFICATION_PATH, name);
     let spec = ArconSpec::load(&json_path).unwrap();
     let generated_code = generate(&spec, true).unwrap();

@@ -2,6 +2,9 @@
 
 Requires Rust nightly (See current toolchain [here](rust-toolchain)).
 
+**NOTE: Codegen for the new Arc batch backend is not yet implemented. Which means that
+arcon_codegen and arcon_compiler is unusable until it is fixed.**
+
 * [`arcon`]: Crate containing the core execution engine
 * [`arcon_codegen`]: Code generation for Arcon
 * [`arcon_compiler`]: Backend compiler targeting Arcon 
