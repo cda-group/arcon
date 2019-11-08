@@ -61,7 +61,7 @@ where
     IN: ArconType,
     OUT: ArconType,
 {
-    fn new(materializer: &'static Fn(&Vec<IN>) -> OUT) -> AppenderWindow<IN, OUT> {
+    pub fn new(materializer: &'static Fn(&Vec<IN>) -> OUT) -> AppenderWindow<IN, OUT> {
         AppenderWindow {
             buffer: Vec::new(),
             materializer,
@@ -114,7 +114,7 @@ where
     IN: ArconType,
     OUT: ArconType,
 {
-    fn new(
+    pub fn new(
         init: &'static Fn(IN) -> OUT,
         agg: &'static Fn(IN, &OUT) -> OUT,
     ) -> IncrementalWindow<IN, OUT> {

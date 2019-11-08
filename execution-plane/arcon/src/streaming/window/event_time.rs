@@ -28,7 +28,7 @@ where
     window: Box<dyn Window<IN, OUT>>,
     window_start: HashMap<u64, u64>,
     window_maps: HashMap<u64, HashMap<u64, Box<Window<IN, OUT>>>>,
-    timer: Box<EventTimer<(u64, u64, u64)>>, // Stores key, "index" and timestamp
+    timer: EventTimer<(u64, u64, u64)>, // Stores key, "index" and timestamp
     hasher: BuildHasherDefault<DefaultHasher>,
     keyed: bool,
 }
@@ -57,10 +57,10 @@ where
             window_length: length,
             window_slide: slide,
             late_arrival_time: late,
-            window: window.clone(),
+            window,
             window_start: HashMap::new(),
             window_maps: HashMap::new(),
-            timer: Box::new(EventTimer::new()),
+            timer: EventTimer::new(),
             hasher: BuildHasherDefault::<DefaultHasher>::default(),
             keyed,
         }
