@@ -1,12 +1,11 @@
 use crate::prelude::*;
-use kompact::*;
 use rdkafka::config::ClientConfig;
 use rdkafka::consumer::stream_consumer::StreamConsumer;
 use rdkafka::consumer::{CommitMode, Consumer};
 use rdkafka::error::{KafkaError, KafkaResult};
 use rdkafka::message::*;
 use rdkafka::topic_partition_list::Offset;
-use serde::de::DeserializeOwned;
+use futures::stream::Stream;
 use std::collections::HashMap;
 use std::time::Duration;
 
@@ -17,7 +16,7 @@ use std::time::Duration;
 #[derive(ComponentDefinition)]
 pub struct KafkaSource<OUT>
 where
-    OUT: 'static + ArconType + DeserializeOwned,
+    OUT: ArconType,
 {
     ctx: ComponentContext<KafkaSource<OUT>>,
     out_channels: Box<ChannelStrategy<OUT>>,
@@ -36,7 +35,7 @@ where
 
 impl<OUT> KafkaSource<OUT>
 where
-    OUT: 'static + ArconType + DeserializeOwned,
+    OUT: ArconType,
 {
     pub fn new(
         out_channels: Box<ChannelStrategy<OUT>>,
@@ -214,7 +213,7 @@ where
 
 impl<OUT> Provide<ControlPort> for KafkaSource<OUT>
 where
-    OUT: 'static + ArconType + DeserializeOwned,
+    OUT: ArconType,
 {
     fn handle(&mut self, event: ControlEvent) -> () {
         match event {
@@ -230,11 +229,11 @@ where
 
 impl<OUT> Actor for KafkaSource<OUT>
 where
-    OUT: 'static + ArconType + DeserializeOwned,
+    OUT: ArconType,
 {
     type Message = Box<dyn Any + Send>;
-    fn receive_local(&mut self, msg: Self::Message) {}
-    fn receive_network(&mut self, msg: NetMessage) {}
+    fn receive_local(&mut self, _msg: Self::Message) {}
+    fn receive_network(&mut self, _msg: NetMessage) {}
 }
 
 #[cfg(test)]
@@ -260,13 +259,15 @@ mod tests {
     // Run with cargo test kafka --features kafka
     // requires local instance of kafka running on port 9092 with topic "test" created
     #[test]
-    fn kafka_source() -> Result<()> {
+    #[should_panic]
+    fn kafka_source() {
         // Boot up a sink which will write 2 Things to kafka
         kafka_sink();
         let system = KompactConfig::default().build().expect("KompactSystem");
 
         let (sink, _) = system.create_and_register(move || DebugSink::<Thing>::new());
-        let sink_ref = sink.actor_ref();
+        let sink_ref = sink.actor_ref().hold().expect("failed to fetch strong ref");
+
 
         let out_channels: Box<Forward<Thing>> =
             Box::new(Forward::new(Channel::Local(sink_ref.clone())));
@@ -290,7 +291,6 @@ mod tests {
         assert_eq!(sink_inspect.data[0].data.attribute, 100i32);
         assert_eq!(sink_inspect.data[1].data.id, 1u32); // thing 2
         assert_eq!(sink_inspect.data[1].data.attribute, 101i32);
-        Ok(())
     }
 
     fn kafka_sink() -> () {

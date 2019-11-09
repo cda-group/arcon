@@ -2,6 +2,9 @@
 
 Requires Rust nightly (See current toolchain [here](rust-toolchain)).
 
+**NOTE: Codegen for the new Arc batch backend is not yet implemented. Which means that
+arcon_codegen and arcon_compiler is unusable until it is fixed.**
+
 * [`arcon`]: Crate containing the core execution engine
 * [`arcon_codegen`]: Code generation for Arcon
 * [`arcon_compiler`]: Backend compiler targeting Arcon 
@@ -12,17 +15,7 @@ Requires Rust nightly (See current toolchain [here](rust-toolchain)).
 [`arcon_compiler`]: arcon_compiler
 [`arcon_spec`]: arcon_spec
 
-## Ubuntu (>= 16.04)
-
-Install LLVM:
-
-```bash
-$ wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
-$ sudo apt-add-repository "deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic-6.0 main"
-$ sudo apt update && sudo apt install clang-6.0
-$ sudo ln -s /usr/bin/llvm-config-6.0 /usr/local/bin/llvm-config
-$ sudo apt-get install -y zlib1g-dev
-```
+## Ubuntu
 
 Install Protobuf:
 
@@ -33,13 +26,6 @@ Install Protobuf:
   $ sudo mv protoc3/include/* /usr/local/include/
 ```
 ## MacOS
-
-Install LLVM:
-  
-```bash
-  $ brew install llvm@6
-  $ sudo ln -s /usr/local/Cellar/llvm@6/6.0.1_1/bin/llvm-config /usr/local/bin/llvm-config
-```
 
 Install Protobuf:
   

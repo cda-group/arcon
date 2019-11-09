@@ -1,65 +1,50 @@
 use crate::prelude::*;
+use crate::streaming::window::Window;
 use crate::util::event_timer::EventTimer;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
-use std::sync::Arc;
 
 /*
     EventTimeWindowAssigner
         * Assigns messages to windows based on event timestamp
         * Time stored as unix timestamps in u64 format (seconds)
         * Windows created on the fly when events for it come in
-        * Events need to implement Hash, use "KeyBy" macro when setting up the pipeline
+        * Events need to implement Hash, use "key_by" macro when setting up the pipeline
 */
 
-/// Window Assigner that manages and triggers `WindowComponent`s
+/// Window Assigner Based on Event Time
 ///
 /// IN: Input event
-/// FUNC: ´WindowBuilder`s internal builder type
 /// OUT: Output of Window
-pub struct EventTimeWindowAssigner<IN, FUNC, OUT>
+pub struct EventTimeWindowAssigner<IN, OUT>
 where
-    IN: 'static + ArconType + Hash,
-    FUNC: 'static + Clone,
-    OUT: 'static + ArconType,
+    IN: ArconType + Hash,
+    OUT: ArconType,
 {
     window_length: u64,
     window_slide: u64,
     late_arrival_time: u64,
+    window: Box<dyn Window<IN, OUT>>,
     window_start: HashMap<u64, u64>,
-    window_maps: HashMap<u64, HashMap<u64, WindowBuilder<IN, FUNC, OUT>>>,
-    window_modules: WindowModules,
-    timer: Box<EventTimer<(u64, u64, u64)>>, // Stores key, "index" and timestamp
+    window_maps: HashMap<u64, HashMap<u64, Box<Window<IN, OUT>>>>,
+    timer: EventTimer<(u64, u64, u64)>, // Stores key, "index" and timestamp
     hasher: BuildHasherDefault<DefaultHasher>,
     keyed: bool,
 }
 
-impl<IN, FUNC, OUT> EventTimeWindowAssigner<IN, FUNC, OUT>
+impl<IN, OUT> EventTimeWindowAssigner<IN, OUT>
 where
     IN: 'static + ArconType + Hash,
-    FUNC: 'static + Clone,
     OUT: 'static + ArconType,
 {
     pub fn new(
-        init_builder_code: String,
-        udf_code: String,
-        result_code: String,
+        window: Box<dyn Window<IN, OUT>>,
         length: u64,
         slide: u64,
         late: u64,
         keyed: bool,
     ) -> Self {
-        let init_builder = Arc::new(Module::new(init_builder_code).unwrap());
-        let code_module = Arc::new(Module::new(udf_code).unwrap());
-        let result_module = Arc::new(Module::new(result_code).unwrap());
-
-        let window_modules = WindowModules {
-            init_builder,
-            udf: code_module,
-            materializer: result_module,
-        };
-
         // Sanity check on slide and length
         if length < slide {
             panic!("Window Length lower than slide!");
@@ -72,10 +57,10 @@ where
             window_length: length,
             window_slide: slide,
             late_arrival_time: late,
+            window,
             window_start: HashMap::new(),
             window_maps: HashMap::new(),
-            window_modules,
-            timer: Box::new(EventTimer::new()),
+            timer: EventTimer::new(),
             hasher: BuildHasherDefault::<DefaultHasher>::default(),
             keyed,
         }
@@ -96,7 +81,7 @@ where
             .schedule_at(ts + self.late_arrival_time, (key, index, ts));
     }
     // Extracts the key from ArconElements
-    fn get_key(&mut self, e: ArconElement<IN>) -> u64 {
+    fn get_key(&mut self, e: &ArconElement<IN>) -> u64 {
         if !self.keyed {
             return 0;
         }
@@ -106,11 +91,10 @@ where
     }
 }
 
-impl<IN, OUT, FUNC> Task<IN, OUT> for EventTimeWindowAssigner<IN, FUNC, OUT>
+impl<IN, OUT> Operator<IN, OUT> for EventTimeWindowAssigner<IN, OUT>
 where
-    IN: 'static + ArconType + Hash,
-    FUNC: 'static + Clone,
-    OUT: 'static + ArconType,
+    IN: ArconType + Hash,
+    OUT: ArconType,
 {
     fn handle_element(&mut self, element: ArconElement<IN>) -> ArconResult<Vec<ArconEvent<OUT>>> {
         let ts = element.timestamp.unwrap_or(0);
@@ -123,7 +107,7 @@ where
             return Ok(Vec::new());
         }
 
-        let key = self.get_key(element);
+        let key = self.get_key(&element);
 
         // Will store the index of the highest and lowest window it should go into
         let mut floor = 0;
@@ -150,17 +134,12 @@ where
             match w_map.get_mut(&i) {
                 Some(window) => {
                     // Just insert the element
-                    if let Err(err) = window.on_element(element.data) {
-                        return Err(err);
-                    }
+                    window.on_element(element.clone().data)?;
                 }
                 None => {
                     // Need to create new window,
-                    let mut window: WindowBuilder<IN, FUNC, OUT> =
-                        WindowBuilder::new(self.window_modules.clone()).unwrap();
-                    if let Err(err) = window.on_element(element.data) {
-                        return Err(err);
-                    }
+                    let mut window = self.window.clone();
+                    window.on_element(element.clone().data)?;
                     w_map.insert(i, window);
                     // Create the window trigger
                     self.new_window_trigger(key, i);
@@ -208,12 +187,13 @@ mod tests {
     use kompact::prelude::Component;
     use std::time::UNIX_EPOCH;
     use std::{thread, time};
-    use weld::data::Appender;
+    use std::sync::Arc;
 
+    #[key_by(id)]
     #[arcon]
-    #[derive(Hash)]
-    pub struct WindowOutput {
-        pub len: i64,
+    pub struct Item {
+        id: u64,
+        price: u32,
     }
 
     // helper functions
@@ -222,36 +202,30 @@ mod tests {
         slide: u64,
         late: u64,
     ) -> (
-        ActorRef<ArconMessage<Item>>,
-        Arc<Component<DebugSink<WindowOutput>>>,
+        ActorRefStrong<ArconMessage<Item>>,
+        Arc<Component<DebugSink<u64>>>,
     ) {
         // Kompact set-up
         let system = KompactConfig::default().build().expect("KompactSystem");
 
         // Create a sink
         let (sink, _) = system.create_and_register(move || DebugSink::new());
-        let sink_ref = sink.actor_ref();
-
-        let channel_strategy: Box<Forward<WindowOutput>> =
+        let sink_ref: ActorRefStrong<ArconMessage<u64>> =
+            sink.actor_ref().hold().expect("failed to get strong ref");
+        let channel_strategy: Box<Forward<u64>> =
             Box::new(Forward::new(Channel::Local(sink_ref.clone())));
 
-        // Create the window_assigner
-        let builder_code = String::from("|| appender[u32]");
-        let udf_code = String::from("|x: {u64, u32}, y: appender[u32]| merge(y, x.$1)");
-        let udf_result = String::from("|y: appender[u32]| len(result(y))");
+        fn appender_fn(u: &Vec<Item>) -> u64 {
+            u.len() as u64
+        }
 
-        let window_assigner = EventTimeWindowAssigner::<Item, Appender<u32>, WindowOutput>::new(
-            builder_code,
-            udf_code,
-            udf_result,
-            length,
-            slide,
-            late,
-            true,
-        );
+        let window: Box<Window<Item, u64>> = Box::new(AppenderWindow::new(&appender_fn));
+
+        let window_assigner =
+            EventTimeWindowAssigner::<Item, u64>::new(window, length, slide, late, true);
 
         let window_node = system.create_and_start(move || {
-            Node::<Item, WindowOutput>::new(
+            Node::<Item, u64>::new(
                 1.into(),
                 vec![0.into()],
                 channel_strategy,
@@ -259,7 +233,10 @@ mod tests {
             )
         });
 
-        let win_ref = window_node.actor_ref();
+        let win_ref: ActorRefStrong<ArconMessage<Item>> = window_node
+            .actor_ref()
+            .hold()
+            .expect("failed to get strong ref");
         system.start(&sink);
         system.start(&window_node);
         return (win_ref, sink);
@@ -282,12 +259,6 @@ mod tests {
     fn timestamped_keyed_event(ts: u64, id: u64) -> ArconMessage<Item> {
         ArconMessage::element(Item { id, price: 1 }, Some(ts), 0.into())
     }
-    #[key_by(id)]
-    #[arcon]
-    pub struct Item {
-        id: u64,
-        price: u32,
-    }
 
     // Tests:
     #[test]
@@ -309,11 +280,11 @@ mod tests {
 
         let r1 = &sink_inspect.data.len();
         assert_eq!(r1, &3); // 3 windows received
-        let r2 = &sink_inspect.data[0].data.len;
+        let r2 = &sink_inspect.data[0].data;
         assert_eq!(r2, &2); // 1st window for key 1 has 2 elements
-        let r3 = &sink_inspect.data[1].data.len;
+        let r3 = &sink_inspect.data[1].data;
         assert_eq!(r3, &3); // 2nd window receieved, key 2, has 3 elements
-        let r4 = &sink_inspect.data[2].data.len;
+        let r4 = &sink_inspect.data[2].data;
         assert_eq!(r4, &1); // 3rd window receieved, for key 3, has 1 elements
     }
 
@@ -333,7 +304,7 @@ mod tests {
         wait(1);
         // Inspect and assert
         let sink_inspect = sink.definition().lock().unwrap();
-        let r1 = &sink_inspect.data[0].data.len;
+        let r1 = &sink_inspect.data[0].data;
         assert_eq!(r1, &2);
         let r2 = &sink_inspect.data.len();
         assert_eq!(r2, &1);
@@ -353,7 +324,7 @@ mod tests {
         wait(1);
         // Inspect and assert
         let sink_inspect = sink.definition().lock().unwrap();
-        let r0 = &sink_inspect.data[0].data.len;
+        let r0 = &sink_inspect.data[0].data;
         assert_eq!(&sink_inspect.data.len(), &(1 as usize));
         assert_eq!(r0, &2);
     }
@@ -374,7 +345,7 @@ mod tests {
         assigner_ref.tell(watermark(moment + 19999));
         wait(1);
         let sink_inspect = sink.definition().lock().unwrap();
-        let r0 = &sink_inspect.data[0].data.len;
+        let r0 = &sink_inspect.data[0].data;
         assert_eq!(r0, &1);
         assert_eq!(&sink_inspect.data.len(), &(1 as usize));
     }
@@ -395,10 +366,10 @@ mod tests {
         assigner_ref.tell(watermark(moment + 20000));
         wait(1);
         let sink_inspect = sink.definition().lock().unwrap();
-        let r0 = &sink_inspect.data[0].data.len;
+        let r0 = &sink_inspect.data[0].data;
         assert_eq!(r0, &1);
         assert_eq!(&sink_inspect.data.len(), &(2 as usize));
-        let r1 = &sink_inspect.data[1].data.len;
+        let r1 = &sink_inspect.data[1].data;
         assert_eq!(r1, &1);
     }
     #[test]
@@ -418,9 +389,9 @@ mod tests {
         let sink_inspect = sink.definition().lock().unwrap();
         let r2 = &sink_inspect.data.len();
         assert_eq!(r2, &2);
-        let r0 = &sink_inspect.data[0].data.len;
+        let r0 = &sink_inspect.data[0].data;
         assert_eq!(r0, &3);
-        let r1 = &sink_inspect.data[1].data.len;
+        let r1 = &sink_inspect.data[1].data;
         assert_eq!(r1, &2);
     }
     #[test]

@@ -1,7 +1,4 @@
 #![allow(bare_trait_objects)]
-extern crate futures;
-extern crate tokio;
-extern crate weld as weld_core;
 
 #[cfg_attr(test, macro_use)]
 extern crate arcon_macros;
@@ -15,8 +12,8 @@ extern crate serde;
 
 pub mod data;
 pub mod streaming;
+pub mod state_backend;
 pub mod util;
-pub mod weld;
 
 pub mod macros {
     pub use crate::data::ArconType;
@@ -31,35 +28,31 @@ pub mod prelude {
     };
 
     pub use crate::streaming::channel::Channel;
-    pub use crate::streaming::task::{
-        filter::Filter, flatmap::FlatMap, map::Map, node::Node, NodeID, Task, TaskMetric,
-    };
+    pub use crate::streaming::node::{Node, NodeID};
+    pub use crate::streaming::operator::{Filter, Map, Operator};
     pub use crate::streaming::window::{
-        builder::WindowBuilder, builder::WindowFn, builder::WindowModules,
-        event_time::EventTimeWindowAssigner,
+        event_time::EventTimeWindowAssigner, AppenderWindow, IncrementalWindow, Window,
     };
 
-    pub use crate::streaming::source::{
-        local_file::LocalFileSource, socket::SocketKind, socket::SocketSource,
+    pub use crate::streaming::source::local_file::LocalFileSource;
+
+    #[cfg(feature = "socket")]
+    pub use crate::streaming::{
+        sink::socket::SocketSink,
+        source::socket::{SocketKind, SocketSource},
     };
 
-    pub use crate::streaming::sink::{
-        debug::DebugSink, local_file::LocalFileSink, socket::SocketSink,
-    };
+    pub use crate::streaming::sink::{debug::DebugSink, local_file::LocalFileSink};
 
     pub use crate::data::Watermark;
     pub use crate::data::*;
-    pub use crate::weld::module::{Module, ModuleRun};
     pub use error::ArconResult;
-    pub use weld_core::data::*;
 
     pub use kompact::default_components::*;
     pub use kompact::prelude::*;
+    #[cfg(feature = "thread_pinning")]
+    pub use kompact::{get_core_ids, CoreId};
     pub use slog::*;
-
-    pub use futures::future;
-    pub use futures::future::ok;
-    pub use futures::prelude::*;
 
     pub use arcon_messages::protobuf::*;
 }

@@ -6,13 +6,11 @@
 
 This crate is not intended to be used directly. It is a part of the [Arcon project](https://github.com/cda-group/arcon)
 
-* [`arcon_backend`]: State backends for Arcon.
 * [`arcon_error`]: Common error utilities.
-* [`arcon_extra`]: Contains extra features such as Kafka.
+* [`arcon_extra`]: Contains extra 3rd party features.
 * [`arcon_macros`]: Internal Rust macros used by Arcon.
 * [`arcon_messages`]: Support for sending Arcon messages over the network (e.g., Protobuf).
 
-[`arcon_backend`]: arcon_backend
 [`arcon_error`]: arcon_error
 [`arcon_extra`]: arcon_extra
 [`arcon_macros`]: arcon_macros

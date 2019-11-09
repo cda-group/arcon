@@ -31,65 +31,75 @@ fn normalise_pipeline_test() {
         sink
     });
 
-    // Create Map Task
-    let actor_ref: ActorRef<ArconMessage<i64>> = node_5.actor_ref();
+    // Define Map
+    let actor_ref: ActorRefStrong<ArconMessage<i64>> = node_5
+        .actor_ref()
+        .hold()
+        .expect("failed to fetch strong ref");
     let channel = Channel::Local(actor_ref);
     let channel_strategy: Box<ChannelStrategy<i64>> = Box::new(Forward::new(channel));
-    let code = String :: from ( "|x: vec[i64]| let m = merger[i64, +]; result(for(x, m, |b: merger[i64, +], i, e| merge(b, e + i64(3))))" ) ;
-    let module = std::sync::Arc::new(Module::new(code).unwrap());
+
+    fn map_fn(x: Vec<i64>) -> i64 {
+        x.iter().map(|x| x + 3).sum()
+    }
+
     let node_4 = system.create_and_start(move || {
-        Node::<ArconVec<i64>, i64>::new(
+        Node::<Vec<i64>, i64>::new(
             4.into(),
             vec![3.into()],
             channel_strategy,
-            Box::new(Map::<ArconVec<i64>, i64>::new(module)),
+            Box::new(Map::<Vec<i64>, i64>::new(&map_fn)),
         )
     });
 
-    // Create Window Component
-    let builder_code = String::from("||appender[i64]");
-    let udf_code = String::from("|e:i64,w:appender[i64]| merge(w,e):appender[i64]");
-    let materialiser_code = String::from("|e: appender[i64]| let elem = result(e); let sum = result(for(elem, merger[i64, +], |b: merger[i64, +], i: i64, e: i64| merge(b, e))); 
-                                         let count = len(elem); let avg = sum / count; result(for(elem, appender[i64], |b: appender[i64], i: i64, e: i64| merge(b, e / avg)))") ;
+    // Define Window
 
-    let channel_strategy: Box<Forward<ArconVec<i64>>> =
-        Box::new(Forward::new(Channel::Local(node_4.actor_ref())));
+    fn window_fn(buffer: &Vec<i64>) -> Vec<i64> {
+        let sum: i64 = buffer.iter().sum();
+        let count = buffer.len() as i64;
+        let avg = sum / count;
+        buffer.iter().map(|x| x / avg).collect()
+    }
+
+    let window: Box<Window<i64, Vec<i64>>> = Box::new(AppenderWindow::new(&window_fn));
+
+    let node_4_actor_ref = node_4.actor_ref().hold().expect("Failed to fetch ref");
+    let channel_strategy: Box<Forward<Vec<i64>>> =
+        Box::new(Forward::new(Channel::Local(node_4_actor_ref)));
 
     let node_3 = system.create_and_start(move || {
-        Node::<i64, ArconVec<i64>>::new(
+        Node::<i64, Vec<i64>>::new(
             3.into(),
             vec![2.into()],
             channel_strategy,
-            Box::new(
-                EventTimeWindowAssigner::<i64, Appender<i64>, ArconVec<i64>>::new(
-                    builder_code,
-                    udf_code,
-                    materialiser_code,
-                    3,
-                    3,
-                    0,
-                    false,
-                ),
-            ),
+            Box::new(EventTimeWindowAssigner::<i64, Vec<i64>>::new(
+                window, 3, 3, 0, false,
+            )),
         )
     });
 
-    // Create Filter Task
-    let channel = Channel::Local(node_3.actor_ref());
+    // Define Filter
+
+    let node_3_actor_ref = node_3.actor_ref().hold().expect("Failed to fetch ref");
+    let channel = Channel::Local(node_3_actor_ref);
     let channel_strategy: Box<ChannelStrategy<i64>> = Box::new(Forward::new(channel));
-    let code = String::from("|x: i64| x < i64(5)");
-    let module = std::sync::Arc::new(Module::new(code).unwrap());
+    fn filter_fn(x: &i64) -> bool {
+        *x < 5
+    }
     let node_2 = system.create_and_start(move || {
         Node::<i64, i64>::new(
             2.into(),
             vec![1.into()],
             channel_strategy,
-            Box::new(Filter::<i64>::new(module)),
+            Box::new(Filter::<i64>::new(&filter_fn)),
         )
     });
 
     // Define Source
-    let actor_ref: ActorRef<ArconMessage<i64>> = node_2.actor_ref();
+    let actor_ref: ActorRefStrong<ArconMessage<i64>> = node_2
+        .actor_ref()
+        .hold()
+        .expect("Failed to fetch strong ref");
     let channel = Channel::Local(actor_ref);
     let channel_strategy: Box<ChannelStrategy<i64>> = Box::new(Forward::new(channel));
 

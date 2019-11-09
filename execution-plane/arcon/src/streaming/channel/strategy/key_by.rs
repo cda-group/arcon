@@ -3,80 +3,74 @@ use crate::prelude::KompactSystem;
 use crate::prelude::*;
 use crate::streaming::channel::strategy::channel_output;
 use fnv::FnvHasher;
-use std::collections::HashMap;
 use std::default::Default;
 use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
+
+type DefaultHashBuilder = BuildHasherDefault<FnvHasher>;
 
 /// A hash based partitioner
 ///
 /// `KeyBy` may be constructed with
 /// either a custom hasher or the default `FnvHasher`
-pub struct KeyBy<A, D = BuildHasherDefault<FnvHasher>>
+#[derive(Default)]
+pub struct KeyBy<A, H = DefaultHashBuilder>
 where
     A: 'static + ArconType + Hash,
 {
-    builder: D,
+    builder: H,
     parallelism: u32,
-    map: HashMap<usize, Channel<A>, D>,
+    nodes: Vec<Channel<A>>,
 }
 
 impl<A> KeyBy<A>
 where
     A: 'static + ArconType + Hash,
 {
-    pub fn with_hasher<H: BuildHasher + Default>(
-        builder: H,
-        parallelism: u32,
-        channels: Vec<Channel<A>>,
-    ) -> KeyBy<A, H> {
+    pub fn new(parallelism: u32, channels: Vec<Channel<A>>) -> KeyBy<A> {
         assert_eq!(channels.len(), parallelism as usize);
-        let mut map = HashMap::with_capacity_and_hasher(parallelism as usize, Default::default());
-        for (i, channel) in channels.into_iter().enumerate() {
-            map.insert(i, channel);
-        }
         KeyBy {
-            builder: builder.into(),
+            builder: Default::default(),
             parallelism,
-            map,
+            nodes: channels,
         }
     }
 
-    pub fn with_default_hasher(parallelism: u32, channels: Vec<Channel<A>>) -> Self {
+    pub fn with_hasher<B>(
+        parallelism: u32,
+        channels: Vec<Channel<A>>,
+    ) -> KeyBy<A, BuildHasherDefault<B>>
+    where
+        B: Hasher + Default,
+    {
         assert_eq!(channels.len(), parallelism as usize);
-        let mut map = HashMap::with_capacity_and_hasher(parallelism as usize, Default::default());
-        for (i, channel) in channels.into_iter().enumerate() {
-            map.insert(i, channel);
-        }
         KeyBy {
-            builder: BuildHasherDefault::<FnvHasher>::default(),
+            builder: BuildHasherDefault::<B>::default(),
             parallelism,
-            map,
+            nodes: channels,
         }
     }
 }
 
-impl<A> ChannelStrategy<A> for KeyBy<A>
+impl<A, B> ChannelStrategy<A> for KeyBy<A, B>
 where
     A: 'static + ArconType + Hash,
+    B: BuildHasher + Send + Sync,
 {
     fn output(&mut self, message: ArconMessage<A>, source: &KompactSystem) -> ArconResult<()> {
-        match message.event {
+        match &message.event {
             ArconEvent::Element(element) => {
                 let mut h = self.builder.build_hasher();
                 element.data.hash(&mut h);
                 let hash = h.finish() as u32;
-                let id = (hash % self.parallelism) as i32;
-                if id >= 0 && id <= self.parallelism as i32 {
-                    if let Some(channel) = self.map.get(&(id as usize)) {
-                        let _ = channel_output(channel, message, source)?;
-                    }
+                let index = (hash % self.parallelism) as usize;
+                if let Some(channel) = self.nodes.get(index) {
+                    let _ = channel_output(channel, message, source)?;
                 } else {
-                    // TODO: Fix
-                    panic!("Failed to hash to channel properly..");
+                    panic!("Something went wrong while finding channel!..");
                 }
             }
             _ => {
-                for (_, channel) in self.map.iter() {
+                for channel in self.nodes.iter() {
                     let _ = channel_output(channel, message.clone(), source)?;
                 }
             }
@@ -112,13 +106,14 @@ mod tests {
 
         for _i in 0..parallelism {
             let comp = system.create_and_start(move || DebugSink::<Input>::new());
-            let actor_ref: ActorRef<ArconMessage<Input>> = comp.actor_ref();
+            let actor_ref: ActorRefStrong<ArconMessage<Input>> =
+                comp.actor_ref().hold().expect("failed to fetch");
             channels.push(Channel::Local(actor_ref));
             comps.push(comp);
         }
 
         let mut channel_strategy: Box<ChannelStrategy<Input>> =
-            Box::new(KeyBy::with_default_hasher(parallelism, channels));
+            Box::new(KeyBy::new(parallelism, channels));
 
         let mut rng = rand::thread_rng();
 

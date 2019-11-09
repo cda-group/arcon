@@ -1,23 +1,57 @@
+
 use crate::prelude::*;
+use crate::streaming::operator::Operator;
+use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::collections::HashSet; // Blocked-list
 use std::collections::LinkedList; // Message buffer
 use std::mem; // Watermark-list
 
+#[derive(Eq, Hash, Copy, Clone, Debug)]
+pub struct NodeID {
+    pub id: u32,
+}
+
+impl NodeID {
+    pub fn new(new_id: u32) -> NodeID {
+        NodeID { id: new_id }
+    }
+}
+impl From<u32> for NodeID {
+    fn from(id: u32) -> Self {
+        NodeID::new(id)
+    }
+}
+impl Ord for NodeID {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.id.cmp(&other.id)
+    }
+}
+impl PartialOrd for NodeID {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl PartialEq for NodeID {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
 /*
-  Node: contains Task which executes actions
+  Node: contains an Operator which executes actions
 */
 #[derive(ComponentDefinition)]
 pub struct Node<IN, OUT>
 where
-    IN: 'static + ArconType,
-    OUT: 'static + ArconType,
+    IN: ArconType,
+    OUT: ArconType,
 {
     ctx: ComponentContext<Node<IN, OUT>>,
     id: NodeID,
     out_channels: Box<ChannelStrategy<OUT>>,
     in_channels: Vec<NodeID>,
-    task: Box<Task<IN, OUT>>,
+    operator: Box<Operator<IN, OUT>>,
     watermarks: BTreeMap<NodeID, Watermark>,
     current_watermark: u64,
     current_epoch: u64,
@@ -27,14 +61,13 @@ where
 
 impl<IN, OUT> Node<IN, OUT>
 where
-    IN: 'static + ArconType,
-    OUT: 'static + ArconType,
-{
+    IN: ArconType,
+    OUT: ArconType, {
     pub fn new(
         id: NodeID,
         in_channels: Vec<NodeID>,
         out_channels: Box<ChannelStrategy<OUT>>,
-        task: Box<Task<IN, OUT>>,
+        operator: Box<Operator<IN, OUT>>,
     ) -> Node<IN, OUT> {
         // Initiate our watermarks
         let mut watermarks = BTreeMap::new();
@@ -47,7 +80,7 @@ where
             id,
             out_channels,
             in_channels,
-            task,
+            operator,
             watermarks,
             current_watermark: 0,
             current_epoch: 0,
@@ -69,7 +102,7 @@ where
 
         match message.event {
             ArconEvent::Element(e) => {
-                let results = self.task.handle_element(e)?;
+                let results = self.operator.handle_element(e)?;
                 for result in results {
                     self.output_event(result)?;
                 }
@@ -100,7 +133,7 @@ where
                     self.current_watermark = new_watermark.timestamp;
 
                     // Handle the watermark
-                    for result in self.task.handle_watermark(new_watermark)? {
+                    for result in self.operator.handle_watermark(new_watermark)? {
                         self.output_event(result)?;
                     }
 
@@ -117,8 +150,8 @@ where
                     // update current epoch
                     self.current_epoch = e.epoch;
 
-                    // call handle_epoch on our task
-                    let _task_state = self.task.handle_epoch(e)?;
+                    // call handle_epoch on our operator
+                    let _operator_state = self.operator.handle_epoch(e)?;
 
                     // store the state
                     self.save_state()?;
@@ -160,14 +193,19 @@ where
 
 impl<IN, OUT> Provide<ControlPort> for Node<IN, OUT>
 where
-    IN: 'static + ArconType,
-    OUT: 'static + ArconType,
+    IN: ArconType,
+    OUT: ArconType,
 {
     fn handle(&mut self, event: ControlEvent) -> () {
         match event {
-            ControlEvent::Start => {}
-            _ => {
-                error!(self.ctx.log(), "bad ControlEvent");
+            ControlEvent::Start => {
+                debug!(self.ctx.log(), "Started Arcon Node");
+            }
+            ControlEvent::Stop => {
+                // TODO
+            }
+            ControlEvent::Kill => {
+                // TODO
             }
         }
     }
@@ -175,8 +213,8 @@ where
 
 impl<IN, OUT> Actor for Node<IN, OUT>
 where
-    IN: 'static + ArconType,
-    OUT: 'static + ArconType,
+    IN: ArconType,
+    OUT: ArconType,
 {
     type Message = ArconMessage<IN>;
 
@@ -203,15 +241,15 @@ where
 
 unsafe impl<IN, OUT> Send for Node<IN, OUT>
 where
-    IN: 'static + ArconType,
-    OUT: 'static + ArconType,
+    IN: ArconType,
+    OUT: ArconType,
 {
 }
 
 unsafe impl<IN, OUT> Sync for Node<IN, OUT>
 where
-    IN: 'static + ArconType,
-    OUT: 'static + ArconType,
+    IN: ArconType,
+    OUT: ArconType,
 {
 }
 
@@ -219,27 +257,31 @@ where
 mod tests {
     // Tests the message logic of Node.
     use super::*;
+    use crate::streaming::operator::Filter;
     use std::sync::Arc;
     use std::{thread, time};
 
-    // Helper functions for cleaner test-cases
     fn node_test_setup() -> (ActorRef<ArconMessage<i32>>, Arc<Component<DebugSink<i32>>>) {
         // Returns a filter Node with input channels: sender1..sender3
         // And a debug sink receiving its results
         let system = KompactConfig::default().build().expect("KompactSystem");
 
         let sink = system.create_and_start(move || DebugSink::<i32>::new());
-        let channel = Channel::Local(sink.actor_ref());
+        let actor_ref: ActorRefStrong<ArconMessage<i32>> =
+            sink.actor_ref().hold().expect("Failed to fetch");
+        let channel = Channel::Local(actor_ref);
         let channel_strategy: Box<ChannelStrategy<i32>> = Box::new(Forward::new(channel));
 
-        let weld_code = String::from("|x: i32| x >= 0");
-        let module = Arc::new(Module::new(weld_code).unwrap());
+        fn node_fn(x: &i32) -> bool {
+            *x >= 0
+        }
+
         let filter_node = system.create_and_start(move || {
             Node::<i32, i32>::new(
                 0.into(),
                 vec![1.into(), 2.into(), 3.into()],
                 channel_strategy,
-                Box::new(Filter::<i32>::new(module)),
+                Box::new(Filter::new(&node_fn)),
             )
         });
 

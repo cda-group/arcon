@@ -2,7 +2,6 @@ use crate::prelude::*;
 use futures::Future;
 use rdkafka::config::ClientConfig;
 use rdkafka::error::KafkaResult;
-use rdkafka::message::*;
 use rdkafka::producer::{FutureProducer, FutureRecord};
 
 /*
@@ -12,7 +11,7 @@ use rdkafka::producer::{FutureProducer, FutureRecord};
 #[allow(dead_code)]
 pub struct KafkaSink<IN>
 where
-    IN: 'static + ArconType,
+    IN: ArconType,
 {
     bootstrap_server: String,
     topic: String,
@@ -24,7 +23,7 @@ where
 
 impl<IN> KafkaSink<IN>
 where
-    IN: 'static + ArconType,
+    IN: ArconType,
 {
     pub fn new(bootstrap_server: String, topic: String, offset: u32) -> KafkaSink<IN> {
         let mut config = ClientConfig::new();
@@ -65,14 +64,14 @@ where
 
         // Write synchronously
         for future in futures {
-            future.wait();
+            let _ = future.wait();
         }
     }
 }
 
-impl<IN> Task<IN, IN> for KafkaSink<IN>
+impl<IN> Operator<IN, IN> for KafkaSink<IN>
 where
-    IN: 'static + ArconType,
+    IN: ArconType,
 {
     fn handle_element(&mut self, element: ArconElement<IN>) -> ArconResult<Vec<ArconEvent<IN>>> {
         //println!("sink buffering element");

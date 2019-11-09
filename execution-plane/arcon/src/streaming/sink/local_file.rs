@@ -96,7 +96,8 @@ mod tests {
         let input_three = ArconMessage::element(15 as i32, None, node_id);
         let input_four = ArconMessage::element(30 as i32, None, node_id);
 
-        let target_ref: ActorRef<ArconMessage<i32>> = sink_comp.actor_ref();
+        let target_ref: ActorRefStrong<ArconMessage<i32>> =
+            sink_comp.actor_ref().hold().expect("Failed to fetch");
         target_ref.tell(input_one);
         target_ref.tell(input_two);
         target_ref.tell(input_three);

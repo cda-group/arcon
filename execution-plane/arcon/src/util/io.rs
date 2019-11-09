@@ -12,7 +12,6 @@ use tokio_codec::BytesCodec;
 
 use std::thread::{Builder, JoinHandle};
 
-use crate::tokio::prelude::Future;
 use bytes::BytesMut;
 
 pub enum IOKind {

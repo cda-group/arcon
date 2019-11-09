@@ -15,7 +15,7 @@ pub mod shuffle;
 /// A: The Event to be sent
 pub trait ChannelStrategy<A>: Send + Sync
 where
-    A: 'static + ArconType,
+    A: ArconType,
 {
     fn output(&mut self, event: ArconMessage<A>, source: &KompactSystem) -> ArconResult<()>;
     fn add_channel(&mut self, channel: Channel<A>);
