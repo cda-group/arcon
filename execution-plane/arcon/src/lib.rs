@@ -9,6 +9,9 @@ extern crate arcon_error as error;
 extern crate keyby;
 #[cfg_attr(test, macro_use)]
 extern crate serde;
+#[macro_use]
+extern crate prost;
+
 
 pub mod data;
 pub mod streaming;
@@ -28,7 +31,7 @@ pub mod prelude {
     };
 
     pub use crate::streaming::channel::Channel;
-    pub use crate::streaming::node::{Node, NodeID};
+    pub use crate::streaming::node::{Node};
     pub use crate::streaming::operator::{Filter, Map, Operator};
     pub use crate::streaming::window::{
         event_time::EventTimeWindowAssigner, AppenderWindow, IncrementalWindow, Window,
@@ -62,6 +65,7 @@ mod tests {
     use crate::macros::*;
     use std::collections::hash_map::DefaultHasher;
 
+    /*
     #[key_by(id)]
     #[arcon_decoder(,)]
     #[arcon]
@@ -94,4 +98,5 @@ mod tests {
         t.hash(&mut s);
         s.finish()
     }
+    */
 }

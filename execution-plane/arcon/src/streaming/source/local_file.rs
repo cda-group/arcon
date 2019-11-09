@@ -1,6 +1,6 @@
 use crate::data::{ArconMessage, ArconType};
 use crate::streaming::channel::strategy::ChannelStrategy;
-use crate::streaming::node::NodeID;
+use crate::data::NodeID;
 use kompact::prelude::*;
 use std::fs::File;
 use std::io::BufRead;

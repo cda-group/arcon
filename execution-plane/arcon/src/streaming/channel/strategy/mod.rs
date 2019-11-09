@@ -49,7 +49,9 @@ pub mod tests {
 
     #[key_by(id)]
     #[arcon]
+    #[derive(prost::Message)]
     pub struct Input {
+        #[prost(uint32, tag="1")]
         pub id: u32,
     }
 }

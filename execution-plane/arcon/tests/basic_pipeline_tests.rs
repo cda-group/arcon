@@ -4,11 +4,20 @@
 #![allow(bare_trait_objects)]
 extern crate arcon;
 
+use arcon::macros::*;
 use arcon::prelude::*;
+use serde::*;
 use std::fs::File;
 use std::io::Write;
 use std::io::{BufRead, BufReader};
 use tempfile::NamedTempFile;
+
+#[arcon]
+#[derive(prost::Message)]
+pub struct NormaliseElements {
+    #[prost(int64, repeated, tag = "1")]
+    pub data: Vec<i64>,
+}
 
 /// `normalise_pipeline_test`
 /// LocalFileSource -> Filter -> Window -> Map -> LocalFileSink
@@ -39,40 +48,41 @@ fn normalise_pipeline_test() {
     let channel = Channel::Local(actor_ref);
     let channel_strategy: Box<ChannelStrategy<i64>> = Box::new(Forward::new(channel));
 
-    fn map_fn(x: Vec<i64>) -> i64 {
-        x.iter().map(|x| x + 3).sum()
+    fn map_fn(x: NormaliseElements) -> i64 {
+        x.data.iter().map(|x| x + 3).sum()
     }
 
     let node_4 = system.create_and_start(move || {
-        Node::<Vec<i64>, i64>::new(
+        Node::<NormaliseElements, i64>::new(
             4.into(),
             vec![3.into()],
             channel_strategy,
-            Box::new(Map::<Vec<i64>, i64>::new(&map_fn)),
+            Box::new(Map::<NormaliseElements, i64>::new(&map_fn)),
         )
     });
 
     // Define Window
 
-    fn window_fn(buffer: &Vec<i64>) -> Vec<i64> {
+    fn window_fn(buffer: &Vec<i64>) -> NormaliseElements {
         let sum: i64 = buffer.iter().sum();
         let count = buffer.len() as i64;
         let avg = sum / count;
-        buffer.iter().map(|x| x / avg).collect()
+        let data: Vec<i64> = buffer.iter().map(|x| x / avg).collect();
+        NormaliseElements { data }
     }
 
-    let window: Box<Window<i64, Vec<i64>>> = Box::new(AppenderWindow::new(&window_fn));
+    let window: Box<Window<i64, NormaliseElements>> = Box::new(AppenderWindow::new(&window_fn));
 
     let node_4_actor_ref = node_4.actor_ref().hold().expect("Failed to fetch ref");
-    let channel_strategy: Box<Forward<Vec<i64>>> =
+    let channel_strategy: Box<Forward<NormaliseElements>> =
         Box::new(Forward::new(Channel::Local(node_4_actor_ref)));
 
     let node_3 = system.create_and_start(move || {
-        Node::<i64, Vec<i64>>::new(
+        Node::<i64, NormaliseElements>::new(
             3.into(),
             vec![2.into()],
             channel_strategy,
-            Box::new(EventTimeWindowAssigner::<i64, Vec<i64>>::new(
+            Box::new(EventTimeWindowAssigner::<i64, NormaliseElements>::new(
                 window, 3, 3, 0, false,
             )),
         )

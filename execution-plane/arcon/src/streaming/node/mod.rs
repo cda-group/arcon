@@ -7,36 +7,6 @@ use std::collections::HashSet; // Blocked-list
 use std::collections::LinkedList; // Message buffer
 use std::mem; // Watermark-list
 
-#[derive(Eq, Hash, Copy, Clone, Debug)]
-pub struct NodeID {
-    pub id: u32,
-}
-
-impl NodeID {
-    pub fn new(new_id: u32) -> NodeID {
-        NodeID { id: new_id }
-    }
-}
-impl From<u32> for NodeID {
-    fn from(id: u32) -> Self {
-        NodeID::new(id)
-    }
-}
-impl Ord for NodeID {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.id.cmp(&other.id)
-    }
-}
-impl PartialOrd for NodeID {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-impl PartialEq for NodeID {
-    fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
-    }
-}
 
 /*
   Node: contains an Operator which executes actions

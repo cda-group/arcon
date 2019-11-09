@@ -15,7 +15,7 @@ Arcon's execution plane
 default = []
 kafka = ["rdkafka"]
 thread_pinning = ["kompact/thread_pinning"]
-socket = ["tokio-codec", "tokio", "bytes", "futures", "serde_json"]
+socket = ["tokio-codec", "tokio", "futures", "serde_json"]
 arcon_rocksdb = ["rocksdb"]
 
 [dependencies]
@@ -37,15 +37,21 @@ slog-term = "2.4"
 # Serialisation
 bincode = "1.1.4"
 serde = { version = "1.0.63", features = ["derive"] }
+prost = "0.5"
+prost-types = "0.5"
+bytes = "0.4"
 
 # Optional
 rdkafka = { version = "~0.19", optional = true }
 tokio = { version = "0.1", optional = true }
 tokio-codec = { version = "0.1", optional = true }
-bytes = { version = "0.4", optional = true }
+#bytes = { version = "0.4", optional = true }
 futures = { version = "0.1", optional = true }
 serde_json = { version = "1.0.40", optional = true }
 rocksdb = { git = "https://github.com/tikv/rust-rocksdb.git", optional = true }
+
+[build-dependencies]
+prost-build = "0.5"
 
 [dev-dependencies]
 tempfile = "3"
