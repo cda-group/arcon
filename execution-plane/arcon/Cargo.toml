@@ -35,6 +35,8 @@ slog-async = "2.3"
 slog-term = "2.4"
 
 # Serialisation
+abomonation = "0.7.3"
+abomonation_derive = "0.5.0"
 bincode = "1.1.4"
 serde = { version = "1.0.63", features = ["derive"] }
 prost = "0.5"

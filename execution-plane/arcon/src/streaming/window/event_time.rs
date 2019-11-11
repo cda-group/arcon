@@ -189,11 +189,13 @@ mod tests {
     use std::{thread, time};
     use std::sync::Arc;
 
-    /*
     #[key_by(id)]
     #[arcon]
+    #[derive(prost::Message)]
     pub struct Item {
+        #[prost(uint64, tag="1")]
         id: u64,
+        #[prost(uint32, tag="2")]
         price: u32,
     }
 
@@ -410,5 +412,4 @@ mod tests {
         let r0 = &sink_inspect.data.len();
         assert_eq!(r0, &0);
     }
-    */
 }

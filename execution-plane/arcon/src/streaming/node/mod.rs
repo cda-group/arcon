@@ -1,7 +1,5 @@
-
 use crate::prelude::*;
 use crate::streaming::operator::Operator;
-use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::collections::HashSet; // Blocked-list
 use std::collections::LinkedList; // Message buffer

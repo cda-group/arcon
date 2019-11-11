@@ -6,22 +6,24 @@ extern crate arcon_messages as messages;
 #[macro_use]
 extern crate arcon_error as error;
 #[cfg_attr(test, macro_use)]
+extern crate abomonation_derive;
+#[cfg_attr(test, macro_use)]
 extern crate keyby;
 #[cfg_attr(test, macro_use)]
 extern crate serde;
 #[macro_use]
 extern crate prost;
 
-
 pub mod data;
-pub mod streaming;
 pub mod state_backend;
+pub mod streaming;
 pub mod util;
 
 pub mod macros {
     pub use crate::data::ArconType;
     pub use arcon_macros::*;
     pub use keyby::*;
+    pub use abomonation_derive::*;
 }
 
 pub mod prelude {
@@ -31,7 +33,7 @@ pub mod prelude {
     };
 
     pub use crate::streaming::channel::Channel;
-    pub use crate::streaming::node::{Node};
+    pub use crate::streaming::node::Node;
     pub use crate::streaming::operator::{Filter, Map, Operator};
     pub use crate::streaming::window::{
         event_time::EventTimeWindowAssigner, AppenderWindow, IncrementalWindow, Window,
@@ -65,12 +67,14 @@ mod tests {
     use crate::macros::*;
     use std::collections::hash_map::DefaultHasher;
 
-    /*
     #[key_by(id)]
     #[arcon_decoder(,)]
     #[arcon]
+    #[derive(prost::Message)]
     pub struct Item {
+        #[prost(uint64, tag="1")]
         id: u64,
+        #[prost(uint32, tag="2")]
         price: u32,
     }
 
@@ -98,5 +102,4 @@ mod tests {
         t.hash(&mut s);
         s.finish()
     }
-    */
 }

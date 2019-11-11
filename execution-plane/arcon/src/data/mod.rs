@@ -1,6 +1,7 @@
 use crate::error::ArconResult;
 use crate::messages::protobuf::messages::ArconNetworkMessage;
 use crate::messages::protobuf::*;
+use abomonation::Abomonation;
 use arcon_messages::protobuf::ArconNetworkMessage_oneof_payload::*;
 use bytes::IntoBuf;
 use serde::de::DeserializeOwned;
@@ -8,30 +9,24 @@ use serde::*;
 use std::cmp::Ordering;
 use std::fmt::Debug;
 use std::hash::Hash;
+use bytes::BufMut;
+use kompact::prelude::*;
 
 /// Type that can be passed through the Arcon runtime
 pub trait ArconType:
-    Clone + Debug + Sync + Send + Serialize + DeserializeOwned + prost::Message + Default + 'static
+    Clone
+    + Debug
+    + Sync
+    + Send
+    + Serialize
+    + DeserializeOwned
+    + prost::Message
+    + Default
+    + Abomonation
+    + 'static
 where
     Self: std::marker::Sized,
 {
-    /// Extremly unsafe. Just for Proof-of-concept for now
-    unsafe fn encode_flight(&self) -> ArconResult<Vec<u8>> {
-        let slice: &[u8] =
-            std::slice::from_raw_parts(std::mem::transmute(self), std::mem::size_of::<Self>());
-        Ok(slice.to_vec())
-    }
-    /// Extremly unsafe. Just for Proof-of-concept for now
-    unsafe fn decode_flight(bytes: &mut [u8]) -> ArconResult<&Self> {
-        if bytes.len() < std::mem::size_of::<Self>() {
-            arcon_err!("Failed to decode in flight ArconType")
-        } else {
-            let (data, _) = bytes.split_at_mut(std::mem::size_of::<Self>());
-            let result: &mut Self = std::mem::transmute(data.get_unchecked_mut(0));
-            Ok(result)
-        }
-    }
-
     /// Encodes `ArconType` into serialised Protobuf data.
     fn encode_storage(&self) -> ArconResult<Vec<u8>> {
         let mut buf = Vec::new();
@@ -51,7 +46,7 @@ where
 }
 
 /// Watermark
-#[derive(prost::Message, Clone, Copy)]
+#[derive(prost::Message, Clone, Copy, Abomonation)]
 pub struct Watermark {
     #[prost(uint64, tag = "1")]
     pub timestamp: u64,
@@ -64,7 +59,7 @@ impl Watermark {
 }
 
 /// Epoch
-#[derive(prost::Message, Clone, Copy)]
+#[derive(prost::Message, Clone, Copy, Abomonation)]
 pub struct Epoch {
     #[prost(uint64, tag = "1")]
     pub epoch: u64,
@@ -77,14 +72,14 @@ impl Epoch {
 }
 
 /// Wrapper for unifying passing of Elements and other stream messages (watermarks)
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Abomonation)]
 pub enum ArconEvent<A: ArconType> {
     Element(ArconElement<A>),
     Watermark(Watermark),
     Epoch(Epoch),
 }
 
-#[derive(prost::Message, Eq, Hash, Copy, Clone)]
+#[derive(prost::Message, Eq, Hash, Copy, Clone, Abomonation)]
 pub struct NodeID {
     #[prost(uint32, tag = "1")]
     pub id: u32,
@@ -116,7 +111,8 @@ impl PartialEq for NodeID {
     }
 }
 
-#[derive(Clone, Debug)]
+use crate::macros::*;
+#[derive(Clone, Debug, Abomonation)]
 pub struct ArconMessage<A: ArconType> {
     pub event: ArconEvent<A>,
     pub sender: NodeID,
@@ -166,51 +162,49 @@ impl<A: ArconType> ArconMessage<A> {
     }
 }
 
-impl<A: ArconType> ArconMessage<A> {
-    pub fn to_remotey(&self, id: NodeID) -> ArconResult<remote::ArconNetworkMessagez> {
-        match &self.event {
-            ArconEvent::Element(e) => {
-                let data = unsafe { e.data.encode_flight()? };
-                let msg = remote::ArconNetworkMessagez {
-                    sender: Some(id),
-                    data,
-                    timestamp: e.timestamp,
-                    type_: remote::Payload::Element as i32,
-                };
-                Ok(msg)
-            }
-            ArconEvent::Watermark(w) => {
-                let data = Vec::new();
-                /*
-                w.encode(&mut data).map_err(|e| {
-                    arcon_err_kind!("Failed to encode ArconType with err {}", e.to_string())
-                })?;
-                */
-                let msg = remote::ArconNetworkMessagez {
-                    sender: Some(id),
-                    data,
-                    timestamp: Some(w.timestamp),
-                    type_: remote::Payload::Watermark as i32,
-                };
-                Ok(msg)
-            }
-            ArconEvent::Epoch(e) => {
-                let data = Vec::new();
-                /*
-                e.encode(&mut data).map_err(|e| {
-                    arcon_err_kind!("Failed to encode ArconType with err {}", e.to_string())
-                })?;
-                */
-                let msg = remote::ArconNetworkMessagez {
-                    sender: Some(id),
-                    data,
-                    timestamp: None,
-                    type_: remote::Payload::Epoch as i32,
-                };
-                Ok(msg)
-            }
+pub struct ProtoSery;
+impl ProtoSery {
+    const SID: kompact::prelude::SerId = 21;
+}
+
+
+impl<A: ArconType> Deserialiser<ArconMessage<A>> for ProtoSery {
+    const SER_ID: SerId = Self::SID;
+
+    fn deserialise(buf: &mut Buf) -> Result<ArconMessage<A>, SerError> {
+        let b = buf.bytes();
+        let mut bytes = vec![];
+        bytes.put(b);
+        if let Some((msg, _)) = unsafe { abomonation::decode::<ArconMessage<A>>(&mut bytes) } {
+            Ok(msg.clone())
+        } else {
+            Err(SerError::InvalidData(
+                "Failed to decode flight data".to_string(),
+            ))
         }
     }
+}
+
+impl<A: ArconType> Serialisable for ArconMessage<A> {
+    fn ser_id(&self) -> u64 {
+        21
+    }
+    fn size_hint(&self) -> Option<usize> {
+        None
+    }
+    fn serialise(&self, buf: &mut BufMut) -> Result<(), SerError> {
+        let _ = unsafe {
+            abomonation::encode(self, &mut buf.bytes_mut())
+                .map_err(|_| SerError::InvalidData("Failed to encode flight data".to_string()))?;
+        };
+        Ok(())
+    }
+    fn local(self: Box<Self>) -> Result<Box<Any + Send>, Box<Serialisable>> {
+        Ok(self)
+    }
+}
+
+impl<A: ArconType> ArconMessage<A> {
     pub fn to_remote(&self) -> ArconResult<ArconNetworkMessage> {
         match &self.event {
             ArconEvent::Element(e) => {
@@ -262,7 +256,7 @@ impl<A: ArconType> ArconMessage<A> {
 }
 
 /// A stream element that contains an `ArconType` and an optional timestamp
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Abomonation)]
 pub struct ArconElement<A: ArconType> {
     pub data: A,
     pub timestamp: Option<u64>,
@@ -352,7 +346,6 @@ impl ArconType for String {}
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::macros::*;
 
     #[arcon]
     #[derive(prost::Message)]
@@ -364,19 +357,7 @@ mod test {
     }
 
     #[test]
-    fn arcon_type_flight_test() {
-        let items = vec![1, 2, 3, 4, 5, 6, 7];
-        let data = ArconDataTest {
-            id: 1,
-            items: items.clone(),
-        };
-        let mut bytes = unsafe { data.encode_flight().unwrap() };
-        let decoded = unsafe { ArconDataTest::decode_flight(&mut bytes).unwrap() };
-        assert_eq!(decoded.items, items);
-    }
-
-    #[test]
-    fn arcon_type_storage_test() {
+    fn arcon_type_serder_test() {
         let items = vec![1, 2, 3, 4, 5, 6, 7];
         let data = ArconDataTest {
             id: 1,
