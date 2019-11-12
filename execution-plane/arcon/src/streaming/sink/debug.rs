@@ -59,15 +59,21 @@ where
         self.handle_event(msg.event);
     }
     fn receive_network(&mut self, msg: NetMessage) {
-        match msg.try_deserialise::<ArconNetworkMessage, ProtoSer>() {
-            Ok(deser_msg) => {
-                if let Ok(message) = ArconMessage::from_remote(deser_msg) {
-                    self.handle_event(message.event);
-                } else {
-                    error!(self.ctx.log(), "Failed to convert remote message to local");
-                }
+        let arcon_msg: ArconResult<ArconMessage<A>> = match msg.ser_id() {
+            &reliable_remote::ReliableSerde::<A>::SER_ID => msg
+                .try_deserialise::<ArconMessage<A>, reliable_remote::ReliableSerde<A>>()
+                .map_err(|_| arcon_err_kind!("Failed to unpack reliable ArconMessage")),
+            &unsafe_remote::UnsafeSerde::<A>::SER_ID => msg
+                .try_deserialise::<ArconMessage<A>, unsafe_remote::UnsafeSerde<A>>()
+                .map_err(|_| arcon_err_kind!("Failed to unpack unreliable ArconMessage")),
+            _ => panic!("Unexpected deserialiser"),
+        };
+
+        match arcon_msg {
+            Ok(m) => {
+                self.handle_event(m.event);
             }
-            Err(e) => error!(self.ctx.log(), "Error ArconNetworkMessage : {:?}", e),
+            Err(e) => error!(self.ctx.log(), "Error ArconNetworkMessage: {:?}", e),
         }
     }
 }

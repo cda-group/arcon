@@ -30,14 +30,18 @@ fn channel_output<A>(
     source: &KompactSystem,
 ) -> ArconResult<()>
 where
-    A: 'static + ArconType,
+    A: ArconType,
 {
     match channel {
         Channel::Local(actor_ref) => {
             actor_ref.tell(message);
         }
         Channel::Remote(actor_path) => {
-            actor_path.tell(message.to_remote()?, source);
+            use crate::data::reliable_remote::*;
+            let ser = ReliableSerde::<A>::new();
+            //use crate::data::unsafe_remote::*;
+            //let ser = UnsafeSerde::<A>::new();
+            actor_path.tell((message, ser), source);
         }
     }
     Ok(())

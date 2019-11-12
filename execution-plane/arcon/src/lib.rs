@@ -11,8 +11,6 @@ extern crate abomonation_derive;
 extern crate keyby;
 #[cfg_attr(test, macro_use)]
 extern crate serde;
-#[macro_use]
-extern crate prost;
 
 pub mod data;
 pub mod state_backend;

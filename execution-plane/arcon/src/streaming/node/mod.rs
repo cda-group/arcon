@@ -5,7 +5,6 @@ use std::collections::HashSet; // Blocked-list
 use std::collections::LinkedList; // Message buffer
 use std::mem; // Watermark-list
 
-
 /*
   Node: contains an Operator which executes actions
 */
@@ -30,7 +29,8 @@ where
 impl<IN, OUT> Node<IN, OUT>
 where
     IN: ArconType,
-    OUT: ArconType, {
+    OUT: ArconType,
+{
     pub fn new(
         id: NodeID,
         in_channels: Vec<NodeID>,
@@ -192,14 +192,20 @@ where
         }
     }
     fn receive_network(&mut self, msg: NetMessage) {
-        match msg.try_deserialise::<ArconNetworkMessage, ProtoSer>() {
-            Ok(deser_msg) => {
-                if let Ok(message) = ArconMessage::from_remote(deser_msg) {
-                    if let Err(err) = self.handle_message(message) {
-                        error!(self.ctx.log(), "Failed to handle node message: {}", err);
-                    }
-                } else {
-                    error!(self.ctx.log(), "Failed to convert remote message to local");
+        let arcon_msg: ArconResult<ArconMessage<IN>> = match msg.ser_id() {
+            &reliable_remote::ReliableSerde::<IN>::SER_ID => msg
+                .try_deserialise::<ArconMessage<IN>, reliable_remote::ReliableSerde<IN>>()
+                .map_err(|_| arcon_err_kind!("Failed to unpack reliable ArconMessage")),
+            &unsafe_remote::UnsafeSerde::<IN>::SER_ID => msg
+                .try_deserialise::<ArconMessage<IN>, unsafe_remote::UnsafeSerde<IN>>()
+                .map_err(|_| arcon_err_kind!("Failed to unpack unreliable ArconMessage")),
+            _ => panic!("Unexpected deserialiser"),
+        };
+
+        match arcon_msg {
+            Ok(m) => {
+                if let Err(err) = self.handle_message(m) {
+                    error!(self.ctx.log(), "Failed to handle node message: {}", err);
                 }
             }
             Err(e) => error!(self.ctx.log(), "Error ArconNetworkMessage: {:?}", e),

@@ -241,17 +241,24 @@ mod tests {
     use super::*;
     use crate::streaming::channel::strategy::mute::Mute;
     use crate::streaming::sink::kafka::KafkaSink;
+    use crate::macros::*;
     use std::{thread, time};
 
     #[arcon]
-    struct Thing {
-        id: u32,
-        attribute: i32,
-        location: Point,
+    #[derive(prost::Message)]
+    pub struct Thing {
+        #[prost(uint32, tag="1")]
+        pub id: u32,
+        #[prost(int32, tag="2")]
+        pub attribute: i32,
     }
+
     #[arcon]
+    #[derive(prost::Message)]
     struct Point {
+        #[prost(float, tag="1")]
         x: f32,
+        #[prost(float, tag="2")]
         y: f32,
     }
     // JSON Example: {"id":1, "attribute":-13,"location":{"x":0.14124,"y":5882.231}}
@@ -311,15 +318,10 @@ mod tests {
         let thing_1 = Thing {
             id: 0,
             attribute: 100,
-            location: Point {
-                x: 0.52,
-                y: 113.3233,
-            },
         };
         let thing_2 = Thing {
             id: 1,
             attribute: 101,
-            location: Point { x: -0.52, y: 15.0 },
         };
         sink.actor_ref()
             .tell(ArconMessage::element(thing_1, Some(10), 0.into()));

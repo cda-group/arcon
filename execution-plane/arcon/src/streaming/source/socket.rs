@@ -1,6 +1,6 @@
 use crate::data::{ArconElement, ArconEvent, ArconMessage, ArconType, Watermark};
 use crate::streaming::channel::strategy::ChannelStrategy;
-use crate::streaming::node::NodeID;
+use crate::data::NodeID;
 use crate::util::io::*;
 use kompact::prelude::*;
 use std::net::SocketAddr;
@@ -250,20 +250,20 @@ mod tests {
     }
     // Test cases
     #[test]
-    fn socket_u8_no_watermark() {
+    fn socket_u32_no_watermark() {
         // Setup conf
         let addr = "127.0.0.1:4000".parse().unwrap();
 
         // Setup
         let system = KompactConfig::default().build().expect("KompactSystem");
 
-        let (sink, _) = system.create_and_register(move || DebugSink::<u8>::new());
+        let (sink, _) = system.create_and_register(move || DebugSink::<u32>::new());
         let sink_ref = sink.actor_ref().hold().expect("Failed to fetch strong ref");
 
-        let out_channels: Box<Forward<u8>> =
+        let out_channels: Box<Forward<u32>> =
             Box::new(Forward::new(Channel::Local(sink_ref.clone())));
 
-        let socket_source: SocketSource<u8> =
+        let socket_source: SocketSource<u32> =
             SocketSource::new(addr, SocketKind::Tcp, out_channels, 0, None, 1.into());
         let (source, _) = system.create_and_register(move || socket_source);
 
@@ -285,7 +285,7 @@ mod tests {
         let sink_inspect = sink.definition().lock().unwrap();
         assert_eq!(sink_inspect.data.len(), (1 as usize));
         let r0 = &sink_inspect.data[0];
-        assert_eq!(r0.data, 77 as u8);
+        assert_eq!(r0.data, 77 as u32);
     }
 
     #[test]
@@ -344,21 +344,21 @@ mod tests {
         assert_eq!(r2.data, 78.9 as f32);
     }
     #[test]
-    fn socket_u8_with_watermark() {
+    fn socket_u32_with_watermark() {
         // Setup conf
         let addr = "127.0.0.1:4002".parse().unwrap();
 
         // Setup
         let system = KompactConfig::default().build().expect("KompactSystem");
 
-        let (sink, _) = system.create_and_register(move || DebugSink::<u8>::new());
+        let (sink, _) = system.create_and_register(move || DebugSink::<u32>::new());
         let sink_ref = sink.actor_ref().hold().expect("failed to fetch strong ref");
 
 
-        let out_channels: Box<Forward<u8>> =
+        let out_channels: Box<Forward<u32>> =
             Box::new(Forward::new(Channel::Local(sink_ref.clone())));
 
-        let socket_source: SocketSource<u8> =
+        let socket_source: SocketSource<u32> =
             SocketSource::new(addr, SocketKind::Tcp, out_channels, 3, None, 1.into());
         let (source, _) = system.create_and_register(move || socket_source);
 
@@ -380,7 +380,7 @@ mod tests {
         let sink_inspect = sink.definition().lock().unwrap();
         assert_eq!(sink_inspect.data.len(), (1 as usize));
         let r0 = &sink_inspect.data[0];
-        assert_eq!(r0.data, 77 as u8);
+        assert_eq!(r0.data, 77 as u32);
         assert_ne!(r0.timestamp, None); // Check that the timestamp is not None
         assert_eq!(sink_inspect.watermarks.len(), (2 as usize));
     }
