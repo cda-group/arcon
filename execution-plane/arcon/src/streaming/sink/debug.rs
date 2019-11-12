@@ -1,5 +1,4 @@
 use crate::data::ArconEvent;
-use crate::messages::protobuf::ProtoSer;
 use crate::prelude::*;
 
 #[derive(ComponentDefinition)]

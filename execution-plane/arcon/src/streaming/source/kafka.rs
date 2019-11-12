@@ -16,7 +16,7 @@ use std::time::Duration;
 #[derive(ComponentDefinition)]
 pub struct KafkaSource<OUT>
 where
-    OUT: ArconType,
+    OUT: ArconType + serde::Serialize + serde::de::DeserializeOwned,
 {
     ctx: ComponentContext<KafkaSource<OUT>>,
     out_channels: Box<ChannelStrategy<OUT>>,
@@ -35,7 +35,7 @@ where
 
 impl<OUT> KafkaSource<OUT>
 where
-    OUT: ArconType,
+    OUT: ArconType + serde::Serialize + serde::de::DeserializeOwned,
 {
     pub fn new(
         out_channels: Box<ChannelStrategy<OUT>>,
@@ -213,7 +213,7 @@ where
 
 impl<OUT> Provide<ControlPort> for KafkaSource<OUT>
 where
-    OUT: ArconType,
+    OUT: ArconType + serde::Serialize + serde::de::DeserializeOwned,
 {
     fn handle(&mut self, event: ControlEvent) -> () {
         match event {
@@ -229,7 +229,7 @@ where
 
 impl<OUT> Actor for KafkaSource<OUT>
 where
-    OUT: ArconType,
+    OUT: ArconType + serde::Serialize + serde::de::DeserializeOwned,
 {
     type Message = Box<dyn Any + Send>;
     fn receive_local(&mut self, _msg: Self::Message) {}
@@ -245,7 +245,7 @@ mod tests {
     use std::{thread, time};
 
     #[arcon]
-    #[derive(prost::Message)]
+    #[derive(prost::Message, serde::Serialize, serde::Deserialize)]
     pub struct Thing {
         #[prost(uint32, tag="1")]
         pub id: u32,
@@ -254,7 +254,7 @@ mod tests {
     }
 
     #[arcon]
-    #[derive(prost::Message)]
+    #[derive(prost::Message, serde::Serialize, serde::Deserialize)]
     struct Point {
         #[prost(float, tag="1")]
         x: f32,

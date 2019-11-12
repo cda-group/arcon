@@ -2,15 +2,12 @@
 
 #[cfg_attr(test, macro_use)]
 extern crate arcon_macros;
-extern crate arcon_messages as messages;
 #[macro_use]
 extern crate arcon_error as error;
 #[cfg_attr(test, macro_use)]
 extern crate abomonation_derive;
 #[cfg_attr(test, macro_use)]
 extern crate keyby;
-#[cfg_attr(test, macro_use)]
-extern crate serde;
 
 pub mod data;
 pub mod state_backend;
@@ -56,8 +53,6 @@ pub mod prelude {
     #[cfg(feature = "thread_pinning")]
     pub use kompact::{get_core_ids, CoreId};
     pub use slog::*;
-
-    pub use arcon_messages::protobuf::*;
 }
 
 #[cfg(test)]

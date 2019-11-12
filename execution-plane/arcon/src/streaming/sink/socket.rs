@@ -12,7 +12,7 @@ use tokio::runtime::TaskExecutor;
 #[derive(ComponentDefinition)]
 pub struct SocketSink<A>
 where
-    A: ArconType + 'static,
+    A: ArconType + serde::Serialize,
 {
     ctx: ComponentContext<Self>,
     tx_channel: mpsc::Sender<Bytes>,
@@ -22,7 +22,7 @@ where
 
 impl<A> SocketSink<A>
 where
-    A: ArconType + 'static,
+    A: ArconType + serde::Serialize,
 {
     pub fn udp(socket_addr: SocketAddr) -> Self {
         let (tx, rx) = mpsc::channel::<Bytes>(1_024);
@@ -86,14 +86,14 @@ where
 
 impl<A> Provide<ControlPort> for SocketSink<A>
 where
-    A: ArconType + 'static,
+    A: ArconType + serde::Serialize,
 {
     fn handle(&mut self, _event: ControlEvent) -> () {}
 }
 
 impl<A> Actor for SocketSink<A>
 where
-    A: ArconType + 'static,
+    A: ArconType + serde::Serialize,
 {
     type Message = ArconMessage<A>;
     fn receive_local(&mut self, msg: Self::Message) {

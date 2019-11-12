@@ -6,7 +6,6 @@ extern crate arcon;
 
 use arcon::macros::*;
 use arcon::prelude::*;
-use serde::*;
 use std::fs::File;
 use std::io::Write;
 use std::io::{BufRead, BufReader};

@@ -1,7 +1,7 @@
 use crate::data::*;
 use crate::error::*;
 use crate::prelude::KompactSystem;
-use crate::streaming::channel::Channel;
+use crate::streaming::channel::{ArconSerde, Channel};
 
 pub mod broadcast;
 pub mod forward;
@@ -36,13 +36,14 @@ where
         Channel::Local(actor_ref) => {
             actor_ref.tell(message);
         }
-        Channel::Remote(actor_path) => {
-            use crate::data::reliable_remote::*;
-            let ser = ReliableSerde::<A>::new();
-            //use crate::data::unsafe_remote::*;
-            //let ser = UnsafeSerde::<A>::new();
-            actor_path.tell((message, ser), source);
-        }
+        Channel::Remote((actor_path, arcon_serde)) => match &arcon_serde {
+            ArconSerde::Unsafe(ser) => {
+                actor_path.tell((message, ser.clone()), source);
+            }
+            ArconSerde::Reliable(ser) => {
+                actor_path.tell((message, ser.clone()), source);
+            }
+        },
     }
     Ok(())
 }
@@ -55,7 +56,7 @@ pub mod tests {
     #[arcon]
     #[derive(prost::Message)]
     pub struct Input {
-        #[prost(uint32, tag="1")]
+        #[prost(uint32, tag = "1")]
         pub id: u32,
     }
 }

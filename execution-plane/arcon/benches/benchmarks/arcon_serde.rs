@@ -5,7 +5,7 @@ use criterion::{black_box, criterion_group, Bencher, Criterion};
 use serde::*;
 
 #[arcon]
-#[derive(prost::Message, Copy, PartialEq)]
+#[derive(prost::Message, PartialEq, Serialize, Deserialize)]
 pub struct SmallStruct {
     #[prost(int64, tag = "1")]
     pub x1: i64,
@@ -26,7 +26,7 @@ impl SmallStruct {
 }
 
 #[arcon]
-#[derive(prost::Message, PartialEq)]
+#[derive(prost::Message, PartialEq, Serialize, Deserialize)]
 pub struct LargeStruct {
     #[prost(int64, tag = "1")]
     pub x1: i64,
@@ -125,7 +125,7 @@ pub fn protobuf_serialise<A: ArconType>(data: &A) {
     black_box(&bytes);
 }
 
-pub fn bincode_serialise<A: ArconType>(data: &A) {
+pub fn bincode_serialise<A: ArconType + Serialize>(data: &A) {
     let bytes = bincode::serialize(data).unwrap();
     black_box(&bytes);
 }

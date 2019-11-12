@@ -1,29 +1,15 @@
 use crate::error::ArconResult;
 use crate::macros::*;
-use crate::messages::protobuf::messages::ArconNetworkMessage;
-use crate::messages::protobuf::*;
 use abomonation::Abomonation;
-use arcon_messages::protobuf::ArconNetworkMessage_oneof_payload::*;
 use bytes::IntoBuf;
 use kompact::prelude::*;
-use serde::de::DeserializeOwned;
-use serde::*;
 use std::cmp::Ordering;
 use std::fmt::Debug;
 use std::hash::Hash;
 
 /// Type that can be passed through the Arcon runtime
 pub trait ArconType:
-    Clone
-    + Debug
-    + Sync
-    + Send
-    + Serialize
-    + DeserializeOwned
-    + prost::Message
-    + Default
-    + Abomonation
-    + 'static
+    Clone + Debug + Sync + Send + prost::Message + Default + Abomonation + 'static
 where
     Self: std::marker::Sized,
 {
@@ -124,7 +110,7 @@ pub(crate) mod reliable_remote {
     use prost::*;
 
     #[derive(prost::Message, Clone)]
-    pub struct ArconNetworkMessagez {
+    pub struct ArconNetworkMessage {
         #[prost(message, tag = "1")]
         pub sender: Option<NodeID>,
         #[prost(bytes, tag = "2")]
@@ -158,7 +144,7 @@ pub(crate) mod reliable_remote {
         const SER_ID: SerId = Self::SID;
 
         fn deserialise(buf: &mut Buf) -> Result<ArconMessage<A>, SerError> {
-            let mut res = ArconNetworkMessagez::decode(buf.bytes()).map_err(|_| {
+            let mut res = ArconNetworkMessage::decode(buf.bytes()).map_err(|_| {
                 SerError::InvalidData("Failed to decode ArconNetworkMessage".to_string())
             })?;
 
@@ -203,23 +189,21 @@ pub(crate) mod reliable_remote {
             Self::SID
         }
         fn size_hint(&self) -> Option<usize> {
-            Some(std::mem::size_of::<ArconNetworkMessagez>())
+            Some(std::mem::size_of::<ArconNetworkMessage>())
         }
         fn serialise(&self, msg: &ArconMessage<A>, buf: &mut dyn BufMut) -> Result<(), SerError> {
             // TODO: Quite inefficient as of now. fix..
             match &msg.event {
                 ArconEvent::Element(elem) => {
-                    let remote_msg = ArconNetworkMessagez {
+                    let remote_msg = ArconNetworkMessage {
                         sender: Some(msg.sender),
                         data: elem.data.encode_storage().unwrap(),
                         timestamp: elem.timestamp,
                         payload: Payload::Element as i32,
                     };
                     let mut data_buf = Vec::new();
-                    remote_msg.encode(&mut data_buf).map_err(|_| {
-                        SerError::InvalidData(
-                            "Failed to encode ArconType for remote msg".to_string(),
-                        )
+                    let _ = remote_msg.encode(&mut data_buf).map_err(|_| {
+                        SerError::InvalidData("Failed to encode network message".to_string())
                     })?;
                     buf.put_slice(&data_buf);
                 }
@@ -230,14 +214,16 @@ pub(crate) mod reliable_remote {
                             "Failed to encode Watermark for remote msg".to_string(),
                         )
                     })?;
-                    let remote_msg = ArconNetworkMessagez {
+                    let remote_msg = ArconNetworkMessage {
                         sender: Some(msg.sender),
                         data: wm_buf,
                         timestamp: Some(wm.timestamp),
                         payload: Payload::Watermark as i32,
                     };
                     let mut data_buf = Vec::new();
-                    remote_msg.encode(&mut data_buf).unwrap();
+                    let _ = remote_msg.encode(&mut data_buf).map_err(|_| {
+                        SerError::InvalidData("Failed to encode network message".to_string())
+                    })?;
                     buf.put_slice(&data_buf);
                 }
                 ArconEvent::Epoch(e) => {
@@ -245,14 +231,16 @@ pub(crate) mod reliable_remote {
                     let _ = e.encode(&mut epoch_buf).map_err(|_| {
                         SerError::InvalidData("Failed to encode Epoch for remote msg".to_string())
                     })?;
-                    let remote_msg = ArconNetworkMessagez {
+                    let remote_msg = ArconNetworkMessage {
                         sender: Some(msg.sender),
                         data: epoch_buf,
                         timestamp: None,
                         payload: Payload::Epoch as i32,
                     };
                     let mut data_buf = Vec::new();
-                    remote_msg.encode(&mut data_buf).unwrap();
+                    let _ = remote_msg.encode(&mut data_buf).map_err(|_| {
+                        SerError::InvalidData("Failed to encode network message".to_string())
+                    })?;
                     buf.put_slice(&data_buf);
                 }
             }
@@ -347,57 +335,6 @@ impl<A: ArconType> ArconMessage<A> {
     }
 }
 
-impl<A: ArconType> ArconMessage<A> {
-    pub fn to_remote(&self) -> ArconResult<ArconNetworkMessage> {
-        match &self.event {
-            ArconEvent::Element(e) => {
-                let serialised_event: Vec<u8> = bincode::serialize(&e.data).map_err(|e| {
-                    arcon_err_kind!("Failed to serialise event with err {}", e.to_string())
-                })?;
-
-                let timestamp = e.timestamp.unwrap_or(0);
-                // TODO: Add Sender info to the ArconNetworkMessage
-                Ok(create_element(serialised_event, timestamp))
-            }
-            ArconEvent::Watermark(w) => {
-                let mut msg = ArconNetworkMessage::new();
-                let mut msg_watermark = messages::Watermark::new();
-                msg_watermark.set_timestamp(w.timestamp);
-                msg.set_watermark(msg_watermark);
-                msg.set_sender(self.sender.id);
-                Ok(msg)
-            }
-            ArconEvent::Epoch(e) => {
-                let mut msg = ArconNetworkMessage::new();
-                let mut msg_checkpoint = messages::Checkpoint::new();
-                msg_checkpoint.set_epoch(e.epoch);
-                msg.set_checkpoint(msg_checkpoint);
-                msg.set_sender(self.sender.id);
-                Ok(msg)
-            }
-        }
-    }
-
-    pub fn from_remote(message: ArconNetworkMessage) -> ArconResult<Self> {
-        let sender = message.get_sender();
-        let payload = message.payload.unwrap();
-        match payload {
-            element(e) => {
-                let data: A = bincode::deserialize(e.get_data()).map_err(|e| {
-                    arcon_err_kind!("Failed to deserialise event with err {}", e.to_string())
-                })?;
-                Ok(ArconMessage::<A>::element(
-                    data,
-                    Some(e.get_timestamp()),
-                    sender.into(),
-                ))
-            }
-            watermark(w) => Ok(ArconMessage::watermark(w.timestamp, sender.into())),
-            checkpoint(c) => Ok(ArconMessage::epoch(c.epoch, sender.into())),
-        }
-    }
-}
-
 /// A stream element that contains an `ArconType` and an optional timestamp
 #[derive(Clone, Debug, Abomonation)]
 pub struct ArconElement<A: ArconType> {
@@ -420,61 +357,6 @@ impl<A: ArconType> ArconElement<A> {
         }
     }
 }
-
-/*
-/// Float wrappers for Arcon
-///
-/// The `Hash` impl rounds the floats down to an integer
-/// and then hashes it. Might want to change this later on..
-#[arcon]
-pub struct ArconF32(f32);
-
-impl Hash for ArconF32 {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        let s: u64 = self.0.trunc() as u64;
-        s.hash(state);
-    }
-}
-
-impl std::str::FromStr for ArconF32 {
-    type Err = ::std::num::ParseFloatError;
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        let f: f32 = s.parse::<f32>()?;
-        Ok(ArconF32(f))
-    }
-}
-
-impl Deref for ArconF32 {
-    type Target = f32;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-#[arcon]
-pub struct ArconF64(f64);
-
-impl Hash for ArconF64 {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        let s: u64 = self.0.trunc() as u64;
-        s.hash(state);
-    }
-}
-
-impl std::str::FromStr for ArconF64 {
-    type Err = ::std::num::ParseFloatError;
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> { let f: f64 = s.parse::<f64>()?; Ok(ArconF64(f)) }
-}
-
-impl Deref for ArconF64 {
-    type Target = f64;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-*/
 
 /// Implements `ArconType` for all data types that are supported
 impl ArconType for u32 {}
