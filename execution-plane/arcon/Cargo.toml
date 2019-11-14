@@ -58,6 +58,7 @@ slog = { version = "2.2", features = ["max_level_off"] }
 criterion = { version = "0.3", features=['real_blackbox'] }
 bincode = "1.1.4"
 serde = { version = "1.0.63", features = ["derive"]}
+lz4-compression = "0.6.1"
 
 [[bench]]
 name = "arcon_benches"

@@ -16,9 +16,9 @@ pub mod util;
 
 pub mod macros {
     pub use crate::data::ArconType;
+    pub use abomonation_derive::*;
     pub use arcon_macros::*;
     pub use keyby::*;
-    pub use abomonation_derive::*;
 }
 
 pub mod prelude {
@@ -44,6 +44,9 @@ pub mod prelude {
 
     pub use crate::streaming::sink::{debug::DebugSink, local_file::LocalFileSink};
 
+    pub use crate::data::serde::{
+        reliable_remote::ReliableSerde, unsafe_remote::UnsafeSerde, ArconSerde,
+    };
     pub use crate::data::Watermark;
     pub use crate::data::*;
     pub use error::ArconResult;
@@ -65,9 +68,9 @@ mod tests {
     #[arcon]
     #[derive(prost::Message)]
     pub struct Item {
-        #[prost(uint64, tag="1")]
+        #[prost(uint64, tag = "1")]
         id: u64,
-        #[prost(uint32, tag="2")]
+        #[prost(uint32, tag = "2")]
         price: u32,
     }
 

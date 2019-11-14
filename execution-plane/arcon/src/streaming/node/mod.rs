@@ -193,11 +193,11 @@ where
     }
     fn receive_network(&mut self, msg: NetMessage) {
         let arcon_msg: ArconResult<ArconMessage<IN>> = match msg.ser_id() {
-            &reliable_remote::ReliableSerde::<IN>::SER_ID => msg
-                .try_deserialise::<ArconMessage<IN>, reliable_remote::ReliableSerde<IN>>()
+            &ReliableSerde::<IN>::SER_ID => msg
+                .try_deserialise::<ArconMessage<IN>, ReliableSerde<IN>>()
                 .map_err(|_| arcon_err_kind!("Failed to unpack reliable ArconMessage")),
-            &unsafe_remote::UnsafeSerde::<IN>::SER_ID => msg
-                .try_deserialise::<ArconMessage<IN>, unsafe_remote::UnsafeSerde<IN>>()
+            &UnsafeSerde::<IN>::SER_ID => msg
+                .try_deserialise::<ArconMessage<IN>, UnsafeSerde<IN>>()
                 .map_err(|_| arcon_err_kind!("Failed to unpack unreliable ArconMessage")),
             _ => panic!("Unexpected deserialiser"),
         };

@@ -2,6 +2,7 @@
 
 use arcon::macros::*;
 use criterion::{black_box, criterion_group, Bencher, Criterion};
+use lz4_compression::prelude::{compress, decompress};
 use serde::*;
 
 #[arcon]
@@ -91,6 +92,13 @@ fn arcon_serde_bench(c: &mut Criterion) {
         abomonation_deser_large_struct,
     );
 
+    group.bench_function("full abomonation serde", abomonation_full_serde);
+
+    group.bench_function(
+        "full abomonation serde with lz4",
+        abomonation_full_serde_lz4,
+    );
+
     group.finish()
 }
 
@@ -130,10 +138,11 @@ pub fn bincode_serialise<A: ArconType + Serialize>(data: &A) {
     black_box(&bytes);
 }
 pub fn abomonation_serialise<A: ArconType>(data: &A) {
-    let mut buf = Vec::new();
+    let mut buf = Vec::with_capacity(abomonation::measure(data));
     let _ = unsafe { abomonation::encode(data, &mut buf).unwrap() };
     black_box(&buf);
 }
+
 pub fn protobuf_deser_small_struct(b: &mut Bencher) {
     let small = SmallStruct::new();
     let mut bytes = small.encode_storage().unwrap();
@@ -168,7 +177,7 @@ pub fn bincode_deser_large_struct(b: &mut Bencher) {
 
 pub fn abomonation_deser_small_struct(b: &mut Bencher) {
     let small = SmallStruct::new();
-    let mut bytes = Vec::new();
+    let mut bytes = Vec::with_capacity(abomonation::measure(&small));
     let _ = unsafe { abomonation::encode(&small, &mut bytes).unwrap() };
     b.iter(|| {
         assert!(
@@ -182,11 +191,41 @@ pub fn abomonation_deser_small_struct(b: &mut Bencher) {
 
 pub fn abomonation_deser_large_struct(b: &mut Bencher) {
     let large = LargeStruct::new();
-    let mut bytes = Vec::new();
+    let mut bytes = Vec::with_capacity(abomonation::measure(&large));
     let _ = unsafe { abomonation::encode(&large, &mut bytes).unwrap() };
     b.iter(|| {
         assert!(
             unsafe { abomonation::decode::<LargeStruct>(&mut bytes) }
+                .unwrap()
+                .0
+                == &large
+        );
+    });
+}
+
+pub fn abomonation_full_serde(b: &mut Bencher) {
+    let large = LargeStruct::new();
+    b.iter(|| {
+        let mut buf = Vec::with_capacity(abomonation::measure(&large));
+        let _ = unsafe { abomonation::encode(&large, &mut buf).unwrap() };
+        assert!(
+            unsafe { abomonation::decode::<LargeStruct>(&mut buf) }
+                .unwrap()
+                .0
+                == &large
+        );
+    });
+}
+
+pub fn abomonation_full_serde_lz4(b: &mut Bencher) {
+    let large = LargeStruct::new();
+    b.iter(|| {
+        let mut buf = Vec::with_capacity(abomonation::measure(&large));
+        let _ = unsafe { abomonation::encode(&large, &mut buf).unwrap() };
+        let compressed_data = compress(&buf);
+        let mut uncompressed_data = decompress(&compressed_data).unwrap();
+        assert!(
+            unsafe { abomonation::decode::<LargeStruct>(&mut uncompressed_data) }
                 .unwrap()
                 .0
                 == &large

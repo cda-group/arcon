@@ -42,7 +42,6 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::data::reliable_remote::*;
     use crate::streaming::channel::strategy::tests::*;
     use crate::streaming::channel::ArconSerde;
     use crate::streaming::sink::debug::DebugSink;
@@ -123,10 +122,7 @@ mod tests {
                 remote.system_path(),
                 vec![comp_id.into()],
             ));
-            channels.push(Channel::Remote((
-                remote_path,
-                ArconSerde::Reliable(ReliableSerde::new()),
-            )));
+            channels.push(Channel::Remote((remote_path, ArconSerde::default())));
             comps.push(comp);
         }
         std::thread::sleep(std::time::Duration::from_secs(1));
