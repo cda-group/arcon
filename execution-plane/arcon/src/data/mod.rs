@@ -17,7 +17,7 @@ where
 {
     /// Encodes `ArconType` into serialised Protobuf data.
     fn encode_storage(&self) -> ArconResult<Vec<u8>> {
-        let mut buf = Vec::new();
+        let mut buf = Vec::with_capacity(self.encoded_len());
         self.encode(&mut buf).map_err(|e| {
             arcon_err_kind!("Failed to encode ArconType with err {}", e.to_string())
         })?;
