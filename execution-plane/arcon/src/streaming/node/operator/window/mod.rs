@@ -4,6 +4,7 @@ pub use event_time::EventTimeWindowAssigner;
 
 use crate::data::*;
 use crate::error::*;
+use crate::util::SafelySendableFn;
 
 /// `Window` consists of the methods required by each window implementation
 ///
@@ -25,7 +26,7 @@ where
     IN: ArconType,
     OUT: ArconType,
 {
-    fn clone_box(&self) -> Box<Window<IN, OUT>>;
+    fn clone_box(&self) -> Box<dyn Window<IN, OUT>>;
 }
 
 impl<IN, OUT, A: 'static + Window<IN, OUT> + Clone> WindowClone<IN, OUT> for A
@@ -33,17 +34,17 @@ where
     IN: ArconType,
     OUT: ArconType,
 {
-    fn clone_box(&self) -> Box<Window<IN, OUT>> {
+    fn clone_box(&self) -> Box<dyn Window<IN, OUT>> {
         Box::new(self.clone())
     }
 }
 
-impl<IN, OUT> Clone for Box<Window<IN, OUT>>
+impl<IN, OUT> Clone for Box<dyn Window<IN, OUT>>
 where
     IN: ArconType,
     OUT: ArconType,
 {
-    fn clone(&self) -> Box<Window<IN, OUT>> {
+    fn clone(&self) -> Box<dyn Window<IN, OUT>> {
         self.clone_box()
     }
 }
@@ -55,7 +56,7 @@ where
     OUT: ArconType,
 {
     buffer: Vec<IN>,
-    materializer: &'static Fn(&Vec<IN>) -> OUT,
+    materializer: &'static dyn for<'r> SafelySendableFn<(&'r [IN],), OUT>,
 }
 
 impl<IN, OUT> AppenderWindow<IN, OUT>
@@ -63,7 +64,9 @@ where
     IN: ArconType,
     OUT: ArconType,
 {
-    pub fn new(materializer: &'static Fn(&Vec<IN>) -> OUT) -> AppenderWindow<IN, OUT> {
+    pub fn new(
+        materializer: &'static dyn for<'r> SafelySendableFn<(&'r [IN],), OUT>,
+    ) -> AppenderWindow<IN, OUT> {
         AppenderWindow {
             buffer: Vec::new(),
             materializer,
@@ -86,20 +89,6 @@ where
     }
 }
 
-unsafe impl<IN, OUT> Send for AppenderWindow<IN, OUT>
-where
-    IN: ArconType,
-    OUT: ArconType,
-{
-}
-
-unsafe impl<IN, OUT> Sync for AppenderWindow<IN, OUT>
-where
-    IN: ArconType,
-    OUT: ArconType,
-{
-}
-
 #[derive(Clone)]
 pub struct IncrementalWindow<IN, OUT>
 where
@@ -107,8 +96,8 @@ where
     OUT: ArconType,
 {
     curr_agg: Option<OUT>,
-    init: &'static Fn(IN) -> OUT,
-    agg: &'static Fn(IN, &OUT) -> OUT,
+    init: &'static dyn SafelySendableFn<(IN,), OUT>,
+    agg: &'static dyn for<'r> SafelySendableFn<(IN, &'r OUT), OUT>,
 }
 
 impl<IN, OUT> IncrementalWindow<IN, OUT>
@@ -117,8 +106,8 @@ where
     OUT: ArconType,
 {
     pub fn new(
-        init: &'static Fn(IN) -> OUT,
-        agg: &'static Fn(IN, &OUT) -> OUT,
+        init: &'static dyn SafelySendableFn<(IN,), OUT>,
+        agg: &'static dyn for<'r> SafelySendableFn<(IN, &'r OUT), OUT>,
     ) -> IncrementalWindow<IN, OUT> {
         IncrementalWindow {
             curr_agg: None,
@@ -153,27 +142,13 @@ where
     }
 }
 
-unsafe impl<IN, OUT> Send for IncrementalWindow<IN, OUT>
-where
-    IN: ArconType,
-    OUT: ArconType,
-{
-}
-
-unsafe impl<IN, OUT> Sync for IncrementalWindow<IN, OUT>
-where
-    IN: ArconType,
-    OUT: ArconType,
-{
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn sum_appender_window_test() {
-        fn materializer(buffer: &Vec<i32>) -> i32 {
+        fn materializer(buffer: &[i32]) -> i32 {
             buffer.iter().sum()
         }
         let mut window: AppenderWindow<i32, i32> = AppenderWindow::new(&materializer);

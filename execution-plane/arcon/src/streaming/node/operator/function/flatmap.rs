@@ -1,5 +1,6 @@
 use crate::data::{ArconElement, ArconEvent, ArconType, Epoch, Watermark};
 use crate::streaming::node::operator::Operator;
+use crate::util::SafelySendableFn;
 use arcon_error::ArconResult;
 
 /// IN: Input Event
@@ -9,7 +10,7 @@ where
     IN: 'static + ArconType,
     OUT: 'static + ArconType,
 {
-    udf: &'static Fn(&IN) -> Vec<OUT>,
+    udf: &'static dyn for<'r> SafelySendableFn<(&'r IN,), Vec<OUT>>,
 }
 
 impl<IN, OUT> FlatMap<IN, OUT>
@@ -17,7 +18,7 @@ where
     IN: 'static + ArconType,
     OUT: 'static + ArconType,
 {
-    pub fn new(udf: &'static Fn(&IN) -> Vec<OUT>) -> Self {
+    pub fn new(udf: &'static dyn for<'r> SafelySendableFn<(&'r IN,), Vec<OUT>>) -> Self {
         FlatMap { udf }
     }
 

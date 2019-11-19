@@ -49,7 +49,7 @@ fn normalise_pipeline_test() {
         .hold()
         .expect("failed to fetch strong ref");
     let channel = Channel::Local(actor_ref);
-    let channel_strategy: Box<ChannelStrategy<i64>> = Box::new(Forward::new(channel));
+    let channel_strategy: Box<dyn ChannelStrategy<i64>> = Box::new(Forward::new(channel));
 
     fn map_fn(x: NormaliseElements) -> i64 {
         x.data.iter().map(|x| x + 3).sum()
@@ -66,7 +66,7 @@ fn normalise_pipeline_test() {
 
     // Define Window
 
-    fn window_fn(buffer: &Vec<i64>) -> NormaliseElements {
+    fn window_fn(buffer: &[i64]) -> NormaliseElements {
         let sum: i64 = buffer.iter().sum();
         let count = buffer.len() as i64;
         let avg = sum / count;
@@ -74,7 +74,7 @@ fn normalise_pipeline_test() {
         NormaliseElements { data }
     }
 
-    let window: Box<Window<i64, NormaliseElements>> = Box::new(AppenderWindow::new(&window_fn));
+    let window: Box<dyn Window<i64, NormaliseElements>> = Box::new(AppenderWindow::new(&window_fn));
 
     let node_4_actor_ref = node_4.actor_ref().hold().expect("Failed to fetch ref");
     let channel_strategy: Box<Forward<NormaliseElements>> =
@@ -95,7 +95,7 @@ fn normalise_pipeline_test() {
 
     let node_3_actor_ref = node_3.actor_ref().hold().expect("Failed to fetch ref");
     let channel = Channel::Local(node_3_actor_ref);
-    let channel_strategy: Box<ChannelStrategy<i64>> = Box::new(Forward::new(channel));
+    let channel_strategy: Box<dyn ChannelStrategy<i64>> = Box::new(Forward::new(channel));
     fn filter_fn(x: &i64) -> bool {
         *x < 5
     }
@@ -114,7 +114,7 @@ fn normalise_pipeline_test() {
         .hold()
         .expect("Failed to fetch strong ref");
     let channel = Channel::Local(actor_ref);
-    let channel_strategy: Box<ChannelStrategy<i64>> = Box::new(Forward::new(channel));
+    let channel_strategy: Box<dyn ChannelStrategy<i64>> = Box::new(Forward::new(channel));
 
     // Watermark per 5 lines in the file
     let wm_interval = 5;

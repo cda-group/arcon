@@ -20,6 +20,15 @@ where
     }
 }
 
+impl<A> Default for Mute<A>
+where
+    A: 'static + ArconType,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<A> ChannelStrategy<A> for Mute<A>
 where
     A: 'static + ArconType,

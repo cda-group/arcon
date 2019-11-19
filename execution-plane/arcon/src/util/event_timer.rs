@@ -33,6 +33,12 @@ pub struct EventTimer<E: Clone> {
     handles: HashMap<Uuid, E>,
 }
 
+impl<E: Clone> Default for EventTimer<E> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<E: Clone> EventTimer<E> {
     pub fn new() -> EventTimer<E> {
         EventTimer {
@@ -42,12 +48,12 @@ impl<E: Clone> EventTimer<E> {
         }
     }
     // Basic scheduling function
-    fn schedule_once(&mut self, timeout: Duration, entry: E) -> () {
+    fn schedule_once(&mut self, timeout: Duration, entry: E) {
         let id = Uuid::new_v4();
         self.handles.insert(id, entry);
 
         let e = TimerEntry::OneShot {
-            id: id,
+            id,
             timeout,
             action: Box::new(move |_| {}),
         };
@@ -60,7 +66,7 @@ impl<E: Clone> EventTimer<E> {
         }
     }
     // Schedule at a specific time in the future
-    pub fn schedule_at(&mut self, time: u64, entry: E) -> () {
+    pub fn schedule_at(&mut self, time: u64, entry: E) {
         // Check for bad target time
         if time < self.time {
             eprintln!("tried to schedule event which has already happened");
@@ -70,7 +76,7 @@ impl<E: Clone> EventTimer<E> {
     }
     // Should be called before scheduling anything
     #[inline(always)]
-    pub fn set_time(&mut self, ts: u64) -> () {
+    pub fn set_time(&mut self, ts: u64) {
         self.time = ts;
     }
     pub fn get_time(&mut self) -> u64 {
@@ -85,6 +91,7 @@ impl<E: Clone> EventTimer<E> {
             return vec;
         }
 
+        // TODO: type conversion mess
         let mut time_left = ts - self.time;
         while time_left > 0 {
             if let Skip::Millis(skip_ms) = self.timer.can_skip() {
@@ -92,28 +99,27 @@ impl<E: Clone> EventTimer<E> {
                 if skip_ms >= time_left.try_into().unwrap() {
                     // No more ops to gather, skip the remaining time_left and return
                     self.timer.skip((time_left).try_into().unwrap());
-                    self.time = self.time + time_left;
+                    self.time += time_left;
                     return vec;
                 } else {
                     // Skip lower than time-left:
                     self.timer.skip(skip_ms);
-                    self.time = self.time + skip_ms as u64;
-                    time_left = time_left - skip_ms as u64;
+                    self.time += skip_ms as u64;
+                    time_left -= skip_ms as u64;
                 }
             } else {
                 // Can't skip
                 let mut res = self.timer.tick();
                 for e in res.drain(..) {
-                    match self.execute(e) {
-                        Some(entry) => vec.push(entry),
-                        _ => {}
+                    if let Some(entry) = self.execute(e) {
+                        vec.push(entry)
                     }
                 }
-                self.time = self.time + 1;
-                time_left = time_left - 1;
+                self.time += 1;
+                time_left -= 1;
             }
         }
-        return vec;
+        vec
     }
     // Takes TimerEntry, reschedules it if necessary and returns Executable actions
     #[inline(always)]
@@ -122,16 +128,15 @@ impl<E: Clone> EventTimer<E> {
         let res = self.handles.remove(&id);
 
         // Reschedule the event
-        match e.execute() {
-            Some(re_e) => match self.timer.insert(re_e) {
+        if let Some(re_e) = e.execute() {
+            match self.timer.insert(re_e) {
                 Ok(_) => (), // great
                 Err(TimerError::Expired(re_e)) => {
                     // This could happen if someone specifies 0ms period
                     eprintln!("TimerEntry could not be inserted properly: {:?}", re_e);
                 }
                 Err(f) => panic!("Could not insert timer entry! {:?}", f),
-            },
-            None => (), // great
+            }
         }
         res
     }
@@ -145,7 +150,7 @@ impl<E: Clone> Debug for EventTimer<E> {
 
 // Allows the EventTimer to be scheduled on different threads, but should never be used concurrently
 unsafe impl<E: Clone> Send for EventTimer<E> {}
-unsafe impl<E: Clone> Sync for EventTimer<E> {}
+//unsafe impl<E: Clone> Sync for EventTimer<E> {} // Q: do we need this timer to be sync?
 /*
 pub(crate) enum TimerHandle<C: ComponentDefinition> {
     OneShot {
@@ -166,4 +171,16 @@ pub enum ExecuteAction<C: ComponentDefinition> {
 */
 
 #[cfg(test)]
-mod tests {}
+mod tests {
+    use super::*;
+
+    #[allow(dead_code)]
+    fn assert_event_timer_send_and_sync<E: Clone>(event_timer: &EventTimer<E>) {
+        fn assert_send<T: Send>(_t: &T) {}
+        fn assert_sync<T: Sync>(_t: &T) {}
+
+        assert_send(event_timer);
+        // TODO: Q: do we need event_timer to be Sync?
+        //        assert_sync(event_timer);
+    }
+}

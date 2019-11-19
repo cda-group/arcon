@@ -64,14 +64,14 @@ where
                 let hash = h.finish() as u32;
                 let index = (hash % self.parallelism) as usize;
                 if let Some(channel) = self.nodes.get(index) {
-                    let _ = channel_output(channel, message, source)?;
+                    channel_output(channel, message, source)?;
                 } else {
                     panic!("Something went wrong while finding channel!..");
                 }
             }
             _ => {
                 for channel in self.nodes.iter() {
-                    let _ = channel_output(channel, message.clone(), source)?;
+                    channel_output(channel, message.clone(), source)?;
                 }
             }
         }
@@ -112,7 +112,7 @@ mod tests {
             comps.push(comp);
         }
 
-        let mut channel_strategy: Box<ChannelStrategy<Input>> =
+        let mut channel_strategy: Box<dyn ChannelStrategy<Input>> =
             Box::new(KeyBy::new(parallelism, channels));
 
         let mut rng = rand::thread_rng();

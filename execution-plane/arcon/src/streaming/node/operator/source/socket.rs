@@ -24,7 +24,7 @@ where
     OUT: 'static + ArconType + FromStr,
 {
     ctx: ComponentContext<SocketSource<OUT>>,
-    out_channels: Box<ChannelStrategy<OUT>>,
+    out_channels: Box<dyn ChannelStrategy<OUT>>,
     sock_addr: SocketAddr,
     sock_kind: SocketKind,
     received: u64,
@@ -41,7 +41,7 @@ where
     pub fn new(
         sock_addr: SocketAddr,
         sock_kind: SocketKind,
-        out_channels: Box<ChannelStrategy<OUT>>,
+        out_channels: Box<dyn ChannelStrategy<OUT>>,
         watermark_interval: u64,
         watermark_index: Option<u32>,
         id: NodeID,

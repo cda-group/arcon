@@ -26,7 +26,7 @@ where
 {
     fn output(&mut self, message: ArconMessage<A>, source: &KompactSystem) -> ArconResult<()> {
         for channel in &self.out_channels {
-            let _ = channel_output(channel, message.clone(), source)?;
+            channel_output(channel, message.clone(), source)?;
         }
         Ok(())
     }
@@ -66,7 +66,8 @@ mod tests {
             comps.push(comp);
         }
 
-        let mut channel_strategy: Box<ChannelStrategy<Input>> = Box::new(Broadcast::new(channels));
+        let mut channel_strategy: Box<dyn ChannelStrategy<Input>> =
+            Box::new(Broadcast::new(channels));
 
         for _i in 0..total_msgs {
             let input = ArconMessage::element(Input { id: 1 }, None, 1.into());
@@ -127,7 +128,8 @@ mod tests {
         }
         std::thread::sleep(std::time::Duration::from_secs(1));
 
-        let mut channel_strategy: Box<ChannelStrategy<Input>> = Box::new(Broadcast::new(channels));
+        let mut channel_strategy: Box<dyn ChannelStrategy<Input>> =
+            Box::new(Broadcast::new(channels));
 
         for _i in 0..total_msgs {
             let input = ArconMessage::element(Input { id: 1 }, None, 1.into());

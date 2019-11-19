@@ -18,7 +18,7 @@ use std::time::SystemTime;
 #[derive(ComponentDefinition)]
 pub struct LocalFileSource<A: 'static + ArconType + FromStr> {
     ctx: ComponentContext<LocalFileSource<A>>,
-    channel_strategy: Box<ChannelStrategy<A>>,
+    channel_strategy: Box<dyn ChannelStrategy<A>>,
     file_path: String,
     watermark_interval: u64, // If 0: no watermarks/timestamps generated
     id: NodeID,
@@ -27,7 +27,7 @@ pub struct LocalFileSource<A: 'static + ArconType + FromStr> {
 impl<A: ArconType + FromStr> LocalFileSource<A> {
     pub fn new(
         file_path: String,
-        strategy: Box<ChannelStrategy<A>>,
+        strategy: Box<dyn ChannelStrategy<A>>,
         watermark_interval: u64,
         id: NodeID,
     ) -> LocalFileSource<A> {
@@ -97,7 +97,7 @@ impl<A: ArconType + FromStr> LocalFileSource<A> {
         }
     }
 
-    pub fn output_watermark(&mut self) -> () {
+    pub fn output_watermark(&mut self) {
         match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
             Ok(ts) => {
                 if let Err(err) = self.channel_strategy.output(
@@ -115,12 +115,9 @@ impl<A: ArconType + FromStr> LocalFileSource<A> {
 }
 
 impl<A: ArconType + FromStr> Provide<ControlPort> for LocalFileSource<A> {
-    fn handle(&mut self, event: ControlEvent) -> () {
-        match event {
-            ControlEvent::Start => {
-                self.process_file();
-            }
-            _ => (),
+    fn handle(&mut self, event: ControlEvent) {
+        if let ControlEvent::Start = event {
+            self.process_file();
         }
     }
 }
@@ -143,7 +140,7 @@ mod tests {
     use tempfile::NamedTempFile;
 
     // Shared methods for test cases
-    fn wait(time: u64) -> () {
+    fn wait(time: u64) {
         thread::sleep(time::Duration::from_secs(time));
     }
 

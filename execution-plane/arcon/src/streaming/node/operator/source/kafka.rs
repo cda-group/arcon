@@ -19,7 +19,7 @@ where
     OUT: ArconType + ::serde::Serialize + ::serde::de::DeserializeOwned,
 {
     ctx: ComponentContext<KafkaSource<OUT>>,
-    out_channels: Box<ChannelStrategy<OUT>>,
+    out_channels: Box<dyn ChannelStrategy<OUT>>,
     bootstrap_server: String,
     topic: String,
     offset: Offset,
@@ -38,7 +38,7 @@ where
     OUT: ArconType + ::serde::Serialize + ::serde::de::DeserializeOwned,
 {
     pub fn new(
-        out_channels: Box<ChannelStrategy<OUT>>,
+        out_channels: Box<dyn ChannelStrategy<OUT>>,
         bootstrap_server: String,
         topic: String,
         offset: i64,
@@ -68,7 +68,7 @@ where
                     offset: Offset::from_raw(offset),
                     max_timestamp: 0,
                     batch_size: 100,
-                    consumer: consumer,
+                    consumer,
                     id,
                     epoch: 0,
                     commit_epoch: None,

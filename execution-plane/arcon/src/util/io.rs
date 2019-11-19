@@ -118,8 +118,8 @@ impl IO {
     }
 }
 
-unsafe impl Send for IO {}
-unsafe impl Sync for IO {}
+//unsafe impl Send for IO {} // it is send anyway
+//unsafe impl Sync for IO {} // it's not sync, but: does it need to be?
 
 impl Provide<ControlPort> for IO {
     fn handle(&mut self, _event: ControlEvent) {}
@@ -235,5 +235,15 @@ pub mod tests {
         std::thread::sleep(std::time::Duration::from_millis(100));
         let source = io_source.definition().lock().unwrap();
         assert_eq!(source.received, 1);
+    }
+
+    #[allow(dead_code)]
+    fn assert_io_send_and_sync(io: &IO) {
+        fn assert_send<T: Send>(_t: &T) {}
+        fn assert_sync<T: Sync>(_t: &T) {}
+
+        assert_send(io);
+        // TODO: Q: do we need IO to be Sync?
+        //        assert_sync(io);
     }
 }

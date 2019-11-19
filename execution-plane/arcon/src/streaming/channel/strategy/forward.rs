@@ -47,7 +47,7 @@ mod tests {
         let comp = system.create_and_start(move || DebugNode::<Input>::new());
         let actor_ref: ActorRefStrong<ArconMessage<Input>> =
             comp.actor_ref().hold().expect("failed to fetch");
-        let mut channel_strategy: Box<ChannelStrategy<Input>> =
+        let mut channel_strategy: Box<dyn ChannelStrategy<Input>> =
             Box::new(Forward::new(Channel::Local(actor_ref)));
 
         for _i in 0..total_msgs {
