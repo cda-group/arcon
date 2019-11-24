@@ -1,0 +1,9 @@
+.swp
+.swo
+*.rs.swm
+*.rs.swn
+*.rs.swl
+*.rs.swo
+*.rs.swp
+*.proto.swp
+target/

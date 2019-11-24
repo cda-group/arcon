@@ -1,0 +1,44 @@
+// Initial start of Protobuf version of Arcon Specification
+
+syntax = "proto3";
+
+option java_package = "se.kth.arcon.spec";
+
+package arcon_spec;
+
+message ArconSpec {
+  string id = 1;
+  CompileMode mode = 2;
+  repeated string features = 3;
+  string target = 4;
+  repeated Node nodes = 5;
+}
+
+message Node {
+  uint32 id = 1;
+  uint32 parallelism = 2;
+}
+
+enum CompileMode {
+  Debug = 0;
+  Release = 1;
+}
+enum OperatorKind {
+  FlatMap = 0;
+  Filter = 1;
+  Map = 2;
+}
+
+enum ChannelStrategy {
+  Forward = 0;
+  Broadcast  = 1;
+  RoundRobin = 2;
+  RandomShuffle = 3;
+  KeyBy = 4;
+}
+
+enum Format {
+  CSV = 0;
+  JSON  = 1;
+  UTF8 = 2;
+}
