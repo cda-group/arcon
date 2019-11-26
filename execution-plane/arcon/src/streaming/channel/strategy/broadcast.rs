@@ -42,8 +42,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::prelude::DebugNode;
     use crate::streaming::channel::strategy::tests::*;
-    use crate::streaming::sink::debug::DebugSink;
+    use crate::streaming::channel::ArconSerde;
     use kompact::prelude::*;
     use std::sync::Arc;
 
@@ -55,10 +56,10 @@ mod tests {
         let total_msgs: u64 = 10;
 
         let mut channels: Vec<Channel<Input>> = Vec::new();
-        let mut comps: Vec<Arc<crate::prelude::Component<DebugSink<Input>>>> = Vec::new();
+        let mut comps: Vec<Arc<crate::prelude::Component<DebugNode<Input>>>> = Vec::new();
 
         for _i in 0..components {
-            let comp = system.create_and_start(move || DebugSink::<Input>::new());
+            let comp = system.create_and_start(move || DebugNode::<Input>::new());
             let actor_ref: ActorRefStrong<ArconMessage<Input>> =
                 comp.actor_ref().hold().expect("failed to fetch");
             channels.push(Channel::Local(actor_ref));
@@ -99,11 +100,11 @@ mod tests {
         let total_msgs: u64 = 5;
 
         let mut channels: Vec<Channel<Input>> = Vec::new();
-        let mut comps: Vec<Arc<crate::prelude::Component<DebugSink<Input>>>> = Vec::new();
+        let mut comps: Vec<Arc<crate::prelude::Component<DebugNode<Input>>>> = Vec::new();
 
         // Create local components
         for _i in 0..local_components {
-            let comp = system.create_and_start(move || DebugSink::<Input>::new());
+            let comp = system.create_and_start(move || DebugNode::<Input>::new());
             let actor_ref: ActorRefStrong<ArconMessage<Input>> =
                 comp.actor_ref().hold().expect("failed to fetch");
             channels.push(Channel::Local(actor_ref));
@@ -112,7 +113,7 @@ mod tests {
 
         // Create remote components
         for i in 0..remote_components {
-            let comp = remote.create_and_start(move || DebugSink::<Input>::new());
+            let comp = remote.create_and_start(move || DebugNode::<Input>::new());
             let comp_id = format!("comp_{}", i);
             let _ = remote.register_by_alias(&comp, comp_id.clone());
             remote.start(&comp);
@@ -121,7 +122,7 @@ mod tests {
                 remote.system_path(),
                 vec![comp_id.into()],
             ));
-            channels.push(Channel::Remote(remote_path));
+            channels.push(Channel::Remote((remote_path, ArconSerde::default())));
             comps.push(comp);
         }
         std::thread::sleep(std::time::Duration::from_secs(1));

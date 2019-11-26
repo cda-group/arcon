@@ -2,48 +2,54 @@
 
 #[cfg_attr(test, macro_use)]
 extern crate arcon_macros;
-extern crate arcon_messages as messages;
 #[macro_use]
 extern crate arcon_error as error;
 #[cfg_attr(test, macro_use)]
-extern crate keyby;
+extern crate abomonation_derive;
 #[cfg_attr(test, macro_use)]
-extern crate serde;
+extern crate keyby;
 
 pub mod data;
-pub mod streaming;
 pub mod state_backend;
+pub mod streaming;
 pub mod util;
 
 pub mod macros {
     pub use crate::data::ArconType;
+    pub use abomonation_derive::*;
     pub use arcon_macros::*;
     pub use keyby::*;
 }
 
 pub mod prelude {
     pub use crate::streaming::channel::strategy::{
-        broadcast::Broadcast, forward::Forward, key_by::KeyBy, round_robin::RoundRobin,
+        broadcast::Broadcast, forward::Forward, key_by::KeyBy, mute::Mute, round_robin::RoundRobin,
         shuffle::Shuffle, ChannelStrategy,
     };
 
     pub use crate::streaming::channel::Channel;
-    pub use crate::streaming::node::{Node, NodeID};
-    pub use crate::streaming::operator::{Filter, Map, Operator};
-    pub use crate::streaming::window::{
-        event_time::EventTimeWindowAssigner, AppenderWindow, IncrementalWindow, Window,
-    };
-
-    pub use crate::streaming::source::local_file::LocalFileSource;
-
     #[cfg(feature = "socket")]
-    pub use crate::streaming::{
+    pub use crate::streaming::node::operator::{
         sink::socket::SocketSink,
         source::socket::{SocketKind, SocketSource},
     };
+    pub use crate::streaming::node::{
+        operator::function::{Filter, FlatMap, Map},
+        operator::sink::local_file::LocalFileSink,
+        operator::source::local_file::LocalFileSource,
+        operator::window::{AppenderWindow, EventTimeWindowAssigner, IncrementalWindow, Window},
+        operator::Operator,
+        DebugNode, Node,
+    };
 
-    pub use crate::streaming::sink::{debug::DebugSink, local_file::LocalFileSink};
+    #[cfg(feature = "kafka")]
+    pub use crate::streaming::node::operator::{
+        sink::kafka::KafkaSink, source::kafka::KafkaSource,
+    };
 
+    pub use crate::data::serde::{
+        reliable_remote::ReliableSerde, unsafe_remote::UnsafeSerde, ArconSerde,
+    };
     pub use crate::data::Watermark;
     pub use crate::data::*;
     pub use error::ArconResult;
@@ -53,8 +59,6 @@ pub mod prelude {
     #[cfg(feature = "thread_pinning")]
     pub use kompact::{get_core_ids, CoreId};
     pub use slog::*;
-
-    pub use arcon_messages::protobuf::*;
 }
 
 #[cfg(test)]
@@ -65,8 +69,11 @@ mod tests {
     #[key_by(id)]
     #[arcon_decoder(,)]
     #[arcon]
+    #[derive(prost::Message)]
     pub struct Item {
+        #[prost(uint64, tag = "1")]
         id: u64,
+        #[prost(uint32, tag = "2")]
         price: u32,
     }
 

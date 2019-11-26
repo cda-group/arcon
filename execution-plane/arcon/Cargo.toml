@@ -13,14 +13,13 @@ Arcon's execution plane
 
 [features]
 default = []
-kafka = ["rdkafka"]
+kafka = ["rdkafka", "serde_json", "serde"]
 thread_pinning = ["kompact/thread_pinning"]
-socket = ["tokio-codec", "tokio", "bytes", "futures", "serde_json"]
+socket = ["tokio-codec", "tokio", "futures", "serde_json", "serde"]
 arcon_rocksdb = ["rocksdb"]
 
 [dependencies]
 arcon_macros = { version = "0.1", path = "arcon_macros" }
-arcon_messages = { version = "0.1", path = "arcon_messages" }
 arcon_error = { version = "0.1", path = "arcon_error" }
 arcon_extra = { version = "0.1", path = "arcon_extra" }
 kompact = { git = "https://github.com/kompics/kompact.git", branch = "master" }
@@ -35,22 +34,31 @@ slog-async = "2.3"
 slog-term = "2.4"
 
 # Serialisation
-bincode = "1.1.4"
-serde = { version = "1.0.63", features = ["derive"] }
+abomonation = "0.7.3"
+abomonation_derive = "0.5.0"
+prost = "0.5"
+prost-types = "0.5"
+bytes = "0.4"
 
 # Optional
 rdkafka = { version = "~0.19", optional = true }
 tokio = { version = "0.1", optional = true }
 tokio-codec = { version = "0.1", optional = true }
-bytes = { version = "0.4", optional = true }
 futures = { version = "0.1", optional = true }
 serde_json = { version = "1.0.40", optional = true }
+serde = { version = "1.0.63", features = ["derive"], optional = true }
 rocksdb = { git = "https://github.com/tikv/rust-rocksdb.git", optional = true }
+
+[build-dependencies]
+prost-build = "0.5"
 
 [dev-dependencies]
 tempfile = "3"
 slog = { version = "2.2", features = ["max_level_off"] }
 criterion = { version = "0.3", features=['real_blackbox'] }
+bincode = "1.1.4"
+serde = { version = "1.0.63", features = ["derive"]}
+lz4-compression = "0.6.1"
 
 [[bench]]
 name = "arcon_benches"

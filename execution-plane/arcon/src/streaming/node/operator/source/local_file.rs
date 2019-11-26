@@ -1,6 +1,6 @@
+use crate::data::NodeID;
 use crate::data::{ArconMessage, ArconType};
 use crate::streaming::channel::strategy::ChannelStrategy;
-use crate::streaming::node::NodeID;
 use kompact::prelude::*;
 use std::fs::File;
 use std::io::BufRead;
@@ -134,7 +134,7 @@ impl<A: ArconType + FromStr> Actor for LocalFileSource<A> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::prelude::{Channel, DebugSink, Forward};
+    use crate::prelude::{Channel, DebugNode, Forward};
     use kompact::default_components::DeadletterBox;
     use kompact::prelude::KompactSystem;
     use std::io::prelude::*;
@@ -147,14 +147,14 @@ mod tests {
         thread::sleep(time::Duration::from_secs(time));
     }
 
-    fn test_setup<A: ArconType>() -> (KompactSystem, Arc<Component<DebugSink<A>>>) {
+    fn test_setup<A: ArconType>() -> (KompactSystem, Arc<Component<DebugNode<A>>>) {
         // Kompact set-up
         let mut cfg = KompactConfig::new();
         cfg.system_components(DeadletterBox::new, NetworkConfig::default().build());
         let system = cfg.build().expect("KompactSystem");
 
         let (sink, _) = system.create_and_register(move || {
-            let s: DebugSink<A> = DebugSink::new();
+            let s: DebugNode<A> = DebugNode::new();
             s
         });
 

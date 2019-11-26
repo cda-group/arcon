@@ -54,8 +54,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::prelude::DebugNode;
     use crate::streaming::channel::strategy::tests::*;
-    use crate::streaming::sink::debug::DebugSink;
     use kompact::prelude::*;
     use std::sync::Arc;
 
@@ -67,10 +67,10 @@ mod tests {
         let total_msgs: u64 = 50;
 
         let mut channels: Vec<Channel<Input>> = Vec::new();
-        let mut comps: Vec<Arc<crate::prelude::Component<DebugSink<Input>>>> = Vec::new();
+        let mut comps: Vec<Arc<crate::prelude::Component<DebugNode<Input>>>> = Vec::new();
 
         for _i in 0..components {
-            let comp = system.create_and_start(move || DebugSink::<Input>::new());
+            let comp = system.create_and_start(move || DebugNode::<Input>::new());
             let actor_ref: ActorRefStrong<ArconMessage<Input>> =
                 comp.actor_ref().hold().expect("failed to fetch");
             channels.push(Channel::Local(actor_ref));

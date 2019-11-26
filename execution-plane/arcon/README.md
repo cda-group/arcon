@@ -9,9 +9,7 @@ This crate is not intended to be used directly. It is a part of the [Arcon proje
 * [`arcon_error`]: Common error utilities.
 * [`arcon_extra`]: Contains extra 3rd party features.
 * [`arcon_macros`]: Internal Rust macros used by Arcon.
-* [`arcon_messages`]: Support for sending Arcon messages over the network (e.g., Protobuf).
 
 [`arcon_error`]: arcon_error
 [`arcon_extra`]: arcon_extra
 [`arcon_macros`]: arcon_macros
-[`arcon_messages`]: arcon_messages
