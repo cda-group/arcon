@@ -17,6 +17,67 @@ message ArconSpec {
 message Node {
   uint32 id = 1;
   uint32 parallelism = 2;
+  oneof node_kind {
+    Window window = 3;
+    Source source = 4;
+    Sink sink = 5;
+  }
+}
+
+message Window {
+  ChannelStrategy channel_strategy = 1;
+  repeated ChannelKind successors = 2;
+  uint32 predecessor = 3;
+  WindowAssigner assigner = 4;
+  WindowKind window_kind = 5;
+  WindowFunction window_function = 6;
+  TimeKind time_kind = 7;
+}
+
+message WindowFunction {
+  oneof function {
+    AppenderWindow appender_window = 1;
+    IncrementalWindow incremental_window = 2;
+  }
+}
+
+message AppenderWindow {
+  Type input_type = 1;
+  Type output_type = 2;
+  string udf = 3;
+}
+message IncrementalWindow {
+  Type input_type = 1;
+  Type output_type = 2;
+  string udf = 3;
+  string agg_udf = 4;
+}
+
+message Source {
+  Type source_type = 1;
+  ChannelStrategy channel_strategy = 2;
+  repeated ChannelKind successors = 3;
+  SourceKind kind = 4;
+  Format format = 5;
+  uint64 source_rate = 6;
+}
+
+
+message Sink {
+  Type sink_type = 1;
+  uint32 predecessor = 2;
+  SinkKind kind = 3;
+  Format format = 4;
+}
+
+message Operator {
+  Type input_type = 1;
+  Type output_type = 2;
+  string udf = 3;
+  uint32 predecessor = 4;
+  ChannelStrategy channel_strategy = 5;
+  repeated ChannelKind successors = 6;
+  OperatorKind kind = 7;
 }
 
 enum CompileMode {
@@ -29,12 +90,111 @@ enum OperatorKind {
   Map = 2;
 }
 
+message WindowAssigner {
+  oneof assigner {
+    TumblingWindow tumbling = 1;
+    SlidingWindow sliding = 2;
+  }
+}
+
+message TumblingWindow {
+  uint64 length = 1;
+}
+
+message SlidingWindow {
+  uint64 length = 1;
+  uint64 slide = 2;
+}
+
+message TimeKind {
+  oneof time_kind {
+    EventTime event_time = 1;
+    ProcessingTime processing_time = 2;
+    IngestionTime ingestion_time = 3;
+  }
+}
+
+message EventTime { 
+  uint64 slack = 1;
+}
+message ProcessingTime {}
+message IngestionTime {}
+
+
+message SourceKind {
+  oneof source_kind {
+    Socket socket_source = 1;
+    LocalFile local_file = 2;
+  }
+}
+
+message SinkKind {
+  oneof sink_kind {
+    Socket socket_source = 1;
+    LocalFile local_file = 2;
+  }
+}
+
+message Socket {
+  string addr = 1;
+  string protocol = 2;
+}
+
+message LocalFile {
+  string path = 1;
+}
+
+
 enum ChannelStrategy {
   Forward = 0;
   Broadcast  = 1;
   RoundRobin = 2;
   RandomShuffle = 3;
   KeyBy = 4;
+}
+
+message ChannelKind {
+  oneof channel_kind {
+    LocalChannel local_channel = 1;
+    RemoteChannel remote_channel = 2;
+  }
+}
+
+message LocalChannel {
+  string id = 1;
+}
+
+message RemoteChannel {
+  string id = 1;
+  string addr = 2;
+}
+
+
+enum WindowKind {
+  Keyed = 0;
+  All = 1;
+}
+
+message Type {
+  oneof type {
+    Scalar scalar = 1;
+    ArconVec vec = 2;
+    string str = 3;
+  }
+}
+
+message ArconVec {
+  repeated Scalar scalar = 1;
+}
+
+enum Scalar {
+    I32 = 0;
+    I64 = 1;
+    U32 = 2;
+    U64 = 3;
+    F32 = 4;
+    F64 = 5;
+    Bool = 6;
 }
 
 enum Format {

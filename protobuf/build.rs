@@ -1,3 +1,5 @@
+extern crate cfg_if;
+
 use std::env;
 use std::io::Write;
 
@@ -21,8 +23,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if arcon_spec_feature {
-        #[cfg(feature = "arcon_spec")]
-        prost_build::compile_protos(&["proto/arcon_spec/arcon_spec.proto"], &["proto/"]).unwrap();
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "arcon_spec")] {
+                let mut config = prost_build::Config::new();
+                config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
+                config.type_attribute(".", "#[serde(rename_all = \"camelCase\")]");
+                config.compile_protos(&["proto/arcon_spec/arcon_spec.proto"], &["proto/"]).unwrap();
+            } else {
+            }
+        }
     }
 
     Ok(())
