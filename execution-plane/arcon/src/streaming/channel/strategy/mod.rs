@@ -1,3 +1,4 @@
+use crate::data::serde::{reliable_remote::ReliableSerde, unsafe_remote::UnsafeSerde};
 use crate::data::*;
 use crate::error::*;
 use crate::prelude::KompactSystem;
@@ -37,11 +38,13 @@ where
             actor_ref.tell(message);
         }
         Channel::Remote((actor_path, arcon_serde)) => match &arcon_serde {
-            ArconSerde::Unsafe(ser) => {
-                actor_path.tell((message, ser.clone()), source);
+            ArconSerde::Unsafe => {
+                let unsafe_msg = UnsafeSerde(message);
+                actor_path.tell(unsafe_msg, source);
             }
-            ArconSerde::Reliable(ser) => {
-                actor_path.tell((message, ser.clone()), source);
+            ArconSerde::Reliable => {
+                let reliable_msg = ReliableSerde(message);
+                actor_path.tell(reliable_msg, source);
             }
         },
     }
