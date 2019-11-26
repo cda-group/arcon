@@ -23,26 +23,29 @@ pub mod macros {
 
 pub mod prelude {
     pub use crate::streaming::channel::strategy::{
-        broadcast::Broadcast, forward::Forward, key_by::KeyBy, round_robin::RoundRobin,
+        broadcast::Broadcast, forward::Forward, key_by::KeyBy, mute::Mute, round_robin::RoundRobin,
         shuffle::Shuffle, ChannelStrategy,
     };
 
     pub use crate::streaming::channel::Channel;
-    pub use crate::streaming::node::Node;
-    pub use crate::streaming::operator::{Filter, Map, Operator};
-    pub use crate::streaming::window::{
-        event_time::EventTimeWindowAssigner, AppenderWindow, IncrementalWindow, Window,
-    };
-
-    pub use crate::streaming::source::local_file::LocalFileSource;
-
     #[cfg(feature = "socket")]
-    pub use crate::streaming::{
+    pub use crate::streaming::node::operator::{
         sink::socket::SocketSink,
         source::socket::{SocketKind, SocketSource},
     };
+    pub use crate::streaming::node::{
+        operator::function::{Filter, FlatMap, Map},
+        operator::sink::local_file::LocalFileSink,
+        operator::source::local_file::LocalFileSource,
+        operator::window::{AppenderWindow, EventTimeWindowAssigner, IncrementalWindow, Window},
+        operator::Operator,
+        DebugNode, Node,
+    };
 
-    pub use crate::streaming::sink::{debug::DebugSink, local_file::LocalFileSink};
+    #[cfg(feature = "kafka")]
+    pub use crate::streaming::node::operator::{
+        sink::kafka::KafkaSink, source::kafka::KafkaSource,
+    };
 
     pub use crate::data::serde::{
         reliable_remote::ReliableSerde, unsafe_remote::UnsafeSerde, ArconSerde,

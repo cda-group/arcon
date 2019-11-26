@@ -35,8 +35,12 @@ fn normalise_pipeline_test() {
 
     // Create Sink Component
     let node_5 = system.create_and_start(move || {
-        let sink: LocalFileSink<i64> = LocalFileSink::new(&sink_path, vec![4.into()]);
-        sink
+        Node::new(
+            5.into(),
+            vec![4.into()],
+            Box::new(Mute::new()),
+            Box::new(LocalFileSink::new(&sink_path)),
+        )
     });
 
     // Define Map

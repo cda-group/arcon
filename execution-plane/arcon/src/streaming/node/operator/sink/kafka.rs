@@ -11,7 +11,7 @@ use rdkafka::producer::{FutureProducer, FutureRecord};
 #[allow(dead_code)]
 pub struct KafkaSink<IN>
 where
-    IN: ArconType + serde::Serialize + serde::de::DeserializeOwned,
+    IN: ArconType + ::serde::Serialize + ::serde::de::DeserializeOwned,
 {
     bootstrap_server: String,
     topic: String,
@@ -23,7 +23,7 @@ where
 
 impl<IN> KafkaSink<IN>
 where
-    IN: ArconType + serde::Serialize + serde::de::DeserializeOwned,
+    IN: ArconType + ::serde::Serialize + ::serde::de::DeserializeOwned,
 {
     pub fn new(bootstrap_server: String, topic: String, offset: u32) -> KafkaSink<IN> {
         let mut config = ClientConfig::new();
@@ -71,7 +71,7 @@ where
 
 impl<IN> Operator<IN, IN> for KafkaSink<IN>
 where
-    IN: ArconType + serde::Serialize + serde::de::DeserializeOwned,
+    IN: ArconType + ::serde::Serialize + ::serde::de::DeserializeOwned,
 {
     fn handle_element(&mut self, element: ArconElement<IN>) -> ArconResult<Vec<ArconEvent<IN>>> {
         //println!("sink buffering element");

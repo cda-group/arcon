@@ -1,5 +1,8 @@
+pub mod debug;
+pub mod operator;
+
 use crate::prelude::*;
-use crate::streaming::operator::Operator;
+pub use debug::DebugNode;
 use std::collections::BTreeMap;
 use std::collections::HashSet; // Blocked-list
 use std::collections::LinkedList; // Message buffer
@@ -231,16 +234,16 @@ where
 mod tests {
     // Tests the message logic of Node.
     use super::*;
-    use crate::streaming::operator::Filter;
+    use crate::prelude::*;
     use std::sync::Arc;
     use std::{thread, time};
 
-    fn node_test_setup() -> (ActorRef<ArconMessage<i32>>, Arc<Component<DebugSink<i32>>>) {
+    fn node_test_setup() -> (ActorRef<ArconMessage<i32>>, Arc<Component<DebugNode<i32>>>) {
         // Returns a filter Node with input channels: sender1..sender3
         // And a debug sink receiving its results
         let system = KompactConfig::default().build().expect("KompactSystem");
 
-        let sink = system.create_and_start(move || DebugSink::<i32>::new());
+        let sink = system.create_and_start(move || DebugNode::<i32>::new());
         let actor_ref: ActorRefStrong<ArconMessage<i32>> =
             sink.actor_ref().hold().expect("Failed to fetch");
         let channel = Channel::Local(actor_ref);

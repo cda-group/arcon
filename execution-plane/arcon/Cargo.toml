@@ -15,7 +15,7 @@ Arcon's execution plane
 default = []
 kafka = ["rdkafka", "serde_json", "serde"]
 thread_pinning = ["kompact/thread_pinning"]
-socket = ["tokio-codec", "tokio", "futures", "serde_json", "serde", "serde"]
+socket = ["tokio-codec", "tokio", "futures", "serde_json", "serde"]
 arcon_rocksdb = ["rocksdb"]
 
 [dependencies]

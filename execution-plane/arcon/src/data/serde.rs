@@ -227,7 +227,6 @@ mod test {
     use super::*;
     use crate::data::test::ArconDataTest;
     use crate::prelude::*;
-    use crate::streaming::sink::debug::DebugSink;
     use kompact::prelude::*;
 
     fn get_systems() -> (KompactSystem, KompactSystem) {
@@ -244,7 +243,7 @@ mod test {
     fn unsafe_serde_test() {
         let (local, remote) = get_systems();
         let timeout = std::time::Duration::from_millis(150);
-        let comp = remote.create(move || DebugSink::<ArconDataTest>::new());
+        let comp = remote.create(move || DebugNode::<ArconDataTest>::new());
         remote
             .start_notify(&comp)
             .wait_timeout(timeout)

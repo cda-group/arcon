@@ -1,6 +1,6 @@
+use crate::data::NodeID;
 use crate::data::{ArconElement, ArconEvent, ArconMessage, ArconType, Watermark};
 use crate::streaming::channel::strategy::ChannelStrategy;
-use crate::data::NodeID;
 use crate::util::io::*;
 use kompact::prelude::*;
 use std::net::SocketAddr;
@@ -236,11 +236,11 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::prelude::DebugSink;
+    use crate::prelude::DebugNode;
     use crate::streaming::channel::strategy::forward::Forward;
     use crate::streaming::channel::Channel;
-    use std::{thread, time};
     use futures::future::Future;
+    use std::{thread, time};
     use tokio::io;
     use tokio::net::TcpStream;
 
@@ -257,7 +257,7 @@ mod tests {
         // Setup
         let system = KompactConfig::default().build().expect("KompactSystem");
 
-        let (sink, _) = system.create_and_register(move || DebugSink::<u32>::new());
+        let (sink, _) = system.create_and_register(move || DebugNode::<u32>::new());
         let sink_ref = sink.actor_ref().hold().expect("Failed to fetch strong ref");
 
         let out_channels: Box<Forward<u32>> =
@@ -296,7 +296,7 @@ mod tests {
         // Setup
         let system = KompactConfig::default().build().expect("KompactSystem");
 
-        let (sink, _) = system.create_and_register(move || DebugSink::<f32>::new());
+        let (sink, _) = system.create_and_register(move || DebugNode::<f32>::new());
         let sink_ref = sink.actor_ref().hold().expect("failed to fetch strong ref");
 
         let out_channels: Box<Forward<f32>> =
@@ -351,9 +351,8 @@ mod tests {
         // Setup
         let system = KompactConfig::default().build().expect("KompactSystem");
 
-        let (sink, _) = system.create_and_register(move || DebugSink::<u32>::new());
+        let (sink, _) = system.create_and_register(move || DebugNode::<u32>::new());
         let sink_ref = sink.actor_ref().hold().expect("failed to fetch strong ref");
-
 
         let out_channels: Box<Forward<u32>> =
             Box::new(Forward::new(Channel::Local(sink_ref.clone())));

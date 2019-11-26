@@ -1,31 +1,29 @@
-use crate::data::ArconEvent;
 use crate::prelude::*;
 
 #[derive(ComponentDefinition)]
-pub struct DebugSink<A>
+pub struct DebugNode<IN>
 where
-    A: ArconType + 'static,
+    IN: ArconType,
 {
-    ctx: ComponentContext<Self>,
-    pub data: Vec<ArconElement<A>>,
+    ctx: ComponentContext<DebugNode<IN>>,
+    pub data: Vec<ArconElement<IN>>,
     pub watermarks: Vec<Watermark>,
     pub epochs: Vec<Epoch>,
 }
 
-impl<A> DebugSink<A>
+impl<IN> DebugNode<IN>
 where
-    A: ArconType + 'static,
+    IN: ArconType,
 {
-    pub fn new() -> Self {
-        DebugSink {
+    pub fn new() -> DebugNode<IN> {
+        DebugNode {
             ctx: ComponentContext::new(),
             data: Vec::new(),
             watermarks: Vec::new(),
             epochs: Vec::new(),
         }
     }
-
-    fn handle_event(&mut self, event: ArconEvent<A>) {
+    fn handle_event(&mut self, event: ArconEvent<IN>) {
         match event {
             ArconEvent::Element(e) => {
                 info!(self.ctx.log(), "Sink element: {:?}", e.data);
@@ -41,29 +39,41 @@ where
     }
 }
 
-impl<A> Provide<ControlPort> for DebugSink<A>
+impl<IN> Provide<ControlPort> for DebugNode<IN>
 where
-    A: ArconType + 'static,
+    IN: ArconType,
 {
-    fn handle(&mut self, _event: ControlEvent) -> () {}
+    fn handle(&mut self, event: ControlEvent) -> () {
+        match event {
+            ControlEvent::Start => {
+                debug!(self.ctx.log(), "Started Arcon DebugNode");
+            }
+            ControlEvent::Stop => {
+                // TODO
+            }
+            ControlEvent::Kill => {
+                // TODO
+            }
+        }
+    }
 }
 
-impl<A> Actor for DebugSink<A>
+impl<IN> Actor for DebugNode<IN>
 where
-    A: ArconType + 'static,
+    IN: ArconType,
 {
-    type Message = ArconMessage<A>;
+    type Message = ArconMessage<IN>;
 
     fn receive_local(&mut self, msg: Self::Message) {
         self.handle_event(msg.event);
     }
     fn receive_network(&mut self, msg: NetMessage) {
-        let arcon_msg: ArconResult<ArconMessage<A>> = match msg.ser_id() {
-            &ReliableSerde::<A>::SER_ID => msg
-                .try_deserialise::<ArconMessage<A>, ReliableSerde<A>>()
+        let arcon_msg: ArconResult<ArconMessage<IN>> = match msg.ser_id() {
+            &ReliableSerde::<IN>::SER_ID => msg
+                .try_deserialise::<ArconMessage<IN>, ReliableSerde<IN>>()
                 .map_err(|_| arcon_err_kind!("Failed to unpack reliable ArconMessage")),
-            &UnsafeSerde::<A>::SER_ID => msg
-                .try_deserialise::<ArconMessage<A>, UnsafeSerde<A>>()
+            &UnsafeSerde::<IN>::SER_ID => msg
+                .try_deserialise::<ArconMessage<IN>, UnsafeSerde<IN>>()
                 .map_err(|_| arcon_err_kind!("Failed to unpack unreliable ArconMessage")),
             _ => panic!("Unexpected deserialiser"),
         };
@@ -76,3 +86,7 @@ where
         }
     }
 }
+
+unsafe impl<IN> Send for DebugNode<IN> where IN: ArconType {}
+
+unsafe impl<IN> Sync for DebugNode<IN> where IN: ArconType {}

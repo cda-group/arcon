@@ -1,7 +1,9 @@
 use crate::prelude::*;
+use ::serde::Serialize;
 use bytes::Bytes;
 use futures::sync;
 use futures::sync::mpsc;
+use std::marker::PhantomData;
 use std::net::SocketAddr;
 use std::thread::{Builder, JoinHandle};
 use tokio::net::UdpSocket;
@@ -9,20 +11,19 @@ use tokio::prelude::*;
 use tokio::runtime::Runtime;
 use tokio::runtime::TaskExecutor;
 
-#[derive(ComponentDefinition)]
-pub struct SocketSink<A>
+pub struct SocketSink<IN>
 where
-    A: ArconType + serde::Serialize,
+    IN: ArconType + Serialize,
 {
-    ctx: ComponentContext<Self>,
     tx_channel: mpsc::Sender<Bytes>,
     executor: TaskExecutor,
     _handle: JoinHandle<()>,
+    _marker: PhantomData<IN>,
 }
 
-impl<A> SocketSink<A>
+impl<IN> SocketSink<IN>
 where
-    A: ArconType + serde::Serialize,
+    IN: ArconType + Serialize,
 {
     pub fn udp(socket_addr: SocketAddr) -> Self {
         let (tx, rx) = mpsc::channel::<Bytes>(1_024);
@@ -55,58 +56,45 @@ where
         let executor = rx_exec.wait().map_err(|_| ()).unwrap();
 
         SocketSink {
-            ctx: ComponentContext::new(),
             tx_channel: tx.clone(),
             executor,
             _handle: th,
+            _marker: PhantomData,
         }
     }
+}
 
-    fn handle_event(&mut self, event: &ArconEvent<A>) {
-        match event {
-            ArconEvent::Element(e) => {
-                debug!(self.ctx.log(), "Sink element: {:?}", e.data);
-                let tx = self.tx_channel.clone();
-                let fmt_data = {
-                    if let Ok(mut json) = serde_json::to_string(&e.data) {
-                        json += "\n";
-                        json
-                    } else {
-                        format!("{:?}\n", e.data)
-                    }
-                };
-                let bytes = Bytes::from(fmt_data);
-                let req_dispatch = tx.send(bytes).map_err(|_| ()).and_then(|_| Ok(()));
-                self.executor.spawn(req_dispatch);
+impl<IN> Operator<IN, IN> for SocketSink<IN>
+where
+    IN: ArconType + Serialize,
+{
+    fn handle_element(&mut self, e: ArconElement<IN>) -> ArconResult<Vec<ArconEvent<IN>>> {
+        let tx = self.tx_channel.clone();
+        let fmt_data = {
+            if let Ok(mut json) = serde_json::to_string(&e.data) {
+                json += "\n";
+                json
+            } else {
+                format!("{:?}\n", e.data)
             }
-            _ => {}
-        }
+        };
+        let bytes = Bytes::from(fmt_data);
+        let req_dispatch = tx.send(bytes).map_err(|_| ()).and_then(|_| Ok(()));
+        self.executor.spawn(req_dispatch);
+        Ok(Vec::new())
     }
-}
-
-impl<A> Provide<ControlPort> for SocketSink<A>
-where
-    A: ArconType + serde::Serialize,
-{
-    fn handle(&mut self, _event: ControlEvent) -> () {}
-}
-
-impl<A> Actor for SocketSink<A>
-where
-    A: ArconType + serde::Serialize,
-{
-    type Message = ArconMessage<A>;
-    fn receive_local(&mut self, msg: Self::Message) {
-        self.handle_event(&msg.event);
+    fn handle_watermark(&mut self, _w: Watermark) -> ArconResult<Vec<ArconEvent<IN>>> {
+        Ok(Vec::new())
     }
-    fn receive_network(&mut self, _msg: NetMessage) {
-        unimplemented!();
+    fn handle_epoch(&mut self, _epoch: Epoch) -> ArconResult<Vec<u8>> {
+        Ok(Vec::new())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::streaming::util::mute_strategy;
 
     #[test]
     fn udp_sink_test() {
@@ -115,14 +103,18 @@ mod tests {
         let addr = "127.0.0.1:9999".parse().unwrap();
         let socket = UdpSocket::bind(&addr).unwrap();
         let socket_sink = system.create_and_start(move || {
-            let s: SocketSink<i64> = SocketSink::udp(addr);
-            s
+            Node::new(
+                0.into(),
+                vec![1.into()],
+                mute_strategy::<i64>(),
+                Box::new(SocketSink::udp(addr)),
+            )
         });
 
         std::thread::sleep(std::time::Duration::from_millis(100));
 
         let target: ActorRef<ArconMessage<i64>> = socket_sink.actor_ref();
-        target.tell(ArconMessage::element(10 as i64, None, 0.into()));
+        target.tell(ArconMessage::element(10 as i64, None, 1.into()));
 
         const MAX_DATAGRAM_SIZE: usize = 65_507;
 

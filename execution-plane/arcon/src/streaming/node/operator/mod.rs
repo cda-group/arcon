@@ -1,10 +1,7 @@
-pub mod filter;
-pub mod flatmap;
-pub mod map;
-
-pub use filter::Filter;
-pub use flatmap::FlatMap;
-pub use map::Map;
+pub mod function;
+pub mod sink;
+pub mod source;
+pub mod window;
 
 use crate::data::{ArconElement, ArconEvent, ArconType, Epoch, Watermark};
 use arcon_error::ArconResult;
