@@ -12,6 +12,7 @@ message ArconSpec {
   repeated string features = 3;
   string target = 4;
   repeated Node nodes = 5;
+  string system = 6;
 }
 
 message Node {

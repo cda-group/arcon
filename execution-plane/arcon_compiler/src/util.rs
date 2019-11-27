@@ -1,4 +1,4 @@
-use arcon_spec::CompileMode;
+use crate::arcon_spec::CompileMode;
 use std::fs::File;
 use std::process::{Command, Stdio};
 
@@ -21,13 +21,9 @@ pub fn rustc_version() -> Result<String, failure::Error> {
     Ok(cmd_output(output))
 }
 
-pub fn cargo_build(
-    id: &str,
-    logged: Option<String>,
-    mode: &CompileMode,
-) -> Result<(), failure::Error> {
+pub fn cargo_build(id: &str, logged: Option<String>, mode: i32) -> Result<(), failure::Error> {
     let mut args: Vec<&str> = vec!["+nightly", "build"];
-    if mode == &CompileMode::Release {
+    if mode == CompileMode::Release as i32 {
         args.push("--release");
     }
 

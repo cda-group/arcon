@@ -4,8 +4,8 @@ use grpcio::{Environment, RpcContext, ServerBuilder, UnarySink};
 
 use std::sync::{Arc, Mutex};
 
+use crate::arcon_spec::ArconSpec;
 use crate::env::CompilerEnv;
-use arcon_spec::ArconSpec;
 
 #[derive(Clone)]
 struct Server {
@@ -32,18 +32,18 @@ impl Server {
                 logged = Some(log_dir)
             }
 
-            let p: String = env.bin_path(&spec.id, &spec.mode)?;
+            let p: String = env.bin_path(&spec.id, spec.mode)?;
             path += &p;
         }
 
-        crate::util::cargo_build(&spec.id, logged, &spec.mode)?;
+        crate::util::cargo_build(&spec.id, logged, spec.mode)?;
         Ok(path)
     }
 }
 
 impl Arconc for Server {
     fn compile(&mut self, ctx: RpcContext, req: ArconcRequest, sink: UnarySink<ArconcReply>) {
-        let reply = match ArconSpec::from_bytes(&req.spec) {
+        let reply = match spec_from_bytes(&req.spec) {
             Ok(spec) => {
                 debug!("Received Compilation Request {:?}", spec);
                 match self.compile_spec(&spec) {

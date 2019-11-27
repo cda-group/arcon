@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use arcon_spec::{ArconSpec, CompileMode};
+use crate::arcon_spec::{ArconSpec, CompileMode};
 use failure::Fail;
 use path_clean::PathClean;
 use serde::{Deserialize, Serialize};
@@ -121,16 +121,17 @@ impl CompilerEnv {
     }
 
     pub fn generate(&self, spec: &ArconSpec) -> Result<(), failure::Error> {
-        let code = arcon_codegen::generate(&spec, false)?;
+        //let code = arcon_codegen::generate(spec, false)?;
         let path = format!("{}/src/main.rs", spec.id);
-        arcon_codegen::to_file(code, path)?;
+        //arcon_codegen::to_file(code, path)?;
         Ok(())
     }
 
-    pub fn bin_path(&self, id: &str, mode: &CompileMode) -> Result<String, failure::Error> {
+    pub fn bin_path(&self, id: &str, mode: i32) -> Result<String, failure::Error> {
         let mode = match mode {
-            CompileMode::Debug => "debug",
-            CompileMode::Release => "release",
+            _ if mode == CompileMode::Debug as i32 => "debug",
+            _ if mode == CompileMode::Release as i32 => "release",
+            _ => "release",
         };
 
         let path_str = format!("target/{}/{}", mode, id);

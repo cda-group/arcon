@@ -2,7 +2,6 @@
 #![recursion_limit = "256"]
 #[macro_use]
 extern crate quote;
-extern crate arcon_spec as spec;
 extern crate failure;
 extern crate proc_macro2;
 extern crate rustfmt_nightly;
@@ -10,13 +9,14 @@ extern crate rustfmt_nightly;
 extern crate lazy_static;
 
 mod common;
-mod sink;
-mod source;
-mod stream_task;
+//mod sink;
+//mod source;
+//mod stream_task;
 mod system;
-mod types;
-mod window;
+//mod types;
+//mod window;
 
+pub use arcon_proto::arcon_spec as spec;
 use failure::Fail;
 use proc_macro2::TokenStream;
 use rustfmt_nightly::*;
@@ -24,8 +24,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::sync::Mutex;
 
-use spec::ArconSpec;
-use spec::NodeKind::{Sink, Source, Task, Window};
+use spec::{ArconSpec, Sink, Source, Window};
 
 const ARCON_CODEGEN_VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
@@ -79,6 +78,8 @@ pub fn generate(spec: &ArconSpec, is_terminated: bool) -> Result<String, Codegen
         struct_map.insert(spec.id.clone(), HashMap::new());
     }
 
+    /*
+
     // NOTE: We go backwards while generating the code
     //       i.e. Sink to Source
     while !nodes.is_empty() {
@@ -119,6 +120,7 @@ pub fn generate(spec: &ArconSpec, is_terminated: bool) -> Result<String, Codegen
 
         previous_node = "node".to_string() + &node.id.to_string();
     }
+    */
 
     let final_stream = stream
         .into_iter()
@@ -134,7 +136,7 @@ pub fn generate(spec: &ArconSpec, is_terminated: bool) -> Result<String, Codegen
     };
 
     // NOTE: Currently just assumes there is a single KompactSystem
-    let system = system::system(&spec.system_addr, None, Some(final_stream), termination);
+    let system = system::system(&spec.system, None, Some(final_stream), termination);
 
     // Check for struct definitions
     let mut struct_map = GENERATED_STRUCTS.lock().unwrap();

@@ -7,7 +7,9 @@ extern crate failure;
 #[macro_use]
 extern crate lazy_static;
 
-use arcon_spec::*;
+use arcon_proto::arcon_spec;
+use arcon_proto::spec_from_file;
+use arcon_proto::arcon_spec::{ArconSpec, CompileMode};
 use clap::{App, AppSettings, Arg, SubCommand};
 use ferris_says::say;
 use std::fs::metadata;
@@ -195,7 +197,7 @@ fn compile(
         }
     };
 
-    let spec = ArconSpec::load(&spec_file)?;
+    let spec = spec_from_file(&spec_file)?;
 
     let mut env = env::CompilerEnv::load(build_dir.to_string())?;
 
@@ -217,7 +219,7 @@ fn compile(
     if daemonize {
         daemonize_arconc();
     } else {
-        let bin = env.bin_path(&spec.id, &spec.mode)?;
+        let bin = env.bin_path(&spec.id, spec.mode)?;
         greeting_with_spec(&spec, &bin);
     }
 
@@ -227,7 +229,7 @@ fn compile(
         None
     };
 
-    util::cargo_build(&spec.id, logged, &spec.mode)?;
+    util::cargo_build(&spec.id, logged, spec.mode)?;
 
     Ok(())
 }
@@ -261,17 +263,12 @@ fn repl() -> Result<(), failure::Error> {
 
 fn greeting_with_spec(spec: &ArconSpec, bin_path: &str) {
     let mode = match spec.mode {
-        CompileMode::Debug => "debug",
-        CompileMode::Release => "release",
+        _ if spec.mode == CompileMode::Debug as i32 => "debug",
+        _ if spec.mode == CompileMode::Release as i32 => "release",
+        _ => "release",
     };
 
-    let features_str = {
-        if let Some(features) = spec.features.clone() {
-            features.join(",")
-        } else {
-            "default".to_string()
-        }
-    };
+    let features_str = spec.features.join(",");
 
     let msg = format!(
         "Wait while I compile {} for you!\n
