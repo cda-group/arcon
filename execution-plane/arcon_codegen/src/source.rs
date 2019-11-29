@@ -1,7 +1,8 @@
 use crate::common::*;
+use crate::spec::source::SourceKind;
+use crate::spec::{Socket, Source};
 use crate::types::to_token_stream;
 use proc_macro2::{Ident, Span, TokenStream};
-use spec::{SocketKind, Source, SourceKind};
 
 pub fn source(
     id: u32,
@@ -12,21 +13,29 @@ pub fn source(
 ) -> TokenStream {
     let source_name = id_to_ident(id);
     let target = Ident::new(&target, Span::call_site());
-    let input_type = to_token_stream(&source.source_type, spec_id);
+    let input_type = to_token_stream(&source.source_type.clone().unwrap(), spec_id);
 
-    let source_stream = match &source.kind {
-        SourceKind::Socket { addr, kind } => socket_source(
+    let source_stream = match source.source_kind.as_ref() {
+        Some(SourceKind::Socket(sock)) => socket_source(
             &source_name,
             &target,
             &input_type,
-            &addr,
-            &kind,
-            *&source.rate,
+            &sock.addr,
+            &sock.protocol,
+            *&source.source_rate,
             ts_extractor,
             id,
         ),
-        SourceKind::LocalFile { path } => {
-            local_file_source(&source_name, &target, &input_type, &path, *&source.rate, id)
+        Some(SourceKind::LocalFile(l)) => local_file_source(
+            &source_name,
+            &target,
+            &input_type,
+            &l.path,
+            *&source.source_rate,
+            id,
+        ),
+        None => {
+            quote! {}
         }
     };
 
@@ -38,19 +47,12 @@ fn socket_source(
     target: &Ident,
     input_type: &TokenStream,
     addr: &str,
-    kind: &SocketKind,
+    protocol: &str,
     rate: u64,
     ts_extraction: u32,
     id: u32,
 ) -> TokenStream {
     let verify = verify_and_start(source_name, "system");
-
-    let sock_kind = {
-        match kind {
-            SocketKind::Tcp => quote! { SocketKind::Tcp },
-            SocketKind::Udp => quote! { SocketKind::Udp },
-        }
-    };
 
     let ts_quote = quote! { Some(#ts_extraction) };
 
@@ -59,7 +61,7 @@ fn socket_source(
         let channel_strategy: Box<ChannelStrategy<#input_type>> = Box::new(Forward::new(channel));
         let (#source_name, reg) = system.create_and_register(move || {
             let sock_addr = #addr.parse().expect("Failed to parse SocketAddr");
-            let source: SocketSource<#input_type> = SocketSource::new(sock_addr, #sock_kind, channel_strategy, #rate, #ts_quote, #id.into());
+            let source: SocketSource<#input_type> = SocketSource::new(sock_addr, #protocol, channel_strategy, #rate, #ts_quote, #id.into());
             source
         });
 

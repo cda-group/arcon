@@ -1,90 +1,58 @@
 use crate::GENERATED_STRUCTS;
+use arcon_proto::arcon_spec::arcon_type::Types;
+use arcon_proto::arcon_spec::scalar;
+use arcon_proto::arcon_spec::{ArconType, Scalar};
 use proc_macro2::{Ident, Span, TokenStream};
-use spec::Type::*;
-use spec::{MergeOp, Scalar, Type, Type::Struct};
 
-pub fn to_token_stream(t: &Type, spec_id: &String) -> TokenStream {
-    match t {
-        Scalar(s) => {
+pub fn to_token_stream(t: &ArconType, spec_id: &String) -> TokenStream {
+    match &t.types {
+        Some(Types::Scalar(s)) => {
             let ident = Ident::new(scalar(s), Span::call_site());
             quote! { #ident }
         }
-        Struct {
-            id,
-            key,
-            decoder,
-            field_tys,
-        } => {
-            let generated = struct_gen(&id, *key, &decoder, *&field_tys, spec_id).to_string();
+        Some(Types::Struct(s)) => {
+            let generated =
+                struct_gen(&s.id, Some(s.key), &None, &s.field_tys, spec_id).to_string();
             let mut struct_map = GENERATED_STRUCTS.lock().unwrap();
-            let struct_ident = Ident::new(id, Span::call_site());
+            let struct_ident = Ident::new(&s.id, Span::call_site());
             if let Some(map) = struct_map.get_mut(spec_id) {
-                if !map.contains_key(id) {
-                    map.insert(String::from(id), generated);
+                if !map.contains_key(&s.id) {
+                    map.insert(String::from(s.id.clone()), generated);
                 }
             }
             quote! { #struct_ident }
         }
-        Appender { elem_ty } => {
-            let t = to_token_stream(&elem_ty, spec_id);
-            quote! { Appender<#t> }
+        Some(Types::Vec(v)) => {
+            let ident = to_token_stream(&v.arcon_type.clone().unwrap(), spec_id);
+            quote! { Vec<#ident> }
         }
-        Merger { elem_ty: _, op: _ } => {
-            unimplemented!();
+        Some(Types::Str(_)) => {
+            quote! { String }
         }
-        Vector { elem_ty } => {
-            let v = to_token_stream(&elem_ty, spec_id);
-            quote! { ArconVec<#v> }
-        }
-        DictMerger { key_ty, val_ty, op } => {
-            let op_ident = Ident::new(&merge_op(op), Span::call_site());
-            let key = to_token_stream(&key_ty, spec_id);
-            let val = to_token_stream(&val_ty, spec_id);
-            quote! { DictMerger<#key, #val, #op_ident> }
-        }
-        GroupMerger { key_ty, val_ty } => {
-            let key = to_token_stream(&key_ty, spec_id);
-            let val = to_token_stream(&val_ty, spec_id);
-            quote! { GroupMerger<#key, #val> }
-        }
-        VecMerger { elem_ty: _, op: _ } => {
-            unimplemented!();
+        None => {
+            panic!("Failed to match ArconType");
         }
     }
 }
 
-fn scalar(scalar: &Scalar) -> &str {
-    match scalar {
-        Scalar::I8 => "i8",
-        Scalar::I16 => "i16",
-        Scalar::I32 => "i32",
-        Scalar::I64 => "i64",
-        Scalar::U8 => "u8",
-        Scalar::U16 => "u16",
-        Scalar::U32 => "u32",
-        Scalar::U64 => "u64",
-        Scalar::F32 => "f32",
-        Scalar::F64 => "f64",
-        Scalar::Bool => "WeldBool",
-        Scalar::Unit => "()",
+fn scalar(s: &Scalar) -> &str {
+    match s.scalar.as_ref() {
+        Some(scalar::Scalar::I32(_)) => "i32",
+        Some(scalar::Scalar::I64(_)) => "i64",
+        Some(scalar::Scalar::U32(_)) => "u32",
+        Some(scalar::Scalar::U64(_)) => "u64",
+        Some(scalar::Scalar::F32(_)) => "f32",
+        Some(scalar::Scalar::F64(_)) => "f64",
+        Some(scalar::Scalar::Bool(_)) => "bool",
+        None => panic!("Not supposed to happen"),
     }
-}
-
-fn merge_op(op: &MergeOp) -> String {
-    match op {
-        MergeOp::Plus => "+",
-        MergeOp::Mult => "*",
-        MergeOp::Max => "max",
-        MergeOp::Min => "min",
-    }
-    .to_string()
 }
 
 fn struct_gen(
     id: &str,
     key: Option<u32>,
     decoder: &Option<String>,
-    field_tys: &Vec<Type>,
+    field_tys: &Vec<ArconType>,
     spec_id: &String,
 ) -> TokenStream {
     let key_opt_stream = if let Some(k) = key {

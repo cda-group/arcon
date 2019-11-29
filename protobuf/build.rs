@@ -7,7 +7,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
             config.type_attribute(".", "#[serde(rename_all = \"camelCase\")]");
             config.compile_protos(&["proto/arcon_spec/arcon_spec.proto"], &["proto/"]).unwrap();
-        } else if #[cfg(feature = "arconc")] {
+        }
+    }
+
+    cfg_if::cfg_if! {
+        if #[cfg(feature = "arconc")] {
             use std::io::Write;
             static ARCONC_RS: &[u8] = b"
             /// Generated from protobuf.

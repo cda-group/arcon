@@ -9,12 +9,12 @@ extern crate rustfmt_nightly;
 extern crate lazy_static;
 
 mod common;
-//mod sink;
-//mod source;
+mod sink;
+mod source;
 //mod stream_task;
 mod system;
-//mod types;
-//mod window;
+mod types;
+mod window;
 
 pub use arcon_proto::arcon_spec as spec;
 use failure::Fail;
@@ -24,6 +24,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::sync::Mutex;
 
+use spec::node::NodeKind;
 use spec::{ArconSpec, Sink, Source, Window};
 
 const ARCON_CODEGEN_VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -36,6 +37,10 @@ pub struct CodegenError {
 
 lazy_static! {
     static ref GENERATED_STRUCTS: Mutex<HashMap<String, HashMap<String, String>>> = {
+        let m = HashMap::new();
+        Mutex::new(m)
+    };
+    static ref GENERATED_FUNCTIONS: Mutex<HashMap<String, HashMap<String, String>>> = {
         let m = HashMap::new();
         Mutex::new(m)
     };
@@ -73,54 +78,36 @@ pub fn generate(spec: &ArconSpec, is_terminated: bool) -> Result<String, Codegen
     let mut previous_node: String = String::new();
 
     {
-        // Creat entry for this Arcon Spec
+        // Create entry for this Arcon Spec
         let mut struct_map = GENERATED_STRUCTS.lock().unwrap();
         struct_map.insert(spec.id.clone(), HashMap::new());
     }
-
-    /*
 
     // NOTE: We go backwards while generating the code
     //       i.e. Sink to Source
     while !nodes.is_empty() {
         let node = nodes.pop().unwrap();
 
-        match node.kind {
-            Source(source) => {
+        match node.node_kind.as_ref() {
+            Some(NodeKind::Source(source)) => {
                 stream.push(source::source(
                     node.id,
                     &previous_node,
                     &source,
                     &spec.id,
-                    spec.timestamp_extractor,
+                    0, // ts extractor.. fix
                 ));
             }
-            Sink(sink) => {
-                stream.push(sink::sink(
-                    node.id,
-                    &sink.sink_type,
-                    &sink.kind,
-                    &spec.id,
-                    sink.predecessor,
-                ));
+            Some(NodeKind::Sink(sink)) => {
+                stream.push(sink::sink(node.id, &sink, &spec.id));
             }
-            Task(task) => {
-                stream.push(stream_task::stream_task(
-                    node.id,
-                    &previous_node,
-                    &node.parallelism,
-                    &task,
-                    &spec.id,
-                ));
-            }
-            Window(window) => {
+            Some(NodeKind::Window(window)) => {
                 stream.push(window::window(node.id, &window, &spec.id));
             }
+            None => {}
         }
-
         previous_node = "node".to_string() + &node.id.to_string();
     }
-    */
 
     let final_stream = stream
         .into_iter()

@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use crate::arcon_spec::{ArconSpec, CompileMode};
+use arcon_proto::arcon_spec::{get_compile_mode, ArconSpec};
 use failure::Fail;
 use path_clean::PathClean;
 use serde::{Deserialize, Serialize};
@@ -127,14 +127,9 @@ impl CompilerEnv {
         Ok(())
     }
 
-    pub fn bin_path(&self, id: &str, mode: i32) -> Result<String, failure::Error> {
-        let mode = match mode {
-            _ if mode == CompileMode::Debug as i32 => "debug",
-            _ if mode == CompileMode::Release as i32 => "release",
-            _ => "release",
-        };
-
-        let path_str = format!("target/{}/{}", mode, id);
+    pub fn bin_path(&self, spec: &ArconSpec) -> Result<String, failure::Error> {
+        let mode = get_compile_mode(spec);
+        let path_str = format!("target/{}/{}", mode, spec.id);
         let path = std::path::Path::new(&path_str);
         let abs_path = self.absolute_path(path)?;
         Ok(abs_path.into_os_string().into_string().unwrap())

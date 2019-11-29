@@ -1,10 +1,10 @@
 use arcon_proto::*;
+use arcon_proto::arcon_spec::{ArconSpec, spec_from_bytes};
 use futures::*;
 use grpcio::{Environment, RpcContext, ServerBuilder, UnarySink};
 
 use std::sync::{Arc, Mutex};
 
-use crate::arcon_spec::ArconSpec;
 use crate::env::CompilerEnv;
 
 #[derive(Clone)]
@@ -32,11 +32,11 @@ impl Server {
                 logged = Some(log_dir)
             }
 
-            let p: String = env.bin_path(&spec.id, spec.mode)?;
+            let p: String = env.bin_path(&spec)?;
             path += &p;
         }
 
-        crate::util::cargo_build(&spec.id, logged, spec.mode)?;
+        crate::util::cargo_build(&spec, logged)?;
         Ok(path)
     }
 }

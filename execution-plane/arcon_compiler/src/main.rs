@@ -7,9 +7,7 @@ extern crate failure;
 #[macro_use]
 extern crate lazy_static;
 
-use arcon_proto::arcon_spec;
-use arcon_proto::spec_from_file;
-use arcon_proto::arcon_spec::{ArconSpec, CompileMode};
+use arcon_proto::arcon_spec::{get_compile_mode, spec_from_file, ArconSpec};
 use clap::{App, AppSettings, Arg, SubCommand};
 use ferris_says::say;
 use std::fs::metadata;
@@ -219,7 +217,7 @@ fn compile(
     if daemonize {
         daemonize_arconc();
     } else {
-        let bin = env.bin_path(&spec.id, spec.mode)?;
+        let bin = env.bin_path(&spec)?;
         greeting_with_spec(&spec, &bin);
     }
 
@@ -229,7 +227,7 @@ fn compile(
         None
     };
 
-    util::cargo_build(&spec.id, logged, spec.mode)?;
+    util::cargo_build(&spec, logged)?;
 
     Ok(())
 }
@@ -262,12 +260,7 @@ fn repl() -> Result<(), failure::Error> {
 }
 
 fn greeting_with_spec(spec: &ArconSpec, bin_path: &str) {
-    let mode = match spec.mode {
-        _ if spec.mode == CompileMode::Debug as i32 => "debug",
-        _ if spec.mode == CompileMode::Release as i32 => "release",
-        _ => "release",
-    };
-
+    let mode = get_compile_mode(spec);
     let features_str = spec.features.join(",");
 
     let msg = format!(

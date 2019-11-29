@@ -1,16 +1,15 @@
+use crate::common::generate_function;
 use crate::common::verify_and_start;
+use crate::spec::channel_kind::ChannelKind;
+use crate::spec::window;
+use crate::spec::Window;
 use crate::types::to_token_stream;
 use proc_macro2::{Ident, Span, TokenStream};
-use spec::{
-    ChannelKind, TimeKind, Window, WindowAssigner, WindowFunction, WindowKind, WindowKind::All,
-    WindowKind::Keyed,
-};
 
 pub fn window(id: u32, window: &Window, spec_id: &String) -> TokenStream {
     let name = "node".to_string() + &id.to_string();
-    let input_type = to_token_stream(&window.window_function.input_type, spec_id);
-    let output_type = to_token_stream(&window.window_function.output_type, spec_id);
-    let builder_type = to_token_stream(&window.window_function.builder_type, spec_id);
+    let input_type = to_token_stream(&window.input_type.clone().unwrap(), spec_id);
+    let output_type = to_token_stream(&window.output_type.clone().unwrap(), spec_id);
     let name = Ident::new(&name, Span::call_site());
 
     let successors = &window.successors;
@@ -18,75 +17,70 @@ pub fn window(id: u32, window: &Window, spec_id: &String) -> TokenStream {
 
     // NOTE: We just support 1 output channel for now
     assert_eq!(successors.len(), 1);
-    let successor = match successors.get(0).unwrap() {
-        ChannelKind::Local { id } => id,
-        ChannelKind::Remote { id: _, addr: _ } => {
+
+    let successor = match successors.get(0).unwrap().channel_kind.as_ref() {
+        Some(ChannelKind::LocalChannel(l)) => id,
+        Some(ChannelKind::RemoteChannel(r)) => {
             unimplemented!();
         }
+        None => panic!("non supported channel"),
     };
 
-    let successor_ident = Ident::new(&successor, Span::call_site());
+    let successor_ident = Ident::new(&successor.to_string(), Span::call_site());
 
-    let window_stream = match window.assigner {
-        WindowAssigner::Tumbling { length } => {
-            let window_code = window_modules(&window.window_function);
+    let window_stream = match window.assigner.as_ref() {
+        Some(window::Assigner::Sliding(s)) => quote! {},
+        Some(window::Assigner::Tumbling(t)) => {
+            let window_code = window_function(&window.function.clone().unwrap());
             let window_comp = tumbling(
                 &name,
-                &window.time_kind,
-                &window.window_kind,
-                length,
+                &window.time_kind.as_ref().unwrap(),
+                window.keyed,
+                t.length,
                 &successor_ident,
                 &input_type,
                 &output_type,
-                &builder_type,
                 id,
                 predecessor,
             );
             crate::combine_token_streams(window_code, window_comp)
         }
-        WindowAssigner::Sliding {
-            length: _,
-            slide: _,
-        } => {
-            unimplemented!();
-        }
+        None => panic!("bad input"),
     };
 
     window_stream
 }
 
-fn window_modules(window_function: &WindowFunction) -> TokenStream {
-    let builder_code: &str = &window_function.builder;
-    let udf_code: &str = &window_function.udf;
-    let materialiser_code: &str = &window_function.materialiser;
-    quote! {
-        let builder_code = String::from(#builder_code);
-        let udf_code = String::from(#udf_code);
-        let materialiser_code = String::from(#materialiser_code);
-    }
+fn window_function(window_function: &crate::spec::window::Function) -> TokenStream {
+    let code = match window_function {
+        window::Function::AppenderWindow(aw) => crate::common::generate_function(&aw.udf),
+        window::Function::IncrementalWindow(iw) => {
+            let udf = crate::common::generate_function(&iw.udf);
+            let agg = crate::common::generate_function(&iw.agg_udf);
+            crate::combine_token_streams(udf, agg)
+        }
+    };
+    code
 }
 
 fn tumbling(
     name: &Ident,
-    time_kind: &TimeKind,
-    window_kind: &WindowKind,
+    time_kind: &window::TimeKind,
+    keyed: bool,
     window_len: u64,
     successor: &Ident,
     input_type: &TokenStream,
     output_type: &TokenStream,
-    builder_type: &TokenStream,
     node_id: u32,
     predecessor: u32,
 ) -> TokenStream {
-    let keyed = match window_kind {
-        Keyed => unimplemented!(),
-        All => quote! { false },
-    };
+    let keyed = quote! { #keyed };
 
     let component = match time_kind {
-        TimeKind::Event { slack } => {
+        window::TimeKind::EventTime(e) => {
+            let slack = Ident::new(&e.slack.to_string(), Span::call_site());
             quote! {
-             EventTimeWindowAssigner::<#input_type, #builder_type, #output_type>::new(
+             EventTimeWindowAssigner::<#input_type, #output_type>::new(
                 builder_code,
                 udf_code,
                 materialiser_code,
@@ -97,9 +91,9 @@ fn tumbling(
             )
             }
         }
-        TimeKind::Processing => {
+        window::TimeKind::ProcessingTime(_) => {
             quote! {
-             ProcessingTimeWindowAssigner::<#input_type, #builder_type, #output_type>::new(
+             ProcessingTimeWindowAssigner::<#input_type, #output_type>::new(
                 builder_code,
                 udf_code,
                 materialiser_code,
@@ -110,9 +104,9 @@ fn tumbling(
             )
             }
         }
-        TimeKind::Ingestion => {
+        window::TimeKind::IngestionTime(_) => {
             quote! {
-             EventTimeWindowAssigner::<#input_type, #builder_type, #output_type>::new(
+             EventTimeWindowAssigner::<#input_type, #output_type>::new(
                 builder_code,
                 udf_code,
                 materialiser_code,
