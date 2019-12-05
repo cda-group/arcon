@@ -25,6 +25,7 @@ message Node {
     Window window = 3;
     Source source = 4;
     Sink sink = 5;
+    Function function = 6;
   }
 }
 
@@ -58,6 +59,22 @@ message IncrementalWindow {
   string agg_udf = 4;
 }
 
+message Function {
+  ArconType input_type = 1;
+  ArconType output_type = 2;
+  string udf = 3;
+  uint32 predecessor = 4;
+  ChannelStrategy channel_strategy = 5;
+  repeated ChannelKind successors = 6;
+  FunctionKind kind = 7;
+}
+
+enum FunctionKind {
+  FlatMap = 0;
+  Filter = 1;
+  Map = 2;
+}
+
 message Source {
   ArconType source_type = 1;
   ChannelStrategy channel_strategy = 2;
@@ -82,24 +99,8 @@ message Sink {
   Format format = 6;
 }
 
-message Operator {
-  ArconType input_type = 1;
-  ArconType output_type = 2;
-  string udf = 3;
-  uint32 predecessor = 4;
-  ChannelStrategy channel_strategy = 5;
-  repeated ChannelKind successors = 6;
-  OperatorKind kind = 7;
-}
-
 message DebugMode {}
 message ReleaseMode {}
-
-enum OperatorKind {
-  FlatMap = 0;
-  Filter = 1;
-  Map = 2;
-}
 
 message TumblingWindow {
   uint64 length = 1;

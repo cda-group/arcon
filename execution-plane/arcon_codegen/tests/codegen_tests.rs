@@ -2,7 +2,7 @@ extern crate arcon;
 extern crate arcon_codegen;
 
 use arcon_codegen::*;
-use arcon_spec::*;
+use arcon_proto::arcon_spec;
 //use std::fs;
 
 pub const RUN_PASS_MODE: &str = "run-pass";
@@ -34,7 +34,7 @@ fn codegen_test() {
 
 fn _add_test_spec(name: &str) {
     let json_path = format!("{}/{}.json", SPECIFICATION_PATH, name);
-    let spec = ArconSpec::load(&json_path).unwrap();
+    let spec = arcon_spec::spec_from_file(&json_path).unwrap();
     let generated_code = generate(&spec, true).unwrap();
     let path = format!("{}/{}.rs", RUN_PASS_PATH, name);
     let _ = to_file(generated_code, path.to_string());

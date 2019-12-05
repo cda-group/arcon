@@ -23,5 +23,6 @@ lazy_static = "1.3.0"
 
 [dev-dependencies]
 arcon_proto = { path = "../../protobuf", version = "0.1", features = ["arcon_spec"] }
+arcon = { version = "0.1", path = "../arcon" }
 trybuild = "1.0"
 serde = { version = "1.0.63", features = ["derive"] }

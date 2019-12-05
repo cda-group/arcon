@@ -19,8 +19,8 @@ pub fn window(id: u32, window: &Window, spec_id: &String) -> TokenStream {
     assert_eq!(successors.len(), 1);
 
     let successor = match successors.get(0).unwrap().channel_kind.as_ref() {
-        Some(ChannelKind::LocalChannel(l)) => id,
-        Some(ChannelKind::RemoteChannel(r)) => {
+        Some(ChannelKind::LocalChannel(_)) => id,
+        Some(ChannelKind::RemoteChannel(_)) => {
             unimplemented!();
         }
         None => panic!("non supported channel"),
@@ -29,7 +29,7 @@ pub fn window(id: u32, window: &Window, spec_id: &String) -> TokenStream {
     let successor_ident = Ident::new(&successor.to_string(), Span::call_site());
 
     let window_stream = match window.assigner.as_ref() {
-        Some(window::Assigner::Sliding(s)) => quote! {},
+        Some(window::Assigner::Sliding(_)) => unimplemented!(),
         Some(window::Assigner::Tumbling(t)) => {
             let window_code = window_function(&window.function.clone().unwrap());
             let window_comp = tumbling(

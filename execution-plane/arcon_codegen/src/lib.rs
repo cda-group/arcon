@@ -11,7 +11,7 @@ extern crate lazy_static;
 mod common;
 mod sink;
 mod source;
-//mod stream_task;
+mod function;
 mod system;
 mod types;
 mod window;
@@ -25,7 +25,7 @@ use std::fs;
 use std::sync::Mutex;
 
 use spec::node::NodeKind;
-use spec::{ArconSpec, Sink, Source, Window};
+use spec::ArconSpec;
 
 const ARCON_CODEGEN_VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
@@ -103,6 +103,9 @@ pub fn generate(spec: &ArconSpec, is_terminated: bool) -> Result<String, Codegen
             }
             Some(NodeKind::Window(window)) => {
                 stream.push(window::window(node.id, &window, &spec.id));
+            }
+            Some(NodeKind::Function(func)) => {
+                stream.push(function::function(node.id, &previous_node, &node.parallelism, &func, &spec.id));
             }
             None => {}
         }
