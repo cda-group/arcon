@@ -66,8 +66,7 @@ fn main() {
     let build_dir_arg = Arg::with_name("b")
         .required(false)
         .default_value("build/")
-        .takes_value(true)
-        .long("build-dir")
+        .takes_value(true) .long("build-dir")
         .short("b")
         .help("Directory where arconc compiles into");
 
@@ -196,6 +195,8 @@ fn compile(
     };
 
     let spec = spec_from_file(&spec_file)?;
+
+    debug!("SPEC {:?}", spec);
 
     let mut env = env::CompilerEnv::load(build_dir.to_string())?;
 

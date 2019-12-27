@@ -1,16 +1,16 @@
 use crate::GENERATED_STRUCTS;
-use arcon_proto::arcon_spec::arcon_type::Types;
+use arcon_proto::arcon_spec::type_holder::ArconType;
 use arcon_proto::arcon_spec::scalar;
-use arcon_proto::arcon_spec::{ArconType, Scalar};
+use arcon_proto::arcon_spec::{TypeHolder, Scalar};
 use proc_macro2::{Ident, Span, TokenStream};
 
-pub fn to_token_stream(t: &ArconType, spec_id: &String) -> TokenStream {
-    match &t.types {
-        Some(Types::Scalar(s)) => {
+pub fn to_token_stream(t: &TypeHolder, spec_id: &String) -> TokenStream {
+    match &t.arcon_type {
+        Some(ArconType::Scalar(s)) => {
             let ident = Ident::new(scalar(s), Span::call_site());
             quote! { #ident }
         }
-        Some(Types::Struct(s)) => {
+        Some(ArconType::Struct(s)) => {
             let generated =
                 struct_gen(&s.id, Some(s.key), &None, &s.field_tys, spec_id).to_string();
             let mut struct_map = GENERATED_STRUCTS.lock().unwrap();
@@ -22,11 +22,11 @@ pub fn to_token_stream(t: &ArconType, spec_id: &String) -> TokenStream {
             }
             quote! { #struct_ident }
         }
-        Some(Types::Vec(v)) => {
+        Some(ArconType::Vec(v)) => {
             let ident = to_token_stream(&v.arcon_type.clone().unwrap(), spec_id);
             quote! { Vec<#ident> }
         }
-        Some(Types::Str(_)) => {
+        Some(ArconType::Str(_)) => {
             quote! { String }
         }
         None => {
@@ -35,16 +35,17 @@ pub fn to_token_stream(t: &ArconType, spec_id: &String) -> TokenStream {
     }
 }
 
-fn scalar(s: &Scalar) -> &str {
-    match s.scalar.as_ref() {
-        Some(scalar::Scalar::I32(_)) => "i32",
-        Some(scalar::Scalar::I64(_)) => "i64",
-        Some(scalar::Scalar::U32(_)) => "u32",
-        Some(scalar::Scalar::U64(_)) => "u64",
-        Some(scalar::Scalar::F32(_)) => "f32",
-        Some(scalar::Scalar::F64(_)) => "f64",
-        Some(scalar::Scalar::Bool(_)) => "bool",
-        None => panic!("Not supposed to happen"),
+/// Emm, yeah..
+fn scalar(s: &str) -> &str {
+    match s {
+        "i32" => "i32",
+        "i64" => "i64",
+        "u32" => "u32",
+        "u64" => "u64",
+        "f32" => "f32",
+        "f64" => "f64",
+        "bool" => "bool",
+        _ => panic!("Bad Scalar value"),
     }
 }
 
@@ -52,7 +53,7 @@ fn struct_gen(
     id: &str,
     key: Option<u32>,
     decoder: &Option<String>,
-    field_tys: &Vec<ArconType>,
+    field_tys: &Vec<TypeHolder>,
     spec_id: &String,
 ) -> TokenStream {
     let key_opt_stream = if let Some(k) = key {

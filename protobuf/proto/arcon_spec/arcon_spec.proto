@@ -30,8 +30,8 @@ message Node {
 }
 
 message Window {
-  ArconType input_type = 1;
-  ArconType output_type = 2;
+  TypeHolder input_type = 1;
+  TypeHolder output_type = 2;
   ChannelStrategy channel_strategy = 3;
   repeated ChannelKind successors = 4;
   uint32 predecessor = 5;
@@ -60,8 +60,8 @@ message IncrementalWindow {
 }
 
 message Function {
-  ArconType input_type = 1;
-  ArconType output_type = 2;
+  TypeHolder input_type = 1;
+  TypeHolder output_type = 2;
   string udf = 3;
   uint32 predecessor = 4;
   ChannelStrategy channel_strategy = 5;
@@ -76,7 +76,7 @@ enum FunctionKind {
 }
 
 message Source {
-  ArconType source_type = 1;
+  TypeHolder source_type = 1;
   ChannelStrategy channel_strategy = 2;
   repeated ChannelKind successors = 3;
   oneof source_kind {
@@ -89,7 +89,7 @@ message Source {
 
 
 message Sink {
-  ArconType sink_type = 1;
+  TypeHolder sink_type = 1;
   uint32 predecessor = 2;
   oneof sink_kind {
     Socket socket = 3;
@@ -139,8 +139,8 @@ enum ChannelStrategy {
 
 message ChannelKind {
   oneof channel_kind {
-    LocalChannel local_channel = 1;
-    RemoteChannel remote_channel = 2;
+    LocalChannel local = 1;
+    RemoteChannel remote = 2;
   }
 }
 
@@ -153,9 +153,9 @@ message RemoteChannel {
   string addr = 2;
 }
 
-message ArconType {
-  oneof types {
-    Scalar scalar = 1;
+message TypeHolder {
+  oneof arcon_type {
+    string scalar = 1;
     Struct struct = 2;
     ArconVec vec = 3;
     string str  = 4;
@@ -165,11 +165,11 @@ message ArconType {
 message Struct {
   string id = 1;
   uint32 key = 2;
-  repeated ArconType field_tys = 3;
+  repeated TypeHolder field_tys = 3;
 }
 
 message ArconVec {
-  ArconType arcon_type = 1;
+  TypeHolder arcon_type = 1;
 }
 
 message I32 {}

@@ -8,7 +8,7 @@ use proc_macro2::{Ident, Span, TokenStream};
 
 pub fn function(
     id: u32,
-    _target_name: &str,
+    target_name: &str,
     parallelism: &u32,
     func: &Function,
     spec_id: &String,
@@ -25,8 +25,8 @@ pub fn function(
         assert_eq!(successors.len(), 1);
 
         match &successors.get(0).unwrap().channel_kind.as_ref() {
-            Some(ChannelKind::LocalChannel(_)) => {
-                let target = Ident::new(&id.to_string(), Span::call_site());
+            Some(ChannelKind::Local(_)) => {
+                let target = Ident::new(target_name, Span::call_site());
                 let kind: FunctionKind = unsafe { ::std::mem::transmute(func.kind) };
                 let task_signature = {
                     match &kind {
@@ -80,7 +80,7 @@ pub fn function(
                     #verify
                 }
             }
-            Some(ChannelKind::RemoteChannel(_)) => {
+            Some(ChannelKind::Remote(_)) => {
                 unimplemented!();
             }
             None => panic!("Bad input"),

@@ -6,6 +6,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut config = prost_build::Config::new();
             config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
             config.type_attribute(".", "#[serde(rename_all = \"camelCase\")]");
+            config.type_attribute(".", "#[serde(deny_unknown_fields)]");
             config.compile_protos(&["proto/arcon_spec/arcon_spec.proto"], &["proto/"]).unwrap();
         }
     }

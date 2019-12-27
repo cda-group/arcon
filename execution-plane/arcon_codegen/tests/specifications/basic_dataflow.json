@@ -1,24 +1,33 @@
 {
 "id": "basic_dataflow",
 "target": "x86-64-unknown-linux-gnu",
+"features": [],
+"system": "127.0.0.1:3000",
 "nodes": [
     {
         "id": 1,
         "parallelism": 1,
-        "kind": {
-            "Source": {
-                "source_type": {
-                    "Scalar": "U32"
+        "nodeKind": {
+            "source": {
+                "sourceType": {
+                    "arconType": {
+                      "scalar": "u32"
+                    }
                 },
+                "channelStrategy": 0,
                 "successors": [
                     {
-                        "Local": {
-                            "id": "node2"
+                        "channelKind": {
+                            "local": {
+                              "id": "node2"
+                            }
                         }
                     }
                 ],
-                "kind": {
-                    "Socket": { "addr": "127.0.0.1:5000", "kind": "udp"}
+                "sourceRate": 0,
+                "format":  2,
+                "sourceKind": {
+                    "socket": { "addr": "127.0.0.1:5000", "protocol": "udp"}
                 }
             }
         }
@@ -26,38 +35,50 @@
     {
         "id": 2,
         "parallelism": 1,
-        "kind": {
-            "Task": {
-                "input_type": {
-                    "Scalar": "U32"
+        "nodeKind": {
+            "function": {
+                "inputType": {
+                    "arconType": {
+                      "scalar": "u32"
+                    }
                 },
-                "output_type": {
-                    "Scalar": "U32"
+                "outputType": {
+                    "arconType": {
+                      "scalar": "u32"
+                    }
                 },
-                "weld_code": "|x: u32| x + u32(5)",
+                "channelStrategy": 0,
                 "successors": [
                     {
-                        "Local": {
-                            "id": "node3"
+                        "channelKind": {
+                            "local": {
+                              "id": "node3"
+                            }
                         }
                     }
                 ],
+                "udf": "hej",
                 "predecessor": 1,
-                "kind": "Map"
+                "kind": 2
             }
         }
     },
     {
         "id": 3,
         "parallelism": 1,
-        "kind": {
-            "Sink": {
-                "sink_type": {
-                    "Scalar": "U32"
-                },
-                "predecessor": 2,
-                "kind": "Debug"
-            }
+        "nodeKind": {
+          "sink": {
+              "sinkType": {
+                  "arconType": {
+                    "scalar": "u32"
+                  }
+              },
+              "sinkKind": {
+                "debug": {}
+              },
+              "predecessor": 2,
+              "format":  2
+          }
         }
     }
 ]

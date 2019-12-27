@@ -19,8 +19,8 @@ pub fn window(id: u32, window: &Window, spec_id: &String) -> TokenStream {
     assert_eq!(successors.len(), 1);
 
     let successor = match successors.get(0).unwrap().channel_kind.as_ref() {
-        Some(ChannelKind::LocalChannel(_)) => id,
-        Some(ChannelKind::RemoteChannel(_)) => {
+        Some(ChannelKind::Local(_)) => id,
+        Some(ChannelKind::Remote(_)) => {
             unimplemented!();
         }
         None => panic!("non supported channel"),

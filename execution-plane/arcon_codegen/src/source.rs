@@ -12,6 +12,11 @@ pub fn source(
     ts_extractor: u32,
 ) -> TokenStream {
     let source_name = id_to_ident(id);
+
+    if target.is_empty() {
+        panic!("Source is missing target");
+    }
+
     let target = Ident::new(&target, Span::call_site());
     let input_type = to_token_stream(&source.source_type.clone().unwrap(), spec_id);
 

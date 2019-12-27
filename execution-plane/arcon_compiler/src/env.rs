@@ -121,9 +121,9 @@ impl CompilerEnv {
     }
 
     pub fn generate(&self, spec: &ArconSpec) -> Result<(), failure::Error> {
-        //let code = arcon_codegen::generate(spec, false)?;
+        let code = arcon_codegen::generate(spec, false)?;
         let path = format!("{}/src/main.rs", spec.id);
-        //arcon_codegen::to_file(code, path)?;
+        arcon_codegen::to_file(code, path)?;
         Ok(())
     }
 
