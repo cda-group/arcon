@@ -1,5 +1,4 @@
 use crate::prelude::*;
-use crate::streaming::window::Window;
 use crate::util::event_timer::EventTimer;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
@@ -185,14 +184,17 @@ mod tests {
     use crate::streaming::channel::strategy::forward::*;
     use crate::streaming::channel::Channel;
     use kompact::prelude::Component;
+    use std::sync::Arc;
     use std::time::UNIX_EPOCH;
     use std::{thread, time};
-    use std::sync::Arc;
 
     #[key_by(id)]
     #[arcon]
+    #[derive(prost::Message)]
     pub struct Item {
+        #[prost(uint64, tag = "1")]
         id: u64,
+        #[prost(uint32, tag = "2")]
         price: u32,
     }
 
@@ -203,13 +205,13 @@ mod tests {
         late: u64,
     ) -> (
         ActorRefStrong<ArconMessage<Item>>,
-        Arc<Component<DebugSink<u64>>>,
+        Arc<Component<DebugNode<u64>>>,
     ) {
         // Kompact set-up
         let system = KompactConfig::default().build().expect("KompactSystem");
 
         // Create a sink
-        let (sink, _) = system.create_and_register(move || DebugSink::new());
+        let (sink, _) = system.create_and_register(move || DebugNode::new());
         let sink_ref: ActorRefStrong<ArconMessage<u64>> =
             sink.actor_ref().hold().expect("failed to get strong ref");
         let channel_strategy: Box<Forward<u64>> =

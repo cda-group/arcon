@@ -1,5 +1,7 @@
 pub mod event_time;
 
+pub use event_time::EventTimeWindowAssigner;
+
 use crate::data::*;
 use crate::error::*;
 

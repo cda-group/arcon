@@ -1,42 +1,12 @@
+pub mod debug;
+pub mod operator;
 
 use crate::prelude::*;
-use crate::streaming::operator::Operator;
-use std::cmp::Ordering;
+pub use debug::DebugNode;
 use std::collections::BTreeMap;
 use std::collections::HashSet; // Blocked-list
 use std::collections::LinkedList; // Message buffer
 use std::mem; // Watermark-list
-
-#[derive(Eq, Hash, Copy, Clone, Debug)]
-pub struct NodeID {
-    pub id: u32,
-}
-
-impl NodeID {
-    pub fn new(new_id: u32) -> NodeID {
-        NodeID { id: new_id }
-    }
-}
-impl From<u32> for NodeID {
-    fn from(id: u32) -> Self {
-        NodeID::new(id)
-    }
-}
-impl Ord for NodeID {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.id.cmp(&other.id)
-    }
-}
-impl PartialOrd for NodeID {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-impl PartialEq for NodeID {
-    fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
-    }
-}
 
 /*
   Node: contains an Operator which executes actions
@@ -62,7 +32,8 @@ where
 impl<IN, OUT> Node<IN, OUT>
 where
     IN: ArconType,
-    OUT: ArconType, {
+    OUT: ArconType,
+{
     pub fn new(
         id: NodeID,
         in_channels: Vec<NodeID>,
@@ -224,14 +195,20 @@ where
         }
     }
     fn receive_network(&mut self, msg: NetMessage) {
-        match msg.try_deserialise::<ArconNetworkMessage, ProtoSer>() {
-            Ok(deser_msg) => {
-                if let Ok(message) = ArconMessage::from_remote(deser_msg) {
-                    if let Err(err) = self.handle_message(message) {
-                        error!(self.ctx.log(), "Failed to handle node message: {}", err);
-                    }
-                } else {
-                    error!(self.ctx.log(), "Failed to convert remote message to local");
+        let arcon_msg: ArconResult<ArconMessage<IN>> = match msg.ser_id() {
+            &ReliableSerde::<IN>::SER_ID => msg
+                .try_deserialise::<ArconMessage<IN>, ReliableSerde<IN>>()
+                .map_err(|_| arcon_err_kind!("Failed to unpack reliable ArconMessage")),
+            &UnsafeSerde::<IN>::SER_ID => msg
+                .try_deserialise::<ArconMessage<IN>, UnsafeSerde<IN>>()
+                .map_err(|_| arcon_err_kind!("Failed to unpack unreliable ArconMessage")),
+            _ => panic!("Unexpected deserialiser"),
+        };
+
+        match arcon_msg {
+            Ok(m) => {
+                if let Err(err) = self.handle_message(m) {
+                    error!(self.ctx.log(), "Failed to handle node message: {}", err);
                 }
             }
             Err(e) => error!(self.ctx.log(), "Error ArconNetworkMessage: {:?}", e),
@@ -257,16 +234,16 @@ where
 mod tests {
     // Tests the message logic of Node.
     use super::*;
-    use crate::streaming::operator::Filter;
+    use crate::prelude::*;
     use std::sync::Arc;
     use std::{thread, time};
 
-    fn node_test_setup() -> (ActorRef<ArconMessage<i32>>, Arc<Component<DebugSink<i32>>>) {
+    fn node_test_setup() -> (ActorRef<ArconMessage<i32>>, Arc<Component<DebugNode<i32>>>) {
         // Returns a filter Node with input channels: sender1..sender3
         // And a debug sink receiving its results
         let system = KompactConfig::default().build().expect("KompactSystem");
 
-        let sink = system.create_and_start(move || DebugSink::<i32>::new());
+        let sink = system.create_and_start(move || DebugNode::<i32>::new());
         let actor_ref: ActorRefStrong<ArconMessage<i32>> =
             sink.actor_ref().hold().expect("Failed to fetch");
         let channel = Channel::Local(actor_ref);

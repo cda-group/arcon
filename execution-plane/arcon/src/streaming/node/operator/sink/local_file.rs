@@ -3,22 +3,21 @@ use crate::prelude::*;
 use std::fs::File;
 use std::fs::OpenOptions;
 use std::io::Write;
+use std::marker::PhantomData;
 
-#[derive(ComponentDefinition)]
-pub struct LocalFileSink<A>
+pub struct LocalFileSink<IN>
 where
-    A: ArconType + 'static,
+    IN: ArconType,
 {
-    ctx: ComponentContext<Self>,
     file: File,
-    in_channels: Vec<NodeID>,
+    _marker: PhantomData<IN>,
 }
 
-impl<A> LocalFileSink<A>
+impl<IN> LocalFileSink<IN>
 where
-    A: ArconType + 'static,
+    IN: ArconType,
 {
-    pub fn new(file_path: &str, in_channels: Vec<NodeID>) -> Self {
+    pub fn new(file_path: &str) -> Self {
         let file = OpenOptions::new()
             .write(true)
             .create(true)
@@ -27,55 +26,34 @@ where
             .expect("Failed to open file");
 
         LocalFileSink {
-            ctx: ComponentContext::new(),
             file,
-            in_channels,
-        }
-    }
-
-    fn handle_event(&mut self, event: &ArconEvent<A>) {
-        match event {
-            ArconEvent::Element(e) => {
-                if let Err(err) = writeln!(self.file, "{:?}", e.data) {
-                    error!(
-                        self.ctx.log(),
-                        "Failed to write sink element to file sink with err {}",
-                        err.to_string()
-                    );
-                }
-            }
-            _ => {}
+            _marker: PhantomData,
         }
     }
 }
 
-impl<A> Provide<ControlPort> for LocalFileSink<A>
+impl<IN> Operator<IN, IN> for LocalFileSink<IN>
 where
-    A: ArconType + 'static,
+    IN: ArconType,
 {
-    fn handle(&mut self, _event: ControlEvent) -> () {}
-}
-
-impl<A> Actor for LocalFileSink<A>
-where
-    A: ArconType + 'static,
-{
-    type Message = ArconMessage<A>;
-
-    fn receive_local(&mut self, msg: Self::Message) {
-        if self.in_channels.contains(&msg.sender) {
-            debug!(self.ctx.log(), "Got event {:?}", msg.event);
-            self.handle_event(&msg.event);
+    fn handle_element(&mut self, element: ArconElement<IN>) -> ArconResult<Vec<ArconEvent<IN>>> {
+        if let Err(err) = writeln!(self.file, "{:?}", element.data) {
+            eprintln!("Error while writing to file sink {}", err.to_string());
         }
+        Ok(Vec::new())
     }
-    fn receive_network(&mut self, _msg: NetMessage) {
-        unimplemented!();
+    fn handle_watermark(&mut self, _w: Watermark) -> ArconResult<Vec<ArconEvent<IN>>> {
+        Ok(Vec::new())
+    }
+    fn handle_epoch(&mut self, _epoch: Epoch) -> ArconResult<Vec<u8>> {
+        Ok(Vec::new())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::streaming::util::mute_strategy;
     use std::io::{BufRead, BufReader};
     use tempfile::NamedTempFile;
 
@@ -88,8 +66,12 @@ mod tests {
 
         let node_id = NodeID::new(1);
         let sink_comp = system.create_and_start(move || {
-            let sink: LocalFileSink<i32> = LocalFileSink::new(&file_path, vec![node_id]);
-            sink
+            Node::new(
+                0.into(),
+                vec![node_id],
+                mute_strategy::<i32>(),
+                Box::new(LocalFileSink::new(&file_path)),
+            )
         });
         let input_one = ArconMessage::element(6 as i32, None, node_id);
         let input_two = ArconMessage::element(2 as i32, None, node_id);

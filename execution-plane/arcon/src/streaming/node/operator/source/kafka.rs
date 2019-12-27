@@ -1,11 +1,11 @@
 use crate::prelude::*;
+use futures::stream::Stream;
 use rdkafka::config::ClientConfig;
 use rdkafka::consumer::stream_consumer::StreamConsumer;
 use rdkafka::consumer::{CommitMode, Consumer};
 use rdkafka::error::{KafkaError, KafkaResult};
 use rdkafka::message::*;
 use rdkafka::topic_partition_list::Offset;
-use futures::stream::Stream;
 use std::collections::HashMap;
 use std::time::Duration;
 
@@ -16,7 +16,7 @@ use std::time::Duration;
 #[derive(ComponentDefinition)]
 pub struct KafkaSource<OUT>
 where
-    OUT: ArconType,
+    OUT: ArconType + ::serde::Serialize + ::serde::de::DeserializeOwned,
 {
     ctx: ComponentContext<KafkaSource<OUT>>,
     out_channels: Box<ChannelStrategy<OUT>>,
@@ -35,7 +35,7 @@ where
 
 impl<OUT> KafkaSource<OUT>
 where
-    OUT: ArconType,
+    OUT: ArconType + ::serde::Serialize + ::serde::de::DeserializeOwned,
 {
     pub fn new(
         out_channels: Box<ChannelStrategy<OUT>>,
@@ -213,7 +213,7 @@ where
 
 impl<OUT> Provide<ControlPort> for KafkaSource<OUT>
 where
-    OUT: ArconType,
+    OUT: ArconType + ::serde::Serialize + ::serde::de::DeserializeOwned,
 {
     fn handle(&mut self, event: ControlEvent) -> () {
         match event {
@@ -229,7 +229,7 @@ where
 
 impl<OUT> Actor for KafkaSource<OUT>
 where
-    OUT: ArconType,
+    OUT: ArconType + ::serde::Serialize + ::serde::de::DeserializeOwned,
 {
     type Message = Box<dyn Any + Send>;
     fn receive_local(&mut self, _msg: Self::Message) {}
@@ -239,19 +239,25 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::streaming::channel::strategy::mute::Mute;
-    use crate::streaming::sink::kafka::KafkaSink;
+    use crate::macros::*;
+    use crate::prelude::{DebugNode, KafkaSink, Mute};
     use std::{thread, time};
 
     #[arcon]
-    struct Thing {
-        id: u32,
-        attribute: i32,
-        location: Point,
+    #[derive(prost::Message, ::serde::Serialize, ::serde::Deserialize)]
+    pub struct Thing {
+        #[prost(uint32, tag = "1")]
+        pub id: u32,
+        #[prost(int32, tag = "2")]
+        pub attribute: i32,
     }
+
     #[arcon]
+    #[derive(prost::Message, ::serde::Serialize, ::serde::Deserialize)]
     struct Point {
+        #[prost(float, tag = "1")]
         x: f32,
+        #[prost(float, tag = "2")]
         y: f32,
     }
     // JSON Example: {"id":1, "attribute":-13,"location":{"x":0.14124,"y":5882.231}}
@@ -265,9 +271,8 @@ mod tests {
         kafka_sink();
         let system = KompactConfig::default().build().expect("KompactSystem");
 
-        let (sink, _) = system.create_and_register(move || DebugSink::<Thing>::new());
+        let (sink, _) = system.create_and_register(move || DebugNode::<Thing>::new());
         let sink_ref = sink.actor_ref().hold().expect("failed to fetch strong ref");
-
 
         let out_channels: Box<Forward<Thing>> =
             Box::new(Forward::new(Channel::Local(sink_ref.clone())));
@@ -311,15 +316,10 @@ mod tests {
         let thing_1 = Thing {
             id: 0,
             attribute: 100,
-            location: Point {
-                x: 0.52,
-                y: 113.3233,
-            },
         };
         let thing_2 = Thing {
             id: 1,
             attribute: 101,
-            location: Point { x: -0.52, y: 15.0 },
         };
         sink.actor_ref()
             .tell(ArconMessage::element(thing_1, Some(10), 0.into()));

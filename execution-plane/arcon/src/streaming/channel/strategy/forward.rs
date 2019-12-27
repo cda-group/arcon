@@ -44,7 +44,7 @@ mod tests {
         let system = KompactConfig::default().build().expect("KompactSystem");
 
         let total_msgs = 10;
-        let comp = system.create_and_start(move || DebugSink::<Input>::new());
+        let comp = system.create_and_start(move || DebugNode::<Input>::new());
         let actor_ref: ActorRefStrong<ArconMessage<Input>> =
             comp.actor_ref().hold().expect("failed to fetch");
         let mut channel_strategy: Box<ChannelStrategy<Input>> =
