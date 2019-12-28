@@ -1,8 +1,9 @@
 use crate::common::*;
 use crate::spec::source::SourceKind;
-use crate::spec::{Socket, Source};
+use crate::spec::Source;
 use crate::types::to_token_stream;
 use proc_macro2::{Ident, Span, TokenStream};
+use std::collections::HashSet;
 
 pub fn source(
     id: u32,
@@ -10,6 +11,7 @@ pub fn source(
     source: &Source,
     spec_id: &String,
     ts_extractor: u32,
+    features: &mut HashSet<String>,
 ) -> TokenStream {
     let source_name = id_to_ident(id);
 
@@ -21,16 +23,21 @@ pub fn source(
     let input_type = to_token_stream(&source.source_type.clone().unwrap(), spec_id);
 
     let source_stream = match source.source_kind.as_ref() {
-        Some(SourceKind::Socket(sock)) => socket_source(
-            &source_name,
-            &target,
-            &input_type,
-            &sock.addr,
-            &sock.protocol,
-            *&source.source_rate,
-            ts_extractor,
-            id,
-        ),
+        Some(SourceKind::Socket(sock)) => {
+            // Add so
+            features.insert("socket".to_string());
+
+            socket_source(
+                &source_name,
+                &target,
+                &input_type,
+                &sock.addr,
+                &sock.protocol,
+                *&source.source_rate,
+                ts_extractor,
+                id,
+            )
+        }
         Some(SourceKind::LocalFile(l)) => local_file_source(
             &source_name,
             &target,
@@ -60,13 +67,23 @@ fn socket_source(
     let verify = verify_and_start(source_name, "system");
 
     let ts_quote = quote! { Some(#ts_extraction) };
+    let sock_kind = {
+        if protocol == "tcp" || protocol == "TCP" {
+            quote! { SocketKind::Tcp }
+        } else if protocol == "udp" || protocol == "UDP" {
+            quote! { SocketKind::Udp}
+        } else {
+            panic!("Unsupported protocol");
+        }
+    };
 
     quote! {
-        let channel = Channel::Local(#target.actor_ref());
+        let actor_ref: ActorRefStrong<ArconMessage<#input_type>> = #target.actor_ref().hold().expect("failed to fetch actor ref");
+        let channel = Channel::Local(actor_ref);
         let channel_strategy: Box<ChannelStrategy<#input_type>> = Box::new(Forward::new(channel));
         let (#source_name, reg) = system.create_and_register(move || {
             let sock_addr = #addr.parse().expect("Failed to parse SocketAddr");
-            let source: SocketSource<#input_type> = SocketSource::new(sock_addr, #protocol, channel_strategy, #rate, #ts_quote, #id.into());
+            let source: SocketSource<#input_type> = SocketSource::new(sock_addr, #sock_kind, channel_strategy, #rate, #ts_quote, #id.into());
             source
         });
 
@@ -85,7 +102,7 @@ fn local_file_source(
     let verify = verify_and_start(source_name, "system");
 
     quote! {
-        let actor_ref: ActorRef<ArconMessage<#input_type>> = #target.actor_ref();
+        let actor_ref: ActorRefStrong<ArconMessage<#input_type>> = #target.actor_ref().hold().expect("failed to fetch actor ref");
         let channel = Channel::Local(actor_ref);
         let channel_strategy: Box<ChannelStrategy<#input_type>> = Box::new(Forward::new(channel));
         let (#source_name, reg) = system.create_and_register(move || {

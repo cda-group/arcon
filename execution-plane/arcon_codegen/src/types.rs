@@ -1,7 +1,6 @@
 use crate::GENERATED_STRUCTS;
 use arcon_proto::arcon_spec::type_holder::ArconType;
-use arcon_proto::arcon_spec::scalar;
-use arcon_proto::arcon_spec::{TypeHolder, Scalar};
+use arcon_proto::arcon_spec::TypeHolder;
 use proc_macro2::{Ident, Span, TokenStream};
 
 pub fn to_token_stream(t: &TypeHolder, spec_id: &String) -> TokenStream {
@@ -118,41 +117,41 @@ mod tests {
     use arcon_proto::arcon_spec::Struct;
 
     /*
-    #[test]
-    fn struct_gen_test() {
-        let s = Struct {
-            id: String::from("MyStruct"),
-            key: Some(0),
-            decoder: None,
-            field_tys: vec![Types::Scalar::U32, Types::Scalar::I32],
-        };
-        // Should generate the following struct
-        //
-        // #[key_by(f0)]
-        // #[arcon_decoder(,)]
-        // #[arcon]
-        // pub struct MyStruct {
-        //  f0: u32,
-        //  f1: i32,
-        // }
-        /*
-        match s {
-            Struct {
-                id,
-                key,
-                decoder,
-                field_tys,
-            } => {
-                let stream = struct_gen(&id, key, &decoder, &field_tys, &"MySpec".to_string());
-                let fmt = crate::format_code(stream.to_string()).unwrap();
-                // RustFmt will return an empty String if it is bad Rust code...
-                assert!(fmt.len() > 0);
-                let expected = String::from("#[key_by(f0)]\n# [ arcon_decoder ( , ) ]\n#[arcon]\npub struct MyStruct {\n    f0: u32,\n    f1: i32,\n}\n");
-                assert_eq!(expected, fmt);
+        #[test]
+        fn struct_gen_test() {
+            let s = Struct {
+                id: String::from("MyStruct"),
+                key: Some(0),
+                decoder: None,
+                field_tys: vec![Types::Scalar::U32, Types::Scalar::I32],
+            };
+            // Should generate the following struct
+            //
+            // #[key_by(f0)]
+            // #[arcon_decoder(,)]
+            // #[arcon]
+            // pub struct MyStruct {
+            //  f0: u32,
+            //  f1: i32,
+            // }
+            /*
+            match s {
+                Struct {
+                    id,
+                    key,
+                    decoder,
+                    field_tys,
+                } => {
+                    let stream = struct_gen(&id, key, &decoder, &field_tys, &"MySpec".to_string());
+                    let fmt = crate::format_code(stream.to_string()).unwrap();
+                    // RustFmt will return an empty String if it is bad Rust code...
+                    assert!(fmt.len() > 0);
+                    let expected = String::from("#[key_by(f0)]\n# [ arcon_decoder ( , ) ]\n#[arcon]\npub struct MyStruct {\n    f0: u32,\n    f1: i32,\n}\n");
+                    assert_eq!(expected, fmt);
+                }
+                _ => panic!("Not supposed to happen"),
             }
-            _ => panic!("Not supposed to happen"),
+            */
         }
-        */
-    }
-*/
+    */
 }

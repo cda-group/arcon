@@ -1,5 +1,5 @@
+use arcon_proto::arcon_spec::{spec_from_bytes, ArconSpec};
 use arcon_proto::*;
-use arcon_proto::arcon_spec::{ArconSpec, spec_from_bytes};
 use futures::*;
 use grpcio::{Environment, RpcContext, ServerBuilder, UnarySink};
 
@@ -25,8 +25,8 @@ impl Server {
         {
             let mut env = self.env.lock().unwrap();
             env.add_project(spec.id.clone())?;
-            env.create_workspace_member(&spec.id)?;
-            env.generate(&spec)?;
+            let features = env.generate(&spec)?;
+            env.create_workspace_member(&spec.id, features)?;
 
             if let Some(log_dir) = env.log_dir.clone() {
                 logged = Some(log_dir)

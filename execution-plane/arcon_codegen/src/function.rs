@@ -3,6 +3,7 @@ use crate::common::verify_and_start;
 use crate::spec;
 use crate::spec::channel_kind::ChannelKind;
 use crate::types::to_token_stream;
+use crate::GENERATED_FUNCTIONS;
 use arcon_proto::arcon_spec::{Function, FunctionKind};
 use proc_macro2::{Ident, Span, TokenStream};
 
@@ -13,6 +14,7 @@ pub fn function(
     func: &Function,
     spec_id: &String,
 ) -> TokenStream {
+    let fn_ident = function_gen(spec_id, &func.id, func.udf.clone());
     let node_id = id;
     let node_name = id_to_ident(id);
     let input_type = to_token_stream(&func.input_type.clone().unwrap(), spec_id);
@@ -32,17 +34,17 @@ pub fn function(
                     match &kind {
                         FunctionKind::FlatMap => {
                             quote! {
-                                FlatMap::<#input_type, #output_type>::new(module)
+                                FlatMap::<#input_type, #output_type>::new(&#fn_ident)
                             }
                         }
                         FunctionKind::Map => {
                             quote! {
-                                Map::<#input_type, #output_type>::new(module)
+                                Map::<#input_type, #output_type>::new(&#fn_ident)
                             }
                         }
                         FunctionKind::Filter => {
                             quote! {
-                                Filter::<#input_type>::new(module)
+                                Filter::<#input_type>::new(&#fn_ident)
                             }
                         }
                     }
@@ -63,11 +65,9 @@ pub fn function(
                 let verify = verify_and_start(&node_name, "system");
 
                 quote! {
-                    let actor_ref: ActorRef<ArconMessage<#output_type>> = #target.actor_ref();
+                    let actor_ref: ActorRefStrong<ArconMessage<#output_type>> = #target.actor_ref().hold().expect("failed to fetch actor ref");
                     let channel = Channel::Local(actor_ref);
                     #channel_strategy_quote
-                    let code = String::from(#);
-                    let module = std::sync::Arc::new(Module::new(code).unwrap());
                     let (#node_name, reg) = system.create_and_register(move || {
                         Node::<#input_type, #output_type>::new(
                             #node_id.into(),
@@ -89,6 +89,16 @@ pub fn function(
         unimplemented!();
         // Handle multiple channels..
     }
+}
+
+fn function_gen(spec_id: &String, name: &str, code: String) -> Ident {
+    let mut func_map = GENERATED_FUNCTIONS.lock().unwrap();
+    if let Some(map) = func_map.get_mut(spec_id) {
+        if !map.contains_key(name) {
+            map.insert(String::from(name.clone()), code);
+        }
+    }
+    Ident::new(name, Span::call_site())
 }
 
 #[cfg(test)]

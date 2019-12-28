@@ -66,7 +66,8 @@ fn main() {
     let build_dir_arg = Arg::with_name("b")
         .required(false)
         .default_value("build/")
-        .takes_value(true) .long("build-dir")
+        .takes_value(true)
+        .long("build-dir")
         .short("b")
         .help("Directory where arconc compiles into");
 
@@ -212,8 +213,8 @@ fn compile(
     std::env::set_current_dir(&path)?;
 
     env.add_project(spec.id.clone())?;
-    env.create_workspace_member(&spec.id)?;
-    env.generate(&spec)?;
+    let features = env.generate(&spec)?;
+    env.create_workspace_member(&spec.id, features)?;
 
     if daemonize {
         daemonize_arconc();

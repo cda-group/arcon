@@ -63,10 +63,11 @@ message Function {
   TypeHolder input_type = 1;
   TypeHolder output_type = 2;
   string udf = 3;
-  uint32 predecessor = 4;
-  ChannelStrategy channel_strategy = 5;
-  repeated ChannelKind successors = 6;
-  FunctionKind kind = 7;
+  string id = 4;
+  uint32 predecessor = 5;
+  ChannelStrategy channel_strategy = 6;
+  repeated ChannelKind successors = 7;
+  FunctionKind kind = 8;
 }
 
 enum FunctionKind {
@@ -170,26 +171,6 @@ message Struct {
 
 message ArconVec {
   TypeHolder arcon_type = 1;
-}
-
-message I32 {}
-message I64 {}
-message U32 {}
-message U64 {}
-message F32 {}
-message F64 {}
-message BOOL {}
-
-message Scalar {
-  oneof scalar {
-    I32 i32 = 1;
-    I64 i64 = 2;
-    U32 u32 = 3;
-    U64 u64 = 4;
-    F32 f32 = 5;
-    F64 f64 = 6;
-    BOOL bool = 7;
-  }
 }
 
 enum Format {

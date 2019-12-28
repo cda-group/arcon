@@ -1,4 +1,3 @@
-use crate::common::generate_function;
 use crate::common::verify_and_start;
 use crate::spec::channel_kind::ChannelKind;
 use crate::spec::window;
@@ -52,15 +51,12 @@ pub fn window(id: u32, window: &Window, spec_id: &String) -> TokenStream {
 }
 
 fn window_function(window_function: &crate::spec::window::Function) -> TokenStream {
-    let code = match window_function {
-        window::Function::AppenderWindow(aw) => crate::common::generate_function(&aw.udf),
-        window::Function::IncrementalWindow(iw) => {
-            let udf = crate::common::generate_function(&iw.udf);
-            let agg = crate::common::generate_function(&iw.agg_udf);
-            crate::combine_token_streams(udf, agg)
+    match window_function {
+        window::Function::AppenderWindow(_) => unimplemented!(),
+        window::Function::IncrementalWindow(_) => {
+            unimplemented!();
         }
-    };
-    code
+    }
 }
 
 fn tumbling(

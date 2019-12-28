@@ -16,8 +16,3 @@ pub fn verify_and_start(name: &Ident, sys_name: &str) -> TokenStream {
 pub fn id_to_ident(id: u32) -> Ident {
     Ident::new(&("node".to_string() + &id.to_string()), Span::call_site())
 }
-
-pub fn generate_function(code: &str) -> TokenStream {
-    // TODO
-    quote! {}
-}

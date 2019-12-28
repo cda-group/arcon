@@ -89,7 +89,11 @@ impl CompilerEnv {
     }
 
     /// Creates a Workspace member with a Cargo.toml and src/ directory
-    pub fn create_workspace_member(&self, id: &str) -> Result<(), failure::Error> {
+    pub fn create_workspace_member(
+        &self,
+        id: &str,
+        features: Vec<String>,
+    ) -> Result<(), failure::Error> {
         let full_path = format!("{}", id);
 
         // Check if we are to use a local arcon crate or pull from crates.io
@@ -99,6 +103,11 @@ impl CompilerEnv {
             format!("version = \"{}\"", crate::ARCON_VER)
         };
 
+        let mut arcon_feature_str = String::new();
+        for feature in features {
+            arcon_feature_str += &format!("\"{}\",", feature);
+        }
+
         let manifest = format!(
             "[package] \
              \nname = \"{}\" \
@@ -106,13 +115,9 @@ impl CompilerEnv {
              \nauthors = [\"Arcon Developers <insert-email>\"] \
              \nedition = \"2018\" \
              \n[dependencies] \
-             \narcon = {{{}}} \
-             \nserde = {{version = \"1.0.63\", features = [\"derive\"] }}",
-            id, arcon_dependency
+             \narcon = {{{}, features = [{}]}}",
+            id, arcon_dependency, arcon_feature_str
         );
-
-        let path = format!("{}/src/", full_path);
-        std::fs::create_dir_all(path)?;
 
         let manifest_file = format!("{}/Cargo.toml", full_path);
         arcon_codegen::to_file(manifest, manifest_file)?;
@@ -120,11 +125,13 @@ impl CompilerEnv {
         Ok(())
     }
 
-    pub fn generate(&self, spec: &ArconSpec) -> Result<(), failure::Error> {
-        let code = arcon_codegen::generate(spec, false)?;
-        let path = format!("{}/src/main.rs", spec.id);
-        arcon_codegen::to_file(code, path)?;
-        Ok(())
+    pub fn generate(&self, spec: &ArconSpec) -> Result<Vec<String>, failure::Error> {
+        let (code, features) = arcon_codegen::generate(spec, false)?;
+        let path = format!("{}/src/", spec.id);
+        std::fs::create_dir_all(path.clone())?;
+        let main_rs = format!("{}/src/main.rs", spec.id);
+        arcon_codegen::to_file(code, main_rs)?;
+        Ok(features)
     }
 
     pub fn bin_path(&self, spec: &ArconSpec) -> Result<String, failure::Error> {
