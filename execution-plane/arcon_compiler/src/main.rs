@@ -214,13 +214,13 @@ fn compile(
 
     env.add_project(spec.id.clone())?;
     let features = env.generate(&spec)?;
-    env.create_workspace_member(&spec.id, features)?;
+    env.create_workspace_member(&spec.id, &features)?;
 
     if daemonize {
         daemonize_arconc();
     } else {
         let bin = env.bin_path(&spec)?;
-        greeting_with_spec(&spec, &bin);
+        greeting_with_spec(&spec, &features, &bin);
     }
 
     let logged = if daemonize {
@@ -261,9 +261,9 @@ fn repl() -> Result<(), failure::Error> {
     Ok(())
 }
 
-fn greeting_with_spec(spec: &ArconSpec, bin_path: &str) {
+fn greeting_with_spec(spec: &ArconSpec, features: &Vec<String>, bin_path: &str) {
     let mode = get_compile_mode(spec);
-    let features_str = spec.features.join(",");
+    let features_str = features.join(",");
 
     let msg = format!(
         "Wait while I compile {} for you!\n

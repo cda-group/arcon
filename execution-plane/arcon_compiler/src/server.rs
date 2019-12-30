@@ -26,7 +26,7 @@ impl Server {
             let mut env = self.env.lock().unwrap();
             env.add_project(spec.id.clone())?;
             let features = env.generate(&spec)?;
-            env.create_workspace_member(&spec.id, features)?;
+            env.create_workspace_member(&spec.id, &features)?;
 
             if let Some(log_dir) = env.log_dir.clone() {
                 logged = Some(log_dir)

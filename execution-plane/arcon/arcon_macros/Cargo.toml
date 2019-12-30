@@ -1,6 +1,6 @@
 [package]
 name = "arcon_macros"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Max Meldrum <mmeldrum@kth.se>"]
 readme = "README.md"
 license = "BSD-3-Clause"
@@ -12,9 +12,9 @@ Macros for Arcon
 edition = "2018"
 
 [dependencies]
-syn = "0.15.38"
-quote = "0.6.3"
-proc-macro2 = "0.4"
+syn = "1.0"
+quote = "1.0"
+proc-macro2 = "1.0"
 
 [lib]
 proc-macro = true

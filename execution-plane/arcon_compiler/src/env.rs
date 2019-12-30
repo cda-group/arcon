@@ -92,7 +92,7 @@ impl CompilerEnv {
     pub fn create_workspace_member(
         &self,
         id: &str,
-        features: Vec<String>,
+        features: &Vec<String>,
     ) -> Result<(), failure::Error> {
         let full_path = format!("{}", id);
 
@@ -104,8 +104,13 @@ impl CompilerEnv {
         };
 
         let mut arcon_feature_str = String::new();
+        let mut to_format = features.len();
         for feature in features {
-            arcon_feature_str += &format!("\"{}\",", feature);
+            arcon_feature_str += &format!("\"{}\"", feature);
+            if to_format > 1 {
+                arcon_feature_str += ",";
+            }
+            to_format -= 1;
         }
 
         let manifest = format!(

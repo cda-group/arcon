@@ -12,7 +12,6 @@ message ArconSpec {
     DebugMode debug = 2;
     ReleaseMode release = 3;
   }
-  repeated string features = 4;
   string target = 5;
   repeated Node nodes = 6;
   string system = 7;

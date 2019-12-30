@@ -35,9 +35,9 @@ fn codegen_test() {
 fn _add_test_spec(name: &str) {
     let json_path = format!("{}/{}.json", SPECIFICATION_PATH, name);
     let spec = arcon_spec::spec_from_file(&json_path).unwrap();
-    let generated_code = generate(&spec, true).unwrap();
+    let (code, _) = generate(&spec, true).unwrap();
     let path = format!("{}/{}.rs", RUN_PASS_PATH, name);
-    let _ = to_file(generated_code, path.to_string());
+    let _ = to_file(code, path.to_string());
 }
 
 fn _add_empty_main(path: &str) {
