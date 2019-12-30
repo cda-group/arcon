@@ -113,8 +113,9 @@ fn struct_gen(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use arcon_proto::arcon_spec::Struct;
+    // TODO: Update after fixing struct gen logic
+    //use super::*;
+    //use arcon_proto::arcon_spec::Struct;
 
     /*
         #[test]

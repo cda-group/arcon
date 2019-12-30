@@ -1,7 +1,6 @@
 {
 "id": "basic_dataflow",
 "target": "x86-64-unknown-linux-gnu",
-"features": [],
 "system": "127.0.0.1:3000",
 "nodes": [
     {
@@ -57,7 +56,8 @@
                         }
                     }
                 ],
-                "udf": "hej",
+                "id": "my_map",
+                "udf": "fn my_map(x: u32) -> u32 { x + 5 }",
                 "predecessor": 1,
                 "kind": 2
             }
