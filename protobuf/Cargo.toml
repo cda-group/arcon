@@ -1,6 +1,6 @@
 [package]
 name = "arcon_proto"
-version = "0.1.3"
+version = "0.1.4"
 authors = ["Max Meldrum <mmeldrum@kth.se>"]
 readme = "README.md"
 repository = "https://github.com/cda-group/arcon_proto"

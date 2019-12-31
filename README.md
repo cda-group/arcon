@@ -3,8 +3,9 @@
 
 # Arcon
 
-Arcon is a data programming system for building continuous analytics applications. The system is made up of two parts: (1) [Arc](https://cda-group.github.io/papers/Arc_DBPL_2019.pdf), an IR for batch and stream programming;
-2) the Arcon runtime, a distributed dataflow runtime that executes applications constructed through Arc.
+Arcon is a streaming-first execution engine for the [Arc](https://github.com/cda-group/arc) language.
+
+## Overview
 
 **Note**: The project is still in an early development stage.
 
@@ -15,10 +16,15 @@ Arcon is a data programming system for building continuous analytics application
 
 ## Project Layout
 
-* [`execution-plane`]: The execution plane provides a Rust-based distributed dataflow runtime that executes Arcon applications.
-* [`operational-plane`]: The operational plane is responsible for the coordination of the distributed execution of an Arcon application.
+* [`execution-plane`]: The execution plane provides a Rust-based distributed dataflow runtime that executes Arc applications.
+* [`operational-plane`]: The operational plane is responsible for the coordination of the distributed execution of an Arc application.
 * [`protobuf`]: Protobuf messages used between Arcon's operational and execution plane.
 
 [`execution-plane`]: execution-plane
 [`operational-plane`]: operational-plane
 [`protobuf`]: protobuf
+
+## Related Projects
+
+* [Arc](https://github.com/cda-group/arc): An IR and compiler for data analytics.
+* [Kompact](https://github.com/kompics/kompact): A hybrid Actor + Component model framework.
