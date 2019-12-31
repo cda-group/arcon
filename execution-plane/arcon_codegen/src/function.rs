@@ -1,56 +1,56 @@
 use crate::common::id_to_ident;
 use crate::common::verify_and_start;
+use crate::spec;
+use crate::spec::channel_kind::ChannelKind;
 use crate::types::to_token_stream;
+use crate::GENERATED_FUNCTIONS;
+use arcon_proto::arcon_spec::{Function, FunctionKind};
 use proc_macro2::{Ident, Span, TokenStream};
-use spec::ChannelKind::*;
-use spec::Task;
-use spec::TaskKind::{Filter, FlatMap, Map};
 
-pub fn stream_task(
+pub fn function(
     id: u32,
-    _target_name: &str,
+    target_name: &str,
     parallelism: &u32,
-    task: &Task,
+    func: &Function,
     spec_id: &String,
 ) -> TokenStream {
+    let fn_ident = function_gen(spec_id, &func.id, func.udf.clone());
     let node_id = id;
     let node_name = id_to_ident(id);
-    let input_type = to_token_stream(&task.input_type, spec_id);
-    let output_type = to_token_stream(&task.output_type, spec_id);
+    let input_type = to_token_stream(&func.input_type.clone().unwrap(), spec_id);
+    let output_type = to_token_stream(&func.output_type.clone().unwrap(), spec_id);
 
-    let weld_code: &str = &task.weld_code;
-
-    let successors: &Vec<spec::ChannelKind> = &task.successors;
-    let predecessor = &task.predecessor;
+    let successors: &Vec<spec::ChannelKind> = &func.successors;
+    let predecessor = func.predecessor;
 
     if *parallelism == 1 {
         assert_eq!(successors.len(), 1);
 
-        match &successors.get(0).unwrap() {
-            Local { id } => {
-                let target = Ident::new(&id, Span::call_site());
+        match &successors.get(0).unwrap().channel_kind.as_ref() {
+            Some(ChannelKind::Local(_)) => {
+                let target = Ident::new(target_name, Span::call_site());
+                let kind: FunctionKind = unsafe { ::std::mem::transmute(func.kind) };
                 let task_signature = {
-                    match &task.kind {
-                        FlatMap => {
+                    match &kind {
+                        FunctionKind::FlatMap => {
                             quote! {
-                                FlatMap::<#input_type, #output_type>::new(module)
+                                FlatMap::<#input_type, #output_type>::new(&#fn_ident)
                             }
                         }
-                        Map => {
+                        FunctionKind::Map => {
                             quote! {
-                                Map::<#input_type, #output_type>::new(module)
+                                Map::<#input_type, #output_type>::new(&#fn_ident)
                             }
                         }
-                        Filter => {
+                        FunctionKind::Filter => {
                             quote! {
-                                Filter::<#input_type>::new(module)
+                                Filter::<#input_type>::new(&#fn_ident)
                             }
                         }
                     }
                 };
-
-                let channel_strategy_quote = match &task.kind {
-                    Filter => {
+                let channel_strategy_quote = match &kind {
+                    FunctionKind::Filter => {
                         quote! {
                             let channel_strategy: Box<ChannelStrategy<#input_type>> = Box::new(Forward::new(channel));
                         }
@@ -65,11 +65,9 @@ pub fn stream_task(
                 let verify = verify_and_start(&node_name, "system");
 
                 quote! {
-                    let actor_ref: ActorRef<ArconMessage<#output_type>> = #target.actor_ref();
+                    let actor_ref: ActorRefStrong<ArconMessage<#output_type>> = #target.actor_ref().hold().expect("failed to fetch actor ref");
                     let channel = Channel::Local(actor_ref);
                     #channel_strategy_quote
-                    let code = String::from(#weld_code);
-                    let module = std::sync::Arc::new(Module::new(code).unwrap());
                     let (#node_name, reg) = system.create_and_register(move || {
                         Node::<#input_type, #output_type>::new(
                             #node_id.into(),
@@ -82,14 +80,25 @@ pub fn stream_task(
                     #verify
                 }
             }
-            Remote { id: _, addr: _ } => {
+            Some(ChannelKind::Remote(_)) => {
                 unimplemented!();
             }
+            None => panic!("Bad input"),
         }
     } else {
         unimplemented!();
         // Handle multiple channels..
     }
+}
+
+fn function_gen(spec_id: &String, name: &str, code: String) -> Ident {
+    let mut func_map = GENERATED_FUNCTIONS.lock().unwrap();
+    if let Some(map) = func_map.get_mut(spec_id) {
+        if !map.contains_key(name) {
+            map.insert(String::from(name.clone()), code);
+        }
+    }
+    Ident::new(name, Span::call_site())
 }
 
 #[cfg(test)]

@@ -1,24 +1,20 @@
 use crate::common::*;
+use crate::spec::sink::SinkKind;
+use crate::spec::Sink;
 use crate::types::to_token_stream;
 use proc_macro2::{Ident, TokenStream};
-use spec::{SinkKind, SocketKind, Type};
 
-pub fn sink(
-    id: u32,
-    input_type: &Type,
-    sink_type: &SinkKind,
-    spec_id: &String,
-    predecessor: u32,
-) -> TokenStream {
+pub fn sink(id: u32, sink: &Sink, spec_id: &String) -> TokenStream {
     let sink_name = id_to_ident(id);
-    let input_type = to_token_stream(input_type, spec_id);
+    let input_type = to_token_stream(&sink.sink_type.clone().unwrap(), spec_id);
 
-    let sink_stream = match sink_type {
-        SinkKind::Debug => debug_sink(&sink_name, &input_type),
-        SinkKind::LocalFile { path } => {
-            local_file_sink(&sink_name, &input_type, &path, predecessor)
+    let sink_stream = match sink.sink_kind.as_ref() {
+        Some(SinkKind::Socket(s)) => socket_sink(&sink_name, &input_type, &s.addr, &s.protocol),
+        Some(SinkKind::LocalFile(file)) => {
+            local_file_sink(&sink_name, &input_type, &file.path, sink.predecessor)
         }
-        SinkKind::Socket { addr, kind } => socket_sink(&sink_name, &input_type, addr, kind),
+        Some(SinkKind::Debug(_)) => debug_sink(&sink_name, &input_type),
+        None => panic!("No sink to codegen"),
     };
 
     sink_stream
@@ -28,7 +24,7 @@ fn debug_sink(sink_name: &Ident, input_type: &TokenStream) -> TokenStream {
     let verify = verify_and_start(sink_name, "system");
     quote! {
         let (#sink_name, reg)= system.create_and_register(move || {
-            let sink: DebugSink<#input_type> = DebugSink::new();
+            let sink: DebugNode<#input_type> = DebugNode::new();
             sink
         });
         #verify
@@ -55,13 +51,15 @@ fn socket_sink(
     sink_name: &Ident,
     input_type: &TokenStream,
     addr: &str,
-    kind: &SocketKind,
+    protocol: &str,
 ) -> TokenStream {
     let verify = verify_and_start(sink_name, "system");
+
     let sock_sink = {
-        match kind {
-            SocketKind::Tcp => unimplemented!(),
-            SocketKind::Udp => quote! {  SocketSink::udp(sock_addr); },
+        if protocol == "udp" || protocol == "UDP" {
+            quote! {  SocketSink::udp(sock_addr); }
+        } else {
+            unimplemented!()
         }
     };
 

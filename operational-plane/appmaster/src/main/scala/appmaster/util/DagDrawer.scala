@@ -15,6 +15,7 @@ private[appmaster] object DagDrawer {
     var edges = new ListBuffer[(String, String)]()
 
     // TODO: actually implement this when JSON is complete
+    /*
     dfg.nodes.foreach { node => 
       node match {
         case Node(id, _, Source(sType, strategy, successors, kind)) => 
@@ -31,6 +32,7 @@ private[appmaster] object DagDrawer {
           vertices += "sink"
       }
     }
+    */
 
     val prefs = LayoutPrefsImpl(vertical = false, elevateEdges = false)
     val graph = Graph(vertices = vertices.toSet, edges.toList)

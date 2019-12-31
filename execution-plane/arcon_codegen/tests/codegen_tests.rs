@@ -2,15 +2,13 @@ extern crate arcon;
 extern crate arcon_codegen;
 
 use arcon_codegen::*;
-use arcon_spec::*;
-//use std::fs;
+use arcon_proto::arcon_spec;
+use std::fs;
 
 pub const RUN_PASS_MODE: &str = "run-pass";
 pub const RUN_PASS_PATH: &str = "tests/run-pass";
 pub const SPECIFICATION_PATH: &str = "tests/specifications";
 
-// Disabled for now until Rust codegen is fixed
-/*
 #[test]
 fn codegen_test() {
     // makes sure that tests/run-pass does not exist
@@ -22,22 +20,23 @@ fn codegen_test() {
     let t = trybuild::TestCases::new();
 
     add_test_spec("basic_dataflow");
+    /*
     add_test_spec("tumbling_window_dataflow");
     add_test_spec("normalise");
     add_test_spec("pipeline_with_structs");
+    */
 
     // test all generated .rs files
     let specs = format!("{}/{}", RUN_PASS_PATH, "*.rs");
     t.pass(&specs);
 }
-*/
 
-fn _add_test_spec(name: &str) {
+fn add_test_spec(name: &str) {
     let json_path = format!("{}/{}.json", SPECIFICATION_PATH, name);
-    let spec = ArconSpec::load(&json_path).unwrap();
-    let generated_code = generate(&spec, true).unwrap();
+    let spec = arcon_spec::spec_from_file(&json_path).unwrap();
+    let (code, _) = generate(&spec, true).unwrap();
     let path = format!("{}/{}.rs", RUN_PASS_PATH, name);
-    let _ = to_file(generated_code, path.to_string());
+    let _ = to_file(code, path.to_string());
 }
 
 fn _add_empty_main(path: &str) {

@@ -7,7 +7,7 @@ extern crate failure;
 #[macro_use]
 extern crate lazy_static;
 
-use arcon_spec::*;
+use arcon_proto::arcon_spec::{get_compile_mode, spec_from_file, ArconSpec};
 use clap::{App, AppSettings, Arg, SubCommand};
 use ferris_says::say;
 use std::fs::metadata;
@@ -195,7 +195,9 @@ fn compile(
         }
     };
 
-    let spec = ArconSpec::load(&spec_file)?;
+    let spec = spec_from_file(&spec_file)?;
+
+    debug!("SPEC {:?}", spec);
 
     let mut env = env::CompilerEnv::load(build_dir.to_string())?;
 
@@ -211,14 +213,14 @@ fn compile(
     std::env::set_current_dir(&path)?;
 
     env.add_project(spec.id.clone())?;
-    env.create_workspace_member(&spec.id)?;
-    env.generate(&spec)?;
+    let features = env.generate(&spec)?;
+    env.create_workspace_member(&spec.id, &features)?;
 
     if daemonize {
         daemonize_arconc();
     } else {
-        let bin = env.bin_path(&spec.id, &spec.mode)?;
-        greeting_with_spec(&spec, &bin);
+        let bin = env.bin_path(&spec)?;
+        greeting_with_spec(&spec, &features, &bin);
     }
 
     let logged = if daemonize {
@@ -227,7 +229,7 @@ fn compile(
         None
     };
 
-    util::cargo_build(&spec.id, logged, &spec.mode)?;
+    util::cargo_build(&spec, logged)?;
 
     Ok(())
 }
@@ -259,19 +261,9 @@ fn repl() -> Result<(), failure::Error> {
     Ok(())
 }
 
-fn greeting_with_spec(spec: &ArconSpec, bin_path: &str) {
-    let mode = match spec.mode {
-        CompileMode::Debug => "debug",
-        CompileMode::Release => "release",
-    };
-
-    let features_str = {
-        if let Some(features) = spec.features.clone() {
-            features.join(",")
-        } else {
-            "default".to_string()
-        }
-    };
+fn greeting_with_spec(spec: &ArconSpec, features: &Vec<String>, bin_path: &str) {
+    let mode = get_compile_mode(spec);
+    let features_str = features.join(",");
 
     let msg = format!(
         "Wait while I compile {} for you!\n

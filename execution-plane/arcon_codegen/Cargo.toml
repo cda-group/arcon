@@ -14,14 +14,14 @@ Code generation for Arcon
 exclude = ["tests/run-pass/*"]
 
 [dependencies]
-arcon_spec = { version = "0.1", path = "../arcon_spec" }
-quote = "0.6"
-proc-macro2 = "0.4"
+arcon_proto = { path = "../../protobuf", version = "0.1", features = ["arcon_spec"] }
+quote = "1.0"
+proc-macro2 = "1.0"
 rustfmt-nightly = "1.2.2"
 failure = "0.1.5"
 lazy_static = "1.3.0"
 
 [dev-dependencies]
-arcon = { version = "0.1", path = "../arcon" }
+arcon_proto = { path = "../../protobuf", version = "0.1", features = ["arcon_spec"] }
+arcon = { version = "0.1", path = "../arcon", features = ["socket"] }
 trybuild = "1.0"
-serde = { version = "1.0.63", features = ["derive"] }

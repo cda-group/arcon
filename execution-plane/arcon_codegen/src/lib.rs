@@ -2,7 +2,6 @@
 #![recursion_limit = "256"]
 #[macro_use]
 extern crate quote;
-extern crate arcon_spec as spec;
 extern crate failure;
 extern crate proc_macro2;
 extern crate rustfmt_nightly;
@@ -10,22 +9,23 @@ extern crate rustfmt_nightly;
 extern crate lazy_static;
 
 mod common;
+mod function;
 mod sink;
 mod source;
-mod stream_task;
 mod system;
 mod types;
 mod window;
 
+pub use arcon_proto::arcon_spec as spec;
 use failure::Fail;
 use proc_macro2::TokenStream;
 use rustfmt_nightly::*;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::sync::Mutex;
 
+use spec::node::NodeKind;
 use spec::ArconSpec;
-use spec::NodeKind::{Sink, Source, Task, Window};
 
 const ARCON_CODEGEN_VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
@@ -37,6 +37,10 @@ pub struct CodegenError {
 
 lazy_static! {
     static ref GENERATED_STRUCTS: Mutex<HashMap<String, HashMap<String, String>>> = {
+        let m = HashMap::new();
+        Mutex::new(m)
+    };
+    static ref GENERATED_FUNCTIONS: Mutex<HashMap<String, HashMap<String, String>>> = {
         let m = HashMap::new();
         Mutex::new(m)
     };
@@ -68,15 +72,21 @@ pub fn to_file(input: String, path: String) -> std::result::Result<(), std::io::
 }
 
 /// Generates a main.rs by parsing an `ArconSpec`
-pub fn generate(spec: &ArconSpec, is_terminated: bool) -> Result<String, CodegenError> {
+pub fn generate(
+    spec: &ArconSpec,
+    is_terminated: bool,
+) -> Result<(String, Vec<String>), CodegenError> {
     let mut nodes = spec.nodes.clone();
     let mut stream: Vec<TokenStream> = Vec::new();
+    let mut features: HashSet<String> = HashSet::new();
     let mut previous_node: String = String::new();
 
     {
-        // Creat entry for this Arcon Spec
+        // Initialise structs/funcs for this spec
         let mut struct_map = GENERATED_STRUCTS.lock().unwrap();
         struct_map.insert(spec.id.clone(), HashMap::new());
+        let mut fn_map = GENERATED_FUNCTIONS.lock().unwrap();
+        fn_map.insert(spec.id.clone(), HashMap::new());
     }
 
     // NOTE: We go backwards while generating the code
@@ -84,39 +94,34 @@ pub fn generate(spec: &ArconSpec, is_terminated: bool) -> Result<String, Codegen
     while !nodes.is_empty() {
         let node = nodes.pop().unwrap();
 
-        match node.kind {
-            Source(source) => {
+        match node.node_kind.as_ref() {
+            Some(NodeKind::Source(source)) => {
                 stream.push(source::source(
                     node.id,
                     &previous_node,
                     &source,
                     &spec.id,
-                    spec.timestamp_extractor,
+                    0, // ts extractor.. fix
+                    &mut features,
                 ));
             }
-            Sink(sink) => {
-                stream.push(sink::sink(
-                    node.id,
-                    &sink.sink_type,
-                    &sink.kind,
-                    &spec.id,
-                    sink.predecessor,
-                ));
+            Some(NodeKind::Sink(sink)) => {
+                stream.push(sink::sink(node.id, &sink, &spec.id));
             }
-            Task(task) => {
-                stream.push(stream_task::stream_task(
+            Some(NodeKind::Window(window)) => {
+                stream.push(window::window(node.id, &window, &spec.id));
+            }
+            Some(NodeKind::Function(func)) => {
+                stream.push(function::function(
                     node.id,
                     &previous_node,
                     &node.parallelism,
-                    &task,
+                    &func,
                     &spec.id,
                 ));
             }
-            Window(window) => {
-                stream.push(window::window(node.id, &window, &spec.id));
-            }
+            None => {}
         }
-
         previous_node = "node".to_string() + &node.id.to_string();
     }
 
@@ -134,7 +139,7 @@ pub fn generate(spec: &ArconSpec, is_terminated: bool) -> Result<String, Codegen
     };
 
     // NOTE: Currently just assumes there is a single KompactSystem
-    let system = system::system(&spec.system_addr, None, Some(final_stream), termination);
+    let system = system::system(&spec.system, None, Some(final_stream), termination);
 
     // Check for struct definitions
     let mut struct_map = GENERATED_STRUCTS.lock().unwrap();
@@ -149,8 +154,21 @@ pub fn generate(spec: &ArconSpec, is_terminated: bool) -> Result<String, Codegen
     // Remove this Arcon specs entry
     let _ = struct_map.remove(&spec.id);
 
+    // Check for functions
+    let mut fn_map = GENERATED_FUNCTIONS.lock().unwrap();
+    let mut fn_streams: Vec<TokenStream> = Vec::new();
+    if let Some(map) = fn_map.get(&spec.id) {
+        for (_, v) in map.iter() {
+            let stream: proc_macro2::TokenStream = v.parse().unwrap();
+            fn_streams.push(stream);
+        }
+    }
+
+    // Remove generated functions
+    let _ = fn_map.remove(&spec.id);
+
     // Create an optional `TokenStream` with struct definitions
-    let struct_definitions = {
+    let structs = {
         if struct_streams.is_empty() {
             None
         } else {
@@ -161,10 +179,38 @@ pub fn generate(spec: &ArconSpec, is_terminated: bool) -> Result<String, Codegen
         }
     };
 
-    let main = generate_main(system, struct_definitions);
+    // Create an optional `TokenStream` with functions
+    let functions = {
+        if fn_streams.is_empty() {
+            None
+        } else {
+            let defs = fn_streams
+                .into_iter()
+                .fold(quote! {}, |f, s| combine_token_streams(f, s));
+            Some(defs)
+        }
+    };
+
+    let pre_main = {
+        match (structs, functions) {
+            (Some(s), Some(f)) => Some(combine_token_streams(s, f)),
+            (Some(s), None) => Some(s),
+            (None, Some(f)) => Some(f),
+            (None, None) => None,
+        }
+    };
+
+    let main = generate_main(system, pre_main);
     let formatted_main = format_code(main.to_string())?;
+
+    if formatted_main.len() == 0 {
+        let msg_err = format!("Failed to format the following Rust code\n {}", main);
+        return Err(CodegenError { msg: msg_err });
+    }
+
     let code_header = generate_header();
-    Ok(format!("{}\n{}", code_header, formatted_main))
+    let final_code = format!("{}\n{}", code_header, formatted_main);
+    Ok((final_code, features.iter().cloned().collect()))
 }
 
 /// Helper function for merging two `TokenStream`s
@@ -177,7 +223,7 @@ pub fn combine_token_streams(s1: TokenStream, s2: TokenStream) -> TokenStream {
 fn generate_header() -> String {
     let disclaimer = format!(
         "// The following code has been generated by arcon_codegen v{}\n\n\
-         // Copyright 2019 KTH Royal Institute of Technology and RISE SICS\n\
+         // Copyright 2019 KTH Royal Institute of Technology\n\
          // Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met: \n\n\
          // 1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer. \n\
          // 2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution. \n\
@@ -202,16 +248,13 @@ fn generate_header() -> String {
 }
 
 /// Generates the main file of an Arcon process
-pub fn generate_main(stream: TokenStream, messages: Option<TokenStream>) -> TokenStream {
+pub fn generate_main(stream: TokenStream, pre_main: Option<TokenStream>) -> TokenStream {
     quote! {
         extern crate arcon;
         use arcon::prelude::*;
         use arcon::macros::*;
 
-        #[macro_use]
-        extern crate serde;
-
-        #messages
+        #pre_main
 
         fn main() {
             #stream

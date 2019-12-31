@@ -2,18 +2,13 @@
 
 Requires Rust nightly (See current toolchain [here](rust-toolchain)).
 
-**NOTE: Codegen for the new Arc batch backend is not yet implemented. Which means that
-arcon_codegen and arcon_compiler is unusable until it is fixed.**
-
 * [`arcon`]: Crate containing the core execution engine
 * [`arcon_codegen`]: Code generation for Arcon
 * [`arcon_compiler`]: Backend compiler targeting Arcon 
-* [`arcon_spec`]: Implementation of the Arcon specification
 
 [`arcon`]: arcon
 [`arcon_codegen`]: arcon_codegen
 [`arcon_compiler`]: arcon_compiler
-[`arcon_spec`]: arcon_spec
 
 ## Ubuntu
 
@@ -46,14 +41,14 @@ $ cargo build --release
 Compile and start binary:
 
 ```bash
-$ ./target/release/arconc compile -s arcon_codegen/tests/specifications/basic_dataflow.json
+$ ./target/release/arconc -l compile -s arcon_codegen/tests/specifications/basic_dataflow.json
 $ ./build/target/release/basic_dataflow
 ```
 
 Connect to Socket Source and enter valid unsigned integers:
 
 ```bash
-$ nc localhost 1337
+$ nc -u localhost 5000
 ```
 
 ## Testing

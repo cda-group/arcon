@@ -1,6 +1,8 @@
 syntax = "proto3";
 option java_package = "kompact";
 
+package kompact;
+
 message Hello {
     string hey = 1;
 }

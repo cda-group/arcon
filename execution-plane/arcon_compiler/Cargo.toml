@@ -18,8 +18,7 @@ name = "arconc"
 
 [dependencies]
 arcon_codegen = { version = "0.1", path = "../arcon_codegen" }
-arcon_spec = { version = "0.1", path = "../arcon_spec" }
-arcon_proto = { version = "0.1", features = ["arconc"] }
+arcon_proto = { path = "../../protobuf", version = "0.1", features = ["arconc", "arcon_spec"] }
 grpcio = { version = "0.4", default-features = false, features = ["protobuf-codec"] }
 futures = "0.1.16"
 serde = { version = "1.0", features = ["derive"] }

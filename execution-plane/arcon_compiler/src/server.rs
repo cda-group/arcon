@@ -1,3 +1,4 @@
+use arcon_proto::arcon_spec::{spec_from_bytes, ArconSpec};
 use arcon_proto::*;
 use futures::*;
 use grpcio::{Environment, RpcContext, ServerBuilder, UnarySink};
@@ -5,7 +6,6 @@ use grpcio::{Environment, RpcContext, ServerBuilder, UnarySink};
 use std::sync::{Arc, Mutex};
 
 use crate::env::CompilerEnv;
-use arcon_spec::ArconSpec;
 
 #[derive(Clone)]
 struct Server {
@@ -25,25 +25,25 @@ impl Server {
         {
             let mut env = self.env.lock().unwrap();
             env.add_project(spec.id.clone())?;
-            env.create_workspace_member(&spec.id)?;
-            env.generate(&spec)?;
+            let features = env.generate(&spec)?;
+            env.create_workspace_member(&spec.id, &features)?;
 
             if let Some(log_dir) = env.log_dir.clone() {
                 logged = Some(log_dir)
             }
 
-            let p: String = env.bin_path(&spec.id, &spec.mode)?;
+            let p: String = env.bin_path(&spec)?;
             path += &p;
         }
 
-        crate::util::cargo_build(&spec.id, logged, &spec.mode)?;
+        crate::util::cargo_build(&spec, logged)?;
         Ok(path)
     }
 }
 
 impl Arconc for Server {
     fn compile(&mut self, ctx: RpcContext, req: ArconcRequest, sink: UnarySink<ArconcReply>) {
-        let reply = match ArconSpec::from_bytes(&req.spec) {
+        let reply = match spec_from_bytes(&req.spec) {
             Ok(spec) => {
                 debug!("Received Compilation Request {:?}", spec);
                 match self.compile_spec(&spec) {

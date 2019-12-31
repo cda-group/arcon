@@ -39,7 +39,7 @@ lazy val kompactExtension = (project in file("kompact-extension"))
   .settings(Dependencies.kompactExtension)
   .settings(moduleName("kompact"))
   .settings(
-    PB.protoSources in Compile := Seq(file("../proto"))
+    PB.protoSources in Compile := Seq(file("../protobuf/proto/operational_plane"))
   )
   .settings(
     PB.targets in Compile := Seq(
@@ -82,7 +82,7 @@ lazy val appmaster = (project in file("appmaster"))
   .enablePlugins(JavaAgent)
   .enablePlugins(AkkaGrpcPlugin)
   .settings(
-    PB.protoSources in Compile := Seq(file("../proto/"))
+    PB.protoSources in Compile := Seq(file("../protobuf/proto/arconc"))
   )
 
 
