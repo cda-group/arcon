@@ -43,7 +43,7 @@ where
         // Initiate our watermarks
         let mut watermarks = BTreeMap::new();
         for channel in &in_channels {
-            watermarks.insert(channel.clone(), Watermark { timestamp: 0 });
+            watermarks.insert(*channel, Watermark { timestamp: 0 });
         }
 
         Node {
@@ -195,11 +195,11 @@ where
         }
     }
     fn receive_network(&mut self, msg: NetMessage) {
-        let arcon_msg: ArconResult<ArconMessage<IN>> = match msg.ser_id() {
-            &ReliableSerde::<IN>::SER_ID => msg
+        let arcon_msg: ArconResult<ArconMessage<IN>> = match *msg.ser_id() {
+            ReliableSerde::<IN>::SER_ID => msg
                 .try_deserialise::<ArconMessage<IN>, ReliableSerde<IN>>()
                 .map_err(|_| arcon_err_kind!("Failed to unpack reliable ArconMessage")),
-            &UnsafeSerde::<IN>::SER_ID => msg
+            UnsafeSerde::<IN>::SER_ID => msg
                 .try_deserialise::<ArconMessage<IN>, UnsafeSerde<IN>>()
                 .map_err(|_| arcon_err_kind!("Failed to unpack unreliable ArconMessage")),
             _ => panic!("Unexpected deserialiser"),
