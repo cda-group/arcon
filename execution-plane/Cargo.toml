@@ -1,3 +1,5 @@
+cargo-features = ["profile-overrides"]
+
 [workspace]
 
 members = [
@@ -5,3 +7,6 @@ members = [
   "arcon_codegen",
   "arcon_compiler",
 ]
+
+[profile.dev.overrides.grpcio-sys]
+opt-level = 1 # weird issue with _FORTIFY_SOURCE makes the compilation fail on some systes
