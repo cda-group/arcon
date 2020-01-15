@@ -56,7 +56,7 @@ where
         let executor = rx_exec.wait().map_err(|_| ()).unwrap();
 
         SocketSink {
-            tx_channel: tx.clone(),
+            tx_channel: tx,
             executor,
             _handle: th,
             _marker: PhantomData,

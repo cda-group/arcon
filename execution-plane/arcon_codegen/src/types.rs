@@ -3,7 +3,7 @@ use arcon_proto::arcon_spec::type_holder::ArconType;
 use arcon_proto::arcon_spec::TypeHolder;
 use proc_macro2::{Ident, Span, TokenStream};
 
-pub fn to_token_stream(t: &TypeHolder, spec_id: &String) -> TokenStream {
+pub fn to_token_stream(t: &TypeHolder, spec_id: &str) -> TokenStream {
     match &t.arcon_type {
         Some(ArconType::Scalar(s)) => {
             let ident = Ident::new(scalar(s), Span::call_site());
@@ -16,7 +16,7 @@ pub fn to_token_stream(t: &TypeHolder, spec_id: &String) -> TokenStream {
             let struct_ident = Ident::new(&s.id, Span::call_site());
             if let Some(map) = struct_map.get_mut(spec_id) {
                 if !map.contains_key(&s.id) {
-                    map.insert(String::from(s.id.clone()), generated);
+                    map.insert(s.id.clone(), generated);
                 }
             }
             quote! { #struct_ident }
@@ -52,8 +52,8 @@ fn struct_gen(
     id: &str,
     key: Option<u32>,
     decoder: &Option<String>,
-    field_tys: &Vec<TypeHolder>,
-    spec_id: &String,
+    field_tys: &[TypeHolder],
+    spec_id: &str,
 ) -> TokenStream {
     let key_opt_stream = if let Some(k) = key {
         let key_id = format!("f{}", k);
@@ -71,18 +71,16 @@ fn struct_gen(
         Some(quote! { #[arcon_decoder(,)] })
     };
 
-    let mut field_counter: u32 = 0;
     let mut fields: Vec<TokenStream> = Vec::new();
 
     let struct_ident = Ident::new(id, Span::call_site());
 
-    for field in &field_tys.clone() {
+    for (field_counter, field) in field_tys.iter().enumerate() {
         let expanded_field = to_token_stream(field, spec_id);
         let field_str = format!("f{}", field_counter);
         let field_ident = Ident::new(&field_str, Span::call_site());
         let field_quote = quote! { #field_ident: #expanded_field };
         fields.push(field_quote);
-        field_counter += 1;
     }
 
     let struct_def = quote! { #struct_ident {

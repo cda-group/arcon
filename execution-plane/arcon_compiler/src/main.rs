@@ -30,7 +30,7 @@ const ARCON_VER: &str = "0.1"; // 0.1.x
 lazy_static! {
     static ref TARGETS: Vec<String> = {
         let targets = util::target_list().expect("Failed to fetch target list");
-        targets.split("\n").map(|x| x.to_string()).collect()
+        targets.split('\n').map(|x| x.to_string()).collect()
     };
     static ref RUSTC_VERSION: String =
         util::rustc_version().expect("Failed to fetch rustc version");
@@ -261,7 +261,7 @@ fn repl() -> Result<(), failure::Error> {
     Ok(())
 }
 
-fn greeting_with_spec(spec: &ArconSpec, features: &Vec<String>, bin_path: &str) {
+fn greeting_with_spec(spec: &ArconSpec, features: &[String], bin_path: &str) {
     let mode = get_compile_mode(spec);
     let features_str = features.join(",");
 
@@ -274,7 +274,7 @@ fn greeting_with_spec(spec: &ArconSpec, features: &Vec<String>, bin_path: &str) 
     );
 
     let width: usize = msg
-        .split("\n")
+        .split('\n')
         .collect::<Vec<&str>>()
         .iter()
         .map(|m| m.len())

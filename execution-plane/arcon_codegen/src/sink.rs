@@ -4,20 +4,18 @@ use crate::spec::Sink;
 use crate::types::to_token_stream;
 use proc_macro2::{Ident, TokenStream};
 
-pub fn sink(id: u32, sink: &Sink, spec_id: &String) -> TokenStream {
+pub fn sink(id: u32, sink: &Sink, spec_id: &str) -> TokenStream {
     let sink_name = id_to_ident(id);
     let input_type = to_token_stream(&sink.sink_type.clone().unwrap(), spec_id);
 
-    let sink_stream = match sink.sink_kind.as_ref() {
+    match sink.sink_kind.as_ref() {
         Some(SinkKind::Socket(s)) => socket_sink(&sink_name, &input_type, &s.addr, &s.protocol),
         Some(SinkKind::LocalFile(file)) => {
             local_file_sink(&sink_name, &input_type, &file.path, sink.predecessor)
         }
         Some(SinkKind::Debug(_)) => debug_sink(&sink_name, &input_type),
         None => panic!("No sink to codegen"),
-    };
-
-    sink_stream
+    }
 }
 
 fn debug_sink(sink_name: &Ident, input_type: &TokenStream) -> TokenStream {

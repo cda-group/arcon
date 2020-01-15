@@ -27,7 +27,7 @@ use std::sync::Mutex;
 use spec::node::NodeKind;
 use spec::ArconSpec;
 
-const ARCON_CODEGEN_VERSION: &'static str = env!("CARGO_PKG_VERSION");
+const ARCON_CODEGEN_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Debug, Fail)]
 #[fail(display = "Codegen err: `{}`", msg)]
@@ -115,7 +115,7 @@ pub fn generate(
                 stream.push(function::function(
                     node.id,
                     &previous_node,
-                    &node.parallelism,
+                    node.parallelism,
                     &func,
                     &spec.id,
                 ));
@@ -127,7 +127,7 @@ pub fn generate(
 
     let final_stream = stream
         .into_iter()
-        .fold(quote! {}, |f, s| combine_token_streams(f, s));
+        .fold(quote! {}, combine_token_streams);
 
     // By default, the system is told to block
     let termination = {
@@ -174,7 +174,7 @@ pub fn generate(
         } else {
             let defs = struct_streams
                 .into_iter()
-                .fold(quote! {}, |f, s| combine_token_streams(f, s));
+                .fold(quote! {}, combine_token_streams);
             Some(defs)
         }
     };
@@ -186,7 +186,7 @@ pub fn generate(
         } else {
             let defs = fn_streams
                 .into_iter()
-                .fold(quote! {}, |f, s| combine_token_streams(f, s));
+                .fold(quote! {}, combine_token_streams);
             Some(defs)
         }
     };
@@ -203,7 +203,7 @@ pub fn generate(
     let main = generate_main(system, pre_main);
     let formatted_main = format_code(main.to_string())?;
 
-    if formatted_main.len() == 0 {
+    if formatted_main.is_empty() {
         let msg_err = format!("Failed to format the following Rust code\n {}", main);
         return Err(CodegenError { msg: msg_err });
     }

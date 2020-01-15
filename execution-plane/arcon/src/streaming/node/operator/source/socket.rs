@@ -58,10 +58,10 @@ where
             id,
         }
     }
-    pub fn output_event(&mut self, data: OUT, ts: Option<u64>) -> () {
+    pub fn output_event(&mut self, data: OUT, ts: Option<u64>) {
         self.received += 1;
         if self.watermark_interval > 0 {
-            if let Some(_) = ts {
+            if ts.is_some() {
                 debug!(self.ctx.log(), "Extracted timestamp and using that");
                 if let Err(err) = self
                     .out_channels
@@ -85,19 +85,17 @@ where
                     }
                 }
             }
-        } else {
-            if let Err(err) = self.out_channels.output(
-                ArconMessage {
-                    event: ArconEvent::Element(ArconElement::new(data)),
-                    sender: self.id,
-                },
-                &self.ctx.system(),
-            ) {
-                error!(self.ctx.log(), "Unable to output event, error {}", err);
-            }
+        } else if let Err(err) = self.out_channels.output(
+            ArconMessage {
+                event: ArconEvent::Element(ArconElement::new(data)),
+                sender: self.id,
+            },
+            &self.ctx.system(),
+        ) {
+            error!(self.ctx.log(), "Unable to output event, error {}", err);
         }
     }
-    pub fn output_watermark(&mut self) -> () {
+    pub fn output_watermark(&mut self) {
         if self.watermark_index.is_some() {
             if let Err(err) = self.out_channels.output(
                 ArconMessage {
@@ -130,33 +128,30 @@ impl<OUT> Provide<ControlPort> for SocketSource<OUT>
 where
     OUT: 'static + ArconType + FromStr,
 {
-    fn handle(&mut self, event: ControlEvent) -> () {
-        match event {
-            ControlEvent::Start => {
-                let system = self.ctx.system();
+    fn handle(&mut self, event: ControlEvent) {
+        if let ControlEvent::Start = event {
+            let system = self.ctx.system();
 
-                // Check if we should schedule watermark generation
-                if self.watermark_interval > 0 {
-                    self.schedule_periodic(
-                        Duration::from_secs(0),
-                        Duration::from_secs(self.watermark_interval),
-                        move |self_c, _| {
-                            self_c.output_watermark();
-                        },
-                    );
+            // Check if we should schedule watermark generation
+            if self.watermark_interval > 0 {
+                self.schedule_periodic(
+                    Duration::from_secs(0),
+                    Duration::from_secs(self.watermark_interval),
+                    move |self_c, _| {
+                        self_c.output_watermark();
+                    },
+                );
+            }
+            match self.sock_kind {
+                SocketKind::Tcp => {
+                    let _ = system
+                        .create_and_start(move || IO::tcp(self.sock_addr, self.actor_ref()));
                 }
-                match self.sock_kind {
-                    SocketKind::Tcp => {
-                        let _ = system
-                            .create_and_start(move || IO::tcp(self.sock_addr, self.actor_ref()));
-                    }
-                    SocketKind::Udp => {
-                        let _ = system
-                            .create_and_start(move || IO::udp(self.sock_addr, self.actor_ref()));
-                    }
+                SocketKind::Udp => {
+                    let _ = system
+                        .create_and_start(move || IO::udp(self.sock_addr, self.actor_ref()));
                 }
             }
-            _ => {}
         }
     }
 }
@@ -176,7 +171,7 @@ where
                     // Just assume it is at first place
                     let v: Vec<String> = byte_string
                         .trim()
-                        .split(",")
+                        .split(',')
                         .collect::<Vec<&str>>()
                         .iter()
                         .map(|s| s.trim().to_string())
@@ -186,35 +181,31 @@ where
                             self.ctx.log(),
                             "Bad input data, should be delimited by comma"
                         );
-                    } else {
-                        if let Some(ts_str) = v.get(wm_index as usize) {
-                            if let Ok(ts) = ts_str.parse::<u64>() {
-                                if ts > self.max_timestamp {
-                                    self.max_timestamp = ts;
-                                }
-                                let input_data = v.join(",");
-                                debug!(self.ctx.log(), "Trying to parse str {}", input_data);
-                                match input_data.parse::<OUT>() {
-                                    Ok(data) => self.output_event(data, Some(ts)),
-                                    Err(_) => error!(
-                                        self.ctx.log(),
-                                        "Unable to parse string {:?}", input_data
-                                    ),
-                                }
-                            } else {
-                                error!(
-                                    self.ctx.log(),
-                                    "Failed to extract timestamp at index {}", wm_index
-                                );
+                    } else if let Some(ts_str) = v.get(wm_index as usize) {
+                        if let Ok(ts) = ts_str.parse::<u64>() {
+                            if ts > self.max_timestamp {
+                                self.max_timestamp = ts;
                             }
+                            let input_data = v.join(",");
+                            debug!(self.ctx.log(), "Trying to parse str {}", input_data);
+                            match input_data.parse::<OUT>() {
+                                Ok(data) => self.output_event(data, Some(ts)),
+                                Err(_) => error!(
+                                    self.ctx.log(),
+                                    "Unable to parse string {:?}", input_data
+                                ),
+                            }
+                        } else {
+                            error!(
+                                self.ctx.log(),
+                                "Failed to extract timestamp at index {}", wm_index
+                            );
                         }
                     }
+                } else if let Ok(data) = byte_string.trim().parse::<OUT>() {
+                    self.output_event(data, None);
                 } else {
-                    if let Ok(data) = byte_string.trim().parse::<OUT>() {
-                        self.output_event(data, None);
-                    } else {
-                        error!(self.ctx.log(), "Unable to parse string {}", byte_string);
-                    }
+                    error!(self.ctx.log(), "Unable to parse string {}", byte_string);
                 }
             } else {
                 error!(self.ctx.log(), "Unable to parse bytes to string");

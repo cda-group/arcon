@@ -10,9 +10,9 @@ use proc_macro2::{Ident, Span, TokenStream};
 pub fn function(
     id: u32,
     target_name: &str,
-    parallelism: &u32,
+    parallelism: u32,
     func: &Function,
-    spec_id: &String,
+    spec_id: &str,
 ) -> TokenStream {
     let fn_ident = function_gen(spec_id, &func.id, func.udf.clone());
     let node_id = id;
@@ -23,7 +23,7 @@ pub fn function(
     let successors: &Vec<spec::ChannelKind> = &func.successors;
     let predecessor = func.predecessor;
 
-    if *parallelism == 1 {
+    if parallelism == 1 {
         assert_eq!(successors.len(), 1);
 
         match &successors.get(0).unwrap().channel_kind.as_ref() {
@@ -91,11 +91,11 @@ pub fn function(
     }
 }
 
-fn function_gen(spec_id: &String, name: &str, code: String) -> Ident {
+fn function_gen(spec_id: &str, name: &str, code: String) -> Ident {
     let mut func_map = GENERATED_FUNCTIONS.lock().unwrap();
     if let Some(map) = func_map.get_mut(spec_id) {
         if !map.contains_key(name) {
-            map.insert(String::from(name.clone()), code);
+            map.insert(String::from(name), code);
         }
     }
     Ident::new(name, Span::call_site())
