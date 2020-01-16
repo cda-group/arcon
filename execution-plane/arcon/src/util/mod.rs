@@ -12,3 +12,6 @@ pub fn get_system_time() -> u64 {
 
     since_the_epoch.as_millis() as u64
 }
+
+pub trait SafelySendableFn<Args, Res>: Fn<Args, Output = Res> + Send + Sync {}
+impl<Args, Res, F> SafelySendableFn<Args, Res> for F where F: Fn<Args, Output = Res> + Send + Sync {}

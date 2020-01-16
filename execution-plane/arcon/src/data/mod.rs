@@ -5,7 +5,6 @@ use crate::macros::*;
 use abomonation::Abomonation;
 use bytes::IntoBuf;
 use kompact::prelude::*;
-use std::cmp::Ordering;
 use std::fmt::Debug;
 use std::hash::Hash;
 
@@ -67,7 +66,7 @@ pub enum ArconEvent<A: ArconType> {
     Epoch(Epoch),
 }
 
-#[derive(prost::Message, Eq, Hash, Copy, Clone, Abomonation)]
+#[derive(prost::Message, PartialEq, Eq, PartialOrd, Ord, Hash, Copy, Clone, Abomonation)]
 pub struct NodeID {
     #[prost(uint32, tag = "1")]
     pub id: u32,
@@ -78,24 +77,10 @@ impl NodeID {
         NodeID { id: new_id }
     }
 }
+
 impl From<u32> for NodeID {
     fn from(id: u32) -> Self {
         NodeID::new(id)
-    }
-}
-impl Ord for NodeID {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.id.cmp(&other.id)
-    }
-}
-impl PartialOrd for NodeID {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-impl PartialEq for NodeID {
-    fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
     }
 }
 

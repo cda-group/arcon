@@ -19,7 +19,7 @@ pub fn window_appender_sum_latency(b: &mut Bencher) {
 
 pub fn window_appender_sum(messages: usize) {
     #[inline]
-    fn materializer(buffer: &Vec<u64>) -> u64 {
+    fn materializer(buffer: &[u64]) -> u64 {
         buffer.iter().sum()
     }
     let mut window: AppenderWindow<u64, u64> = AppenderWindow::new(&materializer);

@@ -30,9 +30,7 @@ pub struct Error {
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let msg = match self.kind {
-            ErrorKind::ArconError(ref err) => err,
-        };
+        let ErrorKind::ArconError(ref msg) = self.kind;
         write!(f, "{}", msg)
     }
 }

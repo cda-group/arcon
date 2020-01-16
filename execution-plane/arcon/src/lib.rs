@@ -1,4 +1,4 @@
-#![allow(bare_trait_objects)]
+#![feature(unboxed_closures)]
 
 #[cfg_attr(test, macro_use)]
 extern crate arcon_macros;
@@ -92,7 +92,7 @@ mod tests {
         let i3 = Item { id: 1, price: 50 };
 
         assert_eq!(calc_hash(&i1), calc_hash(&i3));
-        assert!(calc_hash(&i1) != calc_hash(&i2));
+        assert_ne!(calc_hash(&i1), calc_hash(&i2));
     }
 
     fn calc_hash<T: std::hash::Hash>(t: &T) -> u64 {

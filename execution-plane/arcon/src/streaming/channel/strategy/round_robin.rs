@@ -91,7 +91,8 @@ mod tests {
             comps.push(comp);
         }
 
-        let mut channel_strategy: Box<ChannelStrategy<Input>> = Box::new(RoundRobin::new(channels));
+        let mut channel_strategy: Box<dyn ChannelStrategy<Input>> =
+            Box::new(RoundRobin::new(channels));
 
         for _i in 0..total_msgs {
             let input = ArconMessage::element(Input { id: 1 }, None, 1.into());

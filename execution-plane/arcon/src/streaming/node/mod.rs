@@ -19,9 +19,9 @@ where
 {
     ctx: ComponentContext<Node<IN, OUT>>,
     id: NodeID,
-    out_channels: Box<ChannelStrategy<OUT>>,
+    out_channels: Box<dyn ChannelStrategy<OUT>>,
     in_channels: Vec<NodeID>,
-    operator: Box<Operator<IN, OUT>>,
+    operator: Box<dyn Operator<IN, OUT> + Send>,
     watermarks: BTreeMap<NodeID, Watermark>,
     current_watermark: u64,
     current_epoch: u64,
@@ -37,13 +37,13 @@ where
     pub fn new(
         id: NodeID,
         in_channels: Vec<NodeID>,
-        out_channels: Box<ChannelStrategy<OUT>>,
-        operator: Box<Operator<IN, OUT>>,
+        out_channels: Box<dyn ChannelStrategy<OUT>>,
+        operator: Box<dyn Operator<IN, OUT> + Send>,
     ) -> Node<IN, OUT> {
         // Initiate our watermarks
         let mut watermarks = BTreeMap::new();
         for channel in &in_channels {
-            watermarks.insert(channel.clone(), Watermark { timestamp: 0 });
+            watermarks.insert(*channel, Watermark { timestamp: 0 });
         }
 
         Node {
@@ -151,8 +151,8 @@ where
     }
     fn output_event(&mut self, event: ArconEvent<OUT>) -> ArconResult<()> {
         let message = ArconMessage {
-            event: event,
-            sender: self.id.clone(),
+            event,
+            sender: self.id,
         };
         self.out_channels.output(message, &self.ctx.system())
     }
@@ -167,7 +167,7 @@ where
     IN: ArconType,
     OUT: ArconType,
 {
-    fn handle(&mut self, event: ControlEvent) -> () {
+    fn handle(&mut self, event: ControlEvent) {
         match event {
             ControlEvent::Start => {
                 debug!(self.ctx.log(), "Started Arcon Node");
@@ -195,11 +195,11 @@ where
         }
     }
     fn receive_network(&mut self, msg: NetMessage) {
-        let arcon_msg: ArconResult<ArconMessage<IN>> = match msg.ser_id() {
-            &ReliableSerde::<IN>::SER_ID => msg
+        let arcon_msg: ArconResult<ArconMessage<IN>> = match *msg.ser_id() {
+            ReliableSerde::<IN>::SER_ID => msg
                 .try_deserialise::<ArconMessage<IN>, ReliableSerde<IN>>()
                 .map_err(|_| arcon_err_kind!("Failed to unpack reliable ArconMessage")),
-            &UnsafeSerde::<IN>::SER_ID => msg
+            UnsafeSerde::<IN>::SER_ID => msg
                 .try_deserialise::<ArconMessage<IN>, UnsafeSerde<IN>>()
                 .map_err(|_| arcon_err_kind!("Failed to unpack unreliable ArconMessage")),
             _ => panic!("Unexpected deserialiser"),
@@ -214,20 +214,6 @@ where
             Err(e) => error!(self.ctx.log(), "Error ArconNetworkMessage: {:?}", e),
         }
     }
-}
-
-unsafe impl<IN, OUT> Send for Node<IN, OUT>
-where
-    IN: ArconType,
-    OUT: ArconType,
-{
-}
-
-unsafe impl<IN, OUT> Sync for Node<IN, OUT>
-where
-    IN: ArconType,
-    OUT: ArconType,
-{
 }
 
 #[cfg(test)]
@@ -247,7 +233,7 @@ mod tests {
         let actor_ref: ActorRefStrong<ArconMessage<i32>> =
             sink.actor_ref().hold().expect("Failed to fetch");
         let channel = Channel::Local(actor_ref);
-        let channel_strategy: Box<ChannelStrategy<i32>> = Box::new(Forward::new(channel));
+        let channel_strategy: Box<dyn ChannelStrategy<i32>> = Box::new(Forward::new(channel));
 
         fn node_fn(x: &i32) -> bool {
             *x >= 0
@@ -264,16 +250,20 @@ mod tests {
 
         return (filter_node.actor_ref(), sink);
     }
+
     fn watermark(time: u64, sender: u32) -> ArconMessage<i32> {
         ArconMessage::watermark(time, sender.into())
     }
+
     fn element(data: i32, time: u64, sender: u32) -> ArconMessage<i32> {
         ArconMessage::element(data, Some(time), sender.into())
     }
+
     fn epoch(epoch: u64, sender: u32) -> ArconMessage<i32> {
         ArconMessage::epoch(epoch, sender.into())
     }
-    fn wait(time: u64) -> () {
+
+    fn wait(time: u64) {
         thread::sleep(time::Duration::from_secs(time));
     }
 
@@ -306,6 +296,7 @@ mod tests {
         assert_eq!(watermark_len, 1);
         assert_eq!(data_len, 0);
     }
+
     #[test]
     fn node_outoforder_watermarks() {
         let (node_ref, sink) = node_test_setup();
@@ -322,6 +313,7 @@ mod tests {
         assert_eq!(watermark_len, 1);
         assert_eq!(sink_inspect.watermarks[0].timestamp, 2u64);
     }
+
     #[test]
     fn node_epoch_block() {
         let (node_ref, sink) = node_test_setup();
@@ -342,6 +334,7 @@ mod tests {
         assert_eq!(sink_inspect.data[1].data, 3i32);
         assert_eq!(data_len, 2);
     }
+
     #[test]
     fn node_epoch_no_continue() {
         let (node_ref, sink) = node_test_setup();
@@ -366,6 +359,7 @@ mod tests {
         assert_eq!(sink_inspect.data[2].data, 31i32);
         assert_eq!(data_len, 3);
     }
+
     #[test]
     fn node_epoch_continue() {
         // Same test as previous but we finnish it by sending the required epochs

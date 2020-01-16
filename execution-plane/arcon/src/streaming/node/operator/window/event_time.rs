@@ -26,7 +26,7 @@ where
     late_arrival_time: u64,
     window: Box<dyn Window<IN, OUT>>,
     window_start: HashMap<u64, u64>,
-    window_maps: HashMap<u64, HashMap<u64, Box<Window<IN, OUT>>>>,
+    window_maps: HashMap<u64, HashMap<u64, Box<dyn Window<IN, OUT>>>>, // TODO: add type alias
     timer: EventTimer<(u64, u64, u64)>, // Stores key, "index" and timestamp
     hasher: BuildHasherDefault<DefaultHasher>,
     keyed: bool,
@@ -66,7 +66,7 @@ where
     }
 
     // Creates the window trigger for a key and "window index"
-    fn new_window_trigger(&mut self, key: u64, index: u64) -> () {
+    fn new_window_trigger(&mut self, key: u64, index: u64) {
         let w_start = match self.window_start.get(&key) {
             Some(start) => start,
             None => {
@@ -86,7 +86,7 @@ where
         }
         let mut h = self.hasher.build_hasher();
         e.data.hash(&mut h);
-        return h.finish();
+        h.finish()
     }
 }
 
@@ -159,17 +159,19 @@ where
         let windows = self.timer.advance_to(ts);
         let mut result = Vec::new();
         for (key, index, timestamp) in windows {
-            if let Some(w_map) = self.window_maps.get_mut(&key) {
-                match w_map.remove(&index) {
-                    Some(mut window) => match window.result() {
-                        Ok(e) => result.push(ArconEvent::Element(ArconElement::with_timestamp(
-                            e, timestamp,
-                        ))),
-                        _ => {}
-                    },
-                    None => {}
-                }
-            }
+            // NOTE: this can be rewritten cleaner when either try expression or
+            // https://github.com/rust-lang/rust/issues/53667 land.
+            // this is just an immediately executed closure so we get the `?` syntax instead of
+            // deeply nesting if-lets
+            (|| {
+                let w_map = self.window_maps.get_mut(&key)?;
+                let mut window = w_map.remove(&index)?;
+                let e = window.result().ok()?;
+                result.push(ArconEvent::Element(ArconElement::with_timestamp(
+                    e, timestamp,
+                )));
+                Some(())
+            })();
         }
         Ok(result)
     }
@@ -217,11 +219,11 @@ mod tests {
         let channel_strategy: Box<Forward<u64>> =
             Box::new(Forward::new(Channel::Local(sink_ref.clone())));
 
-        fn appender_fn(u: &Vec<Item>) -> u64 {
+        fn appender_fn(u: &[Item]) -> u64 {
             u.len() as u64
         }
 
-        let window: Box<Window<Item, u64>> = Box::new(AppenderWindow::new(&appender_fn));
+        let window: Box<dyn Window<Item, u64>> = Box::new(AppenderWindow::new(&appender_fn));
 
         let window_assigner =
             EventTimeWindowAssigner::<Item, u64>::new(window, length, slide, late, true);
@@ -249,7 +251,7 @@ mod tests {
             .expect("error")
             .as_secs();
     }
-    fn wait(time: u64) -> () {
+    fn wait(time: u64) {
         thread::sleep(time::Duration::from_secs(time));
     }
     fn watermark(time: u64) -> ArconMessage<Item> {

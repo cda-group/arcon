@@ -39,11 +39,20 @@ where
     }
 }
 
+impl<IN> Default for DebugNode<IN>
+where
+    IN: ArconType,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<IN> Provide<ControlPort> for DebugNode<IN>
 where
     IN: ArconType,
 {
-    fn handle(&mut self, event: ControlEvent) -> () {
+    fn handle(&mut self, event: ControlEvent) {
         match event {
             ControlEvent::Start => {
                 debug!(self.ctx.log(), "Started Arcon DebugNode");
@@ -68,11 +77,11 @@ where
         self.handle_event(msg.event);
     }
     fn receive_network(&mut self, msg: NetMessage) {
-        let arcon_msg: ArconResult<ArconMessage<IN>> = match msg.ser_id() {
-            &ReliableSerde::<IN>::SER_ID => msg
+        let arcon_msg: ArconResult<ArconMessage<IN>> = match *msg.ser_id() {
+            ReliableSerde::<IN>::SER_ID => msg
                 .try_deserialise::<ArconMessage<IN>, ReliableSerde<IN>>()
                 .map_err(|_| arcon_err_kind!("Failed to unpack reliable ArconMessage")),
-            &UnsafeSerde::<IN>::SER_ID => msg
+            UnsafeSerde::<IN>::SER_ID => msg
                 .try_deserialise::<ArconMessage<IN>, UnsafeSerde<IN>>()
                 .map_err(|_| arcon_err_kind!("Failed to unpack unreliable ArconMessage")),
             _ => panic!("Unexpected deserialiser"),

@@ -10,6 +10,7 @@ target/
 spec.json
 run-pass/
 Cargo.lock
+shell.nix
 
 # Generated code
 #arconc_grpc.rs

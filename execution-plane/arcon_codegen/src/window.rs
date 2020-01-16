@@ -5,7 +5,7 @@ use crate::spec::Window;
 use crate::types::to_token_stream;
 use proc_macro2::{Ident, Span, TokenStream};
 
-pub fn window(id: u32, window: &Window, spec_id: &String) -> TokenStream {
+pub fn window(id: u32, window: &Window, spec_id: &str) -> TokenStream {
     let name = "node".to_string() + &id.to_string();
     let input_type = to_token_stream(&window.input_type.clone().unwrap(), spec_id);
     let output_type = to_token_stream(&window.output_type.clone().unwrap(), spec_id);
@@ -27,7 +27,7 @@ pub fn window(id: u32, window: &Window, spec_id: &String) -> TokenStream {
 
     let successor_ident = Ident::new(&successor.to_string(), Span::call_site());
 
-    let window_stream = match window.assigner.as_ref() {
+    match window.assigner.as_ref() {
         Some(window::Assigner::Sliding(_)) => unimplemented!(),
         Some(window::Assigner::Tumbling(t)) => {
             let window_code = window_function(&window.function.clone().unwrap());
@@ -45,9 +45,7 @@ pub fn window(id: u32, window: &Window, spec_id: &String) -> TokenStream {
             crate::combine_token_streams(window_code, window_comp)
         }
         None => panic!("bad input"),
-    };
-
-    window_stream
+    }
 }
 
 fn window_function(window_function: &crate::spec::window::Function) -> TokenStream {

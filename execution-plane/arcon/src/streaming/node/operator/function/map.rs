@@ -1,5 +1,6 @@
 use crate::data::{ArconElement, ArconEvent, ArconType, Epoch, Watermark};
 use crate::streaming::node::operator::Operator;
+use crate::util::SafelySendableFn;
 use arcon_error::ArconResult;
 
 /// IN: Input Event
@@ -9,7 +10,7 @@ where
     IN: 'static + ArconType,
     OUT: 'static + ArconType,
 {
-    udf: &'static Fn(IN) -> OUT,
+    udf: &'static dyn SafelySendableFn<(IN,), OUT>,
 }
 
 impl<IN, OUT> Map<IN, OUT>
@@ -17,7 +18,7 @@ where
     IN: 'static + ArconType,
     OUT: 'static + ArconType,
 {
-    pub fn new(udf: &'static Fn(IN) -> OUT) -> Self {
+    pub fn new(udf: &'static dyn SafelySendableFn<(IN,), OUT>) -> Self {
         Map { udf }
     }
 
@@ -34,10 +35,10 @@ where
 {
     fn handle_element(&mut self, element: ArconElement<IN>) -> ArconResult<Vec<ArconEvent<OUT>>> {
         let data = self.run_udf(element.data);
-        return Ok(vec![ArconEvent::Element(ArconElement {
+        Ok(vec![ArconEvent::Element(ArconElement {
             data,
             timestamp: element.timestamp,
-        })]);
+        })])
     }
 
     fn handle_watermark(&mut self, _w: Watermark) -> ArconResult<Vec<ArconEvent<OUT>>> {

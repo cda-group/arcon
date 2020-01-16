@@ -19,7 +19,7 @@ impl<A: ArconType> CollectionSource<A> {
         CollectionSource {
             ctx: ComponentContext::new(),
             subscriber: Arc::new(subscriber),
-            collection: collection,
+            collection,
         }
     }
     pub fn process_collection(&self) {

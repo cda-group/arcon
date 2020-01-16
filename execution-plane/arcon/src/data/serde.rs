@@ -44,7 +44,7 @@ pub(crate) mod reliable_remote {
     impl<A: ArconType> Deserialiser<ArconMessage<A>> for ReliableSerde<A> {
         const SER_ID: SerId = Self::SID;
 
-        fn deserialise(buf: &mut Buf) -> Result<ArconMessage<A>, SerError> {
+        fn deserialise(buf: &mut dyn Buf) -> Result<ArconMessage<A>, SerError> {
             let mut res = ArconNetworkMessage::decode(buf.bytes()).map_err(|_| {
                 SerError::InvalidData("Failed to decode ArconNetworkMessage".to_string())
             })?;
@@ -111,14 +111,14 @@ pub(crate) mod reliable_remote {
                         payload: Payload::Element as i32,
                     };
                     let mut data_buf = Vec::with_capacity(remote_msg.encoded_len());
-                    let _ = remote_msg.encode(&mut data_buf).map_err(|_| {
+                    remote_msg.encode(&mut data_buf).map_err(|_| {
                         SerError::InvalidData("Failed to encode network message".to_string())
                     })?;
                     buf.put_slice(&data_buf);
                 }
                 ArconEvent::Watermark(wm) => {
                     let mut wm_buf = Vec::with_capacity(wm.encoded_len());
-                    let _ = wm.encode(&mut wm_buf).map_err(|_| {
+                    wm.encode(&mut wm_buf).map_err(|_| {
                         SerError::InvalidData(
                             "Failed to encode Watermark for remote msg".to_string(),
                         )
@@ -130,14 +130,14 @@ pub(crate) mod reliable_remote {
                         payload: Payload::Watermark as i32,
                     };
                     let mut data_buf = Vec::with_capacity(remote_msg.encoded_len());
-                    let _ = remote_msg.encode(&mut data_buf).map_err(|_| {
+                    remote_msg.encode(&mut data_buf).map_err(|_| {
                         SerError::InvalidData("Failed to encode network message".to_string())
                     })?;
                     buf.put_slice(&data_buf);
                 }
                 ArconEvent::Epoch(e) => {
                     let mut epoch_buf = Vec::with_capacity(e.encoded_len());
-                    let _ = e.encode(&mut epoch_buf).map_err(|_| {
+                    e.encode(&mut epoch_buf).map_err(|_| {
                         SerError::InvalidData("Failed to encode Epoch for remote msg".to_string())
                     })?;
                     let remote_msg = ArconNetworkMessage {
@@ -147,7 +147,7 @@ pub(crate) mod reliable_remote {
                         payload: Payload::Epoch as i32,
                     };
                     let mut data_buf = Vec::with_capacity(remote_msg.encoded_len());
-                    let _ = remote_msg.encode(&mut data_buf).map_err(|_| {
+                    remote_msg.encode(&mut data_buf).map_err(|_| {
                         SerError::InvalidData("Failed to encode network message".to_string())
                     })?;
                     buf.put_slice(&data_buf);
@@ -176,11 +176,11 @@ pub mod unsafe_remote {
     impl<A: ArconType> Deserialiser<ArconMessage<A>> for UnsafeSerde<A> {
         const SER_ID: SerId = Self::SID;
 
-        fn deserialise(buf: &mut Buf) -> Result<ArconMessage<A>, SerError> {
+        fn deserialise(buf: &mut dyn Buf) -> Result<ArconMessage<A>, SerError> {
             // TODO: improve
-            let mut bytes = buf.bytes();
+            let bytes = buf.bytes();
             let mut tmp_buf: Vec<u8> = Vec::with_capacity(bytes.len());
-            tmp_buf.put_slice(&mut bytes);
+            tmp_buf.put_slice(&bytes);
             if let Some((msg, _)) = unsafe { abomonation::decode::<ArconMessage<A>>(&mut tmp_buf) }
             {
                 Ok(msg.clone())
@@ -201,7 +201,7 @@ pub mod unsafe_remote {
         }
 
         fn serialise(&self, buf: &mut dyn BufMut) -> Result<(), SerError> {
-            let _ = unsafe {
+            unsafe {
                 abomonation::encode(&self.0, &mut buf.bytes_mut()).map_err(|_| {
                     SerError::InvalidData("Failed to encode flight data".to_string())
                 })?;
@@ -250,7 +250,7 @@ mod test {
         ));
 
         let channel = Channel::Remote((remote_path, ArconSerde::Unsafe));
-        let mut channel_strategy: Box<ChannelStrategy<ArconDataTest>> =
+        let mut channel_strategy: Box<dyn ChannelStrategy<ArconDataTest>> =
             Box::new(Forward::new(channel));
 
         let items = vec![1, 2, 3, 4, 5, 6, 7];

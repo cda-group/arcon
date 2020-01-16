@@ -9,7 +9,7 @@ pub fn source(
     id: u32,
     target: &str,
     source: &Source,
-    spec_id: &String,
+    spec_id: &str,
     ts_extractor: u32,
     features: &mut HashSet<String>,
 ) -> TokenStream {
@@ -22,7 +22,7 @@ pub fn source(
     let target = Ident::new(&target, Span::call_site());
     let input_type = to_token_stream(&source.source_type.clone().unwrap(), spec_id);
 
-    let source_stream = match source.source_kind.as_ref() {
+    match source.source_kind.as_ref() {
         Some(SourceKind::Socket(sock)) => {
             // Add so
             features.insert("socket".to_string());
@@ -33,7 +33,7 @@ pub fn source(
                 &input_type,
                 &sock.addr,
                 &sock.protocol,
-                *&source.source_rate,
+                source.source_rate,
                 ts_extractor,
                 id,
             )
@@ -43,15 +43,13 @@ pub fn source(
             &target,
             &input_type,
             &l.path,
-            *&source.source_rate,
+            source.source_rate,
             id,
         ),
         None => {
             quote! {}
         }
-    };
-
-    source_stream
+    }
 }
 
 fn socket_source(

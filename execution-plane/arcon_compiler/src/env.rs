@@ -41,8 +41,7 @@ impl CompilerEnv {
                 members = []
                 "#;
                 std::fs::write(&manifest_file, default_manifest)?;
-                let config = toml::from_str(default_manifest)?;
-                config
+                toml::from_str(default_manifest)?
             }
         };
 
@@ -71,7 +70,7 @@ impl CompilerEnv {
             Err(CompileEnvError { msg: err_msg })
         } else {
             debug!("Adding Workspace member {}", id);
-            self.config.workspace.members.push(id.clone());
+            self.config.workspace.members.push(id);
             self.update_env()
                 .map_err(|e| CompileEnvError { msg: e.to_string() })
         }
@@ -92,9 +91,9 @@ impl CompilerEnv {
     pub fn create_workspace_member(
         &self,
         id: &str,
-        features: &Vec<String>,
+        features: &[String],
     ) -> Result<(), failure::Error> {
-        let full_path = format!("{}", id);
+        let full_path = id.to_string();
 
         // Check if we are to use a local arcon crate or pull from crates.io
         let arcon_dependency = if self.local_arcon {
@@ -133,7 +132,7 @@ impl CompilerEnv {
     pub fn generate(&self, spec: &ArconSpec) -> Result<Vec<String>, failure::Error> {
         let (code, features) = arcon_codegen::generate(spec, false)?;
         let path = format!("{}/src/", spec.id);
-        std::fs::create_dir_all(path.clone())?;
+        std::fs::create_dir_all(path)?;
         let main_rs = format!("{}/src/main.rs", spec.id);
         arcon_codegen::to_file(code, main_rs)?;
         Ok(features)
@@ -160,7 +159,7 @@ impl CompilerEnv {
     }
 
     pub fn destroy(&mut self) -> Result<(), failure::Error> {
-        let _ = fs::remove_dir_all(&self.root)?;
+        fs::remove_dir_all(&self.root)?;
         Ok(())
     }
 }

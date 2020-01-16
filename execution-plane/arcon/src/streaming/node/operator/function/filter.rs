@@ -1,5 +1,6 @@
 use crate::data::{ArconElement, ArconEvent, ArconType, Epoch, Watermark};
 use crate::streaming::node::operator::Operator;
+use crate::util::SafelySendableFn;
 use arcon_error::ArconResult;
 
 /// IN: Input Event
@@ -7,14 +8,14 @@ pub struct Filter<IN>
 where
     IN: 'static + ArconType,
 {
-    udf: &'static Fn(&IN) -> bool,
+    udf: &'static dyn for<'r> SafelySendableFn<(&'r IN,), bool>,
 }
 
 impl<IN> Filter<IN>
 where
     IN: 'static + ArconType,
 {
-    pub fn new(udf: &'static Fn(&IN) -> bool) -> Self {
+    pub fn new(udf: &'static dyn for<'r> SafelySendableFn<(&'r IN,), bool>) -> Self {
         Filter { udf }
     }
 
@@ -30,7 +31,7 @@ where
 {
     fn handle_element(&mut self, element: ArconElement<IN>) -> ArconResult<Vec<ArconEvent<IN>>> {
         if self.run_udf(&(element.data)) {
-            return Ok(vec![ArconEvent::Element(element)]);
+            Ok(vec![ArconEvent::Element(element)])
         } else {
             Ok(Vec::new())
         }

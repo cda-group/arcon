@@ -39,7 +39,7 @@ where
                 topic,
                 offset,
                 batch_size: 100,
-                producer: producer,
+                producer,
                 buffer: Vec::new(),
             },
             _ => {
