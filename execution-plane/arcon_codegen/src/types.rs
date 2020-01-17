@@ -1,3 +1,6 @@
+// Copyright (c) 2020, KTH Royal Institute of Technology.
+// SPDX-License-Identifier: AGPL-3.0-only
+
 use crate::GENERATED_STRUCTS;
 use arcon_proto::arcon_spec::type_holder::ArconType;
 use arcon_proto::arcon_spec::TypeHolder;

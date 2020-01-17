@@ -1,3 +1,6 @@
+// Copyright (c) 2020, KTH Royal Institute of Technology.
+// SPDX-License-Identifier: AGPL-3.0-only
+
 use crate::common::id_to_ident;
 use crate::common::verify_and_start;
 use crate::spec;
