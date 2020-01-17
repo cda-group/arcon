@@ -3,7 +3,6 @@ pub mod serde;
 use crate::error::ArconResult;
 use crate::macros::*;
 use abomonation::Abomonation;
-use bytes::IntoBuf;
 use kompact::prelude::*;
 use std::fmt::Debug;
 use std::hash::Hash;

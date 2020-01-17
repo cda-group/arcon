@@ -1,18 +1,19 @@
-extern crate tokio_codec;
 use kompact::prelude::*;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tokio::codec::Decoder;
 use tokio::net::TcpListener;
-use tokio::net::{UdpFramed, UdpSocket};
+use tokio::net::UdpSocket;
+use tokio_util::udp::UdpFramed;
 use tokio::prelude::*;
 use tokio::runtime::Runtime;
-use tokio_codec::BytesCodec;
+use tokio_util::codec::{BytesCodec, Decoder};
+use futures::StreamExt;
 
 use std::thread::{Builder, JoinHandle};
 
 use bytes::BytesMut;
+use std::rc::Rc;
 
 pub enum IOKind {
     Http,
@@ -24,7 +25,9 @@ pub enum IOKind {
 pub struct BytesRecv {
     pub bytes: BytesMut,
 }
+
 pub struct SockClosed {}
+
 pub struct SockErr {}
 
 #[derive(ComponentDefinition)]
@@ -39,18 +42,16 @@ impl IO {
             .name(String::from("IOThread"))
             .spawn(move || {
                 let mut runtime = Runtime::new().expect("Could not create Tokio Runtime!");
-                let socket = UdpSocket::bind(&sock_addr).expect("Failed to bind");
 
-                let (_, reader) = UdpFramed::new(socket, BytesCodec::new()).split();
-                let handler = reader
-                    .for_each(move |(bytes, _from)| {
+                runtime.block_on(async move {
+                    let socket = UdpSocket::bind(&sock_addr).await.expect("Failed to bind");
+
+                    let (_, mut reader) = UdpFramed::new(socket, BytesCodec::new()).split();
+
+                    while let Some(Ok((bytes, _from))) = reader.next().await {
                         subscriber.tell(Box::new(BytesRecv { bytes }) as Box<dyn Any + Send>);
-                        Ok(())
-                    })
-                    .map_err(|_| ());
-
-                runtime.spawn(handler);
-                runtime.shutdown_on_idle().wait().unwrap();
+                    }
+                });
             })
             .map_err(|_| ())
             .unwrap();
@@ -62,49 +63,57 @@ impl IO {
     }
 
     pub fn tcp(sock_addr: SocketAddr, subscriber: ActorRef<Box<dyn Any + Send>>) -> IO {
-        let subscriber = Arc::new(subscriber);
         let th = Builder::new()
             .name(String::from("IOThread"))
             .spawn(move || {
                 let mut runtime = Runtime::new().expect("Could not create Tokio Runtime!");
-                let executor = runtime.executor();
-                let listener = TcpListener::bind(&sock_addr).expect("failed to bind");
-                let handler = listener
-                    .incoming()
-                    .map_err(|e| println!("failed to accept socket; error = {:?}", e))
-                    .for_each(move |socket| {
+                let handle = runtime.handle().clone();
+                runtime.block_on(async move {
+                    let mut listener = TcpListener::bind(&sock_addr).await.expect("failed to bind");
+
+                    let mut incoming = listener.incoming();
+                    let subscriber = Arc::new(subscriber);
+                    'incoming: while let Some(socket_res) = incoming.next().await {
+                        let socket = match socket_res {
+                            Ok(s) => s,
+                            Err(_) => {
+                                // TODO: logging?
+                                continue 'incoming;
+                            }
+                        };
+
                         let framed = BytesCodec::new().framed(socket);
-                        let (_writer, reader) = framed.split();
+                        let (_writer, mut reader) = framed.split();
 
-                        let recv_sub = Arc::clone(&subscriber);
-                        let close_sub = Arc::clone(&subscriber);
-                        let err_sub = Arc::clone(&subscriber);
+                        let subscriber = Arc::clone(&subscriber);
+                        let processor = async move {
+                            let mut res = Ok(());
 
-                        let processor = reader
-                            .for_each(move |bytes| {
-                                let tcp_recv = BytesRecv { bytes };
-                                let actor_ref = &*recv_sub;
-                                actor_ref.tell(Box::new(tcp_recv) as Box<dyn Any + Send>);
-                                Ok(())
-                            })
-                            .and_then(move |()| {
-                                let actor_ref = &*close_sub;
-                                actor_ref.tell(Box::new(SockClosed {}) as Box<dyn Any + Send>);
-                                Ok(())
-                            })
-                            .or_else(move |err| {
-                                let actor_ref = &*err_sub;
-                                actor_ref.tell(Box::new(SockErr {}) as Box<dyn Any + Send>);
-                                Err(err)
-                            })
-                            .then(|_result| Ok(()));
+                            while let Some(read_res) = reader.next().await {
+                                match read_res {
+                                    Ok(bytes) => {
+                                        let tcp_recv = BytesRecv { bytes };
+                                        subscriber.tell(Box::new(tcp_recv) as Box<dyn Any + Send>);
+                                    }
+                                    Err(e) => {
+                                        res = Err(e);
+                                    }
+                                }
+                            }
 
-                        executor.spawn(processor);
-                        Ok(())
-                    });
+                            match res {
+                                Ok(()) => {
+                                    subscriber.tell(Box::new(SockClosed {}) as Box<dyn Any + Send>);
+                                }
+                                Err(err) => {
+                                    subscriber.tell(Box::new(SockErr {}) as Box<dyn Any + Send>);
+                                }
+                            }
+                        };
 
-                runtime.spawn(handler);
-                runtime.shutdown_on_idle().wait().unwrap();
+                        handle.spawn(processor);
+                    }
+                });
             })
             .map_err(|_| ())
             .unwrap();
@@ -133,7 +142,10 @@ impl Actor for IO {
 pub mod tests {
     use super::*;
     use tokio::io;
+    use tokio::prelude::*;
     use tokio::net::TcpStream;
+    use futures::TryFutureExt;
+    use futures::executor::block_on;
 
     pub enum IOKind {
         Tcp,
@@ -202,12 +214,14 @@ pub mod tests {
         // Make sure IO::TCP is started
         std::thread::sleep(std::time::Duration::from_millis(100));
 
-        let client = TcpStream::connect(&addr)
-            .and_then(|stream| io::write_all(stream, "hello\n").then(|_| Ok(())))
-            .map_err(|_| {
+        let client = async {
+            let mut stream = TcpStream::connect(&addr).await.expect("couldn't connect");
+            stream.write_all(b"hello\n").await.map_err(|_| {
                 assert!(false);
             });
-        tokio::run(client);
+        };
+
+        Runtime::new().unwrap().block_on(client);
         std::thread::sleep(std::time::Duration::from_millis(50));
 
         // Our IOSource should have received 1 msg, that is, "hello"
@@ -223,12 +237,16 @@ pub mod tests {
         system.start(&io_source);
         std::thread::sleep(std::time::Duration::from_millis(100));
 
-        let self_addr = "0.0.0.0:0".parse().unwrap();
-        let socket = UdpSocket::bind(&self_addr).expect("Failed to bind");
+        let client = async {
+            let self_addr: SocketAddr = "0.0.0.0:0".parse().unwrap();
+            let mut socket = UdpSocket::bind(&self_addr).await.expect("Failed to bind");
 
-        let fmt_data = format!("{:?}\n", "test1");
-        let bytes = bytes::Bytes::from(fmt_data);
-        socket.send_dgram(bytes, &sock).wait().unwrap();
+            let fmt_data = format!("{:?}\n", "test1");
+            let bytes = bytes::Bytes::from(fmt_data);
+            socket.send_to(&bytes, &sock).await.unwrap();
+        };
+
+        Runtime::new().unwrap().block_on(client);
 
         std::thread::sleep(std::time::Duration::from_millis(100));
         let source = io_source.definition().lock().unwrap();

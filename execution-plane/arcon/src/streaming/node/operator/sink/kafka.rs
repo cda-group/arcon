@@ -1,5 +1,5 @@
 use crate::prelude::*;
-use futures::Future;
+use futures::{Future, executor::block_on};
 use rdkafka::config::ClientConfig;
 use rdkafka::error::KafkaResult;
 use rdkafka::producer::{FutureProducer, FutureRecord};
@@ -64,7 +64,7 @@ where
 
         // Write synchronously
         for future in futures {
-            let _ = future.wait();
+            let _ = block_on(future);
         }
     }
 }

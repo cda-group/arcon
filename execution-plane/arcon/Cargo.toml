@@ -15,7 +15,7 @@ Arcon's execution plane
 default = []
 kafka = ["rdkafka", "serde_json", "serde"]
 thread_pinning = ["kompact/thread_pinning"]
-socket = ["tokio-codec", "tokio", "futures", "serde_json", "serde"]
+socket = ["tokio-util", "tokio", "futures", "serde_json", "serde"]
 arcon_rocksdb = ["rocksdb"]
 
 [dependencies]
@@ -36,21 +36,21 @@ slog-term = "2.4"
 # Serialisation
 abomonation = "0.7.3"
 abomonation_derive = "0.5.0"
-prost = "0.5"
-prost-types = "0.5"
-bytes = "0.4"
+prost = "0.6"
+prost-types = "0.6"
+bytes = "0.5"
 
 # Optional
-rdkafka = { version = "~0.19", optional = true }
-tokio = { version = "0.1", optional = true }
-tokio-codec = { version = "0.1", optional = true }
-futures = { version = "0.1", optional = true }
-serde_json = { version = "1.0.40", optional = true }
-serde = { version = "1.0.63", features = ["derive"], optional = true }
+rdkafka = { version = "0.23", optional = true }
+tokio = { version = "0.2", optional = true, features = ["full"] } # TODO: figure out which are truly needed
+tokio-util = { version = "0.2", optional = true, features = ["full"] }
+futures = { version = "0.3", optional = true }
+serde_json = { version = "1.0.44", optional = true }
+serde = { version = "1.0.104", features = ["derive"], optional = true }
 rocksdb = { git = "https://github.com/tikv/rust-rocksdb.git", optional = true }
 
 [build-dependencies]
-prost-build = "0.5"
+prost-build = "0.6"
 
 [dev-dependencies]
 tempfile = "3"

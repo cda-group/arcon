@@ -8,6 +8,7 @@ use rdkafka::message::*;
 use rdkafka::topic_partition_list::Offset;
 use std::collections::HashMap;
 use std::time::Duration;
+use futures::executor::block_on_stream;
 
 /*
     KafkaSource: work in progress
@@ -137,12 +138,10 @@ where
         let mut counter = 0;
 
         // Fetch the batch
-        for message in stream.wait() {
+        for message in block_on_stream(stream) {
             match message {
-                Ok(Ok(m)) => messages.push(m.detach()),
-                Ok(Err(KafkaError::NoMessageReceived)) => break, // No more messages pending
+                Ok(m) => messages.push(m.detach()),
                 Err(_) => error!(self.ctx.log(), "Error while reading from stream."),
-                Ok(Err(e)) => error!(self.ctx.log(), "Kafka error: {}", e),
             };
             counter = counter + 1;
             if counter == self.batch_size {
