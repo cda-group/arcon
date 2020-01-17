@@ -35,7 +35,6 @@ pub struct IO {
 
 impl IO {
     pub fn udp(sock_addr: SocketAddr, subscriber: ActorRef<Box<dyn Any + Send>>) -> IO {
-        let subscriber = Arc::new(subscriber);
         let th = Builder::new()
             .name(String::from("IOThread"))
             .spawn(move || {
@@ -45,8 +44,7 @@ impl IO {
                 let (_, reader) = UdpFramed::new(socket, BytesCodec::new()).split();
                 let handler = reader
                     .for_each(move |(bytes, _from)| {
-                        let actor_ref = &*subscriber;
-                        actor_ref.tell(Box::new(BytesRecv { bytes }) as Box<dyn Any + Send>);
+                        subscriber.tell(Box::new(BytesRecv { bytes }) as Box<dyn Any + Send>);
                         Ok(())
                     })
                     .map_err(|_| ());
