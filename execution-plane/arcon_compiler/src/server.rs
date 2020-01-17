@@ -1,3 +1,6 @@
+// Copyright (c) 2020, KTH Royal Institute of Technology.
+// SPDX-License-Identifier: AGPL-3.0-only
+
 use arcon_proto::arcon_spec::{spec_from_bytes, ArconSpec};
 use arcon_proto::*;
 use futures::*;

@@ -1,3 +1,6 @@
+// Copyright (c) 2020, KTH Royal Institute of Technology.
+// SPDX-License-Identifier: AGPL-3.0-only
+
 use crate::data::{ArconElement, ArconEvent, ArconType, Watermark};
 use crate::error::ArconResult;
 use crate::streaming::channel::strategy::*;

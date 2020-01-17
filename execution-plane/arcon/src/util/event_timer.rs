@@ -1,3 +1,6 @@
+// Copyright (c) 2020, KTH Royal Institute of Technology.
+// SPDX-License-Identifier: AGPL-3.0-only
+
 use core::time::Duration;
 use kompact::timer::*;
 use std::collections::HashMap;

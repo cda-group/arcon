@@ -1,3 +1,6 @@
+// Copyright (c) 2020, KTH Royal Institute of Technology.
+// SPDX-License-Identifier: AGPL-3.0-only
+
 use crate::common::*;
 use crate::spec::sink::SinkKind;
 use crate::spec::Sink;

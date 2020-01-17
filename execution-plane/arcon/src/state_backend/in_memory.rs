@@ -1,3 +1,6 @@
+// Copyright (c) 2020, KTH Royal Institute of Technology.
+// SPDX-License-Identifier: AGPL-3.0-only
+
 use crate::state_backend::StateBackend;
 use arcon_error::*;
 use std::collections::HashMap;
