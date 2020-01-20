@@ -23,23 +23,24 @@ pub enum SocketKind {
 /// AND it will add a timestamp of the ingestion time to each event outputted
 #[derive(ComponentDefinition)]
 pub struct SocketSource<OUT>
-where
-    OUT: 'static + ArconType + FromStr,
+    where
+        OUT: 'static + ArconType + FromStr,
 {
     ctx: ComponentContext<SocketSource<OUT>>,
     out_channels: Box<dyn ChannelStrategy<OUT>>,
     sock_addr: SocketAddr,
     sock_kind: SocketKind,
     received: u64,
-    watermark_interval: u64, // If 0: no watermarks/timestamps generated
+    watermark_interval: u64,
+    // If 0: no watermarks/timestamps generated
     watermark_index: Option<u32>,
     max_timestamp: u64,
     id: NodeID,
 }
 
 impl<OUT> SocketSource<OUT>
-where
-    OUT: 'static + ArconType + FromStr,
+    where
+        OUT: 'static + ArconType + FromStr,
 {
     pub fn new(
         sock_addr: SocketAddr,
@@ -128,8 +129,8 @@ where
 }
 
 impl<OUT> Provide<ControlPort> for SocketSource<OUT>
-where
-    OUT: 'static + ArconType + FromStr,
+    where
+        OUT: 'static + ArconType + FromStr,
 {
     fn handle(&mut self, event: ControlEvent) {
         if let ControlEvent::Start = event {
@@ -160,8 +161,8 @@ where
 }
 
 impl<OUT> Actor for SocketSource<OUT>
-where
-    OUT: 'static + ArconType + FromStr,
+    where
+        OUT: 'static + ArconType + FromStr,
 {
     type Message = Box<dyn Any + Send>;
     fn receive_local(&mut self, msg: Self::Message) {
@@ -233,15 +234,16 @@ mod tests {
     use crate::prelude::DebugNode;
     use crate::streaming::channel::strategy::forward::Forward;
     use crate::streaming::channel::Channel;
-    use futures::future::Future;
     use std::{thread, time};
-    use tokio::io;
     use tokio::net::TcpStream;
+    use tokio::prelude::*;
+    use tokio::runtime::Runtime;
 
     // Shared methods for test cases
     fn wait(time: u64) -> () {
         thread::sleep(time::Duration::from_secs(time));
     }
+
     // Test cases
     #[test]
     fn socket_u32_no_watermark() {
@@ -266,12 +268,12 @@ mod tests {
         wait(1);
 
         // The actual test:
-        let client = TcpStream::connect(&addr)
-            .and_then(|stream| io::write_all(stream, "77").then(|_| Ok(())))
-            .map_err(|_| {
-                assert!(false);
-            });
-        tokio::run(client);
+        let client = async {
+            let mut stream = TcpStream::connect(&addr).await.expect("couldn't connect");
+            stream.write_all(b"77").await.expect("write failed");
+        };
+
+        Runtime::new().unwrap().block_on(client);
 
         wait(1);
         let source_inspect = source.definition().lock().unwrap();
@@ -305,38 +307,35 @@ mod tests {
         wait(1);
 
         // The actual test:
-        let client1 = TcpStream::connect(&addr)
-            .and_then(|stream| io::write_all(stream, "123").then(|_| Ok(())))
-            .map_err(|_| {
-                assert!(false);
-            });
-        let client2 = TcpStream::connect(&addr)
-            .and_then(|stream| io::write_all(stream, "4.56").then(|_| Ok(())))
-            .map_err(|_| {
-                assert!(false);
-            });
-        let client3 = TcpStream::connect(&addr)
-            .and_then(|stream| io::write_all(stream, "78.9").then(|_| Ok(())))
-            .map_err(|_| {
-                assert!(false);
-            });
-        tokio::run(client1);
-        tokio::run(client2);
-        tokio::run(client3);
+        Runtime::new().expect("couldn't create tokio runtime").block_on(async move {
+            let client_write = |src_bytes: &'static [u8]| async move {
+                let mut stream = TcpStream::connect(&addr).await.expect("couldn't connect");
+                stream.write_all(src_bytes).await.expect("write failed");
+            };
+
+            let client1 = client_write(b"123");
+            let client2 = client_write(b"4.56");
+            let client3 = client_write(b"78.9");
+
+            client1.await;
+            client2.await;
+            client3.await;
+        });
 
         wait(1);
 
         let source_inspect = source.definition().lock().unwrap();
         assert_eq!(source_inspect.received, 3);
         let sink_inspect = sink.definition().lock().unwrap();
-        assert_eq!(sink_inspect.data.len(), (3 as usize));
+        assert_eq!(sink_inspect.data.len(), 3);
         let r0 = &sink_inspect.data[0];
         let r1 = &sink_inspect.data[1];
         let r2 = &sink_inspect.data[2];
-        assert_eq!(r0.data, 123 as f32);
-        assert_eq!(r1.data, 4.56 as f32);
-        assert_eq!(r2.data, 78.9 as f32);
+        assert_eq!(r0.data, 123f32);
+        assert_eq!(r1.data, 4.56f32);
+        assert_eq!(r2.data, 78.9f32);
     }
+
     #[test]
     fn socket_u32_with_watermark() {
         // Setup conf
@@ -360,12 +359,12 @@ mod tests {
         wait(1);
 
         // The actual test:
-        let client = TcpStream::connect(&addr)
-            .and_then(|stream| io::write_all(stream, "77").then(|_| Ok(())))
-            .map_err(|_| {
-                assert!(false);
-            });
-        tokio::run(client);
+        let client = async {
+            let mut stream = TcpStream::connect(&addr).await.expect("couldn't connect");
+            stream.write_all(b"77").await.expect("write failed");
+        };
+
+        Runtime::new().unwrap().block_on(client);
 
         wait(3);
         let source_inspect = source.definition().lock().unwrap();

@@ -223,7 +223,6 @@ where
 mod tests {
     // Tests the message logic of Node.
     use super::*;
-    use crate::prelude::*;
     use std::sync::Arc;
     use std::{thread, time};
 

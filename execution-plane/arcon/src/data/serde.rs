@@ -15,7 +15,6 @@ impl Default for ArconSerde {
 
 pub(crate) mod reliable_remote {
     use crate::data::{ArconEvent, ArconMessage, ArconType, Epoch, NodeID, Watermark};
-    use bytes::IntoBuf;
     use kompact::prelude::*;
     use prost::*;
 
