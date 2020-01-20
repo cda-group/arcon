@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::prelude::*;
-use futures::{Future, executor::block_on};
+use futures::executor::block_on;
 use rdkafka::config::ClientConfig;
 use rdkafka::error::KafkaResult;
 use rdkafka::producer::{FutureProducer, FutureRecord};

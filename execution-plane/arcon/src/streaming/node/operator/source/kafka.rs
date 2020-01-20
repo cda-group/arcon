@@ -2,11 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::prelude::*;
-use futures::stream::Stream;
 use rdkafka::config::ClientConfig;
 use rdkafka::consumer::stream_consumer::StreamConsumer;
 use rdkafka::consumer::{CommitMode, Consumer};
-use rdkafka::error::{KafkaError, KafkaResult};
+use rdkafka::error::KafkaResult;
 use rdkafka::message::*;
 use rdkafka::topic_partition_list::Offset;
 use std::collections::HashMap;

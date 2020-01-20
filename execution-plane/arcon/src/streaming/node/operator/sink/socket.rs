@@ -4,12 +4,11 @@
 use crate::prelude::*;
 use ::serde::Serialize;
 use bytes::Bytes;
-use futures::{channel, StreamExt, SinkExt, TryFutureExt, executor::block_on};
+use futures::{channel, StreamExt, SinkExt, executor::block_on};
 use std::marker::PhantomData;
 use std::net::SocketAddr;
 use std::thread::{Builder, JoinHandle};
 use tokio::net::UdpSocket;
-use tokio::prelude::*;
 use tokio::runtime::{Runtime, Handle};
 
 pub struct SocketSink<IN>
@@ -45,7 +44,7 @@ where
                     tx_exec.send(runtime_handle).expect("failed to send executor");
 
                     while let Some(bytes) = rx.next().await {
-                        socket.send_to(&bytes, socket_addr).await;
+                        socket.send_to(&bytes, socket_addr).await.expect("send failed");
                     }
                 });
             })
@@ -80,7 +79,11 @@ where
         let bytes = Bytes::from(fmt_data);
         let req_dispatch = async move {
             let res = tx.send(bytes).await;
-            // TODO: ignored errors
+
+            match res {
+                Ok(_) => {}, // everything ok
+                Err(_) => {}, // ignore errors
+            }
         };
         self.runtime_handle.spawn(req_dispatch);
         Ok(Vec::new())

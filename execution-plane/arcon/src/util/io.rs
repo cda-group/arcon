@@ -8,7 +8,6 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::net::UdpSocket;
 use tokio_util::udp::UdpFramed;
-use tokio::prelude::*;
 use tokio::runtime::Runtime;
 use tokio_util::codec::{BytesCodec, Decoder};
 use futures::StreamExt;
@@ -16,7 +15,6 @@ use futures::StreamExt;
 use std::thread::{Builder, JoinHandle};
 
 use bytes::BytesMut;
-use std::rc::Rc;
 
 pub enum IOKind {
     Http,
@@ -108,7 +106,7 @@ impl IO {
                                 Ok(()) => {
                                     subscriber.tell(Box::new(SockClosed {}) as Box<dyn Any + Send>);
                                 }
-                                Err(err) => {
+                                Err(_err) => {
                                     subscriber.tell(Box::new(SockErr {}) as Box<dyn Any + Send>);
                                 }
                             }
@@ -144,11 +142,8 @@ impl Actor for IO {
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use tokio::io;
-    use tokio::prelude::*;
     use tokio::net::TcpStream;
-    use futures::TryFutureExt;
-    use futures::executor::block_on;
+    use tokio::io::AsyncWriteExt;
 
     pub enum IOKind {
         Tcp,
@@ -219,9 +214,7 @@ pub mod tests {
 
         let client = async {
             let mut stream = TcpStream::connect(&addr).await.expect("couldn't connect");
-            stream.write_all(b"hello\n").await.map_err(|_| {
-                assert!(false);
-            });
+            stream.write_all(b"hello\n").await.expect("write failed");
         };
 
         Runtime::new().unwrap().block_on(client);

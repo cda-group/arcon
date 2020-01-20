@@ -234,13 +234,9 @@ mod tests {
     use crate::prelude::DebugNode;
     use crate::streaming::channel::strategy::forward::Forward;
     use crate::streaming::channel::Channel;
-    use futures::future::Future;
     use std::{thread, time};
-    use tokio::io;
     use tokio::net::TcpStream;
-    use futures::{TryFutureExt, FutureExt};
     use tokio::prelude::*;
-    use futures::executor::block_on;
     use tokio::runtime::Runtime;
 
     // Shared methods for test cases
@@ -274,9 +270,7 @@ mod tests {
         // The actual test:
         let client = async {
             let mut stream = TcpStream::connect(&addr).await.expect("couldn't connect");
-            stream.write_all(b"77").await.map_err(|_| {
-                assert!(false);
-            });
+            stream.write_all(b"77").await.expect("write failed");
         };
 
         Runtime::new().unwrap().block_on(client);
@@ -312,31 +306,16 @@ mod tests {
         system.start(&source);
         wait(1);
 
+        // The actual test:
         Runtime::new().expect("couldn't create tokio runtime").block_on(async move {
-//            let addr1 = addr.clone();
-//            let addr2 = addr.clone();
-//            let addr3 = addr.clone();
-            // The actual test:
-            let client1 = async move {
+            let client_write = |src_bytes: &'static [u8]| async move {
                 let mut stream = TcpStream::connect(&addr).await.expect("couldn't connect");
-                stream.write_all(b"123").await.map_err(|_| {
-                    assert!(false);
-                });
+                stream.write_all(src_bytes).await.expect("write failed");
             };
 
-            let client2 = async move {
-                let mut stream = TcpStream::connect(&addr).await.expect("couldn't connect");
-                stream.write_all(b"4.56").await.map_err(|_| {
-                    assert!(false);
-                });
-            };
-
-            let client3 = async move {
-                let mut stream = TcpStream::connect(&addr).await.expect("couldn't connect");
-                stream.write_all(b"78.9").await.map_err(|_| {
-                    assert!(false);
-                });
-            };
+            let client1 = client_write(b"123");
+            let client2 = client_write(b"4.56");
+            let client3 = client_write(b"78.9");
 
             client1.await;
             client2.await;
@@ -348,13 +327,13 @@ mod tests {
         let source_inspect = source.definition().lock().unwrap();
         assert_eq!(source_inspect.received, 3);
         let sink_inspect = sink.definition().lock().unwrap();
-        assert_eq!(sink_inspect.data.len(), (3 as usize));
+        assert_eq!(sink_inspect.data.len(), 3);
         let r0 = &sink_inspect.data[0];
         let r1 = &sink_inspect.data[1];
         let r2 = &sink_inspect.data[2];
-        assert_eq!(r0.data, 123 as f32);
-        assert_eq!(r1.data, 4.56 as f32);
-        assert_eq!(r2.data, 78.9 as f32);
+        assert_eq!(r0.data, 123f32);
+        assert_eq!(r1.data, 4.56f32);
+        assert_eq!(r2.data, 78.9f32);
     }
 
     #[test]
@@ -382,9 +361,7 @@ mod tests {
         // The actual test:
         let client = async {
             let mut stream = TcpStream::connect(&addr).await.expect("couldn't connect");
-            stream.write_all(b"77").await.map_err(|_| {
-                assert!(false);
-            });
+            stream.write_all(b"77").await.expect("write failed");
         };
 
         Runtime::new().unwrap().block_on(client);
