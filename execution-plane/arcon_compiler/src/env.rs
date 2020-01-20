@@ -1,3 +1,6 @@
+// Copyright (c) 2020, KTH Royal Institute of Technology.
+// SPDX-License-Identifier: AGPL-3.0-only
+
 #![allow(dead_code)]
 
 use arcon_proto::arcon_spec::{get_compile_mode, ArconSpec};

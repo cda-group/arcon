@@ -1,3 +1,7 @@
+// Copyright (c) 2020, KTH Royal Institute of Technology.
+// SPDX-License-Identifier: AGPL-3.0-only
+
+
 //! The following tests will look similar to the generated code from `arcon_codegen`.
 //! The purpose of these tests are to verify the results of end-to-end pipelines.
 

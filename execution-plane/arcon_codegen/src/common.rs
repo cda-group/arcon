@@ -1,3 +1,6 @@
+// Copyright (c) 2020, KTH Royal Institute of Technology.
+// SPDX-License-Identifier: AGPL-3.0-only
+
 use proc_macro2::{Ident, Span, TokenStream};
 
 pub fn verify_and_start(name: &Ident, sys_name: &str) -> TokenStream {

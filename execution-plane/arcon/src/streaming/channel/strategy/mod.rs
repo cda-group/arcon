@@ -1,3 +1,6 @@
+// Copyright (c) 2020, KTH Royal Institute of Technology.
+// SPDX-License-Identifier: AGPL-3.0-only
+
 use crate::data::serde::{reliable_remote::ReliableSerde, unsafe_remote::UnsafeSerde};
 use crate::data::*;
 use crate::error::*;
