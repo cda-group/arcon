@@ -47,7 +47,7 @@ tokio-util = { version = "0.2", optional = true, features = ["full"] }
 futures = { version = "0.3", optional = true }
 serde_json = { version = "1.0.44", optional = true }
 serde = { version = "1.0.104", features = ["derive"], optional = true }
-rocksdb = { git = "https://github.com/tikv/rust-rocksdb.git", optional = true }
+rocksdb = { version = "0.13", optional = true }
 
 [build-dependencies]
 prost-build = "0.6"
