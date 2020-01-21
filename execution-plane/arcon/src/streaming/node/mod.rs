@@ -8,8 +8,10 @@ use crate::prelude::*;
 pub use debug::DebugNode;
 use std::collections::BTreeMap;
 use std::collections::HashSet; // Blocked-list
-use std::collections::LinkedList; // Message buffer
+use std::collections::VecDeque; // Message buffer
 use std::mem; // Watermark-list
+
+const MESSAGE_BUFFER_INIT_CAPACITY: usize = 32;
 
 /*
   Node: contains an Operator which executes actions
@@ -29,7 +31,7 @@ where
     current_watermark: u64,
     current_epoch: u64,
     blocked_channels: HashSet<NodeID>,
-    message_buffer: LinkedList<ArconMessage<IN>>,
+    message_buffer: VecDeque<ArconMessage<IN>>,
 }
 
 impl<IN, OUT> Node<IN, OUT>
@@ -59,7 +61,7 @@ where
             current_watermark: 0,
             current_epoch: 0,
             blocked_channels: HashSet::new(),
-            message_buffer: LinkedList::new(),
+            message_buffer: VecDeque::with_capacity(MESSAGE_BUFFER_INIT_CAPACITY),
         }
     }
     fn handle_message(&mut self, message: ArconMessage<IN>) -> ArconResult<()> {
@@ -94,12 +96,8 @@ where
                 }
 
                 // Let new_watermark take the value of the lowest watermark
-                let mut new_watermark = w;
-                for some_watermark in self.watermarks.values() {
-                    if some_watermark.timestamp < new_watermark.timestamp {
-                        new_watermark = *some_watermark;
-                    }
-                }
+                let new_watermark = *self.watermarks.values().chain(&[w]).min()
+                    .expect("this cannot fail, because the iterator contains at least `w`");
 
                 // Finally, handle the watermark:
                 if new_watermark.timestamp > self.current_watermark {
@@ -117,7 +115,7 @@ where
             }
             ArconEvent::Epoch(e) => {
                 // Add the sender to the blocked set.
-                self.blocked_channels.insert(message.sender.clone());
+                self.blocked_channels.insert(message.sender);
 
                 // If all senders blocked we can transition to new Epoch
                 if self.blocked_channels.len() == self.in_channels.len() {
@@ -139,7 +137,7 @@ where
                     // Handle the message buffer.
                     if !self.message_buffer.is_empty() {
                         // Create a new message buffer
-                        let mut message_buffer = LinkedList::<ArconMessage<IN>>::new();
+                        let mut message_buffer = VecDeque::with_capacity(MESSAGE_BUFFER_INIT_CAPACITY);
                         // Swap the current and the new message buffer
                         mem::swap(&mut message_buffer, &mut self.message_buffer);
                         // Iterate over the message-buffer until empty
@@ -152,6 +150,7 @@ where
         }
         Ok(())
     }
+
     fn output_event(&mut self, event: ArconEvent<OUT>) -> ArconResult<()> {
         let message = ArconMessage {
             event,
@@ -159,6 +158,7 @@ where
         };
         self.out_channels.output(message, &self.ctx.system())
     }
+
     fn save_state(&mut self) -> ArconResult<()> {
         // todo
         Ok(())
