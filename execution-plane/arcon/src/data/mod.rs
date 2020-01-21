@@ -9,10 +9,11 @@ use abomonation::Abomonation;
 use kompact::prelude::*;
 use std::fmt::Debug;
 use std::hash::Hash;
+use prost::Message as PMessage;
 
 /// Type that can be passed through the Arcon runtime
 pub trait ArconType:
-    Clone + Debug + Sync + Send + prost::Message + Default + Abomonation + 'static
+    Clone + Debug + Sync + Send + PMessage + Default + Abomonation + 'static
 where
     Self: std::marker::Sized,
 {
@@ -35,7 +36,7 @@ where
 }
 
 /// Watermark
-#[derive(prost::Message, Clone, Copy, Abomonation)]
+#[derive(PMessage, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Abomonation)]
 pub struct Watermark {
     #[prost(uint64, tag = "1")]
     pub timestamp: u64,
@@ -48,7 +49,7 @@ impl Watermark {
 }
 
 /// Epoch
-#[derive(prost::Message, Clone, Copy, Abomonation)]
+#[derive(PMessage, Clone, Copy, Abomonation)]
 pub struct Epoch {
     #[prost(uint64, tag = "1")]
     pub epoch: u64,
@@ -68,7 +69,7 @@ pub enum ArconEvent<A: ArconType> {
     Epoch(Epoch),
 }
 
-#[derive(prost::Message, PartialEq, Eq, PartialOrd, Ord, Hash, Copy, Clone, Abomonation)]
+#[derive(PMessage, PartialEq, Eq, PartialOrd, Ord, Hash, Copy, Clone, Abomonation)]
 pub struct NodeID {
     #[prost(uint32, tag = "1")]
     pub id: u32,
@@ -152,7 +153,7 @@ pub mod test {
     use super::*;
 
     #[arcon]
-    #[derive(prost::Message)]
+    #[derive(PMessage)]
     pub struct ArconDataTest {
         #[prost(uint32, tag = "1")]
         pub id: u32,
