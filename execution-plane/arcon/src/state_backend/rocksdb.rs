@@ -9,51 +9,85 @@ use crate::state_backend::StateBackend;
 use arcon_error::*;
 use std::path::{PathBuf, Path};
 use self::rocksdb::checkpoint::Checkpoint;
+use crate::state_backend::state_types::{ReducingState, ValueState, MapState, VecState, AggregatingState};
+use std::rc::Rc;
+use std::cell::RefCell;
 
 pub struct RocksDB {
+    inner: Rc<RefCell<Inner>>
+}
+
+struct Inner {
     db: DB,
     checkpoints_path: PathBuf,
 }
 
 impl RocksDB {
     fn set_checkpoints_path<P: AsRef<Path>>(&mut self, path: P) {
-        self.checkpoints_path = path.as_ref().to_path_buf();
+        self.inner.borrow_mut().checkpoints_path = path.as_ref().to_path_buf();
     }
 }
 
 impl StateBackend for RocksDB {
-    fn create(name: &str) -> ArconResult<RocksDB> {
+    fn create_shared(name: &str) -> ArconResult<RocksDB> {
         let db = DB::open_default(&name)
-            .map_err(|e| arcon_err_kind!("Failed to create RocksDB instance: {}", e.to_string()))?;
+            .map_err(|e| arcon_err_kind!("Failed to create RocksDB instance: {}", e))?;
         let checkpoints_path = PathBuf::from(format!("{}-checkpoints", name));
-        Ok(RocksDB { db, checkpoints_path })
-    }
-
-    fn put(&mut self, key: &[u8], value: &[u8]) -> ArconResult<()> {
-        self.db.put(key, value)
-            .map_err(|e| arcon_err_kind!("RocksDB put err: {}", e.to_string()))
+        Ok(RocksDB { inner: Rc::new(RefCell::new(Inner { db, checkpoints_path }))})
     }
 
     fn get(&self, key: &[u8]) -> ArconResult<Vec<u8>> {
-        match self.db.get(key) {
+        match self.inner.borrow().db.get(key) {
             Ok(Some(data)) => Ok(data.to_vec()),
             Ok(None) => arcon_err!("{}", "Value not found"),
-            Err(e) => arcon_err!("{}", e.to_string()),
+            Err(e) => arcon_err!("{}", e),
         }
     }
 
+    fn put(&mut self, key: &[u8], value: &[u8]) -> ArconResult<()> {
+        self.inner.borrow_mut().db.put(key, value)
+            .map_err(|e| arcon_err_kind!("RocksDB put err: {}", e))
+    }
+
+    fn remove(&mut self, key: &[u8]) -> Result<(), Error> {
+        self.inner.borrow_mut().db.delete(key)
+            .map_err(|e| arcon_err_kind!("RocksDB delete err: {}", e))
+    }
+
     fn checkpoint(&self, id: String) -> ArconResult<()> {
-        let checkpointer = Checkpoint::new(&self.db)
+        let this = self.inner.borrow();
+        let checkpointer = Checkpoint::new(&this.db)
             .map_err(|e| arcon_err_kind!("Could not create checkpoint object: {}", e))?;
-        let mut path = self.checkpoints_path.clone();
+
+        let mut path = this.checkpoints_path.clone();
         path.push(id);
 
-        self.db.flush()
+        this.db.flush()
             .map_err(|e| arcon_err_kind!("Could not flush rocksdb: {}", e))?;
 
         checkpointer.create_checkpoint(path)
             .map_err(|e| arcon_err_kind!("Could not save the checkpoint: {}", e))?;
         Ok(())
+    }
+
+    fn new_value_state_boxed<IK, N, T>(&self, init_item_key: IK, init_namespace: N) -> Box<dyn ValueState<IK, N, T>> {
+        unimplemented!()
+    }
+
+    fn new_map_state_boxed<IK, N, K, V>(&self, init_item_key: IK, init_namespace: N) -> Box<dyn MapState<IK, N, K, V>> {
+        unimplemented!()
+    }
+
+    fn new_vec_state_boxed<IK, N, T>(&self, init_item_key: IK, init_namespace: N) -> Box<dyn VecState<IK, N, T>> {
+        unimplemented!()
+    }
+
+    fn new_reducing_state_boxed<IK, N, T>(&self, init_item_key: IK, init_namespace: N) -> Box<dyn ReducingState<IK, N, T>> {
+        unimplemented!()
+    }
+
+    fn new_aggregating_state_boxed<IK, N, IN, OUT>(&self, init_item_key: IK, init_namespace: N) -> Box<dyn AggregatingState<IK, N, IN, OUT>> {
+        unimplemented!()
     }
 }
 
@@ -66,7 +100,7 @@ mod tests {
     fn simple_rocksdb_test() {
         let tmp_dir = TempDir::new().unwrap();
         let dir_path = tmp_dir.path().to_string_lossy().into_owned();
-        let mut db = RocksDB::create(&dir_path).unwrap();
+        let mut db = RocksDB::create_shared(&dir_path).unwrap();
 
         let key = "key";
         let value = "test";
@@ -75,6 +109,10 @@ mod tests {
 
         let v = db.get(key.as_bytes()).unwrap();
         assert_eq!(value, String::from_utf8_lossy(&v));
+
+        db.remove(key.as_bytes()).expect("remove");
+        let v = db.get(key.as_bytes());
+        assert!(v.is_err());
     }
 
     #[test]
@@ -85,7 +123,7 @@ mod tests {
         let dir_path = tmp_dir.path().to_string_lossy();
         let checkpoints_dir_path = checkpoints_dir.path().to_string_lossy();
 
-        let mut db = RocksDB::create(&dir_path).unwrap();
+        let mut db = RocksDB::create_shared(&dir_path).unwrap();
         db.set_checkpoints_path(checkpoints_dir_path.as_ref());
 
         let key: &[u8] = b"key";
@@ -99,7 +137,7 @@ mod tests {
         let mut last_checkpoint_path = checkpoints_dir.path().to_owned();
         last_checkpoint_path.push("chkpt0");
 
-        let db_from_checkpoint = RocksDB::create(&last_checkpoint_path.to_string_lossy())
+        let db_from_checkpoint = RocksDB::create_shared(&last_checkpoint_path.to_string_lossy())
             .expect("Could not open checkpointed db");
 
         assert_eq!(
