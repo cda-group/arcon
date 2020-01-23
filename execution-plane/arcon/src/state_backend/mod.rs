@@ -44,6 +44,26 @@ pub trait StateBackend {
         where IK: Serialize, N: Serialize, IN: Serialize, OUT: for<'a> Deserialize<'a>;
 }
 
+// this is hackish as hell, because we don't have GATs
+pub trait ConcreteStateBackend<IK, N, T1, T2> {
+    // T1 and T2 mean different things for different types, T2 is sometimes unused.
+
+    type ConcreteValueState: ValueState<IK, N, T1>;
+    fn new_value_state(&self, init_item_key: IK, init_namespace: N) -> Self::ConcreteValueState;
+
+    type ConcreteMapState: MapState<IK, N, T1, T2>;
+    fn new_map_state(&self, init_item_key: IK, init_namespace: N) -> Self::ConcreteMapState;
+
+    type ConcreteVecState: VecState<IK, N, T1>;
+    fn new_vec_state(&self, init_item_key: IK, init_namespace: N) -> Self::ConcreteVecState;
+
+    type ConcreteReducingState: ReducingState<IK, N, T1>;
+    fn new_reducing_state(&self, init_item_key: IK, init_namespace: N) -> Self::ConcreteReducingState;
+
+    type ConcreteAggregatingState: AggregatingState<IK, N, T1, T2>;
+    fn new_aggregating_state(&self, init_item_key: IK, init_namespace: N) -> Self::ConcreteAggregatingState;
+}
+
 mod state_types {
     // TODO: Q: Should methods that mutate the state actually take a mutable reference to self?
     // TODO: Q: For now this is modelled after Flink. Do we want a different hierarchy, or maybe get
@@ -66,15 +86,6 @@ mod state_types {
 
         fn get_current_namespace(&self) -> ArconResult<&N>;
         fn set_current_namespace(&mut self, new_namespace: N) -> ArconResult<()>;
-
-        fn serialize_keys_and_namespace(&self, user_key: UK) -> ArconResult<Vec<u8>>
-            where IK: Serialize, N: Serialize, UK: Serialize {
-            bincode::serialize(&(
-                self.get_current_key()?,
-                self.get_current_namespace()?,
-                user_key
-            )).map_err(|e| arcon_err_kind!("Could not serialize keys and namespace: {}", e))
-        }
     }
 
     pub trait AppendingState<IK, N, IN, OUT>: State<IK, N> {

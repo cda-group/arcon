@@ -10,6 +10,7 @@ use std::cell::RefCell;
 use std::marker::PhantomData;
 use uuid::Uuid;
 use serde::{Serialize, Deserialize};
+use std::io::Write;
 
 #[derive(Clone)]
 pub struct InMemory {
@@ -21,14 +22,18 @@ struct Inner {
 }
 
 impl InMemory {
-    fn new_value_state<IK, N, T>(&self, init_item_key: IK, init_namespace: N) -> InMemoryValueState<IK, N, T> {
-        InMemoryValueState {
+    fn new_state_common<IK, N>(&self, init_item_key: IK, init_namespace: N) -> StateCommon<IK, N> {
+        StateCommon {
             backend_ref: self.clone(),
             id: Uuid::new_v4(),
             curr_key: init_item_key,
             curr_namespace: init_namespace,
-            _phantom: Default::default(),
         }
+    }
+
+    pub fn new_value_state<IK, N, T>(&self, init_item_key: IK, init_namespace: N) -> InMemoryValueState<IK, N, T> {
+        let common = self.new_state_common(init_item_key, init_namespace);
+        InMemoryValueState { common, _phantom: Default::default() }
     }
 }
 
@@ -81,46 +86,59 @@ impl StateBackend for InMemory {
     }
 }
 
-pub struct InMemoryValueState<IK, N, T> {
+struct StateCommon<IK, N> {
     backend_ref: InMemory,
     id: Uuid,
     curr_key: IK,
     curr_namespace: N,
-    _phantom: PhantomData<T>,
 }
 
-impl<IK, N, T> InMemoryValueState<IK, N, T>
-    where IK: Serialize, N: Serialize, T: Serialize {
-    fn get_db_key(&self) -> ArconResult<Vec<u8>> {
-        let mut serialized = self.serialize_keys_and_namespace(())?;
-        serialized.extend_from_slice(self.id.as_bytes());
-        Ok(serialized)
+fn serialize_keys_and_namespace_to<IK, N, UK>(item_key: &IK, namespace: &N, user_key: &UK, writer: &mut impl Write) -> ArconResult<()>
+    where IK: Serialize, N: Serialize, UK: Serialize {
+    bincode::serialize_into(writer, &(
+        item_key,
+        namespace,
+        user_key
+    )).map_err(|e| arcon_err_kind!("Could not serialize keys and namespace: {}", e))
+}
+
+impl<IK, N> StateCommon<IK, N> where IK: Serialize, N: Serialize {
+    fn get_db_key<UK>(&self, user_key: &UK) -> ArconResult<Vec<u8>> where UK: Serialize {
+        let mut res = self.id.as_bytes().to_vec();
+        serialize_keys_and_namespace_to(&self.curr_key, &self.curr_namespace, user_key, &mut res)?;
+
+        Ok(res)
     }
+}
+
+pub struct InMemoryValueState<IK, N, T> {
+    common: StateCommon<IK, N>,
+    _phantom: PhantomData<T>,
 }
 
 impl<IK, N, T> State<IK, N> for InMemoryValueState<IK, N, T>
     where IK: Serialize, N: Serialize, T: Serialize {
     fn clear(&mut self) -> ArconResult<()> {
-        let key = self.get_db_key()?;
-        self.backend_ref.remove(&key)?;
+        let key = self.common.get_db_key(&())?;
+        self.common.backend_ref.remove(&key)?;
         Ok(())
     }
 
     fn get_current_key(&self) -> ArconResult<&IK> {
-        Ok(&self.curr_key)
+        Ok(&self.common.curr_key)
     }
 
     fn set_current_key(&mut self, new_key: IK) -> ArconResult<()> {
-        self.curr_key = new_key;
+        self.common.curr_key = new_key;
         Ok(())
     }
 
     fn get_current_namespace(&self) -> ArconResult<&N> {
-        Ok(&self.curr_namespace)
+        Ok(&self.common.curr_namespace)
     }
 
     fn set_current_namespace(&mut self, new_namespace: N) -> ArconResult<()> {
-        self.curr_namespace = new_namespace;
+        self.common.curr_namespace = new_namespace;
         Ok(())
     }
 }
@@ -128,21 +146,23 @@ impl<IK, N, T> State<IK, N> for InMemoryValueState<IK, N, T>
 impl<IK, N, T> ValueState<IK, N, T> for InMemoryValueState<IK, N, T>
     where IK: Serialize, N: Serialize, T: Serialize, T: for<'a> Deserialize<'a> {
     fn get(&self) -> ArconResult<T> {
-        let key = self.get_db_key()?;
-        let serialized = self.backend_ref.get(&key)?;
+        let key = self.common.get_db_key(&())?;
+        let serialized = self.common.backend_ref.get(&key)?;
         let value = bincode::deserialize(&serialized)
             .map_err(|e| arcon_err_kind!("Cannot deserialize value state: {}", e))?;
         Ok(value)
     }
 
     fn set(&mut self, new_value: T) -> ArconResult<()> {
-        let key = self.get_db_key()?;
+        let key = self.common.get_db_key(&())?;
         let serialized = bincode::serialize(&new_value)
             .map_err(|e| arcon_err_kind!("Cannot serialize value state: {}", e))?;
-        self.backend_ref.put(&key, &serialized)?;
+        self.common.backend_ref.put(&key, &serialized)?;
         Ok(())
     }
 }
+
+//pub struct InMemoryMapState<IK, N, K, V> {}
 
 #[cfg(test)]
 mod tests {
