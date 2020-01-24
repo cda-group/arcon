@@ -29,7 +29,7 @@ impl RocksDB {
 }
 
 impl StateBackend for RocksDB {
-    fn create_shared(name: &str) -> ArconResult<RocksDB> {
+    fn new(name: &str) -> ArconResult<RocksDB> {
         let db = DB::open_default(&name)
             .map_err(|e| arcon_err_kind!("Failed to create RocksDB instance: {}", e))?;
         let checkpoints_path = PathBuf::from(format!("{}-checkpoints", name));
@@ -69,26 +69,6 @@ impl StateBackend for RocksDB {
             .map_err(|e| arcon_err_kind!("Could not save the checkpoint: {}", e))?;
         Ok(())
     }
-
-    fn new_value_state_boxed<IK, N, T>(&self, init_item_key: IK, init_namespace: N) -> Box<dyn ValueState<IK, N, T>> {
-        unimplemented!()
-    }
-
-    fn new_map_state_boxed<IK, N, K, V>(&self, init_item_key: IK, init_namespace: N) -> Box<dyn MapState<IK, N, K, V>> {
-        unimplemented!()
-    }
-
-    fn new_vec_state_boxed<IK, N, T>(&self, init_item_key: IK, init_namespace: N) -> Box<dyn VecState<IK, N, T>> {
-        unimplemented!()
-    }
-
-    fn new_reducing_state_boxed<IK, N, T>(&self, init_item_key: IK, init_namespace: N) -> Box<dyn ReducingState<IK, N, T>> {
-        unimplemented!()
-    }
-
-    fn new_aggregating_state_boxed<IK, N, IN, OUT>(&self, init_item_key: IK, init_namespace: N) -> Box<dyn AggregatingState<IK, N, IN, OUT>> {
-        unimplemented!()
-    }
 }
 
 #[cfg(test)]
@@ -100,7 +80,7 @@ mod tests {
     fn simple_rocksdb_test() {
         let tmp_dir = TempDir::new().unwrap();
         let dir_path = tmp_dir.path().to_string_lossy().into_owned();
-        let mut db = RocksDB::create_shared(&dir_path).unwrap();
+        let mut db = RocksDB::new(&dir_path).unwrap();
 
         let key = "key";
         let value = "test";
@@ -123,7 +103,7 @@ mod tests {
         let dir_path = tmp_dir.path().to_string_lossy();
         let checkpoints_dir_path = checkpoints_dir.path().to_string_lossy();
 
-        let mut db = RocksDB::create_shared(&dir_path).unwrap();
+        let mut db = RocksDB::new(&dir_path).unwrap();
         db.set_checkpoints_path(checkpoints_dir_path.as_ref());
 
         let key: &[u8] = b"key";
@@ -137,7 +117,7 @@ mod tests {
         let mut last_checkpoint_path = checkpoints_dir.path().to_owned();
         last_checkpoint_path.push("chkpt0");
 
-        let db_from_checkpoint = RocksDB::create_shared(&last_checkpoint_path.to_string_lossy())
+        let db_from_checkpoint = RocksDB::new(&last_checkpoint_path.to_string_lossy())
             .expect("Could not open checkpointed db");
 
         assert_eq!(

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 #![feature(unboxed_closures)]
+#![feature(fn_traits)]
 
 #[cfg_attr(test, macro_use)]
 extern crate arcon_macros;
