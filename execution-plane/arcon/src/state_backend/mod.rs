@@ -11,9 +11,6 @@ pub mod rocksdb;
 
 use arcon_error::ArconResult;
 use state_types::*;
-use std::cell::RefCell;
-use std::rc::Rc;
-use serde::{Serialize, Deserialize};
 
 // NOTE: we are using bincode for serialization, so it's probably not portable between architectures
 // of different endianness
@@ -25,44 +22,34 @@ pub trait StateBackend {
     fn new(name: &str) -> ArconResult<Self>
         where Self: Sized;
 
-    // TODO: Option instead of ArconResult? or ArconResult<Option<T>>?
-    fn get_cloned(&self, key: &[u8]) -> ArconResult<Vec<u8>>;
-    fn put(&mut self, key: &[u8], value: &[u8]) -> ArconResult<()>;
-    fn remove(&mut self, key: &[u8]) -> ArconResult<()>;
-
     fn checkpoint(&self, id: String) -> ArconResult<()>;
-
-    // unboxed versions of the below cannot be in the traits, because we lack GATs in Rust
-//    fn new_value_state_boxed<IK: 'static, N: 'static, T: 'static>(&self, init_item_key: IK, init_namespace: N) -> Box<dyn ValueState<IK, N, T>>
-//        where IK: Serialize, N: Serialize, T: Serialize, T: for<'a> Deserialize<'a>;
-//    fn new_map_state_boxed<IK: 'static, N: 'static, K: 'static, V: 'static>(&self, init_item_key: IK, init_namespace: N) -> Box<dyn MapState<IK, N, K, V>>
-//        where IK: Serialize, N: Serialize, K: Serialize, V: Serialize, V: for<'a> Deserialize<'a>;
-//    fn new_vec_state_boxed<IK: 'static, N: 'static, T: 'static>(&self, init_item_key: IK, init_namespace: N) -> Box<dyn VecState<IK, N, T>>
-//        where IK: Serialize, N: Serialize, T: Serialize, T: for<'a> Deserialize<'a>;
-//    fn new_reducing_state_boxed<IK: 'static, N: 'static, T: 'static>(&self, init_item_key: IK, init_namespace: N) -> Box<dyn ReducingState<IK, N, T>>
-//        where IK: Serialize, N: Serialize, T: Serialize, T: for<'a> Deserialize<'a>;
-//    fn new_aggregating_state_boxed<IK: 'static, N: 'static, IN: 'static, OUT: 'static>(&self, init_item_key: IK, init_namespace: N) -> Box<dyn AggregatingState<IK, N, IN, OUT>>
-//        where IK: Serialize, N: Serialize, IN: Serialize, OUT: for<'a> Deserialize<'a>;
 }
 
-// this is hackish as hell, because we don't have GATs
-pub trait ConcreteStateBackend<IK, N, T1, T2>: Sized {
-    // T1 and T2 mean different things for different types, T2 is sometimes unused.
+//// builders ////
+// ideally this would be a part of the StateBackend trait, but we lack generic associated types
+pub trait ValueStateBuilder<IK, N, T>: Sized {
+    type Type: ValueState<Self, IK, N, T>;
+    fn new_value_state(&self, init_item_key: IK, init_namespace: N) -> Self::Type;
+}
 
-    type ConcreteValueState: ValueState<Self, IK, N, T1>;
-    fn new_value_state(&self, init_item_key: IK, init_namespace: N) -> Self::ConcreteValueState;
+pub trait MapStateBuilder<IK, N, K, V>: Sized {
+    type Type: MapState<Self, IK, N, K, V>;
+    fn new_map_state(&self, init_item_key: IK, init_namespace: N) -> Self::Type;
+}
 
-    type ConcreteMapState: MapState<Self, IK, N, T1, T2>;
-    fn new_map_state(&self, init_item_key: IK, init_namespace: N) -> Self::ConcreteMapState;
+pub trait VecStateBuilder<IK, N, T>: Sized {
+    type Type: VecState<Self, IK, N, T>;
+    fn new_vec_state(&self, init_item_key: IK, init_namespace: N) -> Self::Type;
+}
 
-    type ConcreteVecState: VecState<Self, IK, N, T1>;
-    fn new_vec_state(&self, init_item_key: IK, init_namespace: N) -> Self::ConcreteVecState;
+pub trait ReducingStateBuilder<IK, N, T, F>: Sized {
+    type Type: ReducingState<Self, IK, N, T>;
+    fn new_reducing_state(&self, init_item_key: IK, init_namespace: N, reducer_fn: F) -> Self::Type;
+}
 
-    type ConcreteReducingState: ReducingState<Self, IK, N, T1>;
-    fn new_reducing_state(&self, init_item_key: IK, init_namespace: N) -> Self::ConcreteReducingState;
-
-    type ConcreteAggregatingState: AggregatingState<Self, IK, N, T1, T2>;
-    fn new_aggregating_state(&self, init_item_key: IK, init_namespace: N) -> Self::ConcreteAggregatingState;
+pub trait AggregatingStateBuilder<IK, N, T, AGG: Aggregator<T>>: Sized {
+    type Type: AggregatingState<Self, IK, N, T, AGG::Result>;
+    fn new_aggregating_state(&self, init_item_key: IK, init_namespace: N, aggregator: AGG) -> Self::Type;
 }
 
 mod state_types {
@@ -71,7 +58,6 @@ mod state_types {
     //  rid of the hierarchy altogether?
 
     use super::*;
-    use serde::Serialize;
 
     //// abstract states ////
     /// State inside a stream.

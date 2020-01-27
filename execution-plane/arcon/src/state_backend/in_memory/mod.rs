@@ -3,11 +3,8 @@
 
 use std::{
     collections::HashMap,
-    rc::Rc,
-    cell::{RefCell, Ref, RefMut},
-    marker::PhantomData,
     fmt::Debug,
-    io::Write
+    io::Write,
 };
 use uuid::Uuid;
 use serde::{Serialize, Deserialize};
@@ -21,8 +18,13 @@ use crate::{
             map_state::InMemoryMapState,
             vec_state::InMemoryVecState,
             reducing_state::InMemoryReducingState,
-            aggregating_state::InMemoryAggregatingState
-        }
+            aggregating_state::InMemoryAggregatingState,
+        },
+        ValueStateBuilder,
+        MapStateBuilder,
+        VecStateBuilder,
+        ReducingStateBuilder,
+        AggregatingStateBuilder
     }
 };
 
@@ -37,33 +39,6 @@ impl InMemory {
             curr_key: init_item_key,
             curr_namespace: init_namespace,
         }
-    }
-
-    pub fn new_value_state<IK, N, T>(&self, init_item_key: IK, init_namespace: N) -> InMemoryValueState<IK, N, T> {
-        let common = self.new_state_common(init_item_key, init_namespace);
-        InMemoryValueState { common, _phantom: Default::default() }
-    }
-
-    pub fn new_map_state<IK, N, K, V>(&self, init_item_key: IK, init_namespace: N) -> InMemoryMapState<IK, N, K, V> {
-        let common = self.new_state_common(init_item_key, init_namespace);
-        InMemoryMapState { common, _phantom: Default::default() }
-    }
-
-    pub fn new_vec_state<IK, N, T>(&self, init_item_key: IK, init_namespace: N) -> InMemoryVecState<IK, N, T> {
-        let common = self.new_state_common(init_item_key, init_namespace);
-        InMemoryVecState { common, _phantom: Default::default() }
-    }
-
-    pub fn new_reducing_state<IK, N, T, F>(&self, init_item_key: IK, init_namespace: N, reduce_fn: F) -> InMemoryReducingState<IK, N, T, F>
-        where F: Fn(&T, &T) -> T {
-        let common = self.new_state_common(init_item_key, init_namespace);
-        InMemoryReducingState { common, reduce_fn, _phantom: Default::default() }
-    }
-
-    pub fn new_aggregating_state<IK, N, T, AGG>(&self, init_item_key: IK, init_namespace: N, aggregator: AGG) -> InMemoryAggregatingState<IK, N, T, AGG>
-        where AGG: Aggregator<T> {
-        let common = self.new_state_common(init_item_key, init_namespace);
-        InMemoryAggregatingState { common, aggregator, _phantom: Default::default() }
     }
 
     /// returns how many entries were removed
@@ -104,30 +79,73 @@ impl InMemory {
     pub fn get_mut_or_init_empty(&mut self, key: &[u8]) -> ArconResult<&mut Vec<u8>> {
         Ok(self.db.entry(key.to_vec()).or_insert(vec![]))
     }
-}
 
-impl StateBackend for InMemory {
-    fn new(_name: &str) -> ArconResult<InMemory> {
-        Ok(InMemory { db: HashMap::new() })
-    }
-
-    fn get_cloned(&self, key: &[u8]) -> ArconResult<Vec<u8>> {
-        if let Some(data) = self.db.get(key) {
-            Ok(data.to_vec())
-        } else {
-            return arcon_err!("{}", "Value not found");
-        }
-    }
-
-    // TODO: unnecessary copy
-    fn put(&mut self, key: &[u8], value: &[u8]) -> ArconResult<()> {
-        self.db.insert(key.to_vec(), value.to_vec());
+    fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> ArconResult<()> {
+        self.db.insert(key, value);
         Ok(())
     }
 
     fn remove(&mut self, key: &[u8]) -> ArconResult<()> {
         let _ = self.db.remove(key);
         Ok(())
+    }
+}
+
+impl<IK, N, T> ValueStateBuilder<IK, N, T> for InMemory
+    where IK: Serialize, N: Serialize, T: Serialize + for<'a> Deserialize<'a> {
+    type Type = InMemoryValueState<IK, N, T>;
+
+    fn new_value_state(&self, init_item_key: IK, init_namespace: N) -> Self::Type {
+        let common = self.new_state_common(init_item_key, init_namespace);
+        InMemoryValueState { common, _phantom: Default::default() }
+    }
+}
+
+impl<IK, N, K, V> MapStateBuilder<IK, N, K, V> for InMemory
+    where IK: Serialize + for<'a> Deserialize<'a>, N: Serialize + for<'a> Deserialize<'a>,
+          K: Serialize + for<'a> Deserialize<'a>, V: Serialize + for<'a> Deserialize<'a> {
+    type Type = InMemoryMapState<IK, N, K, V>;
+
+    fn new_map_state(&self, init_item_key: IK, init_namespace: N) -> Self::Type {
+        let common = self.new_state_common(init_item_key, init_namespace);
+        InMemoryMapState { common, _phantom: Default::default() }
+    }
+}
+
+impl<IK, N, T> VecStateBuilder<IK, N, T> for InMemory
+    where IK: Serialize, N: Serialize, T: Serialize + for<'a> Deserialize<'a> {
+    type Type = InMemoryVecState<IK, N, T>;
+
+    fn new_vec_state(&self, init_item_key: IK, init_namespace: N) -> Self::Type {
+        let common = self.new_state_common(init_item_key, init_namespace);
+        InMemoryVecState { common, _phantom: Default::default() }
+    }
+}
+
+impl<IK, N, T, F> ReducingStateBuilder<IK, N, T, F> for InMemory
+    where IK: Serialize, N: Serialize, T: Serialize + for<'a> Deserialize<'a>, F: Fn(&T, &T) -> T {
+    type Type = InMemoryReducingState<IK, N, T, F>;
+
+    fn new_reducing_state(&self, init_item_key: IK, init_namespace: N, reduce_fn: F) -> Self::Type {
+        let common = self.new_state_common(init_item_key, init_namespace);
+        InMemoryReducingState { common, reduce_fn, _phantom: Default::default() }
+    }
+}
+
+
+impl<IK, N, T, AGG> AggregatingStateBuilder<IK, N, T, AGG> for InMemory
+    where IK: Serialize, N: Serialize, AGG: Aggregator<T>, AGG::Accumulator: Serialize + for<'a> Deserialize<'a> {
+    type Type = InMemoryAggregatingState<IK, N, T, AGG>;
+
+    fn new_aggregating_state(&self, init_item_key: IK, init_namespace: N, aggregator: AGG) -> Self::Type {
+        let common = self.new_state_common(init_item_key, init_namespace);
+        InMemoryAggregatingState { common, aggregator, _phantom: Default::default() }
+    }
+}
+
+impl StateBackend for InMemory {
+    fn new(_name: &str) -> ArconResult<InMemory> {
+        Ok(InMemory { db: HashMap::new() })
     }
 
     fn checkpoint(&self, _id: String) -> ArconResult<()> {
@@ -196,11 +214,11 @@ mod tests {
         let mut db = InMemory::new("test").unwrap();
         let key = "key";
         let value = "hej";
-        let _ = db.put(key.as_bytes(), value.as_bytes()).unwrap();
-        let fetched = db.get_cloned(key.as_bytes()).unwrap();
-        assert_eq!(value, String::from_utf8_lossy(&fetched));
+        let _ = db.put(key.to_string().into_bytes(), value.to_string().into_bytes()).unwrap();
+        let fetched = db.get(key.as_bytes()).unwrap();
+        assert_eq!(value, String::from_utf8_lossy(fetched));
         db.remove(key.as_bytes()).unwrap();
-        let res = db.get_cloned(key.as_bytes());
+        let res = db.get(key.as_bytes());
         assert!(res.is_err());
     }
 

@@ -9,22 +9,35 @@ use crate::state_backend::StateBackend;
 use arcon_error::*;
 use std::path::{PathBuf, Path};
 use self::rocksdb::checkpoint::Checkpoint;
-use crate::state_backend::state_types::{ReducingState, ValueState, MapState, VecState, AggregatingState};
 use std::rc::Rc;
 use std::cell::RefCell;
 
 pub struct RocksDB {
-    inner: Rc<RefCell<Inner>>
-}
-
-struct Inner {
     db: DB,
     checkpoints_path: PathBuf,
 }
 
 impl RocksDB {
     fn set_checkpoints_path<P: AsRef<Path>>(&mut self, path: P) {
-        self.inner.borrow_mut().checkpoints_path = path.as_ref().to_path_buf();
+        self.checkpoints_path = path.as_ref().to_path_buf();
+    }
+
+    fn get(&self, key: &[u8]) -> ArconResult<Vec<u8>> {
+        match self.db.get(key) {
+            Ok(Some(data)) => Ok(data),
+            Ok(None) => arcon_err!("{}", "Value not found"),
+            Err(e) => arcon_err!("{}", e),
+        }
+    }
+
+    fn put(&mut self, key: &[u8], value: &[u8]) -> ArconResult<()> {
+        self.db.put(key, value)
+            .map_err(|e| arcon_err_kind!("RocksDB put err: {}", e))
+    }
+
+    fn remove(&mut self, key: &[u8]) -> Result<(), Error> {
+        self.db.delete(key)
+            .map_err(|e| arcon_err_kind!("RocksDB delete err: {}", e))
     }
 }
 
@@ -33,36 +46,17 @@ impl StateBackend for RocksDB {
         let db = DB::open_default(&name)
             .map_err(|e| arcon_err_kind!("Failed to create RocksDB instance: {}", e))?;
         let checkpoints_path = PathBuf::from(format!("{}-checkpoints", name));
-        Ok(RocksDB { inner: Rc::new(RefCell::new(Inner { db, checkpoints_path }))})
-    }
-
-    fn get_cloned(&self, key: &[u8]) -> ArconResult<Vec<u8>> {
-        match self.inner.borrow().db.get(key) {
-            Ok(Some(data)) => Ok(data.to_vec()),
-            Ok(None) => arcon_err!("{}", "Value not found"),
-            Err(e) => arcon_err!("{}", e),
-        }
-    }
-
-    fn put(&mut self, key: &[u8], value: &[u8]) -> ArconResult<()> {
-        self.inner.borrow_mut().db.put(key, value)
-            .map_err(|e| arcon_err_kind!("RocksDB put err: {}", e))
-    }
-
-    fn remove(&mut self, key: &[u8]) -> Result<(), Error> {
-        self.inner.borrow_mut().db.delete(key)
-            .map_err(|e| arcon_err_kind!("RocksDB delete err: {}", e))
+        Ok(RocksDB { db, checkpoints_path })
     }
 
     fn checkpoint(&self, id: String) -> ArconResult<()> {
-        let this = self.inner.borrow();
-        let checkpointer = Checkpoint::new(&this.db)
+        let checkpointer = Checkpoint::new(&self.db)
             .map_err(|e| arcon_err_kind!("Could not create checkpoint object: {}", e))?;
 
-        let mut path = this.checkpoints_path.clone();
+        let mut path = self.checkpoints_path.clone();
         path.push(id);
 
-        this.db.flush()
+        self.db.flush()
             .map_err(|e| arcon_err_kind!("Could not flush rocksdb: {}", e))?;
 
         checkpointer.create_checkpoint(path)
@@ -87,11 +81,11 @@ mod tests {
 
         db.put(key.as_bytes(), value.as_bytes()).expect("put");
 
-        let v = db.get_cloned(key.as_bytes()).unwrap();
+        let v = db.get(key.as_bytes()).unwrap();
         assert_eq!(value, String::from_utf8_lossy(&v));
 
         db.remove(key.as_bytes()).expect("remove");
-        let v = db.get_cloned(key.as_bytes());
+        let v = db.get(key.as_bytes());
         assert!(v.is_err());
     }
 
@@ -122,13 +116,13 @@ mod tests {
 
         assert_eq!(
             new_value,
-            db.get_cloned(key)
+            db.get(key)
                 .expect("Could not get from the original db")
                 .as_slice()
         );
         assert_eq!(
             initial_value,
-            db_from_checkpoint.get_cloned(key)
+            db_from_checkpoint.get(key)
                 .expect("Could not get from the checkpoint")
                 .as_slice()
         );

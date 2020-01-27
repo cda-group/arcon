@@ -7,7 +7,6 @@ use crate::{
     state_backend::{
         in_memory::{StateCommon, InMemory},
         state_types::{State, ValueState},
-        StateBackend
     },
     prelude::ArconResult,
 };
@@ -42,7 +41,7 @@ impl<IK, N, T> ValueState<InMemory, IK, N, T> for InMemoryValueState<IK, N, T>
         let key = self.common.get_db_key(&())?;
         let serialized = bincode::serialize(&new_value)
             .map_err(|e| arcon_err_kind!("Cannot serialize value state: {}", e))?;
-        backend.put(&key, &serialized)?;
+        backend.put(key, serialized)?;
         Ok(())
     }
 }
@@ -50,6 +49,7 @@ impl<IK, N, T> ValueState<InMemory, IK, N, T> for InMemoryValueState<IK, N, T>
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::state_backend::{ValueStateBuilder, StateBackend};
 
     #[test]
     fn in_memory_value_state_test() {

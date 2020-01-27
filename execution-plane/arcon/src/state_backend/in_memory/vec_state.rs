@@ -8,7 +8,6 @@ use crate::{
     state_backend::{
         in_memory::{StateCommon, InMemory},
         state_types::{State, AppendingState, VecState, MergingState},
-        StateBackend,
     },
     prelude::ArconResult,
 };
@@ -22,7 +21,8 @@ impl<IK, N, T> State<InMemory, IK, N> for InMemoryVecState<IK, N, T>
     where IK: Serialize, N: Serialize {
     fn clear(&self, backend: &mut InMemory) -> ArconResult<()> {
         let key = self.common.get_db_key(&())?;
-        backend.remove(&key)
+        backend.remove(&key)?;
+        Ok(())
     }
 
     delegate_key_and_namespace!(common);
@@ -67,7 +67,7 @@ impl<IK, N, T> VecState<InMemory, IK, N, T> for InMemoryVecState<IK, N, T>
             bincode::serialize_into(&mut storage, &elem)
                 .map_err(|e| arcon_err_kind!("Could not serialize vec state value: {}", e))?;
         }
-        backend.put(&key, &storage)
+        backend.put(key, storage)
     }
 
     fn add_all(&self, backend: &mut InMemory, values: impl IntoIterator<Item=T>) -> ArconResult<()> where Self: Sized {
@@ -125,6 +125,7 @@ impl<IK, N, T> VecState<InMemory, IK, N, T> for InMemoryVecState<IK, N, T>
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::state_backend::{StateBackend, VecStateBuilder};
 
     #[test]
     fn vec_state_test() {

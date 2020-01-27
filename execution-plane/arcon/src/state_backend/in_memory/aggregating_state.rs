@@ -7,7 +7,6 @@ use crate::{
     state_backend::{
         in_memory::{StateCommon, InMemory},
         state_types::{State, AppendingState, Aggregator, MergingState, AggregatingState},
-        StateBackend
     },
     prelude::ArconResult,
 };
@@ -31,7 +30,8 @@ impl<IK, N, T, AGG> State<InMemory, IK, N> for InMemoryAggregatingState<IK, N, T
 }
 
 impl<IK, N, T, AGG> AppendingState<InMemory, IK, N, T, AGG::Result> for InMemoryAggregatingState<IK, N, T, AGG>
-    where IK: Serialize, N: Serialize, AGG: Aggregator<T>, AGG::Accumulator: Serialize + for<'a> Deserialize<'a> {
+    where IK: Serialize, N: Serialize, AGG: Aggregator<T>,
+          AGG::Accumulator: Serialize + for<'a> Deserialize<'a> {
     fn get(&self, backend: &InMemory) -> ArconResult<AGG::Result> {
         // TODO: do we want to return R based on a new accumulator if not found?
         let key = self.common.get_db_key(&())?;
@@ -63,15 +63,21 @@ impl<IK, N, T, AGG> AppendingState<InMemory, IK, N, T, AGG::Result> for InMemory
 }
 
 impl<IK, N, T, AGG> MergingState<InMemory, IK, N, T, AGG::Result> for InMemoryAggregatingState<IK, N, T, AGG>
-    where IK: Serialize, N: Serialize, AGG: Aggregator<T>, AGG::Accumulator: Serialize + for<'a> Deserialize<'a> {}
+    where IK: Serialize, N: Serialize, AGG: Aggregator<T>,
+          AGG::Accumulator: Serialize + for<'a> Deserialize<'a> {}
 
 impl<IK, N, T, AGG> AggregatingState<InMemory, IK, N, T, AGG::Result> for InMemoryAggregatingState<IK, N, T, AGG>
-    where IK: Serialize, N: Serialize, AGG: Aggregator<T>, AGG::Accumulator: Serialize + for<'a> Deserialize<'a> {}
+    where IK: Serialize, N: Serialize, AGG: Aggregator<T>,
+          AGG::Accumulator: Serialize + for<'a> Deserialize<'a> {}
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::state_backend::state_types::ClosuresAggregator;
+    use crate::state_backend::{
+        state_types::ClosuresAggregator,
+        StateBackend,
+        AggregatingStateBuilder,
+    };
 
     #[test]
     fn aggregating_state_test() {

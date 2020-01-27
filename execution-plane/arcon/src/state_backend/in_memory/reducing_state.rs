@@ -7,7 +7,6 @@ use crate::{
     state_backend::{
         in_memory::{StateCommon, InMemory},
         state_types::{State, AppendingState, ReducingState, MergingState},
-        StateBackend,
     },
     prelude::ArconResult,
 };
@@ -71,6 +70,7 @@ impl<IK, N, T, F> ReducingState<InMemory, IK, N, T> for InMemoryReducingState<IK
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::state_backend::{StateBackend, ReducingStateBuilder};
 
     #[test]
     fn reducing_state_test() {

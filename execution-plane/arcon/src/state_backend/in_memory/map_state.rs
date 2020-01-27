@@ -7,7 +7,6 @@ use crate::{
     state_backend::{
         in_memory::{StateCommon, InMemory},
         state_types::{State, MapState},
-        StateBackend
     },
     prelude::ArconResult,
 };
@@ -24,7 +23,6 @@ impl<IK, N, K, V> State<InMemory, IK, N> for InMemoryMapState<IK, N, K, V>
         // the prefix with which to search the underlying db.
         let prefix = self.common.get_db_key(&())?;
         backend.remove_matching(&prefix)?;
-
         Ok(())
     }
 
@@ -51,7 +49,7 @@ impl<IK, N, K, V> MapState<InMemory, IK, N, K, V> for InMemoryMapState<IK, N, K,
         let key = self.common.get_db_key(&key)?;
         let serialized = bincode::serialize(&value)
             .map_err(|e| arcon_err_kind!("Could not serialize map state value: {}", e))?;
-        backend.put(&key, &serialized)?;
+        backend.put(key, serialized)?;
 
         Ok(())
     }
@@ -129,6 +127,7 @@ impl<IK, N, K, V> MapState<InMemory, IK, N, K, V> for InMemoryMapState<IK, N, K,
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::state_backend::{StateBackend, MapStateBuilder};
 
     #[test]
     fn map_state_test() {
