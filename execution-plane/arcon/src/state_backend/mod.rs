@@ -152,16 +152,65 @@ mod state_types {
 
     pub trait AggregatingState<SB, IK, N, IN, OUT>: MergingState<SB, IK, N, IN, OUT> {}
 
+    pub trait Aggregator<T> {
+        type Accumulator;
+        type Result;
+
+        fn create_accumulator(&self) -> Self::Accumulator;
+        // bikeshed - immutable + return value instead of mutable acc? (like in flink)
+        fn add(&self, acc: &mut Self::Accumulator, value: T);
+        fn accumulator_into_result(&self, acc: Self::Accumulator) -> Self::Result;
+    }
+
+    pub struct ClosuresAggregator<CREATE, ADD, RES> {
+        create: CREATE,
+        add: ADD,
+        res: RES,
+    }
+
+    impl<CREATE, ADD, RES> ClosuresAggregator<CREATE, ADD, RES> {
+        pub fn new<T, ACC, R>(create: CREATE, add: ADD, res: RES) -> ClosuresAggregator<CREATE, ADD, RES>
+            where
+                CREATE: Fn() -> ACC,
+                ADD: Fn(&mut ACC, T) -> (),
+                RES: Fn(ACC) -> R {
+            ClosuresAggregator { create, add, res }
+        }
+    }
+
+    impl<CREATE, ADD, RES, T> Aggregator<T> for ClosuresAggregator<CREATE, ADD, RES>
+        where
+            CREATE: Fn<()>,
+            ADD: Fn(&mut CREATE::Output, T) -> (),
+            RES: Fn<(CREATE::Output,)> {
+        type Accumulator = CREATE::Output;
+        type Result = RES::Output;
+
+        fn create_accumulator(&self) -> Self::Accumulator {
+            (self.create)()
+        }
+
+        fn add(&self, acc: &mut Self::Accumulator, value: T) {
+            (self.add)(acc, value)
+        }
+
+        fn accumulator_into_result(&self, acc: Self::Accumulator) -> Self::Result {
+            (self.res)(acc)
+        }
+    }
+
+
     // TODO: broadcast state???
 
-    sa::assert_obj_safe!(
-        State<(), u32, ()>,
-        MapState<(), i32, (), u32, u32>,
-        ValueState<(), i32, (), u32>,
-        AppendingState<(), i32, (), char, String>,
-        MergingState<(), i32, (), u32, std::collections::HashSet<u32>>,
-        ReducingState<(), i32, (), u32>,
-        VecState<(), i32, (), i32>,
-        AggregatingState<(), i32, (), i32, String>
-    );
+    // let's not care about object safety
+//    sa::assert_obj_safe!(
+//        State<(), u32, ()>,
+//        MapState<(), i32, (), u32, u32>,
+//        ValueState<(), i32, (), u32>,
+//        AppendingState<(), i32, (), char, String>,
+//        MergingState<(), i32, (), u32, std::collections::HashSet<u32>>,
+//        ReducingState<(), i32, (), u32>,
+//        VecState<(), i32, (), i32>,
+//        AggregatingState<(), i32, (), i32, String>
+//    );
 }
