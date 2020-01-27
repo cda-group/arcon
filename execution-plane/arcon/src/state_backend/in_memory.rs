@@ -36,6 +36,11 @@ impl InMemory {
         InMemoryMapState { common, _phantom: Default::default() }
     }
 
+    pub fn new_vec_state<IK, N, T>(&self, init_item_key: IK, init_namespace: N) -> InMemoryVecState<IK, N, T> {
+        let common = self.new_state_common(init_item_key, init_namespace);
+        InMemoryVecState { common, _phantom: Default::default() }
+    }
+
     /// returns how many entries were removed
     pub fn remove_matching(&mut self, prefix: &[u8]) -> ArconResult<usize> {
         let db = &mut self.db;
@@ -63,6 +68,18 @@ impl InMemory {
     pub fn contains(&self, key: &[u8]) -> ArconResult<bool> {
         Ok(self.db.contains_key(key))
     }
+
+    pub fn get_mut(&mut self, key: &[u8]) -> ArconResult<&mut Vec<u8>> {
+        if let Some(data) = self.db.get_mut(key) {
+            Ok(data)
+        } else {
+            return arcon_err!("{}", "Value not found");
+        }
+    }
+
+    pub fn get_mut_or_init_empty(&mut self, key: &[u8]) -> ArconResult<&mut Vec<u8>> {
+        Ok(self.db.entry(key.to_vec()).or_insert(vec![]))
+    }
 }
 
 impl StateBackend for InMemory {
@@ -78,6 +95,7 @@ impl StateBackend for InMemory {
         }
     }
 
+    // TODO: unnecessary copy
     fn put(&mut self, key: &[u8], value: &[u8]) -> ArconResult<()> {
         self.db.insert(key.to_vec(), value.to_vec());
         Ok(())
@@ -200,8 +218,8 @@ impl<IK, N, K, V> MapState<InMemory, IK, N, K, V> for InMemoryMapState<IK, N, K,
         N: Serialize + for<'a> Deserialize<'a>,
         K: Serialize + for<'a> Deserialize<'a>,
         V: Serialize + for<'a> Deserialize<'a> {
-    fn get(&self, backend: &InMemory, key: K) -> ArconResult<V> {
-        let key = self.common.get_db_key(&key)?;
+    fn get(&self, backend: &InMemory, key: &K) -> ArconResult<V> {
+        let key = self.common.get_db_key(key)?;
         let serialized = backend.get(&key)?;
         let value = bincode::deserialize(&serialized)
             .map_err(|e| arcon_err_kind!("Cannot deserialize map state value: {}", e))?;
@@ -230,15 +248,15 @@ impl<IK, N, K, V> MapState<InMemory, IK, N, K, V> for InMemoryMapState<IK, N, K,
         Ok(())
     }
 
-    fn remove(&self, backend: &mut InMemory, key: K) -> ArconResult<()> {
-        let key = self.common.get_db_key(&key)?;
+    fn remove(&self, backend: &mut InMemory, key: &K) -> ArconResult<()> {
+        let key = self.common.get_db_key(key)?;
         backend.remove(&key)?;
 
         Ok(())
     }
 
-    fn contains(&self, backend: &InMemory, key: K) -> ArconResult<bool> {
-        let key = self.common.get_db_key(&key)?;
+    fn contains(&self, backend: &InMemory, key: &K) -> ArconResult<bool> {
+        let key = self.common.get_db_key(key)?;
         backend.contains(&key)
     }
 
@@ -285,6 +303,80 @@ impl<IK, N, K, V> MapState<InMemory, IK, N, K, V> for InMemoryMapState<IK, N, K,
     fn is_empty(&self, backend: &InMemory) -> ArconResult<bool> {
         let prefix = self.common.get_db_key(&())?;
         Ok(backend.iter_matching(prefix).next().is_none())
+    }
+}
+
+pub struct InMemoryVecState<IK, N, T> {
+    common: StateCommon<IK, N>,
+    _phantom: PhantomData<T>,
+}
+
+impl<IK, N, T> State<InMemory, IK, N> for InMemoryVecState<IK, N, T>
+    where IK: Serialize, N: Serialize {
+    fn clear(&self, backend: &mut InMemory) -> ArconResult<()> {
+        let key = self.common.get_db_key(&())?;
+        backend.remove(&key)
+    }
+
+    delegate_key_and_namespace!(common);
+}
+
+impl<IK, N, T> AppendingState<InMemory, IK, N, T, Vec<T>> for InMemoryVecState<IK, N, T>
+    where IK: Serialize, N: Serialize, T: Serialize, T: for<'a> Deserialize<'a> {
+    fn get(&self, backend: &InMemory) -> ArconResult<Vec<T>> {
+        let key = self.common.get_db_key(&())?;
+        let serialized = backend.get(&key)?;
+
+        // reader is updated in the loop to point at the yet unconsumed part of the serialized data
+        let mut reader = &serialized[..];
+        let mut res = vec![];
+        while !reader.is_empty() {
+            let val = bincode::deserialize_from(&mut reader)
+                .map_err(|e| arcon_err_kind!("Could not deserialize vec state value: {}", e))?;
+            res.push(val);
+        }
+
+        Ok(res)
+    }
+
+    fn append(&self, backend: &mut InMemory, value: T) -> ArconResult<()> {
+        let key = self.common.get_db_key(&())?;
+        let storage = backend.get_mut_or_init_empty(&key)?;
+
+        bincode::serialize_into(storage, &value)
+            .map_err(|e| arcon_err_kind!("Could not serialize vec state value: {}", e))
+    }
+}
+
+impl<IK, N, T> MergingState<InMemory, IK, N, T, Vec<T>> for InMemoryVecState<IK, N, T>
+    where IK: Serialize, N: Serialize, T: Serialize, T: for<'a> Deserialize<'a> {}
+
+impl<IK, N, T> VecState<InMemory, IK, N, T> for InMemoryVecState<IK, N, T>
+    where IK: Serialize, N: Serialize, T: Serialize, T: for<'a> Deserialize<'a> {
+    fn set(&self, backend: &mut InMemory, value: Vec<T>) -> ArconResult<()> {
+        let key = self.common.get_db_key(&())?;
+        let mut storage = vec![];
+        for elem in value {
+            bincode::serialize_into(&mut storage, &elem)
+                .map_err(|e| arcon_err_kind!("Could not serialize vec state value: {}", e))?;
+        }
+        backend.put(&key, &storage)
+    }
+
+    fn add_all(&self, backend: &mut InMemory, values: impl IntoIterator<Item=T>) -> ArconResult<()> where Self: Sized {
+        let key = self.common.get_db_key(&())?;
+        let mut storage = backend.get_mut_or_init_empty(&key)?;
+
+        for value in values {
+            bincode::serialize_into(&mut storage, &value)
+                .map_err(|e| arcon_err_kind!("Could not serialize vec state value: {}", e))?;
+        }
+
+        Ok(())
+    }
+
+    fn add_all_dyn(&self, backend: &mut InMemory, values: &mut dyn Iterator<Item=T>) -> ArconResult<()> {
+        self.add_all(backend, values)
     }
 }
 
@@ -357,19 +449,19 @@ mod tests {
         let should_be_one = value_state.get(&db).unwrap();
         assert_eq!(should_be_one, 1);
 
-        value_state.set_current_key(0);
+        value_state.set_current_key(0).unwrap();
         let should_be_zero = value_state.get(&db).unwrap();
         assert_eq!(should_be_zero, 0);
 
-        value_state.set_current_namespace(1);
+        value_state.set_current_namespace(1).unwrap();
         let should_be_err = value_state.get(&db);
         assert!(should_be_err.is_err());
 
-        value_state.set(&mut db, 2);
+        value_state.set(&mut db, 2).unwrap();
         let should_be_two = value_state.get(&db).unwrap();
         assert_eq!(should_be_two, 2);
 
-        value_state.set_current_namespace(0);
+        value_state.set_current_namespace(0).unwrap();
         let should_be_zero = value_state.get(&db).unwrap();
         assert_eq!(should_be_zero, 0);
     }
@@ -397,21 +489,35 @@ mod tests {
         let mut db = InMemory::new("test").unwrap();
         let mut map_state = db.new_map_state((), ());
 
-        assert!(!map_state.contains(&db, "first key".to_string()).unwrap());
+        // TODO: &String is weird, maybe look at how it's done with the keys in std hash-map
+        assert!(!map_state.contains(&db, &"first key".to_string()).unwrap());
 
         map_state.put(&mut db, "first key".to_string(), 42).unwrap();
         map_state.put(&mut db, "second key".to_string(), 69).unwrap();
 
-        assert!(map_state.contains(&db, "first key".to_string()).unwrap());
-        assert!(map_state.contains(&db, "second key".to_string()).unwrap());
+        assert!(map_state.contains(&db, &"first key".to_string()).unwrap());
+        assert!(map_state.contains(&db, &"second key".to_string()).unwrap());
 
-        assert_eq!(map_state.get(&db, "first key".to_string()).unwrap(), 42);
-        assert_eq!(map_state.get(&db, "second key".to_string()).unwrap(), 69);
+        assert_eq!(map_state.get(&db, &"first key".to_string()).unwrap(), 42);
+        assert_eq!(map_state.get(&db, &"second key".to_string()).unwrap(), 69);
 
         let keys: Vec<_> = map_state.keys(&db).unwrap().collect();
 
         assert_eq!(keys.len(), 2);
         assert!(keys.contains(&"first key".to_string()));
         assert!(keys.contains(&"second key".to_string()));
+    }
+
+    #[test]
+    fn vec_state_test() {
+        let mut db = InMemory::new("test").unwrap();
+        let mut vec_state = db.new_vec_state((), ());
+
+        vec_state.append(&mut db, 1).unwrap();
+        vec_state.append(&mut db, 2).unwrap();
+        vec_state.append(&mut db, 3).unwrap();
+        vec_state.add_all(&mut db, vec![4, 5, 6]).unwrap();
+
+        assert_eq!(vec_state.get(&db).unwrap(), vec![1, 2, 3, 4, 5, 6]);
     }
 }

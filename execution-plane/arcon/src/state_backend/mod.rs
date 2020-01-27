@@ -90,6 +90,7 @@ mod state_types {
         fn set_current_namespace(&mut self, new_namespace: N) -> ArconResult<()>;
     }
 
+    // TODO: since we don't have any state that is appending, but not merging, maybe consider using one trait?
     pub trait AppendingState<SB, IK, N, IN, OUT>: State<SB, IK, N> {
         fn get(&self, backend: &SB) -> ArconResult<OUT>;
         fn append(&self, backend: &mut SB, value: IN) -> ArconResult<()>;
@@ -108,16 +109,15 @@ mod state_types {
     }
 
     pub trait MapState<SB, IK, N, K, V>: State<SB, IK, N> {
-        fn get(&self, backend: &SB, key: K) -> ArconResult<V>;
+        fn get(&self, backend: &SB, key: &K) -> ArconResult<V>;
         fn put(&self, backend: &mut SB, key: K, value: V) -> ArconResult<()>;
 
         fn put_all_dyn(&self, backend: &mut SB, key_value_pairs: &mut dyn Iterator<Item=(K, V)>) -> ArconResult<()>;
         fn put_all(&self, backend: &mut SB, key_value_pairs: impl IntoIterator<Item=(K, V)>) -> ArconResult<()>
             where Self: Sized;
 
-        // TODO: those, along with get, should probably have &K as param
-        fn remove(&self, backend: &mut SB, key: K) -> ArconResult<()>;
-        fn contains(&self, backend: &SB, key: K) -> ArconResult<bool>;
+        fn remove(&self, backend: &mut SB, key: &K) -> ArconResult<()>;
+        fn contains(&self, backend: &SB, key: &K) -> ArconResult<bool>;
 
         fn iter<'a>(&self, backend: &'a SB) -> ArconResult<Box<dyn Iterator<Item=(K, V)> + 'a>>;
         // makes it not object-safe :(
@@ -144,7 +144,7 @@ mod state_types {
         fn set(&self, backend: &mut SB, value: Vec<T>) -> ArconResult<()>;
         fn add_all(&self, backend: &mut SB, values: impl IntoIterator<Item=T>) -> ArconResult<()>
             where Self: Sized;
-        fn add_all_dyn(&self, backend: &mut SB, values: &dyn Iterator<Item=T>) -> ArconResult<()>;
+        fn add_all_dyn(&self, backend: &mut SB, values: &mut dyn Iterator<Item=T>) -> ArconResult<()>;
     }
 
     pub trait ReducingState<SB, IK, N, T>: MergingState<SB, IK, N, T, T> {}
