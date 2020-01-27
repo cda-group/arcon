@@ -1,3 +1,6 @@
+// Copyright (c) 2020, KTH Royal Institute of Technology.
+// SPDX-License-Identifier: AGPL-3.0-only
+
 use std::marker::PhantomData;
 use serde::{Serialize, Deserialize};
 use error::ErrorKind;
@@ -5,7 +8,7 @@ use crate::{
     state_backend::{
         in_memory::{StateCommon, InMemory},
         state_types::{State, AppendingState, VecState, MergingState},
-        StateBackend
+        StateBackend,
     },
     prelude::ArconResult,
 };
@@ -116,5 +119,25 @@ impl<IK, N, T> VecState<InMemory, IK, N, T> for InMemoryVecState<IK, N, T>
                 Ok(len)
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn vec_state_test() {
+        let mut db = InMemory::new("test").unwrap();
+        let mut vec_state = db.new_vec_state((), ());
+        assert_eq!(vec_state.len(&db).unwrap(), 0);
+
+        vec_state.append(&mut db, 1).unwrap();
+        vec_state.append(&mut db, 2).unwrap();
+        vec_state.append(&mut db, 3).unwrap();
+        vec_state.add_all(&mut db, vec![4, 5, 6]).unwrap();
+
+        assert_eq!(vec_state.get(&db).unwrap(), vec![1, 2, 3, 4, 5, 6]);
+        assert_eq!(vec_state.len(&db).unwrap(), 6);
     }
 }

@@ -1,22 +1,30 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::state_backend::StateBackend;
-use crate::state_backend::state_types::*;
-use arcon_error::*;
-use std::collections::HashMap;
-use std::rc::Rc;
-use std::cell::{RefCell, Ref, RefMut};
-use std::marker::PhantomData;
-use std::fmt::Debug;
-use std::io::Write;
+use std::{
+    collections::HashMap,
+    rc::Rc,
+    cell::{RefCell, Ref, RefMut},
+    marker::PhantomData,
+    fmt::Debug,
+    io::Write
+};
 use uuid::Uuid;
 use serde::{Serialize, Deserialize};
-use crate::state_backend::in_memory::value_state::InMemoryValueState;
-use crate::state_backend::in_memory::map_state::InMemoryMapState;
-use crate::state_backend::in_memory::vec_state::InMemoryVecState;
-use crate::state_backend::in_memory::reducing_state::InMemoryReducingState;
-use crate::state_backend::in_memory::aggregating_state::InMemoryAggregatingState;
+use arcon_error::*;
+use crate::{
+    state_backend::{
+        state_types::*,
+        StateBackend,
+        in_memory::{
+            value_state::InMemoryValueState,
+            map_state::InMemoryMapState,
+            vec_state::InMemoryVecState,
+            reducing_state::InMemoryReducingState,
+            aggregating_state::InMemoryAggregatingState
+        }
+    }
+};
 
 pub struct InMemory {
     db: HashMap<Vec<u8>, Vec<u8>>
@@ -197,75 +205,6 @@ mod tests {
     }
 
     #[test]
-    fn in_memory_value_state_test() {
-        let mut db = InMemory::new("test").unwrap();
-        let mut value_state = db.new_value_state((), ());
-
-        let unset = value_state.get(&db);
-        assert!(unset.is_err());
-
-        value_state.set(&mut db, 123).unwrap();
-        let set = value_state.get(&db).unwrap();
-        assert_eq!(set, 123);
-
-        value_state.clear(&mut db).unwrap();
-        let cleared = value_state.get(&db);
-        assert!(cleared.is_err());
-    }
-
-    #[test]
-    fn in_memory_value_states_are_independant() {
-        let mut db = InMemory::new("test").unwrap();
-        let mut v1 = db.new_value_state((), ());
-        let mut v2 = db.new_value_state((), ());
-
-        v1.set(&mut db, 123).unwrap();
-        v2.set(&mut db, 456).unwrap();
-
-        let v1v = v1.get(&db).unwrap();
-        let v2v = v2.get(&db).unwrap();
-        assert_eq!(v1v, 123);
-        assert_eq!(v2v, 456);
-
-        v1.clear(&mut db).unwrap();
-        let v1res = v1.get(&db);
-        let v2v = v2.get(&db).unwrap();
-        assert!(v1res.is_err());
-        assert_eq!(v2v, 456);
-    }
-
-    #[test]
-    fn in_memory_value_states_handle_state_for_different_keys_and_namespaces() {
-        let mut db = InMemory::new("test").unwrap();
-        let mut value_state = db.new_value_state(0, 0);
-
-        value_state.set(&mut db, 0).unwrap();
-        value_state.set_current_key(1).unwrap();
-        let should_be_err = value_state.get(&db);
-        assert!(should_be_err.is_err());
-
-        value_state.set(&mut db, 1);
-        let should_be_one = value_state.get(&db).unwrap();
-        assert_eq!(should_be_one, 1);
-
-        value_state.set_current_key(0).unwrap();
-        let should_be_zero = value_state.get(&db).unwrap();
-        assert_eq!(should_be_zero, 0);
-
-        value_state.set_current_namespace(1).unwrap();
-        let should_be_err = value_state.get(&db);
-        assert!(should_be_err.is_err());
-
-        value_state.set(&mut db, 2).unwrap();
-        let should_be_two = value_state.get(&db).unwrap();
-        assert_eq!(should_be_two, 2);
-
-        value_state.set_current_namespace(0).unwrap();
-        let should_be_zero = value_state.get(&db).unwrap();
-        assert_eq!(should_be_zero, 0);
-    }
-
-    #[test]
     fn test_namespace_serialization() {
         // we rely on the order of the serialized fields, because we search by prefix when clearing
         // map state
@@ -279,75 +218,5 @@ mod tests {
         let v2 = dbg!(v2);
 
         assert_eq!(&v2[..v.len()], &v[..]);
-    }
-
-    // TODO: comprehensive tests for map, vec, reducing state, and aggregating state impls
-
-    #[test]
-    fn map_state_test() {
-        let mut db = InMemory::new("test").unwrap();
-        let mut map_state = db.new_map_state((), ());
-
-        // TODO: &String is weird, maybe look at how it's done with the keys in std hash-map
-        assert!(!map_state.contains(&db, &"first key".to_string()).unwrap());
-
-        map_state.put(&mut db, "first key".to_string(), 42).unwrap();
-        map_state.put(&mut db, "second key".to_string(), 69).unwrap();
-
-        assert!(map_state.contains(&db, &"first key".to_string()).unwrap());
-        assert!(map_state.contains(&db, &"second key".to_string()).unwrap());
-
-        assert_eq!(map_state.get(&db, &"first key".to_string()).unwrap(), 42);
-        assert_eq!(map_state.get(&db, &"second key".to_string()).unwrap(), 69);
-
-        let keys: Vec<_> = map_state.keys(&db).unwrap().collect();
-
-        assert_eq!(keys.len(), 2);
-        assert!(keys.contains(&"first key".to_string()));
-        assert!(keys.contains(&"second key".to_string()));
-    }
-
-    #[test]
-    fn vec_state_test() {
-        let mut db = InMemory::new("test").unwrap();
-        let mut vec_state = db.new_vec_state((), ());
-        assert_eq!(vec_state.len(&db).unwrap(), 0);
-
-        vec_state.append(&mut db, 1).unwrap();
-        vec_state.append(&mut db, 2).unwrap();
-        vec_state.append(&mut db, 3).unwrap();
-        vec_state.add_all(&mut db, vec![4, 5, 6]).unwrap();
-
-        assert_eq!(vec_state.get(&db).unwrap(), vec![1, 2, 3, 4, 5, 6]);
-        assert_eq!(vec_state.len(&db).unwrap(), 6);
-    }
-
-    #[test]
-    fn reducing_state_test() {
-        let mut db = InMemory::new("test").unwrap();
-        let mut reducing_state = db.new_reducing_state((), (),
-                                                       |old: &i32, new: &i32| *old.max(new));
-
-        reducing_state.append(&mut db, 7).unwrap();
-        reducing_state.append(&mut db, 42).unwrap();
-        reducing_state.append(&mut db, 10).unwrap();
-
-        assert_eq!(reducing_state.get(&db).unwrap(), 42);
-    }
-
-    #[test]
-    fn aggregating_state_test() {
-        let mut db = InMemory::new("test").unwrap();
-        let mut aggregating_state = db.new_aggregating_state(
-            (),
-            (),
-            ClosuresAggregator::new(|| vec![], Vec::push, |v| format!("{:?}", v)),
-        );
-
-        aggregating_state.append(&mut db, 1).unwrap();
-        aggregating_state.append(&mut db, 2).unwrap();
-        aggregating_state.append(&mut db, 3).unwrap();
-
-        assert_eq!(aggregating_state.get(&db).unwrap(), "[1, 2, 3]".to_string());
     }
 }

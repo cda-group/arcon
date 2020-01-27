@@ -1,10 +1,13 @@
+// Copyright (c) 2020, KTH Royal Institute of Technology.
+// SPDX-License-Identifier: AGPL-3.0-only
+
 use std::marker::PhantomData;
 use serde::{Serialize, Deserialize};
 use crate::{
     state_backend::{
         in_memory::{StateCommon, InMemory},
         state_types::{State, AppendingState, ReducingState, MergingState},
-        StateBackend
+        StateBackend,
     },
     prelude::ArconResult,
 };
@@ -64,3 +67,21 @@ impl<IK, N, T, F> MergingState<InMemory, IK, N, T, T> for InMemoryReducingState<
 
 impl<IK, N, T, F> ReducingState<InMemory, IK, N, T> for InMemoryReducingState<IK, N, T, F>
     where IK: Serialize, N: Serialize, T: Serialize + for<'a> Deserialize<'a>, F: Fn(&T, &T) -> T {}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn reducing_state_test() {
+        let mut db = InMemory::new("test").unwrap();
+        let mut reducing_state = db.new_reducing_state((), (),
+                                                       |old: &i32, new: &i32| *old.max(new));
+
+        reducing_state.append(&mut db, 7).unwrap();
+        reducing_state.append(&mut db, 42).unwrap();
+        reducing_state.append(&mut db, 10).unwrap();
+
+        assert_eq!(reducing_state.get(&db).unwrap(), 42);
+    }
+}

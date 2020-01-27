@@ -1,3 +1,6 @@
+// Copyright (c) 2020, KTH Royal Institute of Technology.
+// SPDX-License-Identifier: AGPL-3.0-only
+
 use std::marker::PhantomData;
 use serde::{Serialize, Deserialize};
 use crate::{
@@ -64,3 +67,25 @@ impl<IK, N, T, AGG> MergingState<InMemory, IK, N, T, AGG::Result> for InMemoryAg
 
 impl<IK, N, T, AGG> AggregatingState<InMemory, IK, N, T, AGG::Result> for InMemoryAggregatingState<IK, N, T, AGG>
     where IK: Serialize, N: Serialize, AGG: Aggregator<T>, AGG::Accumulator: Serialize + for<'a> Deserialize<'a> {}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::state_backend::state_types::ClosuresAggregator;
+
+    #[test]
+    fn aggregating_state_test() {
+        let mut db = InMemory::new("test").unwrap();
+        let mut aggregating_state = db.new_aggregating_state(
+            (),
+            (),
+            ClosuresAggregator::new(|| vec![], Vec::push, |v| format!("{:?}", v)),
+        );
+
+        aggregating_state.append(&mut db, 1).unwrap();
+        aggregating_state.append(&mut db, 2).unwrap();
+        aggregating_state.append(&mut db, 3).unwrap();
+
+        assert_eq!(aggregating_state.get(&db).unwrap(), "[1, 2, 3]".to_string());
+    }
+}

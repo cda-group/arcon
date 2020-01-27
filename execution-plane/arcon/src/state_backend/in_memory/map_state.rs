@@ -1,3 +1,6 @@
+// Copyright (c) 2020, KTH Royal Institute of Technology.
+// SPDX-License-Identifier: AGPL-3.0-only
+
 use std::marker::PhantomData;
 use serde::{Serialize, Deserialize};
 use crate::{
@@ -120,5 +123,34 @@ impl<IK, N, K, V> MapState<InMemory, IK, N, K, V> for InMemoryMapState<IK, N, K,
     fn is_empty(&self, backend: &InMemory) -> ArconResult<bool> {
         let prefix = self.common.get_db_key(&())?;
         Ok(backend.iter_matching(prefix).next().is_none())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn map_state_test() {
+        let mut db = InMemory::new("test").unwrap();
+        let mut map_state = db.new_map_state((), ());
+
+        // TODO: &String is weird, maybe look at how it's done with the keys in std hash-map
+        assert!(!map_state.contains(&db, &"first key".to_string()).unwrap());
+
+        map_state.put(&mut db, "first key".to_string(), 42).unwrap();
+        map_state.put(&mut db, "second key".to_string(), 69).unwrap();
+
+        assert!(map_state.contains(&db, &"first key".to_string()).unwrap());
+        assert!(map_state.contains(&db, &"second key".to_string()).unwrap());
+
+        assert_eq!(map_state.get(&db, &"first key".to_string()).unwrap(), 42);
+        assert_eq!(map_state.get(&db, &"second key".to_string()).unwrap(), 69);
+
+        let keys: Vec<_> = map_state.keys(&db).unwrap().collect();
+
+        assert_eq!(keys.len(), 2);
+        assert!(keys.contains(&"first key".to_string()));
+        assert!(keys.contains(&"second key".to_string()));
     }
 }
