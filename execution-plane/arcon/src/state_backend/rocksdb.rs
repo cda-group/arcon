@@ -36,7 +36,7 @@ impl StateBackend for RocksDB {
         Ok(RocksDB { inner: Rc::new(RefCell::new(Inner { db, checkpoints_path }))})
     }
 
-    fn get(&self, key: &[u8]) -> ArconResult<Vec<u8>> {
+    fn get_cloned(&self, key: &[u8]) -> ArconResult<Vec<u8>> {
         match self.inner.borrow().db.get(key) {
             Ok(Some(data)) => Ok(data.to_vec()),
             Ok(None) => arcon_err!("{}", "Value not found"),
@@ -87,11 +87,11 @@ mod tests {
 
         db.put(key.as_bytes(), value.as_bytes()).expect("put");
 
-        let v = db.get(key.as_bytes()).unwrap();
+        let v = db.get_cloned(key.as_bytes()).unwrap();
         assert_eq!(value, String::from_utf8_lossy(&v));
 
         db.remove(key.as_bytes()).expect("remove");
-        let v = db.get(key.as_bytes());
+        let v = db.get_cloned(key.as_bytes());
         assert!(v.is_err());
     }
 
@@ -122,13 +122,13 @@ mod tests {
 
         assert_eq!(
             new_value,
-            db.get(key)
+            db.get_cloned(key)
                 .expect("Could not get from the original db")
                 .as_slice()
         );
         assert_eq!(
             initial_value,
-            db_from_checkpoint.get(key)
+            db_from_checkpoint.get_cloned(key)
                 .expect("Could not get from the checkpoint")
                 .as_slice()
         );

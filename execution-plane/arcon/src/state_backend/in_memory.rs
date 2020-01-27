@@ -41,6 +41,12 @@ impl InMemory {
         InMemoryVecState { common, _phantom: Default::default() }
     }
 
+    pub fn new_reducing_state<IK, N, T, F>(&self, init_item_key: IK, init_namespace: N, reduce_fn: F) -> InMemoryReducingState<IK, N, T, F>
+        where F: Fn(&T, &T) -> T {
+        let common = self.new_state_common(init_item_key, init_namespace);
+        InMemoryReducingState { common, reduce_fn, _phantom: Default::default() }
+    }
+
     /// returns how many entries were removed
     pub fn remove_matching(&mut self, prefix: &[u8]) -> ArconResult<usize> {
         let db = &mut self.db;
@@ -69,11 +75,19 @@ impl InMemory {
         Ok(self.db.contains_key(key))
     }
 
+    pub fn get(&self, key: &[u8]) -> ArconResult<&[u8]> {
+        if let Some(data) = self.db.get(key) {
+            Ok(&*data)
+        } else {
+            return arcon_err!("Value not found");
+        }
+    }
+
     pub fn get_mut(&mut self, key: &[u8]) -> ArconResult<&mut Vec<u8>> {
         if let Some(data) = self.db.get_mut(key) {
             Ok(data)
         } else {
-            return arcon_err!("{}", "Value not found");
+            return arcon_err!("Value not found");
         }
     }
 
@@ -87,7 +101,7 @@ impl StateBackend for InMemory {
         Ok(InMemory { db: HashMap::new() })
     }
 
-    fn get(&self, key: &[u8]) -> ArconResult<Vec<u8>> {
+    fn get_cloned(&self, key: &[u8]) -> ArconResult<Vec<u8>> {
         if let Some(data) = self.db.get(key) {
             Ok(data.to_vec())
         } else {
@@ -378,7 +392,100 @@ impl<IK, N, T> VecState<InMemory, IK, N, T> for InMemoryVecState<IK, N, T>
     fn add_all_dyn(&self, backend: &mut InMemory, values: &mut dyn Iterator<Item=T>) -> ArconResult<()> {
         self.add_all(backend, values)
     }
+
+    fn len(&self, backend: &InMemory) -> ArconResult<usize> {
+        let key = self.common.get_db_key(&())?;
+        let storage = backend.get(&key);
+
+        match storage {
+            Err(e) => {
+                match e.kind() {
+                    ErrorKind::ArconError(message) if &*message == "Value not found" => Ok(0),
+                    _ => Err(e)
+                }
+            }
+            Ok(buf) => {
+                let mut reader = buf;
+                if buf.len() == 0 { return Ok(0); }
+
+                // it's a bit unfortunate, but we need a value of a given type T, to compute its
+                // bincode serialized size
+                let first_value: T = bincode::deserialize_from(&mut reader)
+                    .map_err(|e| arcon_err_kind!("Could not deserialize vec state value: {}", e))?;
+                let first_value_serialized_size = bincode::serialized_size(&first_value)
+                    .map_err(|e| arcon_err_kind!("Could not get the size of serialized vec state value: {}", e))? as usize;
+
+                debug_assert_ne!(first_value_serialized_size, 0);
+
+                let len = buf.len() / first_value_serialized_size;
+                let rem = buf.len() % first_value_serialized_size;
+
+                // sanity check
+                if rem != 0 { return arcon_err!("vec state storage length is not a multiple of element size"); }
+
+                Ok(len)
+            }
+        }
+    }
 }
+
+pub struct InMemoryReducingState<IK, N, T, F> {
+    common: StateCommon<IK, N>,
+    reduce_fn: F,
+    _phantom: PhantomData<T>,
+}
+
+impl<IK, N, T, F> State<InMemory, IK, N> for InMemoryReducingState<IK, N, T, F>
+    where IK: Serialize, N: Serialize {
+    fn clear(&self, backend: &mut InMemory) -> ArconResult<()> {
+        let key = self.common.get_db_key(&())?;
+        backend.remove(&key)?;
+        Ok(())
+    }
+
+    delegate_key_and_namespace!(common);
+}
+
+impl<IK, N, T, F> AppendingState<InMemory, IK, N, T, T> for InMemoryReducingState<IK, N, T, F>
+// TODO: if we made the (backend-)mutating methods take &mut self, F could be FnMut
+    where IK: Serialize, N: Serialize, T: Serialize + for<'a> Deserialize<'a>, F: Fn(&T, &T) -> T {
+    fn get(&self, backend: &InMemory) -> ArconResult<T> {
+        let key = self.common.get_db_key(&())?;
+        let storage = backend.get(&key)?;
+        let value = bincode::deserialize(storage)
+            .map_err(|e| arcon_err_kind!("Could not deserialize reducing state value: {}", e))?;
+
+        Ok(value)
+    }
+
+    fn append(&self, backend: &mut InMemory, value: T) -> ArconResult<()> {
+        let key = self.common.get_db_key(&())?;
+        let storage = backend.get_mut_or_init_empty(&key)?;
+        if storage.is_empty() {
+            bincode::serialize_into(storage, &value)
+                .map_err(|e| arcon_err_kind!("Could not serialize reducing state value: {}", e))?;
+            return Ok(())
+        }
+
+        let old_value = bincode::deserialize(storage)
+            .map_err(|e| arcon_err_kind!("Could not deserialize reducing state value: {}", e))?;
+
+        let new_value = (self.reduce_fn)(&old_value, &value);
+
+        let key = self.common.get_db_key(&())?;
+        bincode::serialize_into(storage.as_mut_slice(), &new_value)
+            .map_err(|e| arcon_err_kind!("Could not serialize reducing state value: {}", e))?;
+
+        Ok(())
+    }
+}
+
+impl<IK, N, T, F> MergingState<InMemory, IK, N, T, T> for InMemoryReducingState<IK, N, T, F>
+// TODO: if we made the (backend-)mutating methods take &mut self, F could be FnMut
+    where IK: Serialize, N: Serialize, T: Serialize + for<'a> Deserialize<'a>, F: Fn(&T, &T) -> T {}
+
+impl<IK, N, T, F> ReducingState<InMemory, IK, N, T> for InMemoryReducingState<IK, N, T, F>
+    where IK: Serialize, N: Serialize, T: Serialize + for<'a> Deserialize<'a>, F: Fn(&T, &T) -> T {}
 
 #[cfg(test)]
 mod tests {
@@ -390,10 +497,10 @@ mod tests {
         let key = "key";
         let value = "hej";
         let _ = db.put(key.as_bytes(), value.as_bytes()).unwrap();
-        let fetched = db.get(key.as_bytes()).unwrap();
+        let fetched = db.get_cloned(key.as_bytes()).unwrap();
         assert_eq!(value, String::from_utf8_lossy(&fetched));
         db.remove(key.as_bytes()).unwrap();
-        let res = db.get(key.as_bytes());
+        let res = db.get_cloned(key.as_bytes());
         assert!(res.is_err());
     }
 
@@ -482,7 +589,7 @@ mod tests {
         assert_eq!(&v2[..v.len()], &v[..]);
     }
 
-    // TODO: comprehensive tests for map impl
+    // TODO: comprehensive tests for map, vec, reducing state, and aggregating state impls
 
     #[test]
     fn map_state_test() {
@@ -512,6 +619,7 @@ mod tests {
     fn vec_state_test() {
         let mut db = InMemory::new("test").unwrap();
         let mut vec_state = db.new_vec_state((), ());
+        assert_eq!(vec_state.len(&db).unwrap(), 0);
 
         vec_state.append(&mut db, 1).unwrap();
         vec_state.append(&mut db, 2).unwrap();
@@ -519,5 +627,19 @@ mod tests {
         vec_state.add_all(&mut db, vec![4, 5, 6]).unwrap();
 
         assert_eq!(vec_state.get(&db).unwrap(), vec![1, 2, 3, 4, 5, 6]);
+        assert_eq!(vec_state.len(&db).unwrap(), 6);
+    }
+
+    #[test]
+    fn reducing_state_test() {
+        let mut db = InMemory::new("test").unwrap();
+        let mut reducing_state = db.new_reducing_state::<_, _, i32, _>((), (),
+                                                                       |old: &i32, new: &i32| *old.max(new));
+
+        reducing_state.append(&mut db, 7).unwrap();
+        reducing_state.append(&mut db, 42).unwrap();
+        reducing_state.append(&mut db, 10).unwrap();
+
+        assert_eq!(reducing_state.get(&db).unwrap(), 42);
     }
 }

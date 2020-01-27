@@ -26,7 +26,7 @@ pub trait StateBackend {
         where Self: Sized;
 
     // TODO: Option instead of ArconResult? or ArconResult<Option<T>>?
-    fn get(&self, key: &[u8]) -> ArconResult<Vec<u8>>;
+    fn get_cloned(&self, key: &[u8]) -> ArconResult<Vec<u8>>;
     fn put(&mut self, key: &[u8], value: &[u8]) -> ArconResult<()>;
     fn remove(&mut self, key: &[u8]) -> ArconResult<()>;
 
@@ -145,6 +145,7 @@ mod state_types {
         fn add_all(&self, backend: &mut SB, values: impl IntoIterator<Item=T>) -> ArconResult<()>
             where Self: Sized;
         fn add_all_dyn(&self, backend: &mut SB, values: &mut dyn Iterator<Item=T>) -> ArconResult<()>;
+        fn len(&self, backend: &SB) -> ArconResult<usize>;
     }
 
     pub trait ReducingState<SB, IK, N, T>: MergingState<SB, IK, N, T, T> {}
