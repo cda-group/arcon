@@ -33,6 +33,7 @@ pub struct InMemory {
 }
 
 impl InMemory {
+    // we don't care about the state name, since it cannot be snapshotted
     fn new_state_common<IK, N>(&self, init_item_key: IK, init_namespace: N) -> StateCommon<IK, N> {
         StateCommon {
             id: Uuid::new_v4(),
@@ -91,11 +92,13 @@ impl InMemory {
     }
 }
 
+// since we don't do checkpointing for InMemory state backend, the name of the state is simply discarded
+// TODO: maybe keep it for debugging purposes?
 impl<IK, N, T> ValueStateBuilder<IK, N, T> for InMemory
     where IK: Serialize, N: Serialize, T: Serialize + for<'a> Deserialize<'a> {
     type Type = InMemoryValueState<IK, N, T>;
 
-    fn new_value_state(&self, init_item_key: IK, init_namespace: N) -> Self::Type {
+    fn new_value_state(&mut self, _name: &str, init_item_key: IK, init_namespace: N) -> Self::Type {
         let common = self.new_state_common(init_item_key, init_namespace);
         InMemoryValueState { common, _phantom: Default::default() }
     }
@@ -106,7 +109,7 @@ impl<IK, N, K, V> MapStateBuilder<IK, N, K, V> for InMemory
           K: Serialize + for<'a> Deserialize<'a>, V: Serialize + for<'a> Deserialize<'a> {
     type Type = InMemoryMapState<IK, N, K, V>;
 
-    fn new_map_state(&self, init_item_key: IK, init_namespace: N) -> Self::Type {
+    fn new_map_state(&mut self, _name: &str, init_item_key: IK, init_namespace: N) -> Self::Type {
         let common = self.new_state_common(init_item_key, init_namespace);
         InMemoryMapState { common, _phantom: Default::default() }
     }
@@ -116,7 +119,7 @@ impl<IK, N, T> VecStateBuilder<IK, N, T> for InMemory
     where IK: Serialize, N: Serialize, T: Serialize + for<'a> Deserialize<'a> {
     type Type = InMemoryVecState<IK, N, T>;
 
-    fn new_vec_state(&self, init_item_key: IK, init_namespace: N) -> Self::Type {
+    fn new_vec_state(&mut self, _name: &str, init_item_key: IK, init_namespace: N) -> Self::Type {
         let common = self.new_state_common(init_item_key, init_namespace);
         InMemoryVecState { common, _phantom: Default::default() }
     }
@@ -126,7 +129,7 @@ impl<IK, N, T, F> ReducingStateBuilder<IK, N, T, F> for InMemory
     where IK: Serialize, N: Serialize, T: Serialize + for<'a> Deserialize<'a>, F: Fn(&T, &T) -> T {
     type Type = InMemoryReducingState<IK, N, T, F>;
 
-    fn new_reducing_state(&self, init_item_key: IK, init_namespace: N, reduce_fn: F) -> Self::Type {
+    fn new_reducing_state(&mut self, _name: &str, init_item_key: IK, init_namespace: N, reduce_fn: F) -> Self::Type {
         let common = self.new_state_common(init_item_key, init_namespace);
         InMemoryReducingState { common, reduce_fn, _phantom: Default::default() }
     }
@@ -136,7 +139,7 @@ impl<IK, N, T, AGG> AggregatingStateBuilder<IK, N, T, AGG> for InMemory
     where IK: Serialize, N: Serialize, AGG: Aggregator<T>, AGG::Accumulator: Serialize + for<'a> Deserialize<'a> {
     type Type = InMemoryAggregatingState<IK, N, T, AGG>;
 
-    fn new_aggregating_state(&self, init_item_key: IK, init_namespace: N, aggregator: AGG) -> Self::Type {
+    fn new_aggregating_state(&mut self, _name: &str, init_item_key: IK, init_namespace: N, aggregator: AGG) -> Self::Type {
         let common = self.new_state_common(init_item_key, init_namespace);
         InMemoryAggregatingState { common, aggregator, _phantom: Default::default() }
     }
@@ -158,44 +161,18 @@ pub(crate) struct StateCommon<IK, N> {
     curr_namespace: N,
 }
 
-fn serialize_keys_and_namespace_into<IK, N, UK>(item_key: &IK, namespace: &N, user_key: &UK, writer: &mut impl Write) -> ArconResult<()>
-    where IK: Serialize, N: Serialize, UK: Serialize {
-    bincode::serialize_into(writer, &(
-        item_key,
-        namespace,
-        user_key
-    )).map_err(|e| arcon_err_kind!("Could not serialize keys and namespace: {}", e))
-}
-
 impl<IK, N> StateCommon<IK, N> where IK: Serialize, N: Serialize {
     fn get_db_key<UK>(&self, user_key: &UK) -> ArconResult<Vec<u8>> where UK: Serialize {
+        // UUID is not serializable TODO: there's probably a feature flag for this
         let mut res = self.id.as_bytes().to_vec();
-        serialize_keys_and_namespace_into(&self.curr_key, &self.curr_namespace, user_key, &mut res)?;
+        bincode::serialize_into(&mut res, &(
+            &self.curr_key,
+            &self.curr_namespace,
+            user_key
+        )).map_err(|e| arcon_err_kind!("Could not serialize keys and namespace: {}", e))?;
 
         Ok(res)
     }
-}
-
-macro_rules! delegate_key_and_namespace {
-    ($common: ident) => {
-        fn get_current_key(&self) -> ArconResult<&IK> {
-            Ok(&self.$common.curr_key)
-        }
-
-        fn set_current_key(&mut self, new_key: IK) -> ArconResult<()> {
-            self.$common.curr_key = new_key;
-            Ok(())
-        }
-
-        fn get_current_namespace(&self) -> ArconResult<&N> {
-            Ok(&self.$common.curr_namespace)
-        }
-
-        fn set_current_namespace(&mut self, new_namespace: N) -> ArconResult<()> {
-            self.$common.curr_namespace = new_namespace;
-            Ok(())
-        }
-    };
 }
 
 mod value_state;
@@ -226,13 +203,14 @@ mod tests {
         // we rely on the order of the serialized fields, because we search by prefix when clearing
         // map state
 
-        let mut v = vec![];
-        serialize_keys_and_namespace_into(&42, &255, &(), &mut v).unwrap();
-        let v = dbg!(v);
+        let state = StateCommon {
+            id: Uuid::new_v4(),
+            curr_key: 42,
+            curr_namespace: 255
+        };
 
-        let mut v2 = vec![];
-        serialize_keys_and_namespace_into(&42, &255, &"hello", &mut v2).unwrap();
-        let v2 = dbg!(v2);
+        let v = state.get_db_key(&()).unwrap();
+        let v2 = state.get_db_key(&"hello").unwrap();
 
         assert_eq!(&v2[..v.len()], &v[..]);
     }

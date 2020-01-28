@@ -5,43 +5,43 @@ use std::marker::PhantomData;
 use serde::{Serialize, Deserialize};
 use crate::{
     state_backend::{
-        in_memory::{StateCommon, InMemory},
+        rocksdb::{StateCommon, RocksDb},
         state_types::{State, ValueState},
     },
     prelude::ArconResult,
 };
 
-pub struct InMemoryValueState<IK, N, T> {
+pub struct RocksDbValueState<IK, N, T> {
     pub(crate) common: StateCommon<IK, N>,
     pub(crate) _phantom: PhantomData<T>,
 }
 
-impl<IK, N, T> State<InMemory, IK, N> for InMemoryValueState<IK, N, T>
+impl<IK, N, T> State<RocksDb, IK, N> for RocksDbValueState<IK, N, T>
     where IK: Serialize, N: Serialize, T: Serialize {
-    fn clear(&self, backend: &mut InMemory) -> ArconResult<()> {
+    fn clear(&self, backend: &mut RocksDb) -> ArconResult<()> {
         let key = self.common.get_db_key(&())?;
-        backend.remove(&key)?;
+        backend.remove(&self.common.cf_name, &key)?;
         Ok(())
     }
 
     delegate_key_and_namespace!(common);
 }
 
-impl<IK, N, T> ValueState<InMemory, IK, N, T> for InMemoryValueState<IK, N, T>
+impl<IK, N, T> ValueState<RocksDb, IK, N, T> for RocksDbValueState<IK, N, T>
     where IK: Serialize, N: Serialize, T: Serialize, T: for<'a> Deserialize<'a> {
-    fn get(&self, backend: &InMemory) -> ArconResult<T> {
+    fn get(&self, backend: &RocksDb) -> ArconResult<T> {
         let key = self.common.get_db_key(&())?;
-        let serialized = backend.get(&key)?;
-        let value = bincode::deserialize(&serialized)
+        let serialized = backend.get(&self.common.cf_name, &key)?;
+        let value = bincode::deserialize(&*serialized)
             .map_err(|e| arcon_err_kind!("Cannot deserialize value state: {}", e))?;
         Ok(value)
     }
 
-    fn set(&self, backend: &mut InMemory, new_value: T) -> ArconResult<()> {
+    fn set(&self, backend: &mut RocksDb, new_value: T) -> ArconResult<()> {
         let key = self.common.get_db_key(&())?;
         let serialized = bincode::serialize(&new_value)
             .map_err(|e| arcon_err_kind!("Cannot serialize value state: {}", e))?;
-        backend.put(key, serialized)?;
+        backend.put(&self.common.cf_name, key, serialized)?;
         Ok(())
     }
 }
@@ -50,10 +50,13 @@ impl<IK, N, T> ValueState<InMemory, IK, N, T> for InMemoryValueState<IK, N, T>
 mod test {
     use super::*;
     use crate::state_backend::{ValueStateBuilder, StateBackend};
+    use tempfile::TempDir;
 
     #[test]
-    fn in_memory_value_state_test() {
-        let mut db = InMemory::new("test").unwrap();
+    fn rocksdb_value_state_test() {
+        let tmp_dir = TempDir::new().unwrap();
+        let dir_path = tmp_dir.path().to_string_lossy().into_owned();
+        let mut db = RocksDb::new(&dir_path).unwrap();
         let value_state = db.new_value_state("test_state", (), ());
 
         let unset = value_state.get(&db);
@@ -69,8 +72,10 @@ mod test {
     }
 
     #[test]
-    fn in_memory_value_states_are_independant() {
-        let mut db = InMemory::new("test").unwrap();
+    fn rocksdb_value_states_are_independant() {
+        let tmp_dir = TempDir::new().unwrap();
+        let dir_path = tmp_dir.path().to_string_lossy().into_owned();
+        let mut db = RocksDb::new(&dir_path).unwrap();
         let v1 = db.new_value_state("test1", (), ());
         let v2 = db.new_value_state("test2", (), ());
 
@@ -90,8 +95,10 @@ mod test {
     }
 
     #[test]
-    fn in_memory_value_states_handle_state_for_different_keys_and_namespaces() {
-        let mut db = InMemory::new("test").unwrap();
+    fn rocksdb_value_states_handle_state_for_different_keys_and_namespaces() {
+        let tmp_dir = TempDir::new().unwrap();
+        let dir_path = tmp_dir.path().to_string_lossy().into_owned();
+        let mut db = RocksDb::new(&dir_path).unwrap();
         let mut value_state = db.new_value_state("test_state", 0, 0);
 
         value_state.set(&mut db, 0).unwrap();

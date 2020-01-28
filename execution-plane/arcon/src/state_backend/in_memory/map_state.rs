@@ -132,7 +132,7 @@ mod test {
     #[test]
     fn map_state_test() {
         let mut db = InMemory::new("test").unwrap();
-        let map_state = db.new_map_state((), ());
+        let map_state = db.new_map_state("test_state", (), ());
 
         // TODO: &String is weird, maybe look at how it's done with the keys in std hash-map
         assert!(!map_state.contains(&db, &"first key".to_string()).unwrap());

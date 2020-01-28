@@ -6,20 +6,20 @@ use serde::{Serialize, Deserialize};
 use error::ErrorKind;
 use crate::{
     state_backend::{
-        in_memory::{StateCommon, InMemory},
+        rocksdb::{StateCommon, RocksDb},
         state_types::{State, AppendingState, VecState, MergingState},
     },
     prelude::ArconResult,
 };
 
-pub struct InMemoryVecState<IK, N, T> {
+pub struct RocksDbVecState<IK, N, T> {
     pub(crate) common: StateCommon<IK, N>,
     pub(crate) _phantom: PhantomData<T>,
 }
 
-impl<IK, N, T> State<InMemory, IK, N> for InMemoryVecState<IK, N, T>
+impl<IK, N, T> State<RocksDb, IK, N> for RocksDbVecState<IK, N, T>
     where IK: Serialize, N: Serialize {
-    fn clear(&self, backend: &mut InMemory) -> ArconResult<()> {
+    fn clear(&self, backend: &mut RocksDb) -> ArconResult<()> {
         let key = self.common.get_db_key(&())?;
         backend.remove(&key)?;
         Ok(())
@@ -28,9 +28,9 @@ impl<IK, N, T> State<InMemory, IK, N> for InMemoryVecState<IK, N, T>
     delegate_key_and_namespace!(common);
 }
 
-impl<IK, N, T> AppendingState<InMemory, IK, N, T, Vec<T>> for InMemoryVecState<IK, N, T>
+impl<IK, N, T> AppendingState<RocksDb, IK, N, T, Vec<T>> for RocksDbVecState<IK, N, T>
     where IK: Serialize, N: Serialize, T: Serialize, T: for<'a> Deserialize<'a> {
-    fn get(&self, backend: &InMemory) -> ArconResult<Vec<T>> {
+    fn get(&self, backend: &RocksDb) -> ArconResult<Vec<T>> {
         let key = self.common.get_db_key(&())?;
         let serialized = backend.get(&key)?;
 
@@ -46,7 +46,7 @@ impl<IK, N, T> AppendingState<InMemory, IK, N, T, Vec<T>> for InMemoryVecState<I
         Ok(res)
     }
 
-    fn append(&self, backend: &mut InMemory, value: T) -> ArconResult<()> {
+    fn append(&self, backend: &mut RocksDb, value: T) -> ArconResult<()> {
         let key = self.common.get_db_key(&())?;
         let storage = backend.get_mut_or_init_empty(&key)?;
 
@@ -55,12 +55,12 @@ impl<IK, N, T> AppendingState<InMemory, IK, N, T, Vec<T>> for InMemoryVecState<I
     }
 }
 
-impl<IK, N, T> MergingState<InMemory, IK, N, T, Vec<T>> for InMemoryVecState<IK, N, T>
+impl<IK, N, T> MergingState<RocksDb, IK, N, T, Vec<T>> for RocksDbVecState<IK, N, T>
     where IK: Serialize, N: Serialize, T: Serialize, T: for<'a> Deserialize<'a> {}
 
-impl<IK, N, T> VecState<InMemory, IK, N, T> for InMemoryVecState<IK, N, T>
+impl<IK, N, T> VecState<RocksDb, IK, N, T> for RocksDbVecState<IK, N, T>
     where IK: Serialize, N: Serialize, T: Serialize, T: for<'a> Deserialize<'a> {
-    fn set(&self, backend: &mut InMemory, value: Vec<T>) -> ArconResult<()> {
+    fn set(&self, backend: &mut RocksDb, value: Vec<T>) -> ArconResult<()> {
         let key = self.common.get_db_key(&())?;
         let mut storage = vec![];
         for elem in value {
@@ -70,7 +70,7 @@ impl<IK, N, T> VecState<InMemory, IK, N, T> for InMemoryVecState<IK, N, T>
         backend.put(key, storage)
     }
 
-    fn add_all(&self, backend: &mut InMemory, values: impl IntoIterator<Item=T>) -> ArconResult<()> where Self: Sized {
+    fn add_all(&self, backend: &mut RocksDb, values: impl IntoIterator<Item=T>) -> ArconResult<()> where Self: Sized {
         let key = self.common.get_db_key(&())?;
         let mut storage = backend.get_mut_or_init_empty(&key)?;
 
@@ -82,11 +82,11 @@ impl<IK, N, T> VecState<InMemory, IK, N, T> for InMemoryVecState<IK, N, T>
         Ok(())
     }
 
-    fn add_all_dyn(&self, backend: &mut InMemory, values: &mut dyn Iterator<Item=T>) -> ArconResult<()> {
+    fn add_all_dyn(&self, backend: &mut RocksDb, values: &mut dyn Iterator<Item=T>) -> ArconResult<()> {
         self.add_all(backend, values)
     }
 
-    fn len(&self, backend: &InMemory) -> ArconResult<usize> {
+    fn len(&self, backend: &RocksDb) -> ArconResult<usize> {
         let key = self.common.get_db_key(&())?;
         let storage = backend.get(&key);
 
@@ -129,8 +129,10 @@ mod test {
 
     #[test]
     fn vec_state_test() {
-        let mut db = InMemory::new("test").unwrap();
-        let vec_state = db.new_vec_state("test_state", (), ());
+        let tmp_dir = TempDir::new().unwrap();
+        let dir_path = tmp_dir.path().to_string_lossy().into_owned();
+        let mut db = RocksDb::new(&dir_path).unwrap();
+        let vec_state = db.new_vec_state((), ());
         assert_eq!(vec_state.len(&db).unwrap(), 0);
 
         vec_state.append(&mut db, 1).unwrap();

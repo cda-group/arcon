@@ -5,22 +5,24 @@ use std::marker::PhantomData;
 use serde::{Serialize, Deserialize};
 use crate::{
     state_backend::{
-        in_memory::{StateCommon, InMemory},
+        rocksdb::{StateCommon, RocksDb},
         state_types::{State, AppendingState, Aggregator, MergingState, AggregatingState},
     },
     prelude::ArconResult,
 };
+#[macro_use]
+use crate::state_backend::state_types;
 
-pub struct InMemoryAggregatingState<IK, N, T, AGG> {
+pub struct RocksDbAggregatingState<IK, N, T, AGG> {
     pub(crate) common: StateCommon<IK, N>,
     pub(crate) aggregator: AGG,
     pub(crate) _phantom: PhantomData<T>,
 }
 
-impl<IK, N, T, AGG> State<InMemory, IK, N> for InMemoryAggregatingState<IK, N, T, AGG>
+impl<IK, N, T, AGG> State<RocksDb, IK, N> for RocksDbAggregatingState<IK, N, T, AGG>
     where IK: Serialize, N: Serialize
 {
-    fn clear(&self, backend: &mut InMemory) -> ArconResult<()> {
+    fn clear(&self, backend: &mut RocksDb) -> ArconResult<()> {
         let key = self.common.get_db_key(&())?;
         backend.remove(&key)?;
         Ok(())
@@ -29,10 +31,10 @@ impl<IK, N, T, AGG> State<InMemory, IK, N> for InMemoryAggregatingState<IK, N, T
     delegate_key_and_namespace!(common);
 }
 
-impl<IK, N, T, AGG> AppendingState<InMemory, IK, N, T, AGG::Result> for InMemoryAggregatingState<IK, N, T, AGG>
+impl<IK, N, T, AGG> AppendingState<RocksDb, IK, N, T, AGG::Result> for RocksDbAggregatingState<IK, N, T, AGG>
     where IK: Serialize, N: Serialize, AGG: Aggregator<T>,
           AGG::Accumulator: Serialize + for<'a> Deserialize<'a> {
-    fn get(&self, backend: &InMemory) -> ArconResult<AGG::Result> {
+    fn get(&self, backend: &RocksDb) -> ArconResult<AGG::Result> {
         // TODO: do we want to return R based on a new accumulator if not found?
         let key = self.common.get_db_key(&())?;
         let serialized = backend.get(&key)?;
@@ -41,7 +43,7 @@ impl<IK, N, T, AGG> AppendingState<InMemory, IK, N, T, AGG::Result> for InMemory
         Ok(self.aggregator.accumulator_into_result(current_accumulator))
     }
 
-    fn append(&self, backend: &mut InMemory, value: T) -> ArconResult<()> {
+    fn append(&self, backend: &mut RocksDb, value: T) -> ArconResult<()> {
         let key = self.common.get_db_key(&())?;
         let accumulator_buffer = backend.get_mut_or_init_empty(&key)?;
 
@@ -62,11 +64,11 @@ impl<IK, N, T, AGG> AppendingState<InMemory, IK, N, T, AGG::Result> for InMemory
     }
 }
 
-impl<IK, N, T, AGG> MergingState<InMemory, IK, N, T, AGG::Result> for InMemoryAggregatingState<IK, N, T, AGG>
+impl<IK, N, T, AGG> MergingState<RocksDb, IK, N, T, AGG::Result> for RocksDbAggregatingState<IK, N, T, AGG>
     where IK: Serialize, N: Serialize, AGG: Aggregator<T>,
           AGG::Accumulator: Serialize + for<'a> Deserialize<'a> {}
 
-impl<IK, N, T, AGG> AggregatingState<InMemory, IK, N, T, AGG::Result> for InMemoryAggregatingState<IK, N, T, AGG>
+impl<IK, N, T, AGG> AggregatingState<RocksDb, IK, N, T, AGG::Result> for RocksDbAggregatingState<IK, N, T, AGG>
     where IK: Serialize, N: Serialize, AGG: Aggregator<T>,
           AGG::Accumulator: Serialize + for<'a> Deserialize<'a> {}
 
@@ -81,9 +83,10 @@ mod test {
 
     #[test]
     fn aggregating_state_test() {
-        let mut db = InMemory::new("test").unwrap();
+        let tmp_dir = TempDir::new().unwrap();
+        let dir_path = tmp_dir.path().to_string_lossy().into_owned();
+        let mut db = RocksDb::new(&dir_path).unwrap();
         let aggregating_state = db.new_aggregating_state(
-            "test_state",
             (),
             (),
             ClosuresAggregator::new(|| vec![], Vec::push, |v| format!("{:?}", v)),
