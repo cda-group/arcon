@@ -9,8 +9,6 @@ use crate::state_backend::StateBackend;
 use arcon_error::*;
 use std::path::{PathBuf, Path};
 use self::rocksdb::checkpoint::Checkpoint;
-use std::rc::Rc;
-use std::cell::RefCell;
 
 pub struct RocksDB {
     db: DB,

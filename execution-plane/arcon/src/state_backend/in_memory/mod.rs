@@ -77,7 +77,7 @@ impl InMemory {
     }
 
     pub fn get_mut_or_init_empty(&mut self, key: &[u8]) -> ArconResult<&mut Vec<u8>> {
-        Ok(self.db.entry(key.to_vec()).or_insert(vec![]))
+        Ok(self.db.entry(key.to_vec()).or_insert_with(|| vec![]))
     }
 
     fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> ArconResult<()> {
@@ -131,7 +131,6 @@ impl<IK, N, T, F> ReducingStateBuilder<IK, N, T, F> for InMemory
         InMemoryReducingState { common, reduce_fn, _phantom: Default::default() }
     }
 }
-
 
 impl<IK, N, T, AGG> AggregatingStateBuilder<IK, N, T, AGG> for InMemory
     where IK: Serialize, N: Serialize, AGG: Aggregator<T>, AGG::Accumulator: Serialize + for<'a> Deserialize<'a> {
@@ -214,7 +213,7 @@ mod tests {
         let mut db = InMemory::new("test").unwrap();
         let key = "key";
         let value = "hej";
-        let _ = db.put(key.to_string().into_bytes(), value.to_string().into_bytes()).unwrap();
+        db.put(key.to_string().into_bytes(), value.to_string().into_bytes()).unwrap();
         let fetched = db.get(key.as_bytes()).unwrap();
         assert_eq!(value, String::from_utf8_lossy(fetched));
         db.remove(key.as_bytes()).unwrap();
@@ -228,11 +227,11 @@ mod tests {
         // map state
 
         let mut v = vec![];
-        serialize_keys_and_namespace_into(&42, &255, &(), &mut v);
+        serialize_keys_and_namespace_into(&42, &255, &(), &mut v).unwrap();
         let v = dbg!(v);
 
         let mut v2 = vec![];
-        serialize_keys_and_namespace_into(&42, &255, &"hello", &mut v2);
+        serialize_keys_and_namespace_into(&42, &255, &"hello", &mut v2).unwrap();
         let v2 = dbg!(v2);
 
         assert_eq!(&v2[..v.len()], &v[..]);

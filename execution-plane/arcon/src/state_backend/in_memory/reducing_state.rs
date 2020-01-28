@@ -75,7 +75,7 @@ mod test {
     #[test]
     fn reducing_state_test() {
         let mut db = InMemory::new("test").unwrap();
-        let mut reducing_state = db.new_reducing_state((), (),
+        let reducing_state = db.new_reducing_state((), (),
                                                        |old: &i32, new: &i32| *old.max(new));
 
         reducing_state.append(&mut db, 7).unwrap();

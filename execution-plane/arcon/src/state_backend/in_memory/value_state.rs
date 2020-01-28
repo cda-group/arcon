@@ -54,7 +54,7 @@ mod test {
     #[test]
     fn in_memory_value_state_test() {
         let mut db = InMemory::new("test").unwrap();
-        let mut value_state = db.new_value_state((), ());
+        let value_state = db.new_value_state((), ());
 
         let unset = value_state.get(&db);
         assert!(unset.is_err());
@@ -71,8 +71,8 @@ mod test {
     #[test]
     fn in_memory_value_states_are_independant() {
         let mut db = InMemory::new("test").unwrap();
-        let mut v1 = db.new_value_state((), ());
-        let mut v2 = db.new_value_state((), ());
+        let v1 = db.new_value_state((), ());
+        let v2 = db.new_value_state((), ());
 
         v1.set(&mut db, 123).unwrap();
         v2.set(&mut db, 456).unwrap();
@@ -99,7 +99,7 @@ mod test {
         let should_be_err = value_state.get(&db);
         assert!(should_be_err.is_err());
 
-        value_state.set(&mut db, 1);
+        value_state.set(&mut db, 1).unwrap();
         let should_be_one = value_state.get(&db).unwrap();
         assert_eq!(should_be_one, 1);
 

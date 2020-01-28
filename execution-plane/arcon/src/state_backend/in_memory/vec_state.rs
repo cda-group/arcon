@@ -99,7 +99,7 @@ impl<IK, N, T> VecState<InMemory, IK, N, T> for InMemoryVecState<IK, N, T>
             }
             Ok(buf) => {
                 let mut reader = buf;
-                if buf.len() == 0 { return Ok(0); }
+                if buf.is_empty() { return Ok(0); }
 
                 // it's a bit unfortunate, but we need a value of a given type T, to compute its
                 // bincode serialized size
@@ -130,7 +130,7 @@ mod test {
     #[test]
     fn vec_state_test() {
         let mut db = InMemory::new("test").unwrap();
-        let mut vec_state = db.new_vec_state((), ());
+        let vec_state = db.new_vec_state((), ());
         assert_eq!(vec_state.len(&db).unwrap(), 0);
 
         vec_state.append(&mut db, 1).unwrap();

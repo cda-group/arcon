@@ -82,7 +82,7 @@ mod test {
     #[test]
     fn aggregating_state_test() {
         let mut db = InMemory::new("test").unwrap();
-        let mut aggregating_state = db.new_aggregating_state(
+        let aggregating_state = db.new_aggregating_state(
             (),
             (),
             ClosuresAggregator::new(|| vec![], Vec::push, |v| format!("{:?}", v)),
