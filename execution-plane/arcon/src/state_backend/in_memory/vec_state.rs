@@ -101,8 +101,9 @@ impl<IK, N, T> VecState<InMemory, IK, N, T> for InMemoryVecState<IK, N, T>
                 let mut reader = buf;
                 if buf.is_empty() { return Ok(0); }
 
-                // it's a bit unfortunate, but we need a value of a given type T, to compute its
-                // bincode serialized size
+                // We rely on every possible value of type T having the same serialized size.
+                // TODO: introduce a trait for types that serialize to a fixed-size byte array and
+                //   add that as a trait bound on T
                 let first_value: T = bincode::deserialize_from(&mut reader)
                     .map_err(|e| arcon_err_kind!("Could not deserialize vec state value: {}", e))?;
                 let first_value_serialized_size = bincode::serialized_size(&first_value)

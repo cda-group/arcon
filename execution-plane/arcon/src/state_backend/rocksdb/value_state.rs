@@ -51,12 +51,11 @@ mod test {
     use super::*;
     use crate::state_backend::{ValueStateBuilder, StateBackend};
     use tempfile::TempDir;
+    use crate::state_backend::rocksdb::tests::TestDb;
 
     #[test]
     fn rocksdb_value_state_test() {
-        let tmp_dir = TempDir::new().unwrap();
-        let dir_path = tmp_dir.path().to_string_lossy().into_owned();
-        let mut db = RocksDb::new(&dir_path).unwrap();
+        let mut db = TestDb::new();
         let value_state = db.new_value_state("test_state", (), ());
 
         let unset = value_state.get(&db);
@@ -73,9 +72,7 @@ mod test {
 
     #[test]
     fn rocksdb_value_states_are_independant() {
-        let tmp_dir = TempDir::new().unwrap();
-        let dir_path = tmp_dir.path().to_string_lossy().into_owned();
-        let mut db = RocksDb::new(&dir_path).unwrap();
+        let mut db = TestDb::new();
         let v1 = db.new_value_state("test1", (), ());
         let v2 = db.new_value_state("test2", (), ());
 
@@ -96,9 +93,7 @@ mod test {
 
     #[test]
     fn rocksdb_value_states_handle_state_for_different_keys_and_namespaces() {
-        let tmp_dir = TempDir::new().unwrap();
-        let dir_path = tmp_dir.path().to_string_lossy().into_owned();
-        let mut db = RocksDb::new(&dir_path).unwrap();
+        let mut db = TestDb::new();
         let mut value_state = db.new_value_state("test_state", 0, 0);
 
         value_state.set(&mut db, 0).unwrap();

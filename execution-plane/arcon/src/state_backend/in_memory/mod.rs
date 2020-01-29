@@ -37,8 +37,8 @@ impl InMemory {
     fn new_state_common<IK, N>(&self, init_item_key: IK, init_namespace: N) -> StateCommon<IK, N> {
         StateCommon {
             id: Uuid::new_v4(),
-            curr_key: init_item_key,
-            curr_namespace: init_namespace,
+            item_key: init_item_key,
+            namespace: init_namespace,
         }
     }
 
@@ -157,8 +157,8 @@ impl StateBackend for InMemory {
 
 pub(crate) struct StateCommon<IK, N> {
     id: Uuid,
-    curr_key: IK,
-    curr_namespace: N,
+    item_key: IK,
+    namespace: N,
 }
 
 impl<IK, N> StateCommon<IK, N> where IK: Serialize, N: Serialize {
@@ -166,8 +166,8 @@ impl<IK, N> StateCommon<IK, N> where IK: Serialize, N: Serialize {
         // UUID is not serializable TODO: there's probably a feature flag for this
         let mut res = self.id.as_bytes().to_vec();
         bincode::serialize_into(&mut res, &(
-            &self.curr_key,
-            &self.curr_namespace,
+            &self.item_key,
+            &self.namespace,
             user_key
         )).map_err(|e| arcon_err_kind!("Could not serialize keys and namespace: {}", e))?;
 
@@ -205,8 +205,8 @@ mod tests {
 
         let state = StateCommon {
             id: Uuid::new_v4(),
-            curr_key: 42,
-            curr_namespace: 255
+            item_key: 42,
+            namespace: 255
         };
 
         let v = state.get_db_key(&()).unwrap();

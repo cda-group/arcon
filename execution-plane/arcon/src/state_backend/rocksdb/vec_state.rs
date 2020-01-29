@@ -11,6 +11,7 @@ use crate::{
     },
     prelude::ArconResult,
 };
+use super::rocksdb::WriteBatch;
 
 pub struct RocksDbVecState<IK, N, T> {
     pub(crate) common: StateCommon<IK, N>,
@@ -21,7 +22,7 @@ impl<IK, N, T> State<RocksDb, IK, N> for RocksDbVecState<IK, N, T>
     where IK: Serialize, N: Serialize {
     fn clear(&self, backend: &mut RocksDb) -> ArconResult<()> {
         let key = self.common.get_db_key(&())?;
-        backend.remove(&key)?;
+        backend.remove(&self.common.cf_name, &key)?;
         Ok(())
     }
 
@@ -32,7 +33,7 @@ impl<IK, N, T> AppendingState<RocksDb, IK, N, T, Vec<T>> for RocksDbVecState<IK,
     where IK: Serialize, N: Serialize, T: Serialize, T: for<'a> Deserialize<'a> {
     fn get(&self, backend: &RocksDb) -> ArconResult<Vec<T>> {
         let key = self.common.get_db_key(&())?;
-        let serialized = backend.get(&key)?;
+        let serialized = backend.get(&self.common.cf_name, &key)?;
 
         // reader is updated in the loop to point at the yet unconsumed part of the serialized data
         let mut reader = &serialized[..];
@@ -48,10 +49,12 @@ impl<IK, N, T> AppendingState<RocksDb, IK, N, T, Vec<T>> for RocksDbVecState<IK,
 
     fn append(&self, backend: &mut RocksDb, value: T) -> ArconResult<()> {
         let key = self.common.get_db_key(&())?;
-        let storage = backend.get_mut_or_init_empty(&key)?;
+        let serialized = bincode::serialize(&value)
+            .map_err(|e| arcon_err_kind!("Could not serialize vec state value: {}", e))?;
 
-        bincode::serialize_into(storage, &value)
-            .map_err(|e| arcon_err_kind!("Could not serialize vec state value: {}", e))
+        let cf = backend.get_cf_handle(&self.common.cf_name)?;
+        backend.db.merge_cf(cf, key, serialized)
+            .map_err(|e| arcon_err_kind!("Could not perform merge operation: {}", e))
     }
 }
 
@@ -67,17 +70,24 @@ impl<IK, N, T> VecState<RocksDb, IK, N, T> for RocksDbVecState<IK, N, T>
             bincode::serialize_into(&mut storage, &elem)
                 .map_err(|e| arcon_err_kind!("Could not serialize vec state value: {}", e))?;
         }
-        backend.put(key, storage)
+        backend.put(&self.common.cf_name, key, storage)
     }
 
     fn add_all(&self, backend: &mut RocksDb, values: impl IntoIterator<Item=T>) -> ArconResult<()> where Self: Sized {
         let key = self.common.get_db_key(&())?;
-        let mut storage = backend.get_mut_or_init_empty(&key)?;
+        let mut wb = WriteBatch::default();
+        let cf = backend.get_cf_handle(&self.common.cf_name)?;
 
         for value in values {
-            bincode::serialize_into(&mut storage, &value)
+            let serialized = bincode::serialize(&value)
                 .map_err(|e| arcon_err_kind!("Could not serialize vec state value: {}", e))?;
+
+            wb.merge_cf(cf, &key, serialized)
+                .map_err(|e| arcon_err_kind!("Could not create merge operation: {}", e))?;
         }
+
+        backend.db.write(wb)
+            .map_err(|e| arcon_err_kind!("Could not execute merge operation: {}", e))?;
 
         Ok(())
     }
@@ -88,7 +98,7 @@ impl<IK, N, T> VecState<RocksDb, IK, N, T> for RocksDbVecState<IK, N, T>
 
     fn len(&self, backend: &RocksDb) -> ArconResult<usize> {
         let key = self.common.get_db_key(&())?;
-        let storage = backend.get(&key);
+        let storage = backend.get(&self.common.cf_name, &key);
 
         match storage {
             Err(e) => {
@@ -98,11 +108,12 @@ impl<IK, N, T> VecState<RocksDb, IK, N, T> for RocksDbVecState<IK, N, T>
                 }
             }
             Ok(buf) => {
-                let mut reader = buf;
+                let mut reader = &*buf;
                 if buf.is_empty() { return Ok(0); }
 
-                // it's a bit unfortunate, but we need a value of a given type T, to compute its
-                // bincode serialized size
+                // We rely on every possible value of type T having the same serialized size.
+                // TODO: introduce a trait for types that serialize to a fixed-size byte array and
+                //   add that as a trait bound on T
                 let first_value: T = bincode::deserialize_from(&mut reader)
                     .map_err(|e| arcon_err_kind!("Could not deserialize vec state value: {}", e))?;
                 let first_value_serialized_size = bincode::serialized_size(&first_value)
@@ -126,13 +137,12 @@ impl<IK, N, T> VecState<RocksDb, IK, N, T> for RocksDbVecState<IK, N, T>
 mod test {
     use super::*;
     use crate::state_backend::{StateBackend, VecStateBuilder};
+    use crate::state_backend::rocksdb::tests::TestDb;
 
     #[test]
     fn vec_state_test() {
-        let tmp_dir = TempDir::new().unwrap();
-        let dir_path = tmp_dir.path().to_string_lossy().into_owned();
-        let mut db = RocksDb::new(&dir_path).unwrap();
-        let vec_state = db.new_vec_state((), ());
+        let mut db = TestDb::new();
+        let vec_state = db.new_vec_state("test_state", (), ());
         assert_eq!(vec_state.len(&db).unwrap(), 0);
 
         vec_state.append(&mut db, 1).unwrap();

@@ -40,7 +40,7 @@ pub trait VecStateBuilder<IK, N, T>: Sized {
 
 pub trait ReducingStateBuilder<IK, N, T, F>: Sized {
     type Type: ReducingState<Self, IK, N, T>;
-    fn new_reducing_state(&mut self, name: &str, init_item_key: IK, init_namespace: N, reducer_fn: F) -> Self::Type;
+    fn new_reducing_state(&mut self, name: &str, init_item_key: IK, init_namespace: N, reduce_fn: F) -> Self::Type;
 }
 
 pub trait AggregatingStateBuilder<IK, N, T, AGG: Aggregator<T>>: Sized {
@@ -76,23 +76,31 @@ mod state_types {
     macro_rules! delegate_key_and_namespace {
         ($common: ident) => {
             fn get_current_key(&self) -> ArconResult<&IK> {
-                Ok(&self.$common.curr_key)
+                Ok(&self.$common.item_key)
             }
 
             fn set_current_key(&mut self, new_key: IK) -> ArconResult<()> {
-                self.$common.curr_key = new_key;
+                self.$common.item_key = new_key;
                 Ok(())
             }
 
             fn get_current_namespace(&self) -> ArconResult<&N> {
-                Ok(&self.$common.curr_namespace)
+                Ok(&self.$common.namespace)
             }
 
             fn set_current_namespace(&mut self, new_namespace: N) -> ArconResult<()> {
-                self.$common.curr_namespace = new_namespace;
+                self.$common.namespace = new_namespace;
                 Ok(())
             }
         };
+    }
+
+    pub enum StateType {
+        ValueState,
+        MapState,
+        VecState,
+        ReducingState,
+        AggregatingState
     }
 
     // TODO: since we don't have any state that is appending, but not merging, maybe consider using one trait?
@@ -106,6 +114,8 @@ mod state_types {
     //// concrete-ish states ////
 
     pub trait ValueState<SB, IK, N, T>: State<SB, IK, N> {
+        const TYPE: StateType = StateType::ValueState;
+
         // bikeshed: get / value (Flink)
         fn get(&self, backend: &SB) -> ArconResult<T>;
 
@@ -114,10 +124,14 @@ mod state_types {
     }
 
     pub trait MapState<SB, IK, N, K, V>: State<SB, IK, N> {
+        const TYPE: StateType = StateType::MapState;
+
         fn get(&self, backend: &SB, key: &K) -> ArconResult<V>;
         fn put(&self, backend: &mut SB, key: K, value: V) -> ArconResult<()>;
 
+        /// key_value_pairs must be a finite iterator!
         fn put_all_dyn(&self, backend: &mut SB, key_value_pairs: &mut dyn Iterator<Item=(K, V)>) -> ArconResult<()>;
+        /// key_value_pairs must be a finite iterator!
         fn put_all(&self, backend: &mut SB, key_value_pairs: impl IntoIterator<Item=(K, V)>) -> ArconResult<()>
             where Self: Sized;
 
@@ -145,6 +159,8 @@ mod state_types {
     // analogous to ListState in Flink
     // TODO: Q: Should MergingState::OUT be Vec, or something else? More abstract?
     pub trait VecState<SB, IK, N, T>: MergingState<SB, IK, N, T, Vec<T>> {
+        const TYPE: StateType = StateType::VecState;
+
         // bikeshed: set / update (Flink)
         fn set(&self, backend: &mut SB, value: Vec<T>) -> ArconResult<()>;
         fn add_all(&self, backend: &mut SB, values: impl IntoIterator<Item=T>) -> ArconResult<()>
@@ -153,9 +169,13 @@ mod state_types {
         fn len(&self, backend: &SB) -> ArconResult<usize>;
     }
 
-    pub trait ReducingState<SB, IK, N, T>: MergingState<SB, IK, N, T, T> {}
+    pub trait ReducingState<SB, IK, N, T>: MergingState<SB, IK, N, T, T> {
+        const TYPE: StateType = StateType::ReducingState;
+    }
 
-    pub trait AggregatingState<SB, IK, N, IN, OUT>: MergingState<SB, IK, N, IN, OUT> {}
+    pub trait AggregatingState<SB, IK, N, IN, OUT>: MergingState<SB, IK, N, IN, OUT> {
+        const TYPE: StateType = StateType::AggregatingState;
+    }
 
     pub trait Aggregator<T> {
         type Accumulator;

@@ -103,6 +103,8 @@ impl<IK, N, K, V> MapState<InMemory, IK, N, K, V> for InMemoryMapState<IK, N, K,
                 .map_err(|e| arcon_err_kind!("Could not deserialize map state key: {:?}", e))?;
             Ok(key)
         }).map(|res: ArconResult<K>| res.expect("deserialization error"));
+        // TODO: we panic above if deserialization fails. Perhaps the function signature should
+        //  change to accommodate for that
 
         Ok(Box::new(iter))
     }
@@ -114,6 +116,8 @@ impl<IK, N, K, V> MapState<InMemory, IK, N, K, V> for InMemoryMapState<IK, N, K,
                 .map_err(|e| arcon_err_kind!("Could not deserialize map state value: {}", e))?;
             Ok(value)
         }).map(|res: ArconResult<V>| res.expect("deserialization error"));
+        // TODO: we panic above if deserialization fails. Perhaps the function signature should
+        //  change to accommodate for that
 
         Ok(Box::new(iter))
     }
