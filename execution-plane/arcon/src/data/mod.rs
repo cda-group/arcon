@@ -7,9 +7,9 @@ use crate::error::ArconResult;
 use crate::macros::*;
 use abomonation::Abomonation;
 use kompact::prelude::*;
+use prost::Message as PMessage;
 use std::fmt::Debug;
 use std::hash::Hash;
-use prost::Message as PMessage;
 
 /// Type that can be passed through the Arcon runtime
 pub trait ArconType:

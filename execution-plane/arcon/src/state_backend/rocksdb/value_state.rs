@@ -1,15 +1,16 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use std::marker::PhantomData;
-use serde::{Serialize, Deserialize};
+use crate::state_backend::rocksdb::state_common::StateCommon;
 use crate::{
+    prelude::ArconResult,
     state_backend::{
-        rocksdb::{StateCommon, RocksDb},
+        rocksdb::RocksDb,
         state_types::{State, ValueState},
     },
-    prelude::ArconResult,
 };
+use serde::{Deserialize, Serialize};
+use std::marker::PhantomData;
 
 pub struct RocksDbValueState<IK, N, T> {
     pub(crate) common: StateCommon<IK, N>,
@@ -17,7 +18,11 @@ pub struct RocksDbValueState<IK, N, T> {
 }
 
 impl<IK, N, T> State<RocksDb, IK, N> for RocksDbValueState<IK, N, T>
-    where IK: Serialize, N: Serialize, T: Serialize {
+where
+    IK: Serialize,
+    N: Serialize,
+    T: Serialize,
+{
     fn clear(&self, backend: &mut RocksDb) -> ArconResult<()> {
         let key = self.common.get_db_key(&())?;
         backend.remove(&self.common.cf_name, &key)?;
@@ -28,7 +33,12 @@ impl<IK, N, T> State<RocksDb, IK, N> for RocksDbValueState<IK, N, T>
 }
 
 impl<IK, N, T> ValueState<RocksDb, IK, N, T> for RocksDbValueState<IK, N, T>
-    where IK: Serialize, N: Serialize, T: Serialize, T: for<'a> Deserialize<'a> {
+where
+    IK: Serialize,
+    N: Serialize,
+    T: Serialize,
+    T: for<'a> Deserialize<'a>,
+{
     fn get(&self, backend: &RocksDb) -> ArconResult<T> {
         let key = self.common.get_db_key(&())?;
         let serialized = backend.get(&self.common.cf_name, &key)?;
@@ -49,9 +59,9 @@ impl<IK, N, T> ValueState<RocksDb, IK, N, T> for RocksDbValueState<IK, N, T>
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::state_backend::{ValueStateBuilder, StateBackend};
-    use tempfile::TempDir;
     use crate::state_backend::rocksdb::tests::TestDb;
+    use crate::state_backend::{StateBackend, ValueStateBuilder};
+    use tempfile::TempDir;
 
     #[test]
     fn rocksdb_value_state_test() {

@@ -1,9 +1,9 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
+extern crate static_assertions as sa;
 #[cfg(test)]
 extern crate tempfile;
-extern crate static_assertions as sa;
 
 use arcon_error::ArconResult;
 use state_types::*;
@@ -16,7 +16,8 @@ use state_types::*;
 /// Trait required for all state backend implementations in Arcon
 pub trait StateBackend {
     fn new(name: &str) -> ArconResult<Self>
-        where Self: Sized;
+    where
+        Self: Sized;
 
     fn checkpoint(&self, id: String) -> ArconResult<()>;
 }
@@ -40,12 +41,24 @@ pub trait VecStateBuilder<IK, N, T>: Sized {
 
 pub trait ReducingStateBuilder<IK, N, T, F>: Sized {
     type Type: ReducingState<Self, IK, N, T>;
-    fn new_reducing_state(&mut self, name: &str, init_item_key: IK, init_namespace: N, reduce_fn: F) -> Self::Type;
+    fn new_reducing_state(
+        &mut self,
+        name: &str,
+        init_item_key: IK,
+        init_namespace: N,
+        reduce_fn: F,
+    ) -> Self::Type;
 }
 
 pub trait AggregatingStateBuilder<IK, N, T, AGG: Aggregator<T>>: Sized {
     type Type: AggregatingState<Self, IK, N, T, AGG::Result>;
-    fn new_aggregating_state(&mut self, name: &str, init_item_key: IK, init_namespace: N, aggregator: AGG) -> Self::Type;
+    fn new_aggregating_state(
+        &mut self,
+        name: &str,
+        init_item_key: IK,
+        init_namespace: N,
+        aggregator: AGG,
+    ) -> Self::Type;
 }
 
 #[macro_use]
@@ -100,7 +113,7 @@ mod state_types {
         MapState,
         VecState,
         ReducingState,
-        AggregatingState
+        AggregatingState,
     }
 
     // TODO: since we don't have any state that is appending, but not merging, maybe consider using one trait?
@@ -130,28 +143,37 @@ mod state_types {
         fn put(&self, backend: &mut SB, key: K, value: V) -> ArconResult<()>;
 
         /// key_value_pairs must be a finite iterator!
-        fn put_all_dyn(&self, backend: &mut SB, key_value_pairs: &mut dyn Iterator<Item=(K, V)>) -> ArconResult<()>;
+        fn put_all_dyn(
+            &self,
+            backend: &mut SB,
+            key_value_pairs: &mut dyn Iterator<Item = (K, V)>,
+        ) -> ArconResult<()>;
         /// key_value_pairs must be a finite iterator!
-        fn put_all(&self, backend: &mut SB, key_value_pairs: impl IntoIterator<Item=(K, V)>) -> ArconResult<()>
-            where Self: Sized;
+        fn put_all(
+            &self,
+            backend: &mut SB,
+            key_value_pairs: impl IntoIterator<Item = (K, V)>,
+        ) -> ArconResult<()>
+        where
+            Self: Sized;
 
         fn remove(&self, backend: &mut SB, key: &K) -> ArconResult<()>;
         fn contains(&self, backend: &SB, key: &K) -> ArconResult<bool>;
 
-        fn iter<'a>(&self, backend: &'a SB) -> ArconResult<Box<dyn Iterator<Item=(K, V)> + 'a>>;
+        fn iter<'a>(&self, backend: &'a SB) -> ArconResult<Box<dyn Iterator<Item = (K, V)> + 'a>>;
         // makes it not object-safe :(
-//        type Iter: Iterator<Item=(K, V)>;
-//        fn entries_unboxed(&self) -> ArconResult<Self::Iter> where Self: Sized;
+        //        type Iter: Iterator<Item=(K, V)>;
+        //        fn entries_unboxed(&self) -> ArconResult<Self::Iter> where Self: Sized;
 
-        fn keys<'a>(&self, backend: &'a SB) -> ArconResult<Box<dyn Iterator<Item=K> + 'a>>;
+        fn keys<'a>(&self, backend: &'a SB) -> ArconResult<Box<dyn Iterator<Item = K> + 'a>>;
         // makes it not object-safe :(
-//        type KeysIter: Iterator<Item=K>;
-//        fn keys_unboxed(&self) -> ArconResult<Self::KeysIter> where Self: Sized;
+        //        type KeysIter: Iterator<Item=K>;
+        //        fn keys_unboxed(&self) -> ArconResult<Self::KeysIter> where Self: Sized;
 
-        fn values<'a>(&self, backend: &'a SB) -> ArconResult<Box<dyn Iterator<Item=V> + 'a>>;
+        fn values<'a>(&self, backend: &'a SB) -> ArconResult<Box<dyn Iterator<Item = V> + 'a>>;
         // makes it not object-safe :(
-//        type ValuesIter: Iterator<Item=V>;
-//        fn values_unboxed(&self) -> ArconResult<Self::ValuesIter> where Self: Sized;
+        //        type ValuesIter: Iterator<Item=V>;
+        //        fn values_unboxed(&self) -> ArconResult<Self::ValuesIter> where Self: Sized;
 
         fn is_empty(&self, backend: &SB) -> ArconResult<bool>;
     }
@@ -163,9 +185,14 @@ mod state_types {
 
         // bikeshed: set / update (Flink)
         fn set(&self, backend: &mut SB, value: Vec<T>) -> ArconResult<()>;
-        fn add_all(&self, backend: &mut SB, values: impl IntoIterator<Item=T>) -> ArconResult<()>
-            where Self: Sized;
-        fn add_all_dyn(&self, backend: &mut SB, values: &mut dyn Iterator<Item=T>) -> ArconResult<()>;
+        fn add_all(&self, backend: &mut SB, values: impl IntoIterator<Item = T>) -> ArconResult<()>
+        where
+            Self: Sized;
+        fn add_all_dyn(
+            &self,
+            backend: &mut SB,
+            values: &mut dyn Iterator<Item = T>,
+        ) -> ArconResult<()>;
         fn len(&self, backend: &SB) -> ArconResult<usize>;
     }
 
@@ -194,20 +221,26 @@ mod state_types {
     }
 
     impl<CREATE, ADD, RES> ClosuresAggregator<CREATE, ADD, RES> {
-        pub fn new<T, ACC, R>(create: CREATE, add: ADD, res: RES) -> ClosuresAggregator<CREATE, ADD, RES>
-            where
-                CREATE: Fn() -> ACC,
-                ADD: Fn(&mut ACC, T) -> (),
-                RES: Fn(ACC) -> R {
+        pub fn new<T, ACC, R>(
+            create: CREATE,
+            add: ADD,
+            res: RES,
+        ) -> ClosuresAggregator<CREATE, ADD, RES>
+        where
+            CREATE: Fn() -> ACC,
+            ADD: Fn(&mut ACC, T) -> (),
+            RES: Fn(ACC) -> R,
+        {
             ClosuresAggregator { create, add, res }
         }
     }
 
     impl<CREATE, ADD, RES, T> Aggregator<T> for ClosuresAggregator<CREATE, ADD, RES>
-        where
-            CREATE: Fn<()>,
-            ADD: Fn(&mut CREATE::Output, T) -> (),
-            RES: Fn<(CREATE::Output,)> {
+    where
+        CREATE: Fn<()>,
+        ADD: Fn(&mut CREATE::Output, T) -> (),
+        RES: Fn<(CREATE::Output,)>,
+    {
         type Accumulator = CREATE::Output;
         type Result = RES::Output;
 
@@ -224,23 +257,21 @@ mod state_types {
         }
     }
 
-
     // TODO: broadcast state???
 
     // let's not care about object safety
-//    sa::assert_obj_safe!(
-//        State<(), u32, ()>,
-//        MapState<(), i32, (), u32, u32>,
-//        ValueState<(), i32, (), u32>,
-//        AppendingState<(), i32, (), char, String>,
-//        MergingState<(), i32, (), u32, std::collections::HashSet<u32>>,
-//        ReducingState<(), i32, (), u32>,
-//        VecState<(), i32, (), i32>,
-//        AggregatingState<(), i32, (), i32, String>
-//    );
+    //    sa::assert_obj_safe!(
+    //        State<(), u32, ()>,
+    //        MapState<(), i32, (), u32, u32>,
+    //        ValueState<(), i32, (), u32>,
+    //        AppendingState<(), i32, (), char, String>,
+    //        MergingState<(), i32, (), u32, std::collections::HashSet<u32>>,
+    //        ReducingState<(), i32, (), u32>,
+    //        VecState<(), i32, (), i32>,
+    //        AggregatingState<(), i32, (), i32, String>
+    //    );
 }
 
 pub mod in_memory;
 #[cfg(feature = "arcon_rocksdb")]
 pub mod rocksdb;
-

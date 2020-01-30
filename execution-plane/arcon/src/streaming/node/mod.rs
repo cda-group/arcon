@@ -96,7 +96,11 @@ where
                 }
 
                 // Let new_watermark take the value of the lowest watermark
-                let new_watermark = *self.watermarks.values().chain(&[w]).min()
+                let new_watermark = *self
+                    .watermarks
+                    .values()
+                    .chain(&[w])
+                    .min()
                     .expect("this cannot fail, because the iterator contains at least `w`");
 
                 // Finally, handle the watermark:
@@ -137,7 +141,8 @@ where
                     // Handle the message buffer.
                     if !self.message_buffer.is_empty() {
                         // Create a new message buffer
-                        let mut message_buffer = VecDeque::with_capacity(MESSAGE_BUFFER_INIT_CAPACITY);
+                        let mut message_buffer =
+                            VecDeque::with_capacity(MESSAGE_BUFFER_INIT_CAPACITY);
                         // Swap the current and the new message buffer
                         mem::swap(&mut message_buffer, &mut self.message_buffer);
                         // Iterate over the message-buffer until empty

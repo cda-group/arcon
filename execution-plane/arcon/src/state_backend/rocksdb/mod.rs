@@ -3,30 +3,28 @@
 
 extern crate rocksdb;
 
-use arcon_error::*;
-use serde::{Serialize, Deserialize};
-use rocksdb::{
-    checkpoint::Checkpoint,
-    DB,
-    ColumnFamilyDescriptor,
-    Options,
-    ColumnFamily,
-    DBPinnableSlice,
-    WriteBatch,
-};
-use std::{
-    path::{PathBuf, Path},
-    io::Write,
-    error::Error,
-};
-use crate::state_backend::{StateBackend, ValueStateBuilder, MapStateBuilder, rocksdb::{
-    value_state::RocksDbValueState,
-    map_state::RocksDbMapState,
-}, state_types::*, VecStateBuilder, ReducingStateBuilder};
-use self::rocksdb::{SliceTransform, MergeOperands};
 use self::rocksdb::merge_operator::MergeFn;
-use crate::state_backend::rocksdb::vec_state::RocksDbVecState;
+use self::rocksdb::{MergeOperands, SliceTransform};
+use self::state_common::*;
 use crate::state_backend::rocksdb::reducing_state::RocksDbReducingState;
+use crate::state_backend::rocksdb::state_common::StateCommon;
+use crate::state_backend::rocksdb::vec_state::RocksDbVecState;
+use crate::state_backend::{
+    rocksdb::{map_state::RocksDbMapState, value_state::RocksDbValueState},
+    state_types::*,
+    MapStateBuilder, ReducingStateBuilder, StateBackend, ValueStateBuilder, VecStateBuilder,
+};
+use arcon_error::*;
+use rocksdb::{
+    checkpoint::Checkpoint, ColumnFamily, ColumnFamilyDescriptor, DBPinnableSlice, Options,
+    WriteBatch, DB,
+};
+use serde::{Deserialize, Serialize};
+use std::{
+    error::Error,
+    io::Write,
+    path::{Path, PathBuf},
+};
 
 pub struct RocksDb {
     db: DB,
@@ -35,7 +33,8 @@ pub struct RocksDb {
 
 impl RocksDb {
     fn get_cf_handle(&self, cf_name: impl AsRef<str>) -> ArconResult<&ColumnFamily> {
-        self.db.cf_handle(cf_name.as_ref())
+        self.db
+            .cf_handle(cf_name.as_ref())
             .ok_or_else(|| arcon_err_kind!("Could not get column family '{}'", cf_name.as_ref()))
     }
 
@@ -53,20 +52,32 @@ impl RocksDb {
         }
     }
 
-    fn put(&mut self, cf_name: impl AsRef<str>, key: impl AsRef<[u8]>, value: impl AsRef<[u8]>) -> ArconResult<()> {
+    fn put(
+        &mut self,
+        cf_name: impl AsRef<str>,
+        key: impl AsRef<[u8]>,
+        value: impl AsRef<[u8]>,
+    ) -> ArconResult<()> {
         let cf = self.get_cf_handle(cf_name)?;
 
-        self.db.put_cf(cf, key, value)
+        self.db
+            .put_cf(cf, key, value)
             .map_err(|e| arcon_err_kind!("RocksDB put err: {}", e))
     }
 
     fn remove(&mut self, cf: impl AsRef<str>, key: impl AsRef<[u8]>) -> ArconResult<()> {
         let cf = self.get_cf_handle(cf)?;
-        self.db.delete_cf(cf, key)
+        self.db
+            .delete_cf(cf, key)
             .map_err(|e| arcon_err_kind!("RocksDB delete err: {}", e))
     }
 
-    fn remove_prefix(&mut self, cf: impl AsRef<str>, cf_opts: &Options, prefix: impl AsRef<[u8]>) -> ArconResult<()> {
+    fn remove_prefix(
+        &mut self,
+        cf: impl AsRef<str>,
+        cf_opts: &Options,
+        prefix: impl AsRef<[u8]>,
+    ) -> ArconResult<()> {
         // We use DB::delete_range_cf here, which should be faster than what Flink does, because it
         // doesn't require explicit iteration. BUT! it assumes that the prefixes have constant
         // length, i.e. IK and N always bincode serialize to the same number of bytes.
@@ -78,11 +89,13 @@ impl RocksDb {
         if prefix.is_empty() {
             // prefix is empty, so we use the fast path of dropping and re-creating the whole
             // column family
-            self.db.drop_cf(cf_name)
-                .map_err(|e| arcon_err_kind!("Could not drop column family '{}': {}", cf_name, e))?;
+            self.db.drop_cf(cf_name).map_err(|e| {
+                arcon_err_kind!("Could not drop column family '{}': {}", cf_name, e)
+            })?;
 
-            self.db.create_cf(cf_name, &cf_opts)
-                .map_err(|e| arcon_err_kind!("Could not recreate column family '{}': {}", cf_name, e))?;
+            self.db.create_cf(cf_name, &cf_opts).map_err(|e| {
+                arcon_err_kind!("Could not recreate column family '{}': {}", cf_name, e)
+            })?;
 
             return Ok(());
         }
@@ -95,13 +108,15 @@ impl RocksDb {
         // delete_range deletes all the entries in [start, end) range, so we can just increment the
         // least significant byte of the prefix
         let mut end = start.to_vec();
-        *end.last_mut().expect("unreachable, the empty case is covered a few lines above") += 1;
+        *end.last_mut()
+            .expect("unreachable, the empty case is covered a few lines above") += 1;
 
         let mut wb = WriteBatch::default();
         wb.delete_range_cf(cf, start, &end)
             .map_err(|e| arcon_err_kind!("Could not create delete_range operation: {}", e))?;
 
-        self.db.write(wb)
+        self.db
+            .write(wb)
             .map_err(|e| arcon_err_kind!("Could not perform delete_range operation: {}", e))?;
 
         Ok(())
@@ -109,21 +124,18 @@ impl RocksDb {
 
     fn contains(&self, cf: impl AsRef<str>, key: impl AsRef<[u8]>) -> ArconResult<bool> {
         let cf = self.get_cf_handle(cf.as_ref())?;
-        Ok(self.db.get_pinned_cf(cf, key)
+        Ok(self
+            .db
+            .get_pinned_cf(cf, key)
             .map_err(|e| arcon_err_kind!("Could not get map state value: {}", e))?
             .is_some())
     }
 
-    fn get_or_create_column_family<IK: Serialize, N: Serialize>(
+    fn get_or_create_column_family(
         &mut self,
         state_name: &str,
-        state_type: StateType,
-        item_key: &IK,
-        namespace: &N,
+        opts: Options,
     ) -> (String, Options) {
-        let opts = self.create_cf_options_for(state_type, item_key, namespace)
-            .expect("Could not create options for new column family"); // TODO: propagate as Result?
-
         // Every state has its own column family. Different state types have potentially different
         // column family options. TODO: Q: is that the optimal solution?
         if self.db.cf_handle(state_name).is_none() {
@@ -131,67 +143,6 @@ impl RocksDb {
         }
 
         (state_name.to_string(), opts)
-    }
-
-    fn create_state_common<IK: Serialize, N: Serialize>(
-        &mut self,
-        state_name: &str,
-        state_type: StateType,
-        item_key: IK,
-        namespace: N,
-    ) -> StateCommon<IK, N> {
-        let (cf_name, cf_options) = self.get_or_create_column_family(state_name, state_type, &item_key, &namespace);
-        StateCommon { cf_name, cf_options, item_key, namespace }
-    }
-
-    fn create_cf_options_for<IK: Serialize, N: Serialize>(&self, state_type: StateType, item_key: &IK, namespace: &N) -> ArconResult<Options> {
-        // The line below should yield the same size for any values of given types IK, N. This is
-        // not enforced anywhere yet, but we rely on it. For example, neither IK nor N should be
-        // Vec<T> or String, because those types serialize to variable length byte arrays.
-        // TODO: restrict possible IK and N with a trait? We could add an associated const there,
-        //  so the computation below is eliminated.
-        let prefix_size = bincode::serialized_size(&(item_key, namespace))
-            .map_err(|e| arcon_err_kind!("Couldn't compute prefix size for column family: {}", e))?;
-
-        // base opts
-        let mut opts = Options::default();
-        // for map state to work properly, but useful for all the states, so the bloom filters get
-        // populated
-        opts.set_prefix_extractor(SliceTransform::create_fixed_prefix(prefix_size as usize));
-
-        match state_type {
-            StateType::MapState => {}
-            StateType::ValueState => {}
-            StateType::VecState => {
-                let concat_merge: MergeFn = |_key, first, rest| {
-                    let mut result: Vec<u8> = Vec::with_capacity(rest.size_hint().0);
-                    first.map(|v| {
-                        result.extend_from_slice(v);
-                    });
-                    for op in rest {
-                        result.extend_from_slice(op);
-                    }
-                    Some(result)
-                };
-                opts.set_merge_operator("concat_merge", concat_merge, None);
-            }
-            StateType::ReducingState => {
-                let reduce_merge: MergeFn = |_key, first, rest| {
-                    let all_values_iter = first.into_iter().chain(rest);
-                    todo!("running reduce_fn by rocksdb not yet supported")
-                };
-//                opts.set_merge_operator("reduce_merge", reduce_merge, None);
-            }
-            StateType::AggregatingState => {
-                let aggregate_merge: MergeFn = |_key, first, rest| {
-                    let all_values_iter = first.into_iter().chain(rest);
-                    todo!("running aggregator by rocksdb not yet supported")
-                };
-//                opts.set_merge_operator("aggregate_merge", aggregate_merge, None);
-            }
-        }
-
-        Ok(opts)
     }
 }
 
@@ -203,10 +154,14 @@ impl StateBackend for RocksDb {
 
         // TODO: maybe we need multiple listings with different options???
         let column_families = match DB::list_cf(&opts, &name) {
-            Ok(cfs) => { cfs }
+            Ok(cfs) => cfs,
             // TODO: possibly platform-dependant error message check
-            Err(e) if e.description().contains("No such file or directory") => { vec!["default".to_string()] }
-            Err(e) => { return arcon_err!("Could not list column families: {}", e); }
+            Err(e) if e.description().contains("No such file or directory") => {
+                vec!["default".to_string()]
+            }
+            Err(e) => {
+                return arcon_err!("Could not list column families: {}", e);
+            }
         };
 
         let db = DB::open_cf(&opts, &name, column_families)
@@ -214,7 +169,10 @@ impl StateBackend for RocksDb {
 
         let checkpoints_path = PathBuf::from(format!("{}-checkpoints", name));
 
-        Ok(RocksDb { db, checkpoints_path })
+        Ok(RocksDb {
+            db,
+            checkpoints_path,
+        })
     }
 
     fn checkpoint(&self, id: String) -> ArconResult<()> {
@@ -224,89 +182,306 @@ impl StateBackend for RocksDb {
         let mut path = self.checkpoints_path.clone();
         path.push(id);
 
-        self.db.flush()
+        self.db
+            .flush()
             .map_err(|e| arcon_err_kind!("Could not flush rocksdb: {}", e))?;
 
-        checkpointer.create_checkpoint(path)
+        checkpointer
+            .create_checkpoint(path)
             .map_err(|e| arcon_err_kind!("Could not save the checkpoint: {}", e))?;
         Ok(())
     }
 }
 
 impl<IK, N, T> ValueStateBuilder<IK, N, T> for RocksDb
-    where IK: Serialize, N: Serialize, T: Serialize + for<'a> Deserialize<'a> {
+where
+    IK: Serialize,
+    N: Serialize,
+    T: Serialize + for<'a> Deserialize<'a>,
+{
     type Type = RocksDbValueState<IK, N, T>;
 
     fn new_value_state(&mut self, name: &str, init_item_key: IK, init_namespace: N) -> Self::Type {
-        let common = self.create_state_common(name, Self::Type::TYPE, init_item_key, init_namespace);
-        RocksDbValueState { common, _phantom: Default::default() }
+        let common = StateCommon::new_for_value_state(self, name, init_item_key, init_namespace);
+        RocksDbValueState {
+            common,
+            _phantom: Default::default(),
+        }
     }
 }
 
 impl<IK, N, K, V> MapStateBuilder<IK, N, K, V> for RocksDb
-    where
-        IK: Serialize + for<'a> Deserialize<'a>,
-        N: Serialize + for<'a> Deserialize<'a>,
-        K: Serialize + for<'a> Deserialize<'a>,
-        V: Serialize + for<'a> Deserialize<'a> {
+where
+    IK: Serialize + for<'a> Deserialize<'a>,
+    N: Serialize + for<'a> Deserialize<'a>,
+    K: Serialize + for<'a> Deserialize<'a>,
+    V: Serialize + for<'a> Deserialize<'a>,
+{
     type Type = RocksDbMapState<IK, N, K, V>;
 
     fn new_map_state(&mut self, name: &str, init_item_key: IK, init_namespace: N) -> Self::Type {
-        let common = self.create_state_common(name, Self::Type::TYPE, init_item_key, init_namespace);
-        RocksDbMapState { common, _phantom: Default::default() }
+        let common = StateCommon::new_for_map_state(self, name, init_item_key, init_namespace);
+        RocksDbMapState {
+            common,
+            _phantom: Default::default(),
+        }
     }
 }
 
 impl<IK, N, T> VecStateBuilder<IK, N, T> for RocksDb
-    where IK: Serialize, N: Serialize, T: Serialize + for<'a> Deserialize<'a> {
+where
+    IK: Serialize,
+    N: Serialize,
+    T: Serialize + for<'a> Deserialize<'a>,
+{
     type Type = RocksDbVecState<IK, N, T>;
 
     fn new_vec_state(&mut self, name: &str, init_item_key: IK, init_namespace: N) -> Self::Type {
-        let common = self.create_state_common(name, Self::Type::TYPE, init_item_key, init_namespace);
-        RocksDbVecState { common, _phantom: Default::default() }
+        let common = StateCommon::new_for_vec_state(self, name, init_item_key, init_namespace);
+        RocksDbVecState {
+            common,
+            _phantom: Default::default(),
+        }
     }
 }
 
 impl<IK, N, T, F> ReducingStateBuilder<IK, N, T, F> for RocksDb
-    where IK: Serialize, N: Serialize, T: Serialize + for<'a> Deserialize<'a>, F: Fn(&T, &T) -> T {
+where
+    IK: Serialize,
+    N: Serialize,
+    T: Serialize + for<'a> Deserialize<'a>,
+    F: Fn(&T, &T) -> T + Send + Sync + Clone,
+{
     type Type = RocksDbReducingState<IK, N, T, F>;
 
-    fn new_reducing_state(&mut self, name: &str, init_item_key: IK, init_namespace: N, reduce_fn: F) -> Self::Type {
-        let common = self.create_state_common(name, Self::Type::TYPE, init_item_key, init_namespace);
-        RocksDbReducingState { common, reduce_fn, _phantom: Default::default() }
+    fn new_reducing_state(
+        &mut self,
+        name: &str,
+        init_item_key: IK,
+        init_namespace: N,
+        reduce_fn: F,
+    ) -> Self::Type {
+        let common = StateCommon::new_for_reducing_state(
+            self,
+            name,
+            init_item_key,
+            init_namespace,
+            reduce_fn.clone(),
+        );
+        RocksDbReducingState {
+            common,
+            reduce_fn,
+            _phantom: Default::default(),
+        }
     }
 }
 
-pub(crate) struct StateCommon<IK, N> {
-    cf_name: String,
-    cf_options: Options,
-    item_key: IK,
-    namespace: N,
+fn common_options<IK: Serialize, N: Serialize>(item_key: &IK, namespace: &N) -> Options {
+    // The line below should yield the same size for any values of given types IK, N. This is
+    // not enforced anywhere yet, but we rely on it. For example, neither IK nor N should be
+    // Vec<T> or String, because those types serialize to variable length byte arrays.
+    // TODO: restrict possible IK and N with a trait? We could add an associated const there,
+    //  so the computation below is eliminated.
+    let prefix_size = bincode::serialized_size(&(item_key, namespace))
+        .expect("Couldn't compute prefix size for column family"); // TODO: propagate
+
+    // base opts
+    let mut opts = Options::default();
+    // for map state to work properly, but useful for all the states, so the bloom filters get
+    // populated
+    opts.set_prefix_extractor(SliceTransform::create_fixed_prefix(prefix_size as usize));
+
+    opts
 }
 
-impl<IK, N> StateCommon<IK, N> where IK: Serialize, N: Serialize {
-    fn get_db_key<UK>(&self, user_key: &UK) -> ArconResult<Vec<u8>> where UK: Serialize {
-        let res = bincode::serialize(&(
-            &self.item_key,
-            &self.namespace,
-            user_key
-        )).map_err(|e| arcon_err_kind!("Could not serialize keys and namespace: {}", e))?;
+mod state_common {
+    use super::*;
+    use itertools::Itertools;
 
-        Ok(res)
+    pub(crate) struct StateCommon<IK, N> {
+        pub cf_name: String,
+        pub cf_options: Options,
+        pub item_key: IK,
+        pub namespace: N,
+    }
+
+    impl<IK, N> StateCommon<IK, N>
+    where
+        IK: Serialize,
+        N: Serialize,
+    {
+        pub fn get_db_key<UK>(&self, user_key: &UK) -> ArconResult<Vec<u8>>
+        where
+            UK: Serialize,
+        {
+            let res = bincode::serialize(&(&self.item_key, &self.namespace, user_key))
+                .map_err(|e| arcon_err_kind!("Could not serialize keys and namespace: {}", e))?;
+
+            Ok(res)
+        }
+
+        fn new_for_basic_state(
+            backend: &mut RocksDb,
+            name: &str,
+            item_key: IK,
+            namespace: N,
+        ) -> StateCommon<IK, N> {
+            let opts = common_options(&item_key, &namespace);
+            let (cf_name, cf_options) = backend.get_or_create_column_family(name, opts);
+
+            StateCommon {
+                cf_name,
+                cf_options,
+                item_key,
+                namespace,
+            }
+        }
+
+        pub fn new_for_value_state(
+            backend: &mut RocksDb,
+            name: &str,
+            item_key: IK,
+            namespace: N,
+        ) -> StateCommon<IK, N> {
+            Self::new_for_basic_state(backend, name, item_key, namespace)
+        }
+
+        pub fn new_for_map_state(
+            backend: &mut RocksDb,
+            name: &str,
+            item_key: IK,
+            namespace: N,
+        ) -> StateCommon<IK, N> {
+            Self::new_for_basic_state(backend, name, item_key, namespace)
+        }
+
+        pub fn new_for_vec_state(
+            backend: &mut RocksDb,
+            name: &str,
+            item_key: IK,
+            namespace: N,
+        ) -> StateCommon<IK, N> {
+            let mut opts = common_options(&item_key, &namespace);
+
+            let concat_merge = |_key: &[u8], first: Option<&[u8]>, rest: &mut MergeOperands| {
+                let mut result: Vec<u8> = Vec::with_capacity(rest.size_hint().0);
+                first.map(|v| {
+                    result.extend_from_slice(v);
+                });
+                for op in rest {
+                    result.extend_from_slice(op);
+                }
+                Some(result)
+            };
+            opts.set_merge_operator_associative("concat_merge", concat_merge);
+
+            let (cf_name, cf_options) = backend.get_or_create_column_family(name, opts);
+            StateCommon {
+                cf_name,
+                cf_options,
+                item_key,
+                namespace,
+            }
+        }
+
+        pub fn new_for_reducing_state<T, F>(
+            backend: &mut RocksDb,
+            name: &str,
+            item_key: IK,
+            namespace: N,
+            reduce_fn: F,
+        ) -> StateCommon<IK, N>
+        where
+            T: Serialize + for<'a> Deserialize<'a>,
+            F: Fn(&T, &T) -> T + Sync + Send,
+        {
+            let mut opts = common_options(&item_key, &namespace);
+
+            let reduce_merge = |_key: &[u8], first: Option<&[u8]>, rest: &mut MergeOperands| {
+                let res = first
+                    .into_iter()
+                    .chain(rest)
+                    .map(bincode::deserialize)
+                    .fold_results(None, |acc, value| match acc {
+                        None => Some(value),
+                        Some(old) => Some(reduce_fn(&old, &value)),
+                    });
+
+                // TODO: change eprintlns to actual logs
+                // we don't really have a way to send results back to rust across rocksdb ffi, so
+                // we just log the errors
+                match res {
+                    Ok(Some(v)) => match bincode::serialize(&v) {
+                        Ok(serialized) => Some(serialized),
+                        Err(e) => {
+                            eprintln!("reduce state merge result serialization error: {}", e);
+                            None
+                        }
+                    },
+                    Ok(None) => {
+                        eprintln!("reducing state merge result is None???");
+                        None
+                    }
+                    Err(e) => {
+                        eprintln!("reducing state merge error: {}", e);
+                        None
+                    }
+                }
+            };
+            opts.set_merge_operator_associative("reduce_merge", reduce_merge);
+
+            let (cf_name, cf_options) = backend.get_or_create_column_family(name, opts);
+            StateCommon {
+                cf_name,
+                cf_options,
+                item_key,
+                namespace,
+            }
+        }
+
+        pub fn new_for_aggregating_state(
+            backend: &mut RocksDb,
+            name: &str,
+            item_key: IK,
+            namespace: N,
+        ) -> StateCommon<IK, N> {
+            let mut opts = common_options(&item_key, &namespace);
+
+            let aggregate_merge = |_key: &[u8], first: Option<&[u8]>, rest: &mut MergeOperands| {
+                let all_values_iter = first.into_iter().chain(rest);
+                todo!("running aggregator by rocksdb not yet supported");
+
+                Some(Vec::new())
+            };
+            let aggregate_partial_merge =
+                |_key: &[u8], first: Option<&[u8]>, rest: &mut MergeOperands| {
+                    todo!();
+                    Some(Vec::new())
+                };
+            opts.set_merge_operator("aggregate_merge", aggregate_merge, aggregate_partial_merge);
+
+            let (cf_name, cf_options) = backend.get_or_create_column_family(name, opts);
+            StateCommon {
+                cf_name,
+                cf_options,
+                item_key,
+                namespace,
+            }
+        }
     }
 }
 
-mod value_state;
 mod map_state;
-mod vec_state;
 mod reducing_state;
+mod value_state;
+mod vec_state;
 //mod aggregating_state; TODO
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
     use std::ops::{Deref, DerefMut};
+    use tempfile::TempDir;
 
     pub struct TestDb {
         db: RocksDb,
@@ -336,7 +511,6 @@ mod tests {
         }
     }
 
-
     #[test]
     fn test_unit_state_key_empty() {
         let state = StateCommon {
@@ -359,7 +533,8 @@ mod tests {
         let value = "test";
         let column_family = "default";
 
-        db.put(column_family, key.as_bytes(), value.as_bytes()).expect("put");
+        db.put(column_family, key.as_bytes(), value.as_bytes())
+            .expect("put");
 
         {
             let v = db.get(column_family, key.as_bytes()).unwrap();
@@ -387,9 +562,11 @@ mod tests {
         let new_value: &[u8] = b"new value";
         let column_family = "default";
 
-        db.put(column_family, key, initial_value).expect("put failed");
+        db.put(column_family, key, initial_value)
+            .expect("put failed");
         db.checkpoint("chkpt0".into()).expect("checkpoint failed");
-        db.put(column_family, key, new_value).expect("second put failed");
+        db.put(column_family, key, new_value)
+            .expect("second put failed");
 
         let mut last_checkpoint_path = checkpoints_dir.path().to_owned();
         last_checkpoint_path.push("chkpt0");
@@ -405,7 +582,8 @@ mod tests {
         );
         assert_eq!(
             initial_value,
-            db_from_checkpoint.get(column_family, key)
+            db_from_checkpoint
+                .get(column_family, key)
                 .expect("Could not get from the checkpoint")
                 .as_ref()
         );

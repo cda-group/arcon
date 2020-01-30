@@ -167,9 +167,12 @@ where
             // this is just an immediately executed closure so we get the `?` syntax instead of
             // deeply nesting if-lets
             (|| {
-                let w_map = self.window_maps.get_mut(&key)
+                let w_map = self
+                    .window_maps
+                    .get_mut(&key)
                     .ok_or_else(|| arcon_err_kind!("no window map with key {}", key))?;
-                let mut window = w_map.remove(&index)
+                let mut window = w_map
+                    .remove(&index)
                     .ok_or_else(|| arcon_err_kind!("no window with index {}", index))?;
                 let e = window.result()?;
                 result.push(ArconEvent::Element(ArconElement::with_timestamp(

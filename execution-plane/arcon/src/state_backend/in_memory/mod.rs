@@ -1,35 +1,23 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use std::{
-    collections::HashMap,
-    fmt::Debug,
-    io::Write,
+use crate::state_backend::{
+    in_memory::{
+        aggregating_state::InMemoryAggregatingState, map_state::InMemoryMapState,
+        reducing_state::InMemoryReducingState, value_state::InMemoryValueState,
+        vec_state::InMemoryVecState,
+    },
+    state_types::*,
+    AggregatingStateBuilder, MapStateBuilder, ReducingStateBuilder, StateBackend,
+    ValueStateBuilder, VecStateBuilder,
 };
-use uuid::Uuid;
-use serde::{Serialize, Deserialize};
 use arcon_error::*;
-use crate::{
-    state_backend::{
-        state_types::*,
-        StateBackend,
-        in_memory::{
-            value_state::InMemoryValueState,
-            map_state::InMemoryMapState,
-            vec_state::InMemoryVecState,
-            reducing_state::InMemoryReducingState,
-            aggregating_state::InMemoryAggregatingState,
-        },
-        ValueStateBuilder,
-        MapStateBuilder,
-        VecStateBuilder,
-        ReducingStateBuilder,
-        AggregatingStateBuilder
-    }
-};
+use serde::{Deserialize, Serialize};
+use std::{collections::HashMap, fmt::Debug, io::Write};
+use uuid::Uuid;
 
 pub struct InMemory {
-    db: HashMap<Vec<u8>, Vec<u8>>
+    db: HashMap<Vec<u8>, Vec<u8>>,
 }
 
 impl InMemory {
@@ -50,9 +38,14 @@ impl InMemory {
         Ok(())
     }
 
-    pub fn iter_matching(&self, prefix: impl AsRef<[u8]> + Debug) -> impl Iterator<Item=(&[u8], &[u8])> {
+    pub fn iter_matching(
+        &self,
+        prefix: impl AsRef<[u8]> + Debug,
+    ) -> impl Iterator<Item = (&[u8], &[u8])> {
         self.db.iter().filter_map(move |(k, v)| {
-            if &k[..prefix.as_ref().len()] != prefix.as_ref() { return None; }
+            if &k[..prefix.as_ref().len()] != prefix.as_ref() {
+                return None;
+            }
             Some((k.as_slice(), v.as_slice()))
         })
     }
@@ -95,53 +88,104 @@ impl InMemory {
 // since we don't do checkpointing for InMemory state backend, the name of the state is simply discarded
 // TODO: maybe keep it for debugging purposes?
 impl<IK, N, T> ValueStateBuilder<IK, N, T> for InMemory
-    where IK: Serialize, N: Serialize, T: Serialize + for<'a> Deserialize<'a> {
+where
+    IK: Serialize,
+    N: Serialize,
+    T: Serialize + for<'a> Deserialize<'a>,
+{
     type Type = InMemoryValueState<IK, N, T>;
 
     fn new_value_state(&mut self, _name: &str, init_item_key: IK, init_namespace: N) -> Self::Type {
         let common = self.new_state_common(init_item_key, init_namespace);
-        InMemoryValueState { common, _phantom: Default::default() }
+        InMemoryValueState {
+            common,
+            _phantom: Default::default(),
+        }
     }
 }
 
 impl<IK, N, K, V> MapStateBuilder<IK, N, K, V> for InMemory
-    where IK: Serialize + for<'a> Deserialize<'a>, N: Serialize + for<'a> Deserialize<'a>,
-          K: Serialize + for<'a> Deserialize<'a>, V: Serialize + for<'a> Deserialize<'a> {
+where
+    IK: Serialize + for<'a> Deserialize<'a>,
+    N: Serialize + for<'a> Deserialize<'a>,
+    K: Serialize + for<'a> Deserialize<'a>,
+    V: Serialize + for<'a> Deserialize<'a>,
+{
     type Type = InMemoryMapState<IK, N, K, V>;
 
     fn new_map_state(&mut self, _name: &str, init_item_key: IK, init_namespace: N) -> Self::Type {
         let common = self.new_state_common(init_item_key, init_namespace);
-        InMemoryMapState { common, _phantom: Default::default() }
+        InMemoryMapState {
+            common,
+            _phantom: Default::default(),
+        }
     }
 }
 
 impl<IK, N, T> VecStateBuilder<IK, N, T> for InMemory
-    where IK: Serialize, N: Serialize, T: Serialize + for<'a> Deserialize<'a> {
+where
+    IK: Serialize,
+    N: Serialize,
+    T: Serialize + for<'a> Deserialize<'a>,
+{
     type Type = InMemoryVecState<IK, N, T>;
 
     fn new_vec_state(&mut self, _name: &str, init_item_key: IK, init_namespace: N) -> Self::Type {
         let common = self.new_state_common(init_item_key, init_namespace);
-        InMemoryVecState { common, _phantom: Default::default() }
+        InMemoryVecState {
+            common,
+            _phantom: Default::default(),
+        }
     }
 }
 
 impl<IK, N, T, F> ReducingStateBuilder<IK, N, T, F> for InMemory
-    where IK: Serialize, N: Serialize, T: Serialize + for<'a> Deserialize<'a>, F: Fn(&T, &T) -> T {
+where
+    IK: Serialize,
+    N: Serialize,
+    T: Serialize + for<'a> Deserialize<'a>,
+    F: Fn(&T, &T) -> T,
+{
     type Type = InMemoryReducingState<IK, N, T, F>;
 
-    fn new_reducing_state(&mut self, _name: &str, init_item_key: IK, init_namespace: N, reduce_fn: F) -> Self::Type {
+    fn new_reducing_state(
+        &mut self,
+        _name: &str,
+        init_item_key: IK,
+        init_namespace: N,
+        reduce_fn: F,
+    ) -> Self::Type {
         let common = self.new_state_common(init_item_key, init_namespace);
-        InMemoryReducingState { common, reduce_fn, _phantom: Default::default() }
+        InMemoryReducingState {
+            common,
+            reduce_fn,
+            _phantom: Default::default(),
+        }
     }
 }
 
 impl<IK, N, T, AGG> AggregatingStateBuilder<IK, N, T, AGG> for InMemory
-    where IK: Serialize, N: Serialize, AGG: Aggregator<T>, AGG::Accumulator: Serialize + for<'a> Deserialize<'a> {
+where
+    IK: Serialize,
+    N: Serialize,
+    AGG: Aggregator<T>,
+    AGG::Accumulator: Serialize + for<'a> Deserialize<'a>,
+{
     type Type = InMemoryAggregatingState<IK, N, T, AGG>;
 
-    fn new_aggregating_state(&mut self, _name: &str, init_item_key: IK, init_namespace: N, aggregator: AGG) -> Self::Type {
+    fn new_aggregating_state(
+        &mut self,
+        _name: &str,
+        init_item_key: IK,
+        init_namespace: N,
+        aggregator: AGG,
+    ) -> Self::Type {
         let common = self.new_state_common(init_item_key, init_namespace);
-        InMemoryAggregatingState { common, aggregator, _phantom: Default::default() }
+        InMemoryAggregatingState {
+            common,
+            aggregator,
+            _phantom: Default::default(),
+        }
     }
 }
 
@@ -161,25 +205,29 @@ pub(crate) struct StateCommon<IK, N> {
     namespace: N,
 }
 
-impl<IK, N> StateCommon<IK, N> where IK: Serialize, N: Serialize {
-    fn get_db_key<UK>(&self, user_key: &UK) -> ArconResult<Vec<u8>> where UK: Serialize {
+impl<IK, N> StateCommon<IK, N>
+where
+    IK: Serialize,
+    N: Serialize,
+{
+    fn get_db_key<UK>(&self, user_key: &UK) -> ArconResult<Vec<u8>>
+    where
+        UK: Serialize,
+    {
         // UUID is not serializable TODO: there's probably a feature flag for this
         let mut res = self.id.as_bytes().to_vec();
-        bincode::serialize_into(&mut res, &(
-            &self.item_key,
-            &self.namespace,
-            user_key
-        )).map_err(|e| arcon_err_kind!("Could not serialize keys and namespace: {}", e))?;
+        bincode::serialize_into(&mut res, &(&self.item_key, &self.namespace, user_key))
+            .map_err(|e| arcon_err_kind!("Could not serialize keys and namespace: {}", e))?;
 
         Ok(res)
     }
 }
 
-mod value_state;
-mod map_state;
-mod vec_state;
-mod reducing_state;
 mod aggregating_state;
+mod map_state;
+mod reducing_state;
+mod value_state;
+mod vec_state;
 
 #[cfg(test)]
 mod tests {
@@ -190,7 +238,8 @@ mod tests {
         let mut db = InMemory::new("test").unwrap();
         let key = "key";
         let value = "hej";
-        db.put(key.to_string().into_bytes(), value.to_string().into_bytes()).unwrap();
+        db.put(key.to_string().into_bytes(), value.to_string().into_bytes())
+            .unwrap();
         let fetched = db.get(key.as_bytes()).unwrap();
         assert_eq!(value, String::from_utf8_lossy(fetched));
         db.remove(key.as_bytes()).unwrap();
@@ -206,7 +255,7 @@ mod tests {
         let state = StateCommon {
             id: Uuid::new_v4(),
             item_key: 42,
-            namespace: 255
+            namespace: 255,
         };
 
         let v = state.get_db_key(&()).unwrap();

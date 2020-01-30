@@ -1,15 +1,15 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use std::marker::PhantomData;
-use serde::{Serialize, Deserialize};
 use crate::{
+    prelude::ArconResult,
     state_backend::{
-        in_memory::{StateCommon, InMemory},
+        in_memory::{InMemory, StateCommon},
         state_types::{State, ValueState},
     },
-    prelude::ArconResult,
 };
+use serde::{Deserialize, Serialize};
+use std::marker::PhantomData;
 
 pub struct InMemoryValueState<IK, N, T> {
     pub(crate) common: StateCommon<IK, N>,
@@ -17,7 +17,11 @@ pub struct InMemoryValueState<IK, N, T> {
 }
 
 impl<IK, N, T> State<InMemory, IK, N> for InMemoryValueState<IK, N, T>
-    where IK: Serialize, N: Serialize, T: Serialize {
+where
+    IK: Serialize,
+    N: Serialize,
+    T: Serialize,
+{
     fn clear(&self, backend: &mut InMemory) -> ArconResult<()> {
         let key = self.common.get_db_key(&())?;
         backend.remove(&key)?;
@@ -28,7 +32,12 @@ impl<IK, N, T> State<InMemory, IK, N> for InMemoryValueState<IK, N, T>
 }
 
 impl<IK, N, T> ValueState<InMemory, IK, N, T> for InMemoryValueState<IK, N, T>
-    where IK: Serialize, N: Serialize, T: Serialize, T: for<'a> Deserialize<'a> {
+where
+    IK: Serialize,
+    N: Serialize,
+    T: Serialize,
+    T: for<'a> Deserialize<'a>,
+{
     fn get(&self, backend: &InMemory) -> ArconResult<T> {
         let key = self.common.get_db_key(&())?;
         let serialized = backend.get(&key)?;
@@ -49,7 +58,7 @@ impl<IK, N, T> ValueState<InMemory, IK, N, T> for InMemoryValueState<IK, N, T>
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::state_backend::{ValueStateBuilder, StateBackend};
+    use crate::state_backend::{StateBackend, ValueStateBuilder};
 
     #[test]
     fn in_memory_value_state_test() {

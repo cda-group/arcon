@@ -128,9 +128,7 @@ pub fn generate(
         previous_node = "node".to_string() + &node.id.to_string();
     }
 
-    let final_stream = stream
-        .into_iter()
-        .fold(quote! {}, combine_token_streams);
+    let final_stream = stream.into_iter().fold(quote! {}, combine_token_streams);
 
     // By default, the system is told to block
     let termination = {

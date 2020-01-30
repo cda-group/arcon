@@ -1,16 +1,16 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use std::marker::PhantomData;
-use serde::{Serialize, Deserialize};
-use error::ErrorKind;
 use crate::{
-    state_backend::{
-        in_memory::{StateCommon, InMemory},
-        state_types::{State, AppendingState, VecState, MergingState},
-    },
     prelude::ArconResult,
+    state_backend::{
+        in_memory::{InMemory, StateCommon},
+        state_types::{AppendingState, MergingState, State, VecState},
+    },
 };
+use error::ErrorKind;
+use serde::{Deserialize, Serialize};
+use std::marker::PhantomData;
 
 pub struct InMemoryVecState<IK, N, T> {
     pub(crate) common: StateCommon<IK, N>,
@@ -18,7 +18,10 @@ pub struct InMemoryVecState<IK, N, T> {
 }
 
 impl<IK, N, T> State<InMemory, IK, N> for InMemoryVecState<IK, N, T>
-    where IK: Serialize, N: Serialize {
+where
+    IK: Serialize,
+    N: Serialize,
+{
     fn clear(&self, backend: &mut InMemory) -> ArconResult<()> {
         let key = self.common.get_db_key(&())?;
         backend.remove(&key)?;
@@ -29,7 +32,12 @@ impl<IK, N, T> State<InMemory, IK, N> for InMemoryVecState<IK, N, T>
 }
 
 impl<IK, N, T> AppendingState<InMemory, IK, N, T, Vec<T>> for InMemoryVecState<IK, N, T>
-    where IK: Serialize, N: Serialize, T: Serialize, T: for<'a> Deserialize<'a> {
+where
+    IK: Serialize,
+    N: Serialize,
+    T: Serialize,
+    T: for<'a> Deserialize<'a>,
+{
     fn get(&self, backend: &InMemory) -> ArconResult<Vec<T>> {
         let key = self.common.get_db_key(&())?;
         let serialized = backend.get(&key)?;
@@ -56,10 +64,21 @@ impl<IK, N, T> AppendingState<InMemory, IK, N, T, Vec<T>> for InMemoryVecState<I
 }
 
 impl<IK, N, T> MergingState<InMemory, IK, N, T, Vec<T>> for InMemoryVecState<IK, N, T>
-    where IK: Serialize, N: Serialize, T: Serialize, T: for<'a> Deserialize<'a> {}
+where
+    IK: Serialize,
+    N: Serialize,
+    T: Serialize,
+    T: for<'a> Deserialize<'a>,
+{
+}
 
 impl<IK, N, T> VecState<InMemory, IK, N, T> for InMemoryVecState<IK, N, T>
-    where IK: Serialize, N: Serialize, T: Serialize, T: for<'a> Deserialize<'a> {
+where
+    IK: Serialize,
+    N: Serialize,
+    T: Serialize,
+    T: for<'a> Deserialize<'a>,
+{
     fn set(&self, backend: &mut InMemory, value: Vec<T>) -> ArconResult<()> {
         let key = self.common.get_db_key(&())?;
         let mut storage = vec![];
@@ -70,7 +89,14 @@ impl<IK, N, T> VecState<InMemory, IK, N, T> for InMemoryVecState<IK, N, T>
         backend.put(key, storage)
     }
 
-    fn add_all(&self, backend: &mut InMemory, values: impl IntoIterator<Item=T>) -> ArconResult<()> where Self: Sized {
+    fn add_all(
+        &self,
+        backend: &mut InMemory,
+        values: impl IntoIterator<Item = T>,
+    ) -> ArconResult<()>
+    where
+        Self: Sized,
+    {
         let key = self.common.get_db_key(&())?;
         let mut storage = backend.get_mut_or_init_empty(&key)?;
 
@@ -82,7 +108,11 @@ impl<IK, N, T> VecState<InMemory, IK, N, T> for InMemoryVecState<IK, N, T>
         Ok(())
     }
 
-    fn add_all_dyn(&self, backend: &mut InMemory, values: &mut dyn Iterator<Item=T>) -> ArconResult<()> {
+    fn add_all_dyn(
+        &self,
+        backend: &mut InMemory,
+        values: &mut dyn Iterator<Item = T>,
+    ) -> ArconResult<()> {
         self.add_all(backend, values)
     }
 
@@ -91,23 +121,28 @@ impl<IK, N, T> VecState<InMemory, IK, N, T> for InMemoryVecState<IK, N, T>
         let storage = backend.get(&key);
 
         match storage {
-            Err(e) => {
-                match e.kind() {
-                    ErrorKind::ArconError(message) if &*message == "Value not found" => Ok(0),
-                    _ => Err(e)
-                }
-            }
+            Err(e) => match e.kind() {
+                ErrorKind::ArconError(message) if &*message == "Value not found" => Ok(0),
+                _ => Err(e),
+            },
             Ok(buf) => {
                 let mut reader = buf;
-                if buf.is_empty() { return Ok(0); }
+                if buf.is_empty() {
+                    return Ok(0);
+                }
 
                 // We rely on every possible value of type T having the same serialized size.
                 // TODO: introduce a trait for types that serialize to a fixed-size byte array and
                 //   add that as a trait bound on T
                 let first_value: T = bincode::deserialize_from(&mut reader)
                     .map_err(|e| arcon_err_kind!("Could not deserialize vec state value: {}", e))?;
-                let first_value_serialized_size = bincode::serialized_size(&first_value)
-                    .map_err(|e| arcon_err_kind!("Could not get the size of serialized vec state value: {}", e))? as usize;
+                let first_value_serialized_size =
+                    bincode::serialized_size(&first_value).map_err(|e| {
+                        arcon_err_kind!(
+                            "Could not get the size of serialized vec state value: {}",
+                            e
+                        )
+                    })? as usize;
 
                 debug_assert_ne!(first_value_serialized_size, 0);
 
@@ -115,7 +150,11 @@ impl<IK, N, T> VecState<InMemory, IK, N, T> for InMemoryVecState<IK, N, T>
                 let rem = buf.len() % first_value_serialized_size;
 
                 // sanity check
-                if rem != 0 { return arcon_err!("vec state storage length is not a multiple of element size"); }
+                if rem != 0 {
+                    return arcon_err!(
+                        "vec state storage length is not a multiple of element size"
+                    );
+                }
 
                 Ok(len)
             }

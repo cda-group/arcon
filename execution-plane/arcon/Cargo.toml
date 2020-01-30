@@ -29,6 +29,7 @@ fnv = "1.0.3"
 uuid = "0.8"
 static_assertions = "1.1.0"
 bincode = "1.2.1"
+itertools = "0.8.2"
 serde = { version = "1.0.104", features = ["derive"] }
 
 # Logging
@@ -49,7 +50,7 @@ tokio = { version = "0.2", optional = true, features = ["full"] } # TODO: figure
 tokio-util = { version = "0.2", optional = true, features = ["full"] }
 futures = { version = "0.3", optional = true }
 serde_json = { version = "1.0.44", optional = true }
-rocksdb = { version = "0.13", optional = true }
+rocksdb = { git = "https://github.com/mrobakowski/rust-rocksdb.git", branch = "feature/merge-fn-closure", optional = true }
 
 [build-dependencies]
 prost-build = "0.6"

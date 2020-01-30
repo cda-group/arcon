@@ -1,15 +1,15 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use std::marker::PhantomData;
-use serde::{Serialize, Deserialize};
 use crate::{
-    state_backend::{
-        in_memory::{StateCommon, InMemory},
-        state_types::{State, AppendingState, ReducingState, MergingState},
-    },
     prelude::ArconResult,
+    state_backend::{
+        in_memory::{InMemory, StateCommon},
+        state_types::{AppendingState, MergingState, ReducingState, State},
+    },
 };
+use serde::{Deserialize, Serialize};
+use std::marker::PhantomData;
 
 pub struct InMemoryReducingState<IK, N, T, F> {
     pub(crate) common: StateCommon<IK, N>,
@@ -18,7 +18,10 @@ pub struct InMemoryReducingState<IK, N, T, F> {
 }
 
 impl<IK, N, T, F> State<InMemory, IK, N> for InMemoryReducingState<IK, N, T, F>
-    where IK: Serialize, N: Serialize {
+where
+    IK: Serialize,
+    N: Serialize,
+{
     fn clear(&self, backend: &mut InMemory) -> ArconResult<()> {
         let key = self.common.get_db_key(&())?;
         backend.remove(&key)?;
@@ -30,7 +33,12 @@ impl<IK, N, T, F> State<InMemory, IK, N> for InMemoryReducingState<IK, N, T, F>
 
 impl<IK, N, T, F> AppendingState<InMemory, IK, N, T, T> for InMemoryReducingState<IK, N, T, F>
 // TODO: if we made the (backend-)mutating methods take &mut self, F could be FnMut
-    where IK: Serialize, N: Serialize, T: Serialize + for<'a> Deserialize<'a>, F: Fn(&T, &T) -> T {
+where
+    IK: Serialize,
+    N: Serialize,
+    T: Serialize + for<'a> Deserialize<'a>,
+    F: Fn(&T, &T) -> T,
+{
     fn get(&self, backend: &InMemory) -> ArconResult<T> {
         let key = self.common.get_db_key(&())?;
         let storage = backend.get(&key)?;
@@ -62,21 +70,33 @@ impl<IK, N, T, F> AppendingState<InMemory, IK, N, T, T> for InMemoryReducingStat
 
 impl<IK, N, T, F> MergingState<InMemory, IK, N, T, T> for InMemoryReducingState<IK, N, T, F>
 // TODO: if we made the (backend-)mutating methods take &mut self, F could be FnMut
-    where IK: Serialize, N: Serialize, T: Serialize + for<'a> Deserialize<'a>, F: Fn(&T, &T) -> T {}
+where
+    IK: Serialize,
+    N: Serialize,
+    T: Serialize + for<'a> Deserialize<'a>,
+    F: Fn(&T, &T) -> T,
+{
+}
 
 impl<IK, N, T, F> ReducingState<InMemory, IK, N, T> for InMemoryReducingState<IK, N, T, F>
-    where IK: Serialize, N: Serialize, T: Serialize + for<'a> Deserialize<'a>, F: Fn(&T, &T) -> T {}
+where
+    IK: Serialize,
+    N: Serialize,
+    T: Serialize + for<'a> Deserialize<'a>,
+    F: Fn(&T, &T) -> T,
+{
+}
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::state_backend::{StateBackend, ReducingStateBuilder};
+    use crate::state_backend::{ReducingStateBuilder, StateBackend};
 
     #[test]
     fn reducing_state_test() {
         let mut db = InMemory::new("test").unwrap();
-        let reducing_state = db.new_reducing_state("test_state", (), (),
-                                                       |old: &i32, new: &i32| *old.max(new));
+        let reducing_state =
+            db.new_reducing_state("test_state", (), (), |old: &i32, new: &i32| *old.max(new));
 
         reducing_state.append(&mut db, 7).unwrap();
         reducing_state.append(&mut db, 42).unwrap();
