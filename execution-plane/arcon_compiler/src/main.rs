@@ -13,9 +13,11 @@ extern crate lazy_static;
 use arcon_proto::arcon_spec::{get_compile_mode, spec_from_file, ArconSpec};
 use clap::{App, AppSettings, Arg, SubCommand};
 use ferris_says::say;
-use std::fs::metadata;
-use std::io::{stdout, BufWriter};
-use std::str::FromStr;
+use std::{
+    fs::metadata,
+    io::{stdout, BufWriter},
+    str::FromStr,
+};
 
 mod env;
 mod repl;

@@ -31,19 +31,23 @@ pub mod prelude {
         shuffle::Shuffle, ChannelStrategy,
     };
 
-    pub use crate::streaming::channel::Channel;
     #[cfg(feature = "socket")]
     pub use crate::streaming::node::operator::{
         sink::socket::SocketSink,
         source::socket::{SocketKind, SocketSource},
     };
-    pub use crate::streaming::node::{
-        operator::function::{Filter, FlatMap, Map},
-        operator::sink::local_file::LocalFileSink,
-        operator::source::local_file::LocalFileSource,
-        operator::window::{AppenderWindow, EventTimeWindowAssigner, IncrementalWindow, Window},
-        operator::Operator,
-        DebugNode, Node,
+    pub use crate::streaming::{
+        channel::Channel,
+        node::{
+            operator::{
+                function::{Filter, FlatMap, Map},
+                sink::local_file::LocalFileSink,
+                source::local_file::LocalFileSource,
+                window::{AppenderWindow, EventTimeWindowAssigner, IncrementalWindow, Window},
+                Operator,
+            },
+            DebugNode, Node,
+        },
     };
 
     #[cfg(feature = "kafka")]
@@ -51,15 +55,13 @@ pub mod prelude {
         sink::kafka::KafkaSink, source::kafka::KafkaSource,
     };
 
-    pub use crate::data::serde::{
-        reliable_remote::ReliableSerde, unsafe_remote::UnsafeSerde, ArconSerde,
+    pub use crate::data::{
+        serde::{reliable_remote::ReliableSerde, unsafe_remote::UnsafeSerde, ArconSerde},
+        Watermark, *,
     };
-    pub use crate::data::Watermark;
-    pub use crate::data::*;
     pub use error::ArconResult;
 
-    pub use kompact::default_components::*;
-    pub use kompact::prelude::*;
+    pub use kompact::{default_components::*, prelude::*};
     #[cfg(feature = "thread_pinning")]
     pub use kompact::{get_core_ids, CoreId};
     pub use slog::*;

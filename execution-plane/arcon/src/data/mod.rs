@@ -3,13 +3,11 @@
 
 pub mod serde;
 
-use crate::error::ArconResult;
-use crate::macros::*;
+use crate::{error::ArconResult, macros::*};
 use abomonation::Abomonation;
 use kompact::prelude::*;
 use prost::Message as PMessage;
-use std::fmt::Debug;
-use std::hash::Hash;
+use std::{fmt::Debug, hash::Hash};
 
 /// Type that can be passed through the Arcon runtime
 pub trait ArconType:

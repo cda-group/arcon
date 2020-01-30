@@ -1,13 +1,16 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::data::{ArconEvent, ArconType};
-use crate::prelude::KompactSystem;
-use crate::prelude::*;
-use crate::streaming::channel::strategy::channel_output;
+use crate::{
+    data::{ArconEvent, ArconType},
+    prelude::{KompactSystem, *},
+    streaming::channel::strategy::channel_output,
+};
 use fnv::FnvHasher;
-use std::default::Default;
-use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
+use std::{
+    default::Default,
+    hash::{BuildHasher, BuildHasherDefault, Hash, Hasher},
+};
 
 type DefaultHashBuilder = BuildHasherDefault<FnvHasher>;
 

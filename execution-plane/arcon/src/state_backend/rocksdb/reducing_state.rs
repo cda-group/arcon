@@ -10,8 +10,7 @@ use crate::{
 };
 use rocksdb::DBPinnableSlice;
 use serde::{Deserialize, Serialize};
-use std::error::Error;
-use std::marker::PhantomData;
+use std::{error::Error, marker::PhantomData};
 
 pub struct RocksDbReducingState<IK, N, T, F> {
     pub(crate) common: StateCommon<IK, N>,
@@ -53,43 +52,12 @@ where
     fn append(&self, backend: &mut RocksDb, value: T) -> ArconResult<()> {
         let key = self.common.get_db_key(&())?;
 
-        // TODO: an implementation driven entirely by rocksdb
-        // see the merging operation for reducing state in RocksDb::create_cf_options_for
-        //        let cf = backend.get_cf_handle(&self.common.cf_name)?;
-        //        backend.db.merge_cf(cf, key, serialized)
-        //            .map_err(|e| arcon_err_kind!("Could not perform merge operation: {}", e))?;
-
-        // TODO: this impl is not thread safe, values in rocksdb can be unexpectedly ignored
-        let old_value_opt = match backend.get(&self.common.cf_name, &key) {
-            Ok(serialized) => Some(bincode::deserialize(&*serialized).map_err(|e| {
-                arcon_err_kind!("Couldn't deserialize reducing state value: {}", e)
-            })?),
-            Err(e) if e.to_string().contains("Value not found") => {
-                // TODO: proper error enums would be great
-                None
-            }
-            Err(e) => {
-                return Err(e);
-            }
-        };
-
-        match old_value_opt {
-            None => {
-                let new_serialized = bincode::serialize(&value).map_err(|e| {
-                    arcon_err_kind!("Could not serialize reducing state value: {}", e)
-                })?;
-                backend.put(&self.common.cf_name, key, new_serialized)?;
-                Ok(())
-            }
-            Some(old_value) => {
-                let new_value = (self.reduce_fn)(&old_value, &value);
-                let new_serialized = bincode::serialize(&new_value).map_err(|e| {
-                    arcon_err_kind!("Could not serialize reducing state value: {}", e)
-                })?;
-                backend.put(&self.common.cf_name, key, new_serialized)?;
-                Ok(())
-            }
-        }
+        // see the merging operation for reducing state in StateCommon::new_for_reducing_state
+        let cf = backend.get_cf_handle(&self.common.cf_name)?;
+        backend
+            .db
+            .merge_cf(cf, key, serialized)
+            .map_err(|e| arcon_err_kind!("Could not perform merge operation: {}", e))
     }
 }
 
@@ -115,8 +83,7 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::state_backend::rocksdb::tests::TestDb;
-    use crate::state_backend::{ReducingStateBuilder, StateBackend};
+    use crate::state_backend::{rocksdb::tests::TestDb, ReducingStateBuilder, StateBackend};
 
     #[test]
     fn reducing_state_test() {

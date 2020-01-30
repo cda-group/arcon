@@ -3,9 +3,11 @@
 
 use crate::prelude::*;
 use futures::executor::block_on;
-use rdkafka::config::ClientConfig;
-use rdkafka::error::KafkaResult;
-use rdkafka::producer::{FutureProducer, FutureRecord};
+use rdkafka::{
+    config::ClientConfig,
+    error::KafkaResult,
+    producer::{FutureProducer, FutureRecord},
+};
 
 /*
     KafkaSink: Buffers received elements

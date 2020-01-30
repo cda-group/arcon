@@ -5,9 +5,7 @@ pub mod event_time;
 
 pub use event_time::EventTimeWindowAssigner;
 
-use crate::data::*;
-use crate::error::*;
-use crate::util::SafelySendableFn;
+use crate::{data::*, error::*, util::SafelySendableFn};
 
 /// `Window` consists of the methods required by each window implementation
 ///

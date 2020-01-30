@@ -23,12 +23,13 @@ pub use arcon_proto::arcon_spec as spec;
 use failure::Fail;
 use proc_macro2::TokenStream;
 use rustfmt_nightly::*;
-use std::collections::{HashMap, HashSet};
-use std::fs;
-use std::sync::Mutex;
+use std::{
+    collections::{HashMap, HashSet},
+    fs,
+    sync::Mutex,
+};
 
-use spec::node::NodeKind;
-use spec::ArconSpec;
+use spec::{node::NodeKind, ArconSpec};
 
 const ARCON_CODEGEN_VERSION: &str = env!("CARGO_PKG_VERSION");
 

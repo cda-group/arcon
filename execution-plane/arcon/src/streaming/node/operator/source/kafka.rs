@@ -3,14 +3,14 @@
 
 use crate::prelude::*;
 use futures::executor::block_on_stream;
-use rdkafka::config::ClientConfig;
-use rdkafka::consumer::stream_consumer::StreamConsumer;
-use rdkafka::consumer::{CommitMode, Consumer};
-use rdkafka::error::KafkaResult;
-use rdkafka::message::*;
-use rdkafka::topic_partition_list::Offset;
-use std::collections::HashMap;
-use std::time::Duration;
+use rdkafka::{
+    config::ClientConfig,
+    consumer::{stream_consumer::StreamConsumer, CommitMode, Consumer},
+    error::KafkaResult,
+    message::*,
+    topic_partition_list::Offset,
+};
+use std::{collections::HashMap, time::Duration};
 
 /*
     KafkaSource: work in progress
@@ -240,8 +240,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::macros::*;
-    use crate::prelude::{DebugNode, KafkaSink, Mute};
+    use crate::{
+        macros::*,
+        prelude::{DebugNode, KafkaSink, Mute},
+    };
     use std::{thread, time};
 
     #[arcon]

@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use arcon_proto::arcon_spec::{get_compile_mode, ArconSpec};
-use std::fs::File;
-use std::process::{Command, Stdio};
+use std::{
+    fs::File,
+    process::{Command, Stdio},
+};
 
 pub fn target_list() -> Result<String, failure::Error> {
     let output = Command::new("rustc")

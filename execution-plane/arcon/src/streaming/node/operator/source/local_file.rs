@@ -1,16 +1,17 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::data::NodeID;
-use crate::data::{ArconMessage, ArconType};
-use crate::streaming::channel::strategy::ChannelStrategy;
+use crate::{
+    data::{ArconMessage, ArconType, NodeID},
+    streaming::channel::strategy::ChannelStrategy,
+};
 use kompact::prelude::*;
-use std::fs::File;
-use std::io::BufRead;
-use std::io::BufReader;
-use std::str::FromStr;
-use std::time::Duration;
-use std::time::SystemTime;
+use std::{
+    fs::File,
+    io::{BufRead, BufReader},
+    str::FromStr,
+    time::{Duration, SystemTime},
+};
 /*
     LocalFileSource:
     Allows generation of events from a file.
@@ -135,11 +136,8 @@ impl<A: ArconType + FromStr> Actor for LocalFileSource<A> {
 mod tests {
     use super::*;
     use crate::prelude::{Channel, DebugNode, Forward};
-    use kompact::default_components::DeadletterBox;
-    use kompact::prelude::KompactSystem;
-    use std::io::prelude::*;
-    use std::sync::Arc;
-    use std::{thread, time};
+    use kompact::{default_components::DeadletterBox, prelude::KompactSystem};
+    use std::{io::prelude::*, sync::Arc, thread, time};
     use tempfile::NamedTempFile;
 
     // Shared methods for test cases

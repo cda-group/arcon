@@ -1,16 +1,15 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use rocksdb::WriteBatch;
-use crate::state_backend::rocksdb::state_common::StateCommon;
 use crate::{
     prelude::ArconResult,
     state_backend::{
-        rocksdb::RocksDb,
+        rocksdb::{state_common::StateCommon, RocksDb},
         state_types::{AppendingState, MergingState, State, VecState},
     },
 };
 use error::ErrorKind;
+use rocksdb::WriteBatch;
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 
@@ -176,8 +175,7 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::state_backend::rocksdb::tests::TestDb;
-    use crate::state_backend::{StateBackend, VecStateBuilder};
+    use crate::state_backend::{rocksdb::tests::TestDb, StateBackend, VecStateBuilder};
 
     #[test]
     fn vec_state_test() {

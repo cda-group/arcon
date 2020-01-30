@@ -3,14 +3,15 @@
 
 extern crate rocksdb;
 
-use self::rocksdb::merge_operator::MergeFn;
-use self::rocksdb::{MergeOperands, SliceTransform};
-use self::state_common::*;
-use crate::state_backend::rocksdb::reducing_state::RocksDbReducingState;
-use crate::state_backend::rocksdb::state_common::StateCommon;
-use crate::state_backend::rocksdb::vec_state::RocksDbVecState;
+use self::{
+    rocksdb::{merge_operator::MergeFn, MergeOperands, SliceTransform},
+    state_common::*,
+};
 use crate::state_backend::{
-    rocksdb::{map_state::RocksDbMapState, value_state::RocksDbValueState},
+    rocksdb::{
+        map_state::RocksDbMapState, reducing_state::RocksDbReducingState,
+        state_common::StateCommon, value_state::RocksDbValueState, vec_state::RocksDbVecState,
+    },
     state_types::*,
     MapStateBuilder, ReducingStateBuilder, StateBackend, ValueStateBuilder, VecStateBuilder,
 };

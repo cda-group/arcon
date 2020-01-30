@@ -1,11 +1,10 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::state_backend::rocksdb::state_common::StateCommon;
 use crate::{
     prelude::ArconResult,
     state_backend::{
-        rocksdb::RocksDb,
+        rocksdb::{state_common::StateCommon, RocksDb},
         state_types::{State, ValueState},
     },
 };
@@ -59,8 +58,7 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::state_backend::rocksdb::tests::TestDb;
-    use crate::state_backend::{StateBackend, ValueStateBuilder};
+    use crate::state_backend::{rocksdb::tests::TestDb, StateBackend, ValueStateBuilder};
     use tempfile::TempDir;
 
     #[test]

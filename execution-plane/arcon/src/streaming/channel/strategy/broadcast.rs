@@ -1,10 +1,14 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::data::{ArconMessage, ArconType};
-use crate::prelude::KompactSystem;
-use crate::streaming::channel::strategy::{channel_output, ChannelStrategy};
-use crate::streaming::channel::Channel;
+use crate::{
+    data::{ArconMessage, ArconType},
+    prelude::KompactSystem,
+    streaming::channel::{
+        strategy::{channel_output, ChannelStrategy},
+        Channel,
+    },
+};
 use arcon_error::ArconResult;
 
 pub struct Broadcast<A>
@@ -45,9 +49,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::prelude::DebugNode;
-    use crate::streaming::channel::strategy::tests::*;
-    use crate::streaming::channel::ArconSerde;
+    use crate::{
+        prelude::DebugNode,
+        streaming::channel::{strategy::tests::*, ArconSerde},
+    };
     use kompact::prelude::*;
     use std::sync::Arc;
 
@@ -122,10 +127,9 @@ mod tests {
             let _ = remote.register_by_alias(&comp, comp_id.clone());
             remote.start(&comp);
 
-            let remote_path = ActorPath::Named(NamedPath::with_system(
-                remote.system_path(),
-                vec![comp_id.into()],
-            ));
+            let remote_path = ActorPath::Named(NamedPath::with_system(remote.system_path(), vec![
+                comp_id.into(),
+            ]));
             channels.push(Channel::Remote((remote_path, ArconSerde::default())));
             comps.push(comp);
         }

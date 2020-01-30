@@ -1,9 +1,13 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::prelude::*;
-use crate::streaming::channel::strategy::{channel_output, ChannelStrategy};
-use crate::streaming::channel::Channel;
+use crate::{
+    prelude::*,
+    streaming::channel::{
+        strategy::{channel_output, ChannelStrategy},
+        Channel,
+    },
+};
 
 pub struct Forward<A>
 where

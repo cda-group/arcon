@@ -1,11 +1,11 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::common::verify_and_start;
-use crate::spec::channel_kind::ChannelKind;
-use crate::spec::window;
-use crate::spec::Window;
-use crate::types::to_token_stream;
+use crate::{
+    common::verify_and_start,
+    spec::{channel_kind::ChannelKind, window, Window},
+    types::to_token_stream,
+};
 use proc_macro2::{Ident, Span, TokenStream};
 
 pub fn window(id: u32, window: &Window, spec_id: &str) -> TokenStream {

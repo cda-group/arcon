@@ -3,10 +3,7 @@
 
 use core::time::Duration;
 use kompact::timer::*;
-use std::collections::HashMap;
-use std::convert::TryInto;
-use std::fmt;
-use std::fmt::Debug;
+use std::{collections::HashMap, convert::TryInto, fmt, fmt::Debug};
 use uuid::Uuid;
 /*
     EventTimer: Abstraction of timer with underlying QuadWheel scheduling

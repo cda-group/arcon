@@ -221,8 +221,7 @@ pub mod unsafe_remote {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::data::test::ArconDataTest;
-    use crate::prelude::*;
+    use crate::{data::test::ArconDataTest, prelude::*};
     use kompact::prelude::*;
 
     fn get_systems() -> (KompactSystem, KompactSystem) {
@@ -246,10 +245,9 @@ mod test {
 
         let comp_id = format!("comp");
         let _ = remote.register_by_alias(&comp, comp_id.clone());
-        let remote_path = ActorPath::Named(NamedPath::with_system(
-            remote.system_path(),
-            vec![comp_id.into()],
-        ));
+        let remote_path = ActorPath::Named(NamedPath::with_system(remote.system_path(), vec![
+            comp_id.into(),
+        ]));
 
         let channel = Channel::Remote((remote_path, ArconSerde::Unsafe));
         let mut channel_strategy: Box<dyn ChannelStrategy<ArconDataTest>> =

@@ -181,10 +181,8 @@ where
 
 #[cfg(test)]
 mod test {
-    use super::super::rocksdb::IteratorMode;
-    use super::*;
-    use crate::state_backend::rocksdb::tests::TestDb;
-    use crate::state_backend::{MapStateBuilder, StateBackend};
+    use super::{super::rocksdb::IteratorMode, *};
+    use crate::state_backend::{rocksdb::tests::TestDb, MapStateBuilder, StateBackend};
     use tempfile::TempDir;
 
     #[test]

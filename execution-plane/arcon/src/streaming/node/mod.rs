@@ -6,10 +6,10 @@ pub mod operator;
 
 use crate::prelude::*;
 pub use debug::DebugNode;
-use std::collections::BTreeMap;
-use std::collections::HashSet; // Blocked-list
-use std::collections::VecDeque; // Message buffer
-use std::mem; // Watermark-list
+use std::{
+    collections::{BTreeMap, HashSet, VecDeque},
+    mem,
+}; // Message buffer // Blocked-list // Watermark-list
 
 const MESSAGE_BUFFER_INIT_CAPACITY: usize = 32;
 
@@ -228,8 +228,7 @@ where
 mod tests {
     // Tests the message logic of Node.
     use super::*;
-    use std::sync::Arc;
-    use std::{thread, time};
+    use std::{sync::Arc, thread, time};
 
     fn node_test_setup() -> (ActorRef<ArconMessage<i32>>, Arc<Component<DebugNode<i32>>>) {
         // Returns a filter Node with input channels: sender1..sender3

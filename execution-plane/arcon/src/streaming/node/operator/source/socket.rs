@@ -1,16 +1,17 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::data::NodeID;
-use crate::data::{ArconElement, ArconEvent, ArconMessage, ArconType, Watermark};
-use crate::streaming::channel::strategy::ChannelStrategy;
-use crate::util::io::*;
+use crate::{
+    data::{ArconElement, ArconEvent, ArconMessage, ArconType, NodeID, Watermark},
+    streaming::channel::strategy::ChannelStrategy,
+    util::io::*,
+};
 use kompact::prelude::*;
-use std::net::SocketAddr;
-use std::str::from_utf8;
-use std::str::FromStr;
-use std::time::Duration;
-use std::time::SystemTime;
+use std::{
+    net::SocketAddr,
+    str::{from_utf8, FromStr},
+    time::{Duration, SystemTime},
+};
 
 pub enum SocketKind {
     Tcp,
@@ -231,13 +232,12 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::prelude::DebugNode;
-    use crate::streaming::channel::strategy::forward::Forward;
-    use crate::streaming::channel::Channel;
+    use crate::{
+        prelude::DebugNode,
+        streaming::channel::{strategy::forward::Forward, Channel},
+    };
     use std::{thread, time};
-    use tokio::net::TcpStream;
-    use tokio::prelude::*;
-    use tokio::runtime::Runtime;
+    use tokio::{net::TcpStream, prelude::*, runtime::Runtime};
 
     // Shared methods for test cases
     fn wait(time: u64) -> () {

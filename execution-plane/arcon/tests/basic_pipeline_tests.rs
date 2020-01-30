@@ -7,11 +7,11 @@
 #![allow(bare_trait_objects)]
 extern crate arcon;
 
-use arcon::macros::*;
-use arcon::prelude::*;
-use std::fs::File;
-use std::io::Write;
-use std::io::{BufRead, BufReader};
+use arcon::{macros::*, prelude::*};
+use std::{
+    fs::File,
+    io::{BufRead, BufReader, Write},
+};
 use tempfile::NamedTempFile;
 
 #[arcon]

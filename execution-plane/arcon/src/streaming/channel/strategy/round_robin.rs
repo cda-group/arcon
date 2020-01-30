@@ -1,10 +1,11 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::data::{ArconMessage, ArconType};
-use crate::error::*;
-use crate::streaming::channel::strategy::*;
-use crate::streaming::channel::Channel;
+use crate::{
+    data::{ArconMessage, ArconType},
+    error::*,
+    streaming::channel::{strategy::*, Channel},
+};
 
 pub struct RoundRobin<A>
 where
@@ -70,8 +71,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::prelude::DebugNode;
-    use crate::streaming::channel::strategy::tests::*;
+    use crate::{prelude::DebugNode, streaming::channel::strategy::tests::*};
     use kompact::prelude::*;
     use std::sync::Arc;
 
