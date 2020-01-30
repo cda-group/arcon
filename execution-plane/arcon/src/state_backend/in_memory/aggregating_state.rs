@@ -106,7 +106,15 @@ mod test {
             "test_state",
             (),
             (),
-            ClosuresAggregator::new(|| vec![], Vec::push, |v| format!("{:?}", v)),
+            ClosuresAggregator::new(
+                || vec![],
+                Vec::push,
+                |mut fst, mut snd| {
+                    fst.append(&mut snd);
+                    fst
+                },
+                |v| format!("{:?}", v),
+            ),
         );
 
         aggregating_state.append(&mut db, 1).unwrap();

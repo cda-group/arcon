@@ -3,6 +3,7 @@
 
 #![feature(unboxed_closures)]
 #![feature(fn_traits)]
+#![feature(slice_patterns)]
 
 #[cfg_attr(test, macro_use)]
 extern crate arcon_macros;

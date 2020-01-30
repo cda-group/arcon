@@ -9,11 +9,13 @@ use self::{
 };
 use crate::state_backend::{
     rocksdb::{
-        map_state::RocksDbMapState, reducing_state::RocksDbReducingState,
-        state_common::StateCommon, value_state::RocksDbValueState, vec_state::RocksDbVecState,
+        aggregating_state::RocksDbAggregatingState, map_state::RocksDbMapState,
+        reducing_state::RocksDbReducingState, state_common::StateCommon,
+        value_state::RocksDbValueState, vec_state::RocksDbVecState,
     },
     state_types::*,
-    MapStateBuilder, ReducingStateBuilder, StateBackend, ValueStateBuilder, VecStateBuilder,
+    AggregatingStateBuilder, MapStateBuilder, ReducingStateBuilder, StateBackend,
+    ValueStateBuilder, VecStateBuilder,
 };
 use arcon_error::*;
 use rocksdb::{
@@ -251,7 +253,7 @@ where
     IK: Serialize,
     N: Serialize,
     T: Serialize + for<'a> Deserialize<'a>,
-    F: Fn(&T, &T) -> T + Send + Sync + Clone,
+    F: Fn(&T, &T) -> T + Send + Sync + Clone + 'static,
 {
     type Type = RocksDbReducingState<IK, N, T, F>;
 
@@ -272,6 +274,38 @@ where
         RocksDbReducingState {
             common,
             reduce_fn,
+            _phantom: Default::default(),
+        }
+    }
+}
+
+impl<IK, N, T, AGG> AggregatingStateBuilder<IK, N, T, AGG> for RocksDb
+where
+    IK: Serialize,
+    N: Serialize,
+    T: Serialize + for<'a> Deserialize<'a>,
+    AGG: Aggregator<T> + Send + Sync + Clone + 'static,
+    AGG::Accumulator: Serialize + for<'a> Deserialize<'a>,
+{
+    type Type = RocksDbAggregatingState<IK, N, T, AGG>;
+
+    fn new_aggregating_state(
+        &mut self,
+        name: &str,
+        init_item_key: IK,
+        init_namespace: N,
+        aggregator: AGG,
+    ) -> Self::Type {
+        let common = StateCommon::new_for_aggregating_state(
+            self,
+            name,
+            init_item_key,
+            init_namespace,
+            aggregator.clone(),
+        );
+        RocksDbAggregatingState {
+            common,
+            aggregator,
             _phantom: Default::default(),
         }
     }
@@ -394,41 +428,41 @@ mod state_common {
         ) -> StateCommon<IK, N>
         where
             T: Serialize + for<'a> Deserialize<'a>,
-            F: Fn(&T, &T) -> T + Sync + Send,
+            F: Fn(&T, &T) -> T + Sync + Send + Clone + 'static,
         {
             let mut opts = common_options(&item_key, &namespace);
 
-            let reduce_merge = |_key: &[u8], first: Option<&[u8]>, rest: &mut MergeOperands| {
-                let res = first
-                    .into_iter()
-                    .chain(rest)
-                    .map(bincode::deserialize)
-                    .fold_results(None, |acc, value| match acc {
-                        None => Some(value),
-                        Some(old) => Some(reduce_fn(&old, &value)),
-                    });
+            let reduce_merge =
+                move |_key: &[u8], first: Option<&[u8]>, rest: &mut MergeOperands| {
+                    let res = first
+                        .into_iter()
+                        .chain(rest)
+                        .map(bincode::deserialize)
+                        .fold_results(None, |acc, value| match acc {
+                            None => Some(value),
+                            Some(old) => Some(reduce_fn(&old, &value)),
+                        });
 
-                // TODO: change eprintlns to actual logs
-                // we don't really have a way to send results back to rust across rocksdb ffi, so
-                // we just log the errors
-                match res {
-                    Ok(Some(v)) => match bincode::serialize(&v) {
-                        Ok(serialized) => Some(serialized),
-                        Err(e) => {
-                            eprintln!("reduce state merge result serialization error: {}", e);
+                    // TODO: change eprintlns to actual logs
+                    // we don't really have a way to send results back to rust across rocksdb ffi, so we just log the errors
+                    match res {
+                        Ok(Some(v)) => match bincode::serialize(&v) {
+                            Ok(serialized) => Some(serialized),
+                            Err(e) => {
+                                eprintln!("reduce state merge result serialization error: {}", e);
+                                None
+                            }
+                        },
+                        Ok(None) => {
+                            eprintln!("reducing state merge result is None???");
                             None
                         }
-                    },
-                    Ok(None) => {
-                        eprintln!("reducing state merge result is None???");
-                        None
+                        Err(e) => {
+                            eprintln!("reducing state merge error: {}", e);
+                            None
+                        }
                     }
-                    Err(e) => {
-                        eprintln!("reducing state merge error: {}", e);
-                        None
-                    }
-                }
-            };
+                };
             opts.set_merge_operator_associative("reduce_merge", reduce_merge);
 
             let (cf_name, cf_options) = backend.get_or_create_column_family(name, opts);
@@ -440,26 +474,95 @@ mod state_common {
             }
         }
 
-        pub fn new_for_aggregating_state(
+        pub fn new_for_aggregating_state<T, AGG>(
             backend: &mut RocksDb,
             name: &str,
             item_key: IK,
             namespace: N,
-        ) -> StateCommon<IK, N> {
+            aggregator: AGG,
+        ) -> StateCommon<IK, N>
+        where
+            T: for<'a> Deserialize<'a>,
+            AGG: Aggregator<T> + Send + Sync + Clone + 'static,
+            AGG::Accumulator: Serialize + for<'a> Deserialize<'a>,
+        {
             let mut opts = common_options(&item_key, &namespace);
 
-            let aggregate_merge = |_key: &[u8], first: Option<&[u8]>, rest: &mut MergeOperands| {
-                let all_values_iter = first.into_iter().chain(rest);
-                todo!("running aggregator by rocksdb not yet supported");
+            // TODO: move this to aggregating_state module
+            let aggregate_merge =
+                move |_key: &[u8], first: Option<&[u8]>, rest: &mut MergeOperands| {
+                    let mut all_slices = first.into_iter().chain(rest).fuse();
 
-                Some(Vec::new())
-            };
-            let aggregate_partial_merge =
-                |_key: &[u8], first: Option<&[u8]>, rest: &mut MergeOperands| {
-                    todo!();
-                    Some(Vec::new())
+                    let first = all_slices.next();
+                    let mut accumulator = {
+                        match first {
+                            Some(
+                                [aggregating_state::ACCUMULATOR_MARKER, accumulator_bytes @ ..],
+                            ) => bincode::deserialize(accumulator_bytes)
+                                .map_err(|e| {
+                                    eprintln!(
+                                        "aggregator accumulator deserialization error: {}",
+                                        e
+                                    );
+                                })
+                                .ok()?,
+                            Some([aggregating_state::VALUE_MARKER, value_bytes @ ..]) => {
+                                let value: T = bincode::deserialize(value_bytes)
+                                    .map_err(|e| {
+                                        eprintln!("aggregator value deserialization error: {}", e);
+                                    })
+                                    .ok()?;
+                                let mut acc = aggregator.create_accumulator();
+                                aggregator.add(&mut acc, value);
+                                acc
+                            }
+                            Some(_) => {
+                                eprintln!("unknown operand in aggregate merge operator");
+                                return None;
+                            }
+                            None => aggregator.create_accumulator(),
+                        }
+                    };
+
+                    for slice in all_slices {
+                        match slice {
+                            [aggregating_state::ACCUMULATOR_MARKER, accumulator_bytes @ ..] => {
+                                let second_acc = bincode::deserialize(accumulator_bytes)
+                                    .map_err(|e| {
+                                        eprintln!(
+                                            "aggregator accumulator deserialization error: {}",
+                                            e
+                                        );
+                                    })
+                                    .ok()?;
+
+                                accumulator =
+                                    aggregator.merge_accumulators(accumulator, second_acc);
+                            }
+                            [aggregating_state::VALUE_MARKER, value_bytes @ ..] => {
+                                let value = bincode::deserialize(value_bytes)
+                                    .map_err(|e| {
+                                        eprintln!("aggregator value deserialization error: {}", e);
+                                    })
+                                    .ok()?;
+
+                                aggregator.add(&mut accumulator, value);
+                            }
+                            _ => {
+                                eprintln!("unknown operand in aggregate merge operator");
+                                return None;
+                            }
+                        }
+                    }
+
+                    let mut result = vec![aggregating_state::ACCUMULATOR_MARKER];
+                    bincode::serialize_into(&mut result, &accumulator)
+                        .map_err(|e| eprintln!("aggregator accumulator serialization error: {}", e))
+                        .ok()?;
+
+                    Some(result)
                 };
-            opts.set_merge_operator("aggregate_merge", aggregate_merge, aggregate_partial_merge);
+            opts.set_merge_operator_associative("aggregate_merge", aggregate_merge);
 
             let (cf_name, cf_options) = backend.get_or_create_column_family(name, opts);
             StateCommon {
@@ -472,11 +575,11 @@ mod state_common {
     }
 }
 
+mod aggregating_state;
 mod map_state;
 mod reducing_state;
 mod value_state;
 mod vec_state;
-//mod aggregating_state; TODO
 
 #[cfg(test)]
 mod tests {

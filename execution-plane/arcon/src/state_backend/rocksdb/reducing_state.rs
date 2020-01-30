@@ -51,6 +51,8 @@ where
 
     fn append(&self, backend: &mut RocksDb, value: T) -> ArconResult<()> {
         let key = self.common.get_db_key(&())?;
+        let serialized = bincode::serialize(&value)
+            .map_err(|e| arcon_err_kind!("Could not serialize reducing state value: {}", e))?;
 
         // see the merging operation for reducing state in StateCommon::new_for_reducing_state
         let cf = backend.get_cf_handle(&self.common.cf_name)?;
@@ -62,7 +64,6 @@ where
 }
 
 impl<IK, N, T, F> MergingState<RocksDb, IK, N, T, T> for RocksDbReducingState<IK, N, T, F>
-// TODO: if we made the (backend-)mutating methods take &mut self, F could be FnMut
 where
     IK: Serialize,
     N: Serialize,
@@ -96,5 +97,22 @@ mod test {
         reducing_state.append(&mut db, 10).unwrap();
 
         assert_eq!(reducing_state.get(&db).unwrap(), 42);
+    }
+
+    #[test]
+    fn different_funcs_test() {
+        let mut db = TestDb::new();
+        let rs1 = db.new_reducing_state("rs1", (), (), |old: &i32, new: &i32| *old.max(new));
+        let rs2 = db.new_reducing_state("rs2", (), (), |old: &i32, new: &i32| *old.min(new));
+
+        rs1.append(&mut db, 7).unwrap();
+        rs2.append(&mut db, 7).unwrap();
+        rs1.append(&mut db, 42).unwrap();
+        rs2.append(&mut db, 42).unwrap();
+        rs1.append(&mut db, 10).unwrap();
+        rs2.append(&mut db, 10).unwrap();
+
+        assert_eq!(rs1.get(&db).unwrap(), 42);
+        assert_eq!(rs2.get(&db).unwrap(), 7);
     }
 }

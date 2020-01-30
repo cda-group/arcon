@@ -211,35 +211,50 @@ mod state_types {
         fn create_accumulator(&self) -> Self::Accumulator;
         // bikeshed - immutable + return value instead of mutable acc? (like in flink)
         fn add(&self, acc: &mut Self::Accumulator, value: T);
+        fn merge_accumulators(
+            &self,
+            fst: Self::Accumulator,
+            snd: Self::Accumulator,
+        ) -> Self::Accumulator;
         fn accumulator_into_result(&self, acc: Self::Accumulator) -> Self::Result;
     }
 
-    pub struct ClosuresAggregator<CREATE, ADD, RES> {
+    #[derive(Clone)]
+    pub struct ClosuresAggregator<CREATE, ADD, MERGE, RES> {
         create: CREATE,
         add: ADD,
+        merge: MERGE,
         res: RES,
     }
 
-    impl<CREATE, ADD, RES> ClosuresAggregator<CREATE, ADD, RES> {
+    impl<CREATE, ADD, MERGE, RES> ClosuresAggregator<CREATE, ADD, MERGE, RES> {
         pub fn new<T, ACC, R>(
             create: CREATE,
             add: ADD,
+            merge: MERGE,
             res: RES,
-        ) -> ClosuresAggregator<CREATE, ADD, RES>
+        ) -> ClosuresAggregator<CREATE, ADD, MERGE, RES>
         where
             CREATE: Fn() -> ACC,
             ADD: Fn(&mut ACC, T) -> (),
             RES: Fn(ACC) -> R,
+            MERGE: Fn(ACC, ACC) -> ACC,
         {
-            ClosuresAggregator { create, add, res }
+            ClosuresAggregator {
+                create,
+                add,
+                merge,
+                res,
+            }
         }
     }
 
-    impl<CREATE, ADD, RES, T> Aggregator<T> for ClosuresAggregator<CREATE, ADD, RES>
+    impl<CREATE, ADD, MERGE, RES, T> Aggregator<T> for ClosuresAggregator<CREATE, ADD, MERGE, RES>
     where
         CREATE: Fn<()>,
         ADD: Fn(&mut CREATE::Output, T) -> (),
         RES: Fn<(CREATE::Output,)>,
+        MERGE: Fn(CREATE::Output, CREATE::Output) -> CREATE::Output,
     {
         type Accumulator = CREATE::Output;
         type Result = RES::Output;
@@ -250,6 +265,14 @@ mod state_types {
 
         fn add(&self, acc: &mut Self::Accumulator, value: T) {
             (self.add)(acc, value)
+        }
+
+        fn merge_accumulators(
+            &self,
+            fst: Self::Accumulator,
+            snd: Self::Accumulator,
+        ) -> Self::Accumulator {
+            (self.merge)(fst, snd)
         }
 
         fn accumulator_into_result(&self, acc: Self::Accumulator) -> Self::Result {
