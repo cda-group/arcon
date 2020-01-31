@@ -374,7 +374,8 @@ mod state_common {
             item_key: IK,
             namespace: N,
         ) -> StateCommon<IK, N> {
-            Self::new_for_basic_state(backend, name, item_key, namespace)
+            let mut full_name = format!("value_{}", name);
+            Self::new_for_basic_state(backend, &full_name, item_key, namespace)
         }
 
         pub fn new_for_map_state(
@@ -383,7 +384,8 @@ mod state_common {
             item_key: IK,
             namespace: N,
         ) -> StateCommon<IK, N> {
-            Self::new_for_basic_state(backend, name, item_key, namespace)
+            let full_name = format!("map_{}", name);
+            Self::new_for_basic_state(backend, &full_name, item_key, namespace)
         }
 
         pub fn new_for_vec_state(
@@ -396,7 +398,8 @@ mod state_common {
 
             opts.set_merge_operator_associative("vec_merge", vec_state::vec_merge);
 
-            let (cf_name, cf_options) = backend.get_or_create_column_family(name, opts);
+            let full_name = format!("vec_{}", name);
+            let (cf_name, cf_options) = backend.get_or_create_column_family(&full_name, opts);
             StateCommon {
                 cf_name,
                 cf_options,
@@ -421,7 +424,8 @@ mod state_common {
             let reducing_merge = reducing_state::make_reducing_merge(reduce_fn);
             opts.set_merge_operator_associative("reducing_merge", reducing_merge);
 
-            let (cf_name, cf_options) = backend.get_or_create_column_family(name, opts);
+            let full_name = format!("reducing_{}", name);
+            let (cf_name, cf_options) = backend.get_or_create_column_family(&full_name, opts);
             StateCommon {
                 cf_name,
                 cf_options,
@@ -447,7 +451,8 @@ mod state_common {
             let aggregate_merge = aggregating_state::make_aggregating_merge(aggregator);
             opts.set_merge_operator_associative("aggregate_merge", aggregate_merge);
 
-            let (cf_name, cf_options) = backend.get_or_create_column_family(name, opts);
+            let full_name = format!("aggregating_{}", name);
+            let (cf_name, cf_options) = backend.get_or_create_column_family(&full_name, opts);
             StateCommon {
                 cf_name,
                 cf_options,
