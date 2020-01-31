@@ -1,7 +1,7 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use super::rocksdb::{Options, WriteBatch};
+use super::rocksdb::WriteBatch;
 use crate::{
     prelude::ArconResult,
     state_backend::{
@@ -181,9 +181,8 @@ where
 
 #[cfg(test)]
 mod test {
-    use super::{super::rocksdb::IteratorMode, *};
-    use crate::state_backend::{rocksdb::tests::TestDb, MapStateBuilder, StateBackend};
-    use tempfile::TempDir;
+    use super::*;
+    use crate::state_backend::{rocksdb::tests::TestDb, MapStateBuilder};
 
     #[test]
     fn map_state_test() {

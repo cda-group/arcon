@@ -228,6 +228,7 @@ mod state_types {
     }
 
     impl<CREATE, ADD, MERGE, RES> ClosuresAggregator<CREATE, ADD, MERGE, RES> {
+        #[allow(dead_code)] // used by tests
         pub fn new<T, ACC, R>(
             create: CREATE,
             add: ADD,

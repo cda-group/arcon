@@ -13,7 +13,7 @@ use crate::state_backend::{
 };
 use arcon_error::*;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fmt::Debug, io::Write};
+use std::{collections::HashMap, fmt::Debug};
 use uuid::Uuid;
 
 pub struct InMemory {

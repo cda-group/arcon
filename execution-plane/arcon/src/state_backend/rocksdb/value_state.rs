@@ -58,8 +58,7 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::state_backend::{rocksdb::tests::TestDb, StateBackend, ValueStateBuilder};
-    use tempfile::TempDir;
+    use crate::state_backend::{rocksdb::tests::TestDb, ValueStateBuilder};
 
     #[test]
     fn rocksdb_value_state_test() {

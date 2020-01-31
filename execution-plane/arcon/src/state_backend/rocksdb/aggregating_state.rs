@@ -1,11 +1,11 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
+use super::rocksdb::{merge_operator::MergeFn, MergeOperands};
 use crate::{
     prelude::ArconResult,
     state_backend::{
         rocksdb::{state_common::StateCommon, RocksDb},
-        state_types,
         state_types::{AggregatingState, Aggregator, AppendingState, MergingState, State},
     },
 };
@@ -35,6 +35,79 @@ where
     delegate_key_and_namespace!(common);
 }
 
+pub fn make_aggregating_merge<T, AGG>(aggregator: AGG) -> impl MergeFn + Clone
+where
+    T: for<'a> Deserialize<'a>,
+    AGG: Aggregator<T> + Send + Sync + Clone + 'static,
+    AGG::Accumulator: Serialize + for<'a> Deserialize<'a>,
+{
+    move |_key: &[u8], first: Option<&[u8]>, rest: &mut MergeOperands| {
+        let mut all_slices = first.into_iter().chain(rest).fuse();
+
+        let first = all_slices.next();
+        let mut accumulator = {
+            match first {
+                Some([ACCUMULATOR_MARKER, accumulator_bytes @ ..]) => {
+                    bincode::deserialize(accumulator_bytes)
+                        .map_err(|e| {
+                            eprintln!("aggregator accumulator deserialization error: {}", e);
+                        })
+                        .ok()?
+                }
+                Some([VALUE_MARKER, value_bytes @ ..]) => {
+                    let value: T = bincode::deserialize(value_bytes)
+                        .map_err(|e| {
+                            eprintln!("aggregator value deserialization error: {}", e);
+                        })
+                        .ok()?;
+                    let mut acc = aggregator.create_accumulator();
+                    aggregator.add(&mut acc, value);
+                    acc
+                }
+                Some(_) => {
+                    eprintln!("unknown operand in aggregate merge operator");
+                    return None;
+                }
+                None => aggregator.create_accumulator(),
+            }
+        };
+
+        for slice in all_slices {
+            match slice {
+                [ACCUMULATOR_MARKER, accumulator_bytes @ ..] => {
+                    let second_acc = bincode::deserialize(accumulator_bytes)
+                        .map_err(|e| {
+                            eprintln!("aggregator accumulator deserialization error: {}", e);
+                        })
+                        .ok()?;
+
+                    accumulator = aggregator.merge_accumulators(accumulator, second_acc);
+                }
+                [VALUE_MARKER, value_bytes @ ..] => {
+                    let value = bincode::deserialize(value_bytes)
+                        .map_err(|e| {
+                            eprintln!("aggregator value deserialization error: {}", e);
+                        })
+                        .ok()?;
+
+                    aggregator.add(&mut accumulator, value);
+                }
+                _ => {
+                    eprintln!("unknown operand in aggregate merge operator");
+                    return None;
+                }
+            }
+        }
+
+        let mut result = vec![ACCUMULATOR_MARKER];
+        bincode::serialize_into(&mut result, &accumulator)
+            .map_err(|e| eprintln!("aggregator accumulator serialization error: {}", e))
+            .ok()?;
+
+        Some(result)
+    }
+}
+
 impl<IK, N, T, AGG> AppendingState<RocksDb, IK, N, T, AGG::Result>
     for RocksDbAggregatingState<IK, N, T, AGG>
 where
@@ -45,7 +118,7 @@ where
     AGG::Accumulator: Serialize + for<'a> Deserialize<'a>,
 {
     fn get(&self, backend: &RocksDb) -> ArconResult<AGG::Result> {
-        // TODO: do we want to return R based on a new accumulator if not found?
+        // TODO: do we want to return R based on a new/empty accumulator if not found?
         let key = self.common.get_db_key(&())?;
 
         let serialized = backend.get(&self.common.cf_name, &key)?;
@@ -64,8 +137,8 @@ where
         bincode::serialize_into(&mut serialized, &value)
             .map_err(|e| arcon_err_kind!("Could not serialize aggregating state value: {}", e))?;
 
-        // see StateCommon::new_for_aggregating_state
         let cf = backend.get_cf_handle(&self.common.cf_name)?;
+        // See the make_aggregating_merge function in this module. Its result is set as the merging operator for this state.
         backend
             .db
             .merge_cf(cf, key, serialized)
@@ -100,9 +173,7 @@ mod test {
     use super::*;
     use crate::state_backend::{
         rocksdb::tests::TestDb, state_types::ClosuresAggregator, AggregatingStateBuilder,
-        StateBackend,
     };
-    use tempfile::TempDir;
 
     #[test]
     fn aggregating_state_test() {

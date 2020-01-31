@@ -1,6 +1,7 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
+use super::rocksdb::MergeOperands;
 use crate::{
     prelude::ArconResult,
     state_backend::{
@@ -32,6 +33,17 @@ where
     delegate_key_and_namespace!(common);
 }
 
+pub fn vec_merge(_key: &[u8], first: Option<&[u8]>, rest: &mut MergeOperands) -> Option<Vec<u8>> {
+    let mut result: Vec<u8> = Vec::with_capacity(rest.size_hint().0);
+    first.map(|v| {
+        result.extend_from_slice(v);
+    });
+    for op in rest {
+        result.extend_from_slice(op);
+    }
+    Some(result)
+}
+
 impl<IK, N, T> AppendingState<RocksDb, IK, N, T, Vec<T>> for RocksDbVecState<IK, N, T>
 where
     IK: Serialize,
@@ -61,6 +73,7 @@ where
             .map_err(|e| arcon_err_kind!("Could not serialize vec state value: {}", e))?;
 
         let cf = backend.get_cf_handle(&self.common.cf_name)?;
+        // See the vec_merge function in this module. It is set as the merge operator for every vec state.
         backend
             .db
             .merge_cf(cf, key, serialized)
@@ -175,7 +188,7 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::state_backend::{rocksdb::tests::TestDb, StateBackend, VecStateBuilder};
+    use crate::state_backend::{rocksdb::tests::TestDb, VecStateBuilder};
 
     #[test]
     fn vec_state_test() {
