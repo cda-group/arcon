@@ -4,12 +4,12 @@
 use crate::prelude::*;
 use ::serde::Serialize;
 use bytes::Bytes;
-use futures::{channel, StreamExt, SinkExt, executor::block_on};
+use futures::{channel, executor::block_on, SinkExt, StreamExt};
 use std::marker::PhantomData;
 use std::net::SocketAddr;
 use std::thread::{Builder, JoinHandle};
 use tokio::net::UdpSocket;
-use tokio::runtime::{Runtime, Handle};
+use tokio::runtime::{Handle, Runtime};
 
 pub struct SocketSink<IN>
 where
@@ -41,10 +41,15 @@ where
                     let self_addr: SocketAddr = "0.0.0.0:0".parse().unwrap();
                     let mut socket = UdpSocket::bind(self_addr).await.expect("Failed to bind");
 
-                    tx_exec.send(runtime_handle).expect("failed to send executor");
+                    tx_exec
+                        .send(runtime_handle)
+                        .expect("failed to send executor");
 
                     while let Some(bytes) = rx.next().await {
-                        socket.send_to(&bytes, socket_addr).await.expect("send failed");
+                        socket
+                            .send_to(&bytes, socket_addr)
+                            .await
+                            .expect("send failed");
                     }
                 });
             })
@@ -81,8 +86,8 @@ where
             let res = tx.send(bytes).await;
 
             match res {
-                Ok(_) => {}, // everything ok
-                Err(_) => {}, // ignore errors
+                Ok(_) => {}  // everything ok
+                Err(_) => {} // ignore errors
             }
         };
         self.runtime_handle.spawn(req_dispatch);
@@ -107,27 +112,30 @@ mod tests {
         const MAX_DATAGRAM_SIZE: usize = 65_507;
         let mut buf = vec![0u8; MAX_DATAGRAM_SIZE];
 
-        let len = Runtime::new().expect("couln't create tokio runtime").block_on(async {
-            let addr = "127.0.0.1:9999".parse().unwrap();
-            let mut socket = UdpSocket::bind(&addr).await.unwrap();
+        let len = Runtime::new()
+            .expect("couln't create tokio runtime")
+            .block_on(async {
+                let addr = "127.0.0.1:9999".parse().unwrap();
+                let mut socket = UdpSocket::bind(&addr).await.unwrap();
 
-            let socket_sink = system.create_and_start(move || {
-                Node::new(
-                    0.into(),
-                    vec![1.into()],
-                    mute_strategy::<i64>(),
-                    Box::new(SocketSink::udp(addr)),
-                )
+                let socket_sink = system.create(move || {
+                    Node::new(
+                        0.into(),
+                        vec![1.into()],
+                        mute_strategy::<i64>(),
+                        Box::new(SocketSink::udp(addr)),
+                    )
+                });
+                system.start(&socket_sink);
+
+                std::thread::sleep(std::time::Duration::from_millis(100));
+
+                let target: ActorRef<ArconMessage<i64>> = socket_sink.actor_ref();
+                target.tell(ArconMessage::element(10 as i64, None, 1.into()));
+
+                let (len, _) = socket.recv_from(&mut buf).await.expect("did not receive");
+                len
             });
-
-            std::thread::sleep(std::time::Duration::from_millis(100));
-
-            let target: ActorRef<ArconMessage<i64>> = socket_sink.actor_ref();
-            target.tell(ArconMessage::element(10 as i64, None, 1.into()));
-
-            let (len, _) = socket.recv_from(&mut buf).await.expect("did not receive");
-            len
-        });
 
         let recv = String::from_utf8_lossy(&buf[..len]);
         assert_eq!(recv, String::from("10\n"));
