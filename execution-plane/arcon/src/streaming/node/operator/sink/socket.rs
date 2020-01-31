@@ -122,7 +122,7 @@ mod tests {
                 let addr = "127.0.0.1:9999".parse().unwrap();
                 let mut socket = UdpSocket::bind(&addr).await.unwrap();
 
-                let socket_sink = system.create_and_start(move || {
+                let socket_sink = system.create(move || {
                     Node::new(
                         0.into(),
                         vec![1.into()],
@@ -130,6 +130,7 @@ mod tests {
                         Box::new(SocketSink::udp(addr)),
                     )
                 });
+                system.start(&socket_sink);
 
                 std::thread::sleep(std::time::Duration::from_millis(100));
 

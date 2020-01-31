@@ -193,10 +193,12 @@ pub mod tests {
                 let system = self.ctx.system();
                 match self.kind {
                     IOKind::Tcp => {
-                        system.create_and_start(move || IO::tcp(self.sock_addr, self.actor_ref()));
+                        let comp = system.create(move || IO::tcp(self.sock_addr, self.actor_ref()));
+                        system.start(&comp);
                     }
                     IOKind::Udp => {
-                        system.create_and_start(move || IO::udp(self.sock_addr, self.actor_ref()));
+                        let comp = system.create(move || IO::udp(self.sock_addr, self.actor_ref()));
+                        system.start(&comp);
                     }
                 }
             }

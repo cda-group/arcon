@@ -149,12 +149,12 @@ where
             }
             match self.sock_kind {
                 SocketKind::Tcp => {
-                    let _ =
-                        system.create_and_start(move || IO::tcp(self.sock_addr, self.actor_ref()));
+                    let comp = system.create(move || IO::tcp(self.sock_addr, self.actor_ref()));
+                    system.start(&comp);
                 }
                 SocketKind::Udp => {
-                    let _ =
-                        system.create_and_start(move || IO::udp(self.sock_addr, self.actor_ref()));
+                    let comp = system.create(move || IO::udp(self.sock_addr, self.actor_ref()));
+                    system.start(&comp);
                 }
             }
         }
