@@ -3,6 +3,7 @@
 
 extern crate rocksdb;
 
+use self::rocksdb::ColumnFamilyDescriptor;
 use crate::state_backend::{
     rocksdb::{
         aggregating_state::RocksDbAggregatingState, map_state::RocksDbMapState,
@@ -19,25 +20,37 @@ use rocksdb::{
 };
 use serde::{Deserialize, Serialize};
 use std::{
+    collections::{HashMap, HashSet},
     error::Error,
-    path::{Path, PathBuf},
+    iter::FromIterator,
+    mem,
+    path::{Component, Path, PathBuf},
 };
 
 pub struct RocksDb {
-    db: DB,
-    checkpoints_path: PathBuf,
+    inner: Inner,
+    path: PathBuf,
 }
 
-impl RocksDb {
+enum Inner {
+    Initialized(InitializedRocksDb),
+    Uninitialized {
+        unknown_cfs: HashSet<String>,
+        known_cfs: HashMap<String, Options>,
+    },
+}
+
+pub struct InitializedRocksDb {
+    db: DB,
+    // this is here so we can easily clear the column family by dropping and recreating it
+    options: HashMap<String, Options>,
+}
+
+impl InitializedRocksDb {
     fn get_cf_handle(&self, cf_name: impl AsRef<str>) -> ArconResult<&ColumnFamily> {
         self.db
             .cf_handle(cf_name.as_ref())
             .ok_or_else(|| arcon_err_kind!("Could not get column family '{}'", cf_name.as_ref()))
-    }
-
-    #[allow(unused)]
-    fn set_checkpoints_path<P: AsRef<Path>>(&mut self, path: P) {
-        self.checkpoints_path = path.as_ref().to_path_buf();
     }
 
     fn get(&self, cf_name: impl AsRef<str>, key: impl AsRef<[u8]>) -> ArconResult<DBPinnableSlice> {
@@ -70,15 +83,10 @@ impl RocksDb {
             .map_err(|e| arcon_err_kind!("RocksDB delete err: {}", e))
     }
 
-    fn remove_prefix(
-        &mut self,
-        cf: impl AsRef<str>,
-        cf_opts: &Options,
-        prefix: impl AsRef<[u8]>,
-    ) -> ArconResult<()> {
+    fn remove_prefix(&mut self, cf: impl AsRef<str>, prefix: impl AsRef<[u8]>) -> ArconResult<()> {
         // We use DB::delete_range_cf here, which should be faster than what Flink does, because it
         // doesn't require explicit iteration. BUT! it assumes that the prefixes have constant
-        // length, i.e. IK and N always bincode serialize to the same number of bytes.
+        // length, i.e. IK and N always serialize to the same number of bytes.
         // TODO: fix that? or restrict possible item-key and namespace types
 
         let prefix = prefix.as_ref();
@@ -87,11 +95,14 @@ impl RocksDb {
         if prefix.is_empty() {
             // prefix is empty, so we use the fast path of dropping and re-creating the whole
             // column family
+
+            let cf_opts = &self.options[cf_name];
+
             self.db.drop_cf(cf_name).map_err(|e| {
                 arcon_err_kind!("Could not drop column family '{}': {}", cf_name, e)
             })?;
 
-            self.db.create_cf(cf_name, &cf_opts).map_err(|e| {
+            self.db.create_cf(cf_name, cf_opts).map_err(|e| {
                 arcon_err_kind!("Could not recreate column family '{}': {}", cf_name, e)
             })?;
 
@@ -129,67 +140,209 @@ impl RocksDb {
             .is_some())
     }
 
-    fn get_or_create_column_family(
-        &mut self,
-        state_name: &str,
-        opts: Options,
-    ) -> (String, Options) {
-        // Every state has its own column family. Different state types have potentially different
-        // column family options. TODO: Q: is that the optimal solution?
-        if self.db.cf_handle(state_name).is_none() {
+    fn create_column_family_if_doesnt_exist(&mut self, cf_name: &str, opts: Options) {
+        if self.db.cf_handle(cf_name).is_none() {
             self.db
-                .create_cf(state_name, &opts)
+                .create_cf(cf_name, &opts)
                 .expect("Could not create column family"); // TODO: propagate
+            self.options.insert(cf_name.into(), opts);
+        }
+    }
+}
+
+impl RocksDb {
+    #[inline]
+    fn initialized(&self) -> ArconResult<&InitializedRocksDb> {
+        match &self.inner {
+            Inner::Initialized(i) => Ok(i),
+            Inner::Uninitialized { unknown_cfs, .. } => arcon_err!(
+                "Database not initialized, missing cf descriptors: {:?}",
+                unknown_cfs
+            ),
+        }
+    }
+
+    #[inline]
+    fn initialized_mut(&mut self) -> ArconResult<&mut InitializedRocksDb> {
+        match &mut self.inner {
+            Inner::Initialized(i) => Ok(i),
+            Inner::Uninitialized { unknown_cfs, .. } => arcon_err!(
+                "Database not initialized, missing cf descriptors: {:?}",
+                unknown_cfs
+            ),
+        }
+    }
+
+    #[inline]
+    fn get(&self, cf_name: impl AsRef<str>, key: impl AsRef<[u8]>) -> ArconResult<DBPinnableSlice> {
+        self.initialized()?.get(cf_name, key)
+    }
+
+    #[inline]
+    fn put(
+        &mut self,
+        cf_name: impl AsRef<str>,
+        key: impl AsRef<[u8]>,
+        value: impl AsRef<[u8]>,
+    ) -> ArconResult<()> {
+        self.initialized_mut()?.put(cf_name, key, value)
+    }
+
+    #[inline]
+    fn remove(&mut self, cf_name: impl AsRef<str>, key: impl AsRef<[u8]>) -> ArconResult<()> {
+        self.initialized_mut()?.remove(cf_name, key)
+    }
+
+    #[inline]
+    fn remove_prefix(&mut self, cf: impl AsRef<str>, prefix: impl AsRef<[u8]>) -> ArconResult<()> {
+        self.initialized_mut()?.remove_prefix(cf, prefix)
+    }
+
+    #[inline]
+    fn contains(&self, cf: impl AsRef<str>, key: impl AsRef<[u8]>) -> ArconResult<bool> {
+        self.initialized()?.contains(cf, key)
+    }
+
+    fn get_or_create_column_family(&mut self, cf_name: &str, opts: Options) -> String {
+        match &mut self.inner {
+            Inner::Initialized(i) => i.create_column_family_if_doesnt_exist(cf_name, opts),
+            Inner::Uninitialized {
+                unknown_cfs,
+                known_cfs,
+            } => {
+                if known_cfs.contains_key(cf_name) {
+                    return cf_name.to_string();
+                }
+
+                unknown_cfs.remove(cf_name);
+                known_cfs.insert(cf_name.to_string(), opts);
+
+                let all_cfs_known = if let Inner::Uninitialized { unknown_cfs, .. } = &self.inner {
+                    unknown_cfs.is_empty()
+                } else {
+                    false
+                };
+
+                if all_cfs_known {
+                    self.initialize().expect("Could not initialize"); // TODO: propagate
+                }
+            }
         }
 
-        (state_name.to_string(), opts)
+        cf_name.to_string()
+    }
+
+    fn initialize(&mut self) -> ArconResult<()> {
+        assert!(!self.is_initialized());
+        let options = {
+            let (no_unknown_cfs, known_cfs_ref) = match &mut self.inner {
+                Inner::Uninitialized {
+                    unknown_cfs,
+                    known_cfs,
+                } => (unknown_cfs.is_empty(), known_cfs),
+                Inner::Initialized { .. } => unreachable!(),
+            };
+            assert!(no_unknown_cfs);
+            let mut known_cfs = HashMap::new();
+            mem::swap(known_cfs_ref, &mut known_cfs);
+            known_cfs
+        };
+
+        let mut whole_db_opts: Options = Default::default();
+        whole_db_opts.create_if_missing(true);
+
+        let cfds: Vec<_> = options
+            .into_iter()
+            .map(|(name, opts)| ColumnFamilyDescriptor::new(name, opts))
+            .collect();
+
+        let mut new_inner = Inner::Initialized(InitializedRocksDb {
+            db: DB::open_cf_descriptors_borrowed(&whole_db_opts, &self.path, &cfds)
+                .map_err(|e| arcon_err_kind!("Couldn't open db: {}", e))?,
+            options: cfds
+                .into_iter()
+                .map(|cfd| (cfd.name, cfd.options))
+                .collect(),
+        });
+
+        mem::swap(&mut self.inner, &mut new_inner);
+        Ok(())
+    }
+
+    #[inline]
+    fn is_initialized(&self) -> bool {
+        match &self.inner {
+            Inner::Initialized { .. } => true,
+            Inner::Uninitialized { .. } => false,
+        }
     }
 }
 
 impl StateBackend for RocksDb {
-    fn new(name: &str) -> ArconResult<RocksDb> {
+    fn new(path_str: &str) -> ArconResult<RocksDb> {
         // those are database options, cf options come from RocksDb::create_db_options_for
         let mut opts = Options::default();
         opts.create_if_missing(true);
 
+        let path: PathBuf = path_str.into();
+        let path = path
+            .canonicalize()
+            .map_err(|e| arcon_err_kind!("Cannot canonicalize path '{}': {}", path_str, e))?;
+
         // TODO: maybe we need multiple listings with different options???
-        let column_families = match DB::list_cf(&opts, &name) {
-            Ok(cfs) => cfs,
+        let column_families: HashSet<String> = match DB::list_cf(&opts, &path) {
+            Ok(cfs) => cfs.into_iter().filter(|n| n != "default").collect(),
             // TODO: possibly platform-dependant error message check
-            Err(e) if e.description().contains("No such file or directory") => {
-                vec!["default".to_string()]
-            }
+            Err(e) if e.description().contains("No such file or directory") => HashSet::new(),
             Err(e) => {
                 return arcon_err!("Could not list column families: {}", e);
             }
         };
 
-        let db = DB::open_cf(&opts, &name, column_families)
-            .map_err(|e| arcon_err_kind!("Failed to create RocksDB instance: {}", e))?;
+        let inner = if !column_families.is_empty() {
+            Inner::Uninitialized {
+                unknown_cfs: column_families,
+                known_cfs: HashMap::from_iter(std::iter::once((
+                    "default".to_string(),
+                    Options::default(),
+                ))),
+            }
+        } else {
+            let cfds = vec![ColumnFamilyDescriptor::new("default", Options::default())];
 
-        let checkpoints_path = PathBuf::from(format!("{}-checkpoints", name));
+            Inner::Initialized(InitializedRocksDb {
+                db: DB::open_cf_descriptors_borrowed(&opts, &path, &cfds)
+                    .map_err(|e| arcon_err_kind!("Couldn't open DB: {}", e))?,
+                options: cfds
+                    .into_iter()
+                    .map(|cfd| (cfd.name, cfd.options))
+                    .collect(),
+            })
+        };
 
-        Ok(RocksDb {
-            db,
-            checkpoints_path,
-        })
+        Ok(RocksDb { inner, path })
     }
 
-    fn checkpoint(&self, id: String) -> ArconResult<()> {
-        let checkpointer = Checkpoint::new(&self.db)
-            .map_err(|e| arcon_err_kind!("Could not create checkpoint object: {}", e))?;
+    fn checkpoint(&self, checkpoint_path: String) -> ArconResult<()> {
+        let InitializedRocksDb { db, .. } = self.initialized()?;
 
-        let mut path = self.checkpoints_path.clone();
-        path.push(id);
-
-        self.db
-            .flush()
+        db.flush()
             .map_err(|e| arcon_err_kind!("Could not flush rocksdb: {}", e))?;
 
+        let checkpointer = Checkpoint::new(db)
+            .map_err(|e| arcon_err_kind!("Could not create checkpoint object: {}", e))?;
+
         checkpointer
-            .create_checkpoint(path)
+            .create_checkpoint(checkpoint_path)
             .map_err(|e| arcon_err_kind!("Could not save the checkpoint: {}", e))?;
         Ok(())
+    }
+
+    fn restore(checkpoint_path: &str, restore_path: &str) -> ArconResult<Self>
+    where
+        Self: Sized,
+    {
+        unimplemented!()
     }
 }
 
@@ -308,32 +461,31 @@ where
     }
 }
 
-fn common_options<IK: Serialize, N: Serialize>(item_key: &IK, namespace: &N) -> Options {
-    // The line below should yield the same size for any values of given types IK, N. This is
-    // not enforced anywhere yet, but we rely on it. For example, neither IK nor N should be
-    // Vec<T> or String, because those types serialize to variable length byte arrays.
-    // TODO: restrict possible IK and N with a trait? We could add an associated const there,
-    //  so the computation below is eliminated.
-    let prefix_size = bincode::serialized_size(&(item_key, namespace))
-        .expect("Couldn't compute prefix size for column family"); // TODO: propagate
-
-    // base opts
-    let mut opts = Options::default();
-    // for map state to work properly, but useful for all the states, so the bloom filters get
-    // populated
-    opts.set_prefix_extractor(SliceTransform::create_fixed_prefix(prefix_size as usize));
-
-    opts
-}
-
 mod state_common {
     use super::*;
 
     pub(crate) struct StateCommon<IK, N> {
         pub cf_name: String,
-        pub cf_options: Options,
         pub item_key: IK,
         pub namespace: N,
+    }
+
+    fn common_options<IK: Serialize, N: Serialize>(item_key: &IK, namespace: &N) -> Options {
+        // The line below should yield the same size for any values of given types IK, N. This is
+        // not enforced anywhere yet, but we rely on it. For example, neither IK nor N should be
+        // Vec<T> or String, because those types serialize to variable length byte arrays.
+        // TODO: restrict possible IK and N with a trait? We could add an associated const there,
+        //  so the computation below is eliminated.
+        let prefix_size = bincode::serialized_size(&(item_key, namespace))
+            .expect("Couldn't compute prefix size for column family"); // TODO: propagate
+
+        // base opts
+        let mut opts = Options::default();
+        // for map state to work properly, but useful for all the states, so the bloom filters get
+        // populated
+        opts.set_prefix_extractor(SliceTransform::create_fixed_prefix(prefix_size as usize));
+
+        opts
     }
 
     impl<IK, N> StateCommon<IK, N>
@@ -358,11 +510,10 @@ mod state_common {
             namespace: N,
         ) -> StateCommon<IK, N> {
             let opts = common_options(&item_key, &namespace);
-            let (cf_name, cf_options) = backend.get_or_create_column_family(name, opts);
+            let cf_name = backend.get_or_create_column_family(name, opts);
 
             StateCommon {
                 cf_name,
-                cf_options,
                 item_key,
                 namespace,
             }
@@ -374,7 +525,7 @@ mod state_common {
             item_key: IK,
             namespace: N,
         ) -> StateCommon<IK, N> {
-            let mut full_name = format!("value_{}", name);
+            let full_name = format!("value_{}", name);
             Self::new_for_basic_state(backend, &full_name, item_key, namespace)
         }
 
@@ -399,10 +550,9 @@ mod state_common {
             opts.set_merge_operator_associative("vec_merge", vec_state::vec_merge);
 
             let full_name = format!("vec_{}", name);
-            let (cf_name, cf_options) = backend.get_or_create_column_family(&full_name, opts);
+            let cf_name = backend.get_or_create_column_family(&full_name, opts);
             StateCommon {
                 cf_name,
-                cf_options,
                 item_key,
                 namespace,
             }
@@ -425,10 +575,9 @@ mod state_common {
             opts.set_merge_operator_associative("reducing_merge", reducing_merge);
 
             let full_name = format!("reducing_{}", name);
-            let (cf_name, cf_options) = backend.get_or_create_column_family(&full_name, opts);
+            let cf_name = backend.get_or_create_column_family(&full_name, opts);
             StateCommon {
                 cf_name,
-                cf_options,
                 item_key,
                 namespace,
             }
@@ -452,10 +601,9 @@ mod state_common {
             opts.set_merge_operator_associative("aggregate_merge", aggregate_merge);
 
             let full_name = format!("aggregating_{}", name);
-            let (cf_name, cf_options) = backend.get_or_create_column_family(&full_name, opts);
+            let cf_name = backend.get_or_create_column_family(&full_name, opts);
             StateCommon {
                 cf_name,
-                cf_options,
                 item_key,
                 namespace,
             }
@@ -476,7 +624,7 @@ mod tests {
     use tempfile::TempDir;
 
     pub struct TestDb {
-        db: RocksDb,
+        rocks: RocksDb,
         _dir: TempDir,
     }
 
@@ -484,8 +632,8 @@ mod tests {
         pub fn new() -> TestDb {
             let dir = TempDir::new().unwrap();
             let dir_path = dir.path().to_string_lossy().into_owned();
-            let db = RocksDb::new(&dir_path).unwrap();
-            TestDb { db, _dir: dir }
+            let rocks = RocksDb::new(&dir_path).unwrap();
+            TestDb { rocks, _dir: dir }
         }
     }
 
@@ -493,13 +641,13 @@ mod tests {
         type Target = RocksDb;
 
         fn deref(&self) -> &Self::Target {
-            &self.db
+            &self.rocks
         }
     }
 
     impl DerefMut for TestDb {
         fn deref_mut(&mut self) -> &mut Self::Target {
-            &mut self.db
+            &mut self.rocks
         }
     }
 
@@ -507,7 +655,6 @@ mod tests {
     fn test_unit_state_key_empty() {
         let state = StateCommon {
             cf_name: "".to_string(),
-            cf_options: Options::default(),
             item_key: (),
             namespace: (),
         };
@@ -544,10 +691,12 @@ mod tests {
         let checkpoints_dir = TempDir::new().unwrap();
 
         let dir_path = tmp_dir.path().to_string_lossy();
-        let checkpoints_dir_path = checkpoints_dir.path().to_string_lossy();
+        let mut checkpoints_dir_path = checkpoints_dir.path().to_path_buf();
+        checkpoints_dir_path.push("chkp0");
+        let checkpoints_dir_path = checkpoints_dir_path.to_string_lossy();
+        let checkpoints_dir_path = checkpoints_dir_path.as_ref();
 
         let mut db = RocksDb::new(&dir_path).unwrap();
-        db.set_checkpoints_path(checkpoints_dir_path.as_ref());
 
         let key: &[u8] = b"key";
         let initial_value: &[u8] = b"value";
@@ -556,15 +705,13 @@ mod tests {
 
         db.put(column_family, key, initial_value)
             .expect("put failed");
-        db.checkpoint("chkpt0".into()).expect("checkpoint failed");
+        db.checkpoint(checkpoints_dir_path.into())
+            .expect("checkpoint failed");
         db.put(column_family, key, new_value)
             .expect("second put failed");
 
-        let mut last_checkpoint_path = checkpoints_dir.path().to_owned();
-        last_checkpoint_path.push("chkpt0");
-
-        let db_from_checkpoint = RocksDb::new(&last_checkpoint_path.to_string_lossy())
-            .expect("Could not open checkpointed db");
+        let db_from_checkpoint =
+            RocksDb::new(&checkpoints_dir_path).expect("Could not open checkpointed db");
 
         assert_eq!(
             new_value,

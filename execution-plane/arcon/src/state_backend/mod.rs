@@ -15,11 +15,14 @@ use state_types::*;
 // TODO: figure out if this needs to be Send + Sync
 /// Trait required for all state backend implementations in Arcon
 pub trait StateBackend {
-    fn new(name: &str) -> ArconResult<Self>
+    fn new(path: &str) -> ArconResult<Self>
     where
         Self: Sized;
 
-    fn checkpoint(&self, id: String) -> ArconResult<()>;
+    fn checkpoint(&self, checkpoint_path: String) -> ArconResult<()>;
+    fn restore(restore_path: &str, checkpoint_path: &str) -> ArconResult<Self>
+    where
+        Self: Sized;
 }
 
 //// builders ////

@@ -132,6 +132,8 @@ where
     }
 
     fn append(&self, backend: &mut RocksDb, value: T) -> ArconResult<()> {
+        let backend = backend.initialized_mut()?;
+
         let key = self.common.get_db_key(&())?;
         let mut serialized = vec![VALUE_MARKER];
         bincode::serialize_into(&mut serialized, &value)

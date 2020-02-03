@@ -68,6 +68,8 @@ where
     }
 
     fn append(&self, backend: &mut RocksDb, value: T) -> ArconResult<()> {
+        let backend = backend.initialized_mut()?;
+
         let key = self.common.get_db_key(&())?;
         let serialized = bincode::serialize(&value)
             .map_err(|e| arcon_err_kind!("Could not serialize vec state value: {}", e))?;
@@ -111,6 +113,8 @@ where
     where
         Self: Sized,
     {
+        let backend = backend.initialized_mut()?;
+
         let key = self.common.get_db_key(&())?;
         let mut wb = WriteBatch::default();
         let cf = backend.get_cf_handle(&self.common.cf_name)?;

@@ -91,6 +91,8 @@ where
     }
 
     fn append(&self, backend: &mut RocksDb, value: T) -> ArconResult<()> {
+        let backend = backend.initialized_mut()?;
+
         let key = self.common.get_db_key(&())?;
         let serialized = bincode::serialize(&value)
             .map_err(|e| arcon_err_kind!("Could not serialize reducing state value: {}", e))?;

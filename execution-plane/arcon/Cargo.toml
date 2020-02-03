@@ -50,7 +50,7 @@ tokio = { version = "0.2", optional = true, features = ["full"] } # TODO: figure
 tokio-util = { version = "0.2", optional = true, features = ["full"] }
 futures = { version = "0.3", optional = true }
 serde_json = { version = "1.0.44", optional = true }
-rocksdb = { git = "https://github.com/mrobakowski/rust-rocksdb.git", branch = "feature/merge-fn-closure", optional = true }
+rocksdb = { git = "https://github.com/mrobakowski/rust-rocksdb.git", branch = "arcon", optional = true }
 
 [build-dependencies]
 prost-build = "0.6"

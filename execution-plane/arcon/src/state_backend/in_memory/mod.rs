@@ -190,12 +190,19 @@ where
 }
 
 impl StateBackend for InMemory {
-    fn new(_name: &str) -> ArconResult<InMemory> {
+    fn new(_path: &str) -> ArconResult<InMemory> {
         Ok(InMemory { db: HashMap::new() })
     }
 
     fn checkpoint(&self, _id: String) -> ArconResult<()> {
         arcon_err!("InMemory backend snapshotting is not implemented")
+    }
+
+    fn restore(_restore_path: &str, _checkpoint_path: &str) -> ArconResult<Self>
+    where
+        Self: Sized,
+    {
+        arcon_err!("InMemory backend restoring is not implemented")
     }
 }
 

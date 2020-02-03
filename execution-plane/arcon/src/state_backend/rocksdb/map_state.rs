@@ -26,7 +26,7 @@ where
         // () is not serialized, and the user key is the tail of the db key, so in effect we get
         // the prefix with which to search the underlying db.
         let prefix = self.common.get_db_key(&())?;
-        backend.remove_prefix(&self.common.cf_name, &self.common.cf_options, prefix)
+        backend.remove_prefix(&self.common.cf_name, prefix)
     }
 
     delegate_key_and_namespace!(common);
@@ -73,6 +73,8 @@ where
     where
         Self: Sized,
     {
+        let backend = backend.initialized_mut()?;
+
         let mut wb = WriteBatch::default();
         let cf = backend.get_cf_handle(&self.common.cf_name)?;
 
@@ -104,6 +106,8 @@ where
 
     // TODO: unboxed versions of below
     fn iter<'a>(&self, backend: &'a RocksDb) -> ArconResult<Box<dyn Iterator<Item = (K, V)> + 'a>> {
+        let backend = backend.initialized()?;
+
         let prefix = self.common.get_db_key(&())?;
         let cf = backend.get_cf_handle(&self.common.cf_name)?;
         // NOTE: prefix_iterator only works as expected when the cf has proper prefix_extractor
@@ -128,6 +132,8 @@ where
     }
 
     fn keys<'a>(&self, backend: &'a RocksDb) -> ArconResult<Box<dyn Iterator<Item = K> + 'a>> {
+        let backend = backend.initialized()?;
+
         let prefix = self.common.get_db_key(&())?;
         let cf = backend.get_cf_handle(&self.common.cf_name)?;
         let iter = backend
@@ -148,6 +154,8 @@ where
     }
 
     fn values<'a>(&self, backend: &'a RocksDb) -> ArconResult<Box<dyn Iterator<Item = V> + 'a>> {
+        let backend = backend.initialized()?;
+
         let prefix = self.common.get_db_key(&())?;
         let cf = backend.get_cf_handle(&self.common.cf_name)?;
         let iter = backend
@@ -168,6 +176,8 @@ where
     }
 
     fn is_empty(&self, backend: &RocksDb) -> ArconResult<bool> {
+        let backend = backend.initialized()?;
+
         let prefix = self.common.get_db_key(&())?;
         let cf = backend.get_cf_handle(&self.common.cf_name)?;
         Ok(backend
