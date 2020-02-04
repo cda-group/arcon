@@ -194,7 +194,7 @@ impl StateBackend for InMemory {
         Ok(InMemory { db: HashMap::new() })
     }
 
-    fn checkpoint(&self, _id: String) -> ArconResult<()> {
+    fn checkpoint(&self, _id: &str) -> ArconResult<()> {
         arcon_err!("InMemory backend snapshotting is not implemented")
     }
 

@@ -22,9 +22,10 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
     error::Error,
+    fs,
     iter::FromIterator,
     mem,
-    path::{Component, Path, PathBuf},
+    path::PathBuf,
 };
 
 pub struct RocksDb {
@@ -280,7 +281,6 @@ impl RocksDb {
 
 impl StateBackend for RocksDb {
     fn new(path_str: &str) -> ArconResult<RocksDb> {
-        // those are database options, cf options come from RocksDb::create_db_options_for
         let mut opts = Options::default();
         opts.create_if_missing(true);
 
@@ -289,7 +289,6 @@ impl StateBackend for RocksDb {
             .canonicalize()
             .map_err(|e| arcon_err_kind!("Cannot canonicalize path '{}': {}", path_str, e))?;
 
-        // TODO: maybe we need multiple listings with different options???
         let column_families: HashSet<String> = match DB::list_cf(&opts, &path) {
             Ok(cfs) => cfs.into_iter().filter(|n| n != "default").collect(),
             // TODO: possibly platform-dependant error message check
@@ -323,7 +322,7 @@ impl StateBackend for RocksDb {
         Ok(RocksDb { inner, path })
     }
 
-    fn checkpoint(&self, checkpoint_path: String) -> ArconResult<()> {
+    fn checkpoint(&self, checkpoint_path: &str) -> ArconResult<()> {
         let InitializedRocksDb { db, .. } = self.initialized()?;
 
         db.flush()
@@ -342,7 +341,52 @@ impl StateBackend for RocksDb {
     where
         Self: Sized,
     {
-        unimplemented!()
+        fs::create_dir_all(restore_path)
+            .map_err(|e| arcon_err_kind!("Could not create restore directory: {}", e))?;
+
+        if fs::read_dir(restore_path)
+            .map_err(|e| arcon_err_kind!("Could not read directory contents: {}", e))?
+            .next()
+            .is_some()
+        {
+            return arcon_err!("Restore path '{}' is not empty!", restore_path);
+        }
+
+        let mut target_path: PathBuf = restore_path.into();
+        target_path.push("__DUMMY");
+        for entry in fs::read_dir(checkpoint_path).map_err(|e| {
+            arcon_err_kind!(
+                "Could not read checkpoint directory '{}': {}",
+                checkpoint_path,
+                e
+            )
+        })? {
+            let entry = entry.map_err(|e| {
+                arcon_err_kind!("Could not inspect checkpoint directory entry: {}", e)
+            })?;
+
+            assert!(entry
+                .file_type()
+                .expect("Cannot read entry metadata")
+                .is_file());
+
+            let source_path = entry.path();
+            target_path.set_file_name(
+                source_path
+                    .file_name()
+                    .expect("directory entry with no name?"),
+            );
+
+            fs::copy(&source_path, &target_path).map_err(|e| {
+                arcon_err_kind!(
+                    "Could not copy rocks file '{}': {}",
+                    source_path.to_string_lossy(),
+                    e
+                )
+            })?;
+        }
+
+        RocksDb::new(restore_path)
     }
 }
 
@@ -620,20 +664,44 @@ mod vec_state;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::ops::{Deref, DerefMut};
+    use std::{
+        ops::{Deref, DerefMut},
+        path::Path,
+    };
     use tempfile::TempDir;
 
     pub struct TestDb {
         rocks: RocksDb,
-        _dir: TempDir,
+        dir: TempDir,
     }
 
     impl TestDb {
         pub fn new() -> TestDb {
             let dir = TempDir::new().unwrap();
-            let dir_path = dir.path().to_string_lossy().into_owned();
+            let mut dir_path = dir.path().to_path_buf();
+            dir_path.push("rocks");
+            fs::create_dir(&dir_path).unwrap();
+            let dir_path = dir_path.to_string_lossy();
             let rocks = RocksDb::new(&dir_path).unwrap();
-            TestDb { rocks, _dir: dir }
+            TestDb { rocks, dir }
+        }
+
+        pub fn checkpoint(&mut self) -> PathBuf {
+            let mut checkpoint_dir = self.dir.path().to_path_buf();
+            checkpoint_dir.push("checkpoint");
+            self.rocks
+                .checkpoint(&checkpoint_dir.to_string_lossy())
+                .unwrap();
+            checkpoint_dir
+        }
+
+        pub fn from_checkpoint(checkpoint_dir: &str) -> TestDb {
+            let dir = TempDir::new().unwrap();
+            let mut dir_path = dir.path().to_path_buf();
+            dir_path.push("rocks");
+            let dir_path = dir_path.to_string_lossy();
+            let rocks = RocksDb::restore(checkpoint_dir, &dir_path).unwrap();
+            TestDb { rocks, dir }
         }
     }
 
@@ -686,15 +754,22 @@ mod tests {
     }
 
     #[test]
-    fn checkpoint_rocksdb_test() {
+    fn checkpoint_rocksdb_raw_test() {
         let tmp_dir = TempDir::new().unwrap();
         let checkpoints_dir = TempDir::new().unwrap();
+        let restore_dir = TempDir::new().unwrap();
 
         let dir_path = tmp_dir.path().to_string_lossy();
+
         let mut checkpoints_dir_path = checkpoints_dir.path().to_path_buf();
         checkpoints_dir_path.push("chkp0");
         let checkpoints_dir_path = checkpoints_dir_path.to_string_lossy();
         let checkpoints_dir_path = checkpoints_dir_path.as_ref();
+
+        let mut restore_dir_path = restore_dir.path().to_path_buf();
+        restore_dir_path.push("chkp0");
+        let restore_dir_path = restore_dir_path.to_string_lossy();
+        let restore_dir_path = restore_dir_path.as_ref();
 
         let mut db = RocksDb::new(&dir_path).unwrap();
 
@@ -710,8 +785,8 @@ mod tests {
         db.put(column_family, key, new_value)
             .expect("second put failed");
 
-        let db_from_checkpoint =
-            RocksDb::new(&checkpoints_dir_path).expect("Could not open checkpointed db");
+        let db_from_checkpoint = RocksDb::restore(&checkpoints_dir_path, &restore_dir_path)
+            .expect("Could not open checkpointed db");
 
         assert_eq!(
             new_value,
@@ -726,5 +801,54 @@ mod tests {
                 .expect("Could not get from the checkpoint")
                 .as_ref()
         );
+    }
+
+    #[test]
+    fn checkpoint_restore_state_test() {
+        let mut original = TestDb::new();
+        let a_value = original.new_value_state("a", (), ());
+        a_value.set(&mut original, 420).unwrap();
+
+        let checkpoint_dir = original.checkpoint();
+
+        assert_eq!(a_value.get(&original).unwrap(), 420);
+        a_value.set(&mut original, 69).unwrap();
+        assert_eq!(a_value.get(&original).unwrap(), 69);
+
+        let mut restored = TestDb::from_checkpoint(&checkpoint_dir.to_string_lossy());
+        // TODO: serialize value state metadata (type names, serialization, etc.) into rocksdb, so
+        //   that type mismatches are caught early. Right now it would be possible to, let's say,
+        //   store an integer, and then read a float from the restored state backend
+        let a_value_restored = restored.new_value_state("a", (), ());
+        assert_eq!(a_value_restored.get(&restored).unwrap(), 420);
+
+        a_value_restored.set(&mut restored, 1337).unwrap();
+        assert_eq!(a_value_restored.get(&restored).unwrap(), 1337);
+        assert_eq!(a_value.get(&original).unwrap(), 69);
+    }
+
+    #[test]
+    fn missing_state_raises_errors() {
+        let mut original = TestDb::new();
+        let a_value = original.new_value_state("a", (), ());
+        let b_value = original.new_value_state("b", (), ());
+        a_value.set(&mut original, 420).unwrap();
+        b_value.set(&mut original, 69).unwrap();
+
+        let checkpoint_dir = original.checkpoint();
+
+        let mut restored = TestDb::from_checkpoint(&checkpoint_dir.to_string_lossy());
+        let a_value_restored: RocksDbValueState<_, _, i32> = restored.new_value_state("a", (), ());
+        // original backend had two states created, and here we try to mess with state before we
+        // declare all the states
+        if let ErrorKind::ArconError(message) = a_value_restored.get(&restored).unwrap_err().kind()
+        {
+            assert_eq!(
+                &*message,
+                "Database not initialized, missing cf descriptors: {\"value_b\"}" // TODO: hardcoded error message :(
+            )
+        } else {
+            panic!("Error should have been returned")
+        }
     }
 }

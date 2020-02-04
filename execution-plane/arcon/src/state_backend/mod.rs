@@ -19,7 +19,7 @@ pub trait StateBackend {
     where
         Self: Sized;
 
-    fn checkpoint(&self, checkpoint_path: String) -> ArconResult<()>;
+    fn checkpoint(&self, checkpoint_path: &str) -> ArconResult<()>;
     fn restore(restore_path: &str, checkpoint_path: &str) -> ArconResult<Self>
     where
         Self: Sized;
