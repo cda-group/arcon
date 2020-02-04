@@ -22,7 +22,7 @@ arcon_rocksdb = ["rocksdb"]
 arcon_macros = { version = "0.1", path = "arcon_macros" }
 arcon_error = { version = "0.1", path = "arcon_error" }
 arcon_extra = { version = "0.1", path = "arcon_extra" }
-kompact = { git = "https://github.com/kompics/kompact.git", branch = "master" }
+kompact = { git = "https://github.com/kompics/kompact.git", rev = "ee00a5f" }
 keyby = "0.2.0"
 rand = "0.6.5"
 fnv = "1.0.3"
