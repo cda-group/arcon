@@ -23,8 +23,8 @@ pub enum SocketKind {
 /// AND it will add a timestamp of the ingestion time to each event outputted
 #[derive(ComponentDefinition)]
 pub struct SocketSource<OUT>
-    where
-        OUT: 'static + ArconType + FromStr,
+where
+    OUT: 'static + ArconType + FromStr,
 {
     ctx: ComponentContext<SocketSource<OUT>>,
     out_channels: Box<dyn ChannelStrategy<OUT>>,
@@ -39,8 +39,8 @@ pub struct SocketSource<OUT>
 }
 
 impl<OUT> SocketSource<OUT>
-    where
-        OUT: 'static + ArconType + FromStr,
+where
+    OUT: 'static + ArconType + FromStr,
 {
     pub fn new(
         sock_addr: SocketAddr,
@@ -129,8 +129,8 @@ impl<OUT> SocketSource<OUT>
 }
 
 impl<OUT> Provide<ControlPort> for SocketSource<OUT>
-    where
-        OUT: 'static + ArconType + FromStr,
+where
+    OUT: 'static + ArconType + FromStr,
 {
     fn handle(&mut self, event: ControlEvent) {
         if let ControlEvent::Start = event {
@@ -148,12 +148,12 @@ impl<OUT> Provide<ControlPort> for SocketSource<OUT>
             }
             match self.sock_kind {
                 SocketKind::Tcp => {
-                    let _ = system
-                        .create_and_start(move || IO::tcp(self.sock_addr, self.actor_ref()));
+                    let comp = system.create(move || IO::tcp(self.sock_addr, self.actor_ref()));
+                    system.start(&comp);
                 }
                 SocketKind::Udp => {
-                    let _ = system
-                        .create_and_start(move || IO::udp(self.sock_addr, self.actor_ref()));
+                    let comp = system.create(move || IO::udp(self.sock_addr, self.actor_ref()));
+                    system.start(&comp);
                 }
             }
         }
@@ -161,8 +161,8 @@ impl<OUT> Provide<ControlPort> for SocketSource<OUT>
 }
 
 impl<OUT> Actor for SocketSource<OUT>
-    where
-        OUT: 'static + ArconType + FromStr,
+where
+    OUT: 'static + ArconType + FromStr,
 {
     type Message = Box<dyn Any + Send>;
     fn receive_local(&mut self, msg: Self::Message) {
@@ -307,20 +307,24 @@ mod tests {
         wait(1);
 
         // The actual test:
-        Runtime::new().expect("couldn't create tokio runtime").block_on(async move {
-            let client_write = |src_bytes: &'static [u8]| async move {
-                let mut stream = TcpStream::connect(&addr).await.expect("couldn't connect");
-                stream.write_all(src_bytes).await.expect("write failed");
-            };
+        Runtime::new()
+            .expect("couldn't create tokio runtime")
+            .block_on(async move {
+                let client_write = |src_bytes: &'static [u8]| {
+                    async move {
+                        let mut stream = TcpStream::connect(&addr).await.expect("couldn't connect");
+                        stream.write_all(src_bytes).await.expect("write failed");
+                    }
+                };
 
-            let client1 = client_write(b"123");
-            let client2 = client_write(b"4.56");
-            let client3 = client_write(b"78.9");
+                let client1 = client_write(b"123");
+                let client2 = client_write(b"4.56");
+                let client3 = client_write(b"78.9");
 
-            client1.await;
-            client2.await;
-            client3.await;
-        });
+                client1.await;
+                client2.await;
+                client3.await;
+            });
 
         wait(1);
 

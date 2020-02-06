@@ -62,7 +62,8 @@ mod tests {
         let mut comps: Vec<Arc<crate::prelude::Component<DebugNode<Input>>>> = Vec::new();
 
         for _i in 0..components {
-            let comp = system.create_and_start(move || DebugNode::<Input>::new());
+            let comp = system.create(move || DebugNode::<Input>::new());
+            system.start(&comp);
             let actor_ref: ActorRefStrong<ArconMessage<Input>> =
                 comp.actor_ref().hold().expect("failed to fetch");
             channels.push(Channel::Local(actor_ref));
@@ -108,7 +109,8 @@ mod tests {
 
         // Create local components
         for _i in 0..local_components {
-            let comp = system.create_and_start(move || DebugNode::<Input>::new());
+            let comp = system.create(move || DebugNode::<Input>::new());
+            system.start(&comp);
             let actor_ref: ActorRefStrong<ArconMessage<Input>> =
                 comp.actor_ref().hold().expect("failed to fetch");
             channels.push(Channel::Local(actor_ref));
@@ -117,7 +119,8 @@ mod tests {
 
         // Create remote components
         for i in 0..remote_components {
-            let comp = remote.create_and_start(move || DebugNode::<Input>::new());
+            let comp = remote.create(move || DebugNode::<Input>::new());
+            system.start(&comp);
             let comp_id = format!("comp_{}", i);
             let _ = remote.register_by_alias(&comp, comp_id.clone());
             remote.start(&comp);

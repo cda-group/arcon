@@ -1,7 +1,6 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-
 //! The following tests will look similar to the generated code from `arcon_codegen`.
 //! The purpose of these tests are to verify the results of end-to-end pipelines.
 
@@ -38,7 +37,7 @@ fn normalise_pipeline_test() {
     let sink_path = sink_file.path().to_string_lossy().into_owned();
 
     // Create Sink Component
-    let node_5 = system.create_and_start(move || {
+    let node_5 = system.create(move || {
         Node::new(
             5.into(),
             vec![4.into()],
@@ -46,6 +45,7 @@ fn normalise_pipeline_test() {
             Box::new(LocalFileSink::new(&sink_path)),
         )
     });
+    system.start(&node_5);
 
     // Define Map
     let actor_ref: ActorRefStrong<ArconMessage<i64>> = node_5
@@ -59,7 +59,7 @@ fn normalise_pipeline_test() {
         x.data.iter().map(|x| x + 3).sum()
     }
 
-    let node_4 = system.create_and_start(move || {
+    let node_4 = system.create(move || {
         Node::<NormaliseElements, i64>::new(
             4.into(),
             vec![3.into()],
@@ -67,6 +67,7 @@ fn normalise_pipeline_test() {
             Box::new(Map::<NormaliseElements, i64>::new(&map_fn)),
         )
     });
+    system.start(&node_4);
 
     // Define Window
 
@@ -84,7 +85,7 @@ fn normalise_pipeline_test() {
     let channel_strategy: Box<Forward<NormaliseElements>> =
         Box::new(Forward::new(Channel::Local(node_4_actor_ref)));
 
-    let node_3 = system.create_and_start(move || {
+    let node_3 = system.create(move || {
         Node::<i64, NormaliseElements>::new(
             3.into(),
             vec![2.into()],
@@ -94,6 +95,7 @@ fn normalise_pipeline_test() {
             )),
         )
     });
+    system.start(&node_3);
 
     // Define Filter
 
@@ -103,7 +105,7 @@ fn normalise_pipeline_test() {
     fn filter_fn(x: &i64) -> bool {
         *x < 5
     }
-    let node_2 = system.create_and_start(move || {
+    let node_2 = system.create(move || {
         Node::<i64, i64>::new(
             2.into(),
             vec![1.into()],
@@ -111,6 +113,7 @@ fn normalise_pipeline_test() {
             Box::new(Filter::<i64>::new(&filter_fn)),
         )
     });
+    system.start(&node_2);
 
     // Define Source
     let actor_ref: ActorRefStrong<ArconMessage<i64>> = node_2
@@ -122,7 +125,7 @@ fn normalise_pipeline_test() {
 
     // Watermark per 5 lines in the file
     let wm_interval = 5;
-    let _ = system.create_and_start(move || {
+    let node_1 = system.create(move || {
         let source: LocalFileSource<i64> = LocalFileSource::new(
             String::from(&source_path),
             channel_strategy,
@@ -131,6 +134,7 @@ fn normalise_pipeline_test() {
         );
         source
     });
+    system.start(&node_1);
 
     std::thread::sleep(std::time::Duration::from_secs(5));
 
