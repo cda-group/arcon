@@ -6,14 +6,15 @@ use crate::{
     prelude::ArconResult,
     state_backend::{
         rocksdb::{state_common::StateCommon, RocksDb},
+        serialization::{DeserializableWith, SerializableFixedSizeWith, SerializableWith},
         state_types::{AggregatingState, Aggregator, AppendingState, MergingState, State},
     },
 };
-use serde::{Deserialize, Serialize};
+
 use std::marker::PhantomData;
 
-pub struct RocksDbAggregatingState<IK, N, T, AGG> {
-    pub(crate) common: StateCommon<IK, N>,
+pub struct RocksDbAggregatingState<IK, N, T, AGG, KS, TS> {
+    pub(crate) common: StateCommon<IK, N, KS, TS>,
     pub(crate) aggregator: AGG,
     pub(crate) _phantom: PhantomData<T>,
 }
@@ -21,10 +22,12 @@ pub struct RocksDbAggregatingState<IK, N, T, AGG> {
 pub(crate) const ACCUMULATOR_MARKER: u8 = 0xAC;
 pub(crate) const VALUE_MARKER: u8 = 0x00;
 
-impl<IK, N, T, AGG> State<RocksDb, IK, N> for RocksDbAggregatingState<IK, N, T, AGG>
+impl<IK, N, T, AGG, KS, TS> State<RocksDb, IK, N, KS, TS>
+    for RocksDbAggregatingState<IK, N, T, AGG, KS, TS>
 where
-    IK: Serialize,
-    N: Serialize,
+    IK: SerializableFixedSizeWith<KS>,
+    N: SerializableFixedSizeWith<KS>,
+    (): SerializableWith<KS>,
 {
     fn clear(&self, backend: &mut RocksDb) -> ArconResult<()> {
         let key = self.common.get_db_key(&())?;
@@ -35,11 +38,15 @@ where
     delegate_key_and_namespace!(common);
 }
 
-pub fn make_aggregating_merge<T, AGG>(aggregator: AGG) -> impl MergeFn + Clone
+pub fn make_aggregating_merge<T, AGG, TS>(
+    aggregator: AGG,
+    value_serializer: TS,
+) -> impl MergeFn + Clone
 where
-    T: for<'a> Deserialize<'a>,
+    T: DeserializableWith<TS>,
     AGG: Aggregator<T> + Send + Sync + Clone + 'static,
-    AGG::Accumulator: Serialize + for<'a> Deserialize<'a>,
+    AGG::Accumulator: SerializableWith<TS> + DeserializableWith<TS>,
+    TS: Send + Sync + Clone + 'static,
 {
     move |_key: &[u8], first: Option<&[u8]>, rest: &mut MergeOperands| {
         let mut all_slices = first.into_iter().chain(rest).fuse();
@@ -48,18 +55,10 @@ where
         let mut accumulator = {
             match first {
                 Some([ACCUMULATOR_MARKER, accumulator_bytes @ ..]) => {
-                    bincode::deserialize(accumulator_bytes)
-                        .map_err(|e| {
-                            eprintln!("aggregator accumulator deserialization error: {}", e);
-                        })
-                        .ok()?
+                    AGG::Accumulator::deserialize(&value_serializer, accumulator_bytes).ok()?
                 }
                 Some([VALUE_MARKER, value_bytes @ ..]) => {
-                    let value: T = bincode::deserialize(value_bytes)
-                        .map_err(|e| {
-                            eprintln!("aggregator value deserialization error: {}", e);
-                        })
-                        .ok()?;
+                    let value: T = T::deserialize(&value_serializer, value_bytes).ok()?;
                     let mut acc = aggregator.create_accumulator();
                     aggregator.add(&mut acc, value);
                     acc
@@ -75,20 +74,13 @@ where
         for slice in all_slices {
             match slice {
                 [ACCUMULATOR_MARKER, accumulator_bytes @ ..] => {
-                    let second_acc = bincode::deserialize(accumulator_bytes)
-                        .map_err(|e| {
-                            eprintln!("aggregator accumulator deserialization error: {}", e);
-                        })
-                        .ok()?;
+                    let second_acc =
+                        AGG::Accumulator::deserialize(&value_serializer, accumulator_bytes).ok()?;
 
                     accumulator = aggregator.merge_accumulators(accumulator, second_acc);
                 }
                 [VALUE_MARKER, value_bytes @ ..] => {
-                    let value = bincode::deserialize(value_bytes)
-                        .map_err(|e| {
-                            eprintln!("aggregator value deserialization error: {}", e);
-                        })
-                        .ok()?;
+                    let value = T::deserialize(&value_serializer, value_bytes).ok()?;
 
                     aggregator.add(&mut accumulator, value);
                 }
@@ -100,22 +92,21 @@ where
         }
 
         let mut result = vec![ACCUMULATOR_MARKER];
-        bincode::serialize_into(&mut result, &accumulator)
-            .map_err(|e| eprintln!("aggregator accumulator serialization error: {}", e))
-            .ok()?;
+        AGG::Accumulator::serialize_into(&value_serializer, &mut result, &accumulator).ok()?;
 
         Some(result)
     }
 }
 
-impl<IK, N, T, AGG> AppendingState<RocksDb, IK, N, T, AGG::Result>
-    for RocksDbAggregatingState<IK, N, T, AGG>
+impl<IK, N, T, AGG, KS, TS> AppendingState<RocksDb, IK, N, T, AGG::Result, KS, TS>
+    for RocksDbAggregatingState<IK, N, T, AGG, KS, TS>
 where
-    IK: Serialize,
-    N: Serialize,
-    T: Serialize,
+    IK: SerializableFixedSizeWith<KS>,
+    N: SerializableFixedSizeWith<KS>,
+    (): SerializableWith<KS>,
+    T: SerializableWith<TS>,
     AGG: Aggregator<T>,
-    AGG::Accumulator: Serialize + for<'a> Deserialize<'a>,
+    AGG::Accumulator: SerializableWith<TS> + DeserializableWith<TS>,
 {
     fn get(&self, backend: &RocksDb) -> ArconResult<AGG::Result> {
         // TODO: do we want to return R based on a new/empty accumulator if not found?
@@ -125,9 +116,8 @@ where
         assert_eq!(serialized[0], ACCUMULATOR_MARKER);
         let serialized = &serialized[1..];
 
-        let current_accumulator = bincode::deserialize(serialized).map_err(|e| {
-            arcon_err_kind!("Could not deserialize aggregating state accumulator: {}", e)
-        })?;
+        let current_accumulator =
+            AGG::Accumulator::deserialize(&self.common.value_serializer, serialized)?;
         Ok(self.aggregator.accumulator_into_result(current_accumulator))
     }
 
@@ -136,8 +126,7 @@ where
 
         let key = self.common.get_db_key(&())?;
         let mut serialized = vec![VALUE_MARKER];
-        bincode::serialize_into(&mut serialized, &value)
-            .map_err(|e| arcon_err_kind!("Could not serialize aggregating state value: {}", e))?;
+        T::serialize_into(&self.common.value_serializer, &mut serialized, &value)?;
 
         let cf = backend.get_cf_handle(&self.common.cf_name)?;
         // See the make_aggregating_merge function in this module. Its result is set as the merging operator for this state.
@@ -148,25 +137,27 @@ where
     }
 }
 
-impl<IK, N, T, AGG> MergingState<RocksDb, IK, N, T, AGG::Result>
-    for RocksDbAggregatingState<IK, N, T, AGG>
+impl<IK, N, T, AGG, KS, TS> MergingState<RocksDb, IK, N, T, AGG::Result, KS, TS>
+    for RocksDbAggregatingState<IK, N, T, AGG, KS, TS>
 where
-    IK: Serialize,
-    N: Serialize,
-    T: Serialize,
+    IK: SerializableFixedSizeWith<KS>,
+    N: SerializableFixedSizeWith<KS>,
+    (): SerializableWith<KS>,
+    T: SerializableWith<TS>,
     AGG: Aggregator<T>,
-    AGG::Accumulator: Serialize + for<'a> Deserialize<'a>,
+    AGG::Accumulator: SerializableWith<TS> + DeserializableWith<TS>,
 {
 }
 
-impl<IK, N, T, AGG> AggregatingState<RocksDb, IK, N, T, AGG::Result>
-    for RocksDbAggregatingState<IK, N, T, AGG>
+impl<IK, N, T, AGG, KS, TS> AggregatingState<RocksDb, IK, N, T, AGG::Result, KS, TS>
+    for RocksDbAggregatingState<IK, N, T, AGG, KS, TS>
 where
-    IK: Serialize,
-    N: Serialize,
-    T: Serialize,
+    IK: SerializableFixedSizeWith<KS>,
+    N: SerializableFixedSizeWith<KS>,
+    (): SerializableWith<KS>,
+    T: SerializableWith<TS>,
     AGG: Aggregator<T>,
-    AGG::Accumulator: Serialize + for<'a> Deserialize<'a>,
+    AGG::Accumulator: SerializableWith<TS> + DeserializableWith<TS>,
 {
 }
 
@@ -174,7 +165,8 @@ where
 mod test {
     use super::*;
     use crate::state_backend::{
-        rocksdb::tests::TestDb, state_types::ClosuresAggregator, AggregatingStateBuilder,
+        rocksdb::tests::TestDb, serialization::Bincode, state_types::ClosuresAggregator,
+        AggregatingStateBuilder,
     };
 
     #[test]
@@ -193,6 +185,8 @@ mod test {
                 },
                 |v| format!("{:?}", v),
             ),
+            Bincode,
+            Bincode,
         );
 
         aggregating_state.append(&mut db, 1).unwrap();

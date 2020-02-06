@@ -1,35 +1,27 @@
 use crate::prelude::ArconResult;
 use bytes::{buf::ext::*, Buf, BufMut};
 use prost::Message;
-use serde::{export::PhantomData, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use std::{
     any::type_name,
     collections::hash_map::DefaultHasher,
     hash::{BuildHasher, BuildHasherDefault, Hash, Hasher},
 };
 
-trait SerializableWith<S>: Sized {
-    type Serializer;
-
-    fn serialize(serializer: &Self::Serializer, payload: &Self) -> ArconResult<Vec<u8>>;
-    fn serialize_into(
-        serializer: &Self::Serializer,
-        target: impl BufMut,
-        payload: &Self,
-    ) -> ArconResult<()>;
+pub trait SerializableWith<S>: Sized {
+    fn serialize(serializer: &S, payload: &Self) -> ArconResult<Vec<u8>>;
+    fn serialize_into(serializer: &S, target: impl BufMut, payload: &Self) -> ArconResult<()>;
 }
 
-trait DeserializableWith<S>: Sized {
-    type Serializer;
-
-    fn deserialize(serializer: &Self::Serializer, bytes: &[u8]) -> ArconResult<Self>;
-    fn deserialize_from(serializer: &Self::Serializer, source: impl Buf) -> ArconResult<Self>;
+pub trait DeserializableWith<S>: Sized {
+    fn deserialize(serializer: &S, bytes: &[u8]) -> ArconResult<Self>;
+    fn deserialize_from(serializer: &S, source: impl Buf) -> ArconResult<Self>;
 }
 
 /// unsafe: implementations must assure that Self always serializes to buffers of size Self::SIZE
-unsafe trait SerializableFixedSizeWith<S>: SerializableWith<S> {
+pub unsafe trait SerializableFixedSizeWith<S>: SerializableWith<S> {
     const SIZE: usize;
-    fn serialize_check(serializer: &Self::Serializer, payload: &Self) -> ArconResult<Vec<u8>> {
+    fn serialize_check(serializer: &S, payload: &Self) -> ArconResult<Vec<u8>> {
         let serialized = Self::serialize(serializer, payload)?;
         assert_eq!(serialized.len(), Self::SIZE);
         Ok(serialized)
@@ -44,14 +36,13 @@ macro_rules! impl_serializable_fixed_size {
     };
 }
 
-struct Bincode;
+#[derive(Debug, Default, Copy, Clone)]
+pub struct Bincode;
 impl<T> SerializableWith<Bincode> for T
 where
     T: Serialize,
 {
-    type Serializer = ();
-
-    fn serialize(_serializer: &Self::Serializer, payload: &Self) -> ArconResult<Vec<u8>> {
+    fn serialize(_serializer: &Bincode, payload: &Self) -> ArconResult<Vec<u8>> {
         bincode::serialize(payload).map_err(|e| {
             arcon_err_kind!(
                 "Could not serialize payload of type `{}`: {}",
@@ -62,7 +53,7 @@ where
     }
 
     fn serialize_into(
-        _serializer: &Self::Serializer,
+        _serializer: &Bincode,
         target: impl BufMut,
         payload: &Self,
     ) -> ArconResult<()> {
@@ -80,9 +71,7 @@ impl<T> DeserializableWith<Bincode> for T
 where
     T: for<'de> Deserialize<'de>,
 {
-    type Serializer = ();
-
-    fn deserialize(_serializer: &Self::Serializer, bytes: &[u8]) -> ArconResult<Self> {
+    fn deserialize(_serializer: &Bincode, bytes: &[u8]) -> ArconResult<Self> {
         bincode::deserialize(bytes).map_err(|e| {
             arcon_err_kind!(
                 "Could not deserialize payload of type `{}`: {}",
@@ -92,7 +81,7 @@ where
         })
     }
 
-    fn deserialize_from(_serializer: &Self::Serializer, source: impl Buf) -> ArconResult<Self> {
+    fn deserialize_from(_serializer: &Bincode, source: impl Buf) -> ArconResult<Self> {
         bincode::deserialize_from(source.reader()).map_err(|e| {
             arcon_err_kind!(
                 "Could not deserialize payload of type `{}`: {}",
@@ -106,18 +95,17 @@ where
 impl_serializable_fixed_size!(Bincode;
     u8: 1, u16: 2, u32: 4, u64: 8, usize: std::mem::size_of::<usize>(), u128: 16,
     i8: 1, i16: 2, i32: 4, i64: 8, isize: std::mem::size_of::<isize>(), i128: 16,
-    f32: 4, f64: 4,
+    f32: 4, f64: 8,
     char: 1, bool: 1, (): 0
 );
 
-struct Prost;
+#[derive(Debug, Default, Copy, Clone)]
+pub struct Prost;
 impl<T> SerializableWith<Prost> for T
 where
     T: Message,
 {
-    type Serializer = ();
-
-    fn serialize(_serializer: &Self::Serializer, payload: &Self) -> ArconResult<Vec<u8>> {
+    fn serialize(_serializer: &Prost, payload: &Self) -> ArconResult<Vec<u8>> {
         let size = payload.encoded_len();
         let mut buf = vec![0u8; size];
         payload.encode(&mut buf).map_err(|e| {
@@ -131,7 +119,7 @@ where
     }
 
     fn serialize_into(
-        _serializer: &Self::Serializer,
+        _serializer: &Prost,
         mut target: impl BufMut,
         payload: &Self,
     ) -> ArconResult<()> {
@@ -149,9 +137,7 @@ impl<T> DeserializableWith<Prost> for T
 where
     T: Message + Default,
 {
-    type Serializer = ();
-
-    fn deserialize(_serializer: &Self::Serializer, bytes: &[u8]) -> ArconResult<Self> {
+    fn deserialize(_serializer: &Prost, bytes: &[u8]) -> ArconResult<Self> {
         <T as Message>::decode(bytes).map_err(|e| {
             arcon_err_kind!(
                 "Could not deserialize payload of type `{}`: {}",
@@ -161,7 +147,7 @@ where
         })
     }
 
-    fn deserialize_from(_serializer: &Self::Serializer, source: impl Buf) -> ArconResult<Self> {
+    fn deserialize_from(_serializer: &Prost, source: impl Buf) -> ArconResult<Self> {
         <T as Message>::decode(source).map_err(|e| {
             arcon_err_kind!(
                 "Could not deserialize payload of type `{}`: {}",
@@ -174,16 +160,17 @@ where
 // even integers have variable length encodings with protobuf, so we cannot implement SerializableFixedSizeWith for anything
 
 // similar to bincode, but only for numeric primitives and with specified endianness
-struct NativeEndianBytesDump;
-struct BigEndianBytesDump;
-struct LittleEndianBytesDump;
+#[derive(Debug, Default, Copy, Clone)]
+pub struct NativeEndianBytesDump;
+#[derive(Debug, Default, Copy, Clone)]
+pub struct BigEndianBytesDump;
+#[derive(Debug, Default, Copy, Clone)]
+pub struct LittleEndianBytesDump;
 
 macro_rules! impl_byte_dump {
     ($serializer: ty, $to_bytes: ident, $from_bytes: ident; $($t: ty),+) => {$(
         impl SerializableWith<$serializer> for $t {
-            type Serializer = ();
-
-            fn serialize(_serializer: &Self::Serializer, payload: &Self) -> ArconResult<Vec<u8>> {
+            fn serialize(_serializer: &$serializer, payload: &Self) -> ArconResult<Vec<u8>> {
                 let bytes = payload.$to_bytes();
                 let mut buf = vec![0; bytes.len()];
                 buf.copy_from_slice(&bytes);
@@ -191,7 +178,7 @@ macro_rules! impl_byte_dump {
             }
 
             fn serialize_into(
-                _serializer: &Self::Serializer,
+                _serializer: &$serializer,
                 mut target: impl BufMut,
                 payload: &Self,
             ) -> ArconResult<()> {
@@ -202,15 +189,13 @@ macro_rules! impl_byte_dump {
         }
 
         impl DeserializableWith<$serializer> for $t {
-            type Serializer = ();
-
-            fn deserialize(_serializer: &Self::Serializer, bytes: &[u8]) -> ArconResult<Self> {
+            fn deserialize(_serializer: &$serializer, bytes: &[u8]) -> ArconResult<Self> {
                 let mut buf = [0; std::mem::size_of::<Self>()];
                 buf.copy_from_slice(bytes);
                 Ok(Self::$from_bytes(buf))
             }
 
-            fn deserialize_from(_serializer: &Self::Serializer, mut source: impl Buf) -> ArconResult<Self> {
+            fn deserialize_from(_serializer: &$serializer, mut source: impl Buf) -> ArconResult<Self> {
                 let mut buf = [0; std::mem::size_of::<Self>()];
                 source.copy_to_slice(&mut buf);
                 Ok(Self::$from_bytes(buf))
@@ -244,33 +229,32 @@ impl_byte_dump!(LittleEndianBytesDump, to_le_bytes, from_le_bytes;
 //    ,f32, f64
 );
 
-struct HashAndThen<S, H = BuildHasherDefault<DefaultHasher>>(PhantomData<(S, H)>);
+#[derive(Debug, Default, Copy, Clone)]
+pub struct HashAndThen<S, H = BuildHasherDefault<DefaultHasher>>(S, H);
 impl<T, S, H> SerializableWith<HashAndThen<S, H>> for T
 where
     T: Hash,
     H: BuildHasher,
     u64: SerializableWith<S>,
 {
-    type Serializer = (H, <u64 as SerializableWith<S>>::Serializer);
-
-    fn serialize(serializer: &Self::Serializer, payload: &Self) -> ArconResult<Vec<u8>> {
-        let mut hasher = serializer.0.build_hasher();
+    fn serialize(serializer: &HashAndThen<S, H>, payload: &Self) -> ArconResult<Vec<u8>> {
+        let mut hasher = serializer.1.build_hasher();
         payload.hash(&mut hasher);
         let hashed = hasher.finish();
 
-        <u64 as SerializableWith<S>>::serialize(&serializer.1, &hashed)
+        <u64 as SerializableWith<S>>::serialize(&serializer.0, &hashed)
     }
 
     fn serialize_into(
-        serializer: &Self::Serializer,
+        serializer: &HashAndThen<S, H>,
         target: impl BufMut,
         payload: &Self,
     ) -> ArconResult<()> {
-        let mut hasher = serializer.0.build_hasher();
+        let mut hasher = serializer.1.build_hasher();
         payload.hash(&mut hasher);
         let hashed = hasher.finish();
 
-        <u64 as SerializableWith<S>>::serialize_into(&serializer.1, target, &hashed)
+        <u64 as SerializableWith<S>>::serialize_into(&serializer.0, target, &hashed)
     }
 }
 
@@ -289,26 +273,26 @@ mod test {
 
     #[test]
     fn test_primitives_fixed() {
-        SerializableFixedSizeWith::<Bincode>::serialize_check(&(), &0u8).unwrap();
-        SerializableFixedSizeWith::<Bincode>::serialize_check(&(), &0u16).unwrap();
-        SerializableFixedSizeWith::<Bincode>::serialize_check(&(), &0u32).unwrap();
-        SerializableFixedSizeWith::<Bincode>::serialize_check(&(), &0u64).unwrap();
-        SerializableFixedSizeWith::<Bincode>::serialize_check(&(), &0usize).unwrap();
-        SerializableFixedSizeWith::<Bincode>::serialize_check(&(), &0u128).unwrap();
+        SerializableFixedSizeWith::serialize_check(&Bincode, &0u8).unwrap();
+        SerializableFixedSizeWith::serialize_check(&Bincode, &0u16).unwrap();
+        SerializableFixedSizeWith::serialize_check(&Bincode, &0u32).unwrap();
+        SerializableFixedSizeWith::serialize_check(&Bincode, &0u64).unwrap();
+        SerializableFixedSizeWith::serialize_check(&Bincode, &0usize).unwrap();
+        SerializableFixedSizeWith::serialize_check(&Bincode, &0u128).unwrap();
 
-        SerializableFixedSizeWith::<Bincode>::serialize_check(&(), &0i8).unwrap();
-        SerializableFixedSizeWith::<Bincode>::serialize_check(&(), &0i16).unwrap();
-        SerializableFixedSizeWith::<Bincode>::serialize_check(&(), &0i32).unwrap();
-        SerializableFixedSizeWith::<Bincode>::serialize_check(&(), &0i64).unwrap();
-        SerializableFixedSizeWith::<Bincode>::serialize_check(&(), &0isize).unwrap();
-        SerializableFixedSizeWith::<Bincode>::serialize_check(&(), &0i128).unwrap();
+        SerializableFixedSizeWith::serialize_check(&Bincode, &0i8).unwrap();
+        SerializableFixedSizeWith::serialize_check(&Bincode, &0i16).unwrap();
+        SerializableFixedSizeWith::serialize_check(&Bincode, &0i32).unwrap();
+        SerializableFixedSizeWith::serialize_check(&Bincode, &0i64).unwrap();
+        SerializableFixedSizeWith::serialize_check(&Bincode, &0isize).unwrap();
+        SerializableFixedSizeWith::serialize_check(&Bincode, &0i128).unwrap();
 
-        SerializableFixedSizeWith::<Bincode>::serialize_check(&(), &0f32).unwrap();
-        SerializableFixedSizeWith::<Bincode>::serialize_check(&(), &0f64).unwrap();
+        SerializableFixedSizeWith::serialize_check(&Bincode, &0f32).unwrap();
+        SerializableFixedSizeWith::serialize_check(&Bincode, &0f64).unwrap();
 
-        SerializableFixedSizeWith::<Bincode>::serialize_check(&(), &'0').unwrap();
-        SerializableFixedSizeWith::<Bincode>::serialize_check(&(), &false).unwrap();
-        SerializableFixedSizeWith::<Bincode>::serialize_check(&(), &()).unwrap();
+        SerializableFixedSizeWith::serialize_check(&Bincode, &'0').unwrap();
+        SerializableFixedSizeWith::serialize_check(&Bincode, &false).unwrap();
+        SerializableFixedSizeWith::serialize_check(&Bincode, &()).unwrap();
     }
 
     #[test]
@@ -327,12 +311,20 @@ mod test {
 
     #[test]
     fn test_prost_serialization() {
-        SerializableWith::<Prost>::serialize(&(), &"foobar".to_string()).unwrap();
-        SerializableWith::<Prost>::serialize(&(), &vec![1, 2, 3]).unwrap();
+        SerializableWith::serialize(&Prost, &"foobar".to_string()).unwrap();
+        SerializableWith::serialize(&Prost, &vec![1, 2, 3]).unwrap();
 
         assert_eq!(
-            <u32 as DeserializableWith<Prost>>::deserialize(&(), &[]).unwrap(),
+            <u32 as DeserializableWith<Prost>>::deserialize(&Prost, &[]).unwrap(),
             0u32
         );
+    }
+
+    #[test]
+    fn test_bincode_strings() {
+        let s = "foo".to_string();
+        let serialized = SerializableWith::serialize(&Bincode, &s).unwrap();
+        let deserialized: String = DeserializableWith::deserialize(&Bincode, &serialized).unwrap();
+        assert_eq!(deserialized, s);
     }
 }

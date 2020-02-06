@@ -10,6 +10,7 @@ use crate::state_backend::{
         reducing_state::RocksDbReducingState, state_common::StateCommon,
         value_state::RocksDbValueState, vec_state::RocksDbVecState,
     },
+    serialization::{DeserializableWith, SerializableFixedSizeWith, SerializableWith},
     state_types::*,
     AggregatingStateBuilder, MapStateBuilder, ReducingStateBuilder, StateBackend,
     ValueStateBuilder, VecStateBuilder,
@@ -18,7 +19,6 @@ use arcon_error::*;
 use rocksdb::{
     checkpoint::Checkpoint, ColumnFamily, DBPinnableSlice, Options, SliceTransform, WriteBatch, DB,
 };
-use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
     error::Error,
@@ -390,16 +390,31 @@ impl StateBackend for RocksDb {
     }
 }
 
-impl<IK, N, T> ValueStateBuilder<IK, N, T> for RocksDb
+impl<IK, N, T, KS, TS> ValueStateBuilder<IK, N, T, KS, TS> for RocksDb
 where
-    IK: Serialize,
-    N: Serialize,
-    T: Serialize + for<'a> Deserialize<'a>,
+    IK: SerializableFixedSizeWith<KS>,
+    N: SerializableFixedSizeWith<KS>,
+    (): SerializableWith<KS>,
+    T: SerializableWith<TS> + DeserializableWith<TS>,
 {
-    type Type = RocksDbValueState<IK, N, T>;
+    type Type = RocksDbValueState<IK, N, T, KS, TS>;
 
-    fn new_value_state(&mut self, name: &str, init_item_key: IK, init_namespace: N) -> Self::Type {
-        let common = StateCommon::new_for_value_state(self, name, init_item_key, init_namespace);
+    fn new_value_state(
+        &mut self,
+        name: &str,
+        init_item_key: IK,
+        init_namespace: N,
+        key_serializer: KS,
+        value_serializer: TS,
+    ) -> Self::Type {
+        let common = StateCommon::new_for_value_state(
+            self,
+            name,
+            init_item_key,
+            init_namespace,
+            key_serializer,
+            value_serializer,
+        );
         RocksDbValueState {
             common,
             _phantom: Default::default(),
@@ -407,17 +422,34 @@ where
     }
 }
 
-impl<IK, N, K, V> MapStateBuilder<IK, N, K, V> for RocksDb
+impl<IK, N, K, V, KS, TS> MapStateBuilder<IK, N, K, V, KS, TS> for RocksDb
 where
-    IK: Serialize + for<'a> Deserialize<'a>,
-    N: Serialize + for<'a> Deserialize<'a>,
-    K: Serialize + for<'a> Deserialize<'a>,
-    V: Serialize + for<'a> Deserialize<'a>,
+    IK: SerializableFixedSizeWith<KS> + DeserializableWith<KS>,
+    N: SerializableFixedSizeWith<KS> + DeserializableWith<KS>,
+    K: SerializableWith<KS> + DeserializableWith<KS>,
+    (): SerializableWith<KS>,
+    V: SerializableWith<TS> + DeserializableWith<TS>,
+    KS: Clone + 'static,
+    TS: Clone + 'static,
 {
-    type Type = RocksDbMapState<IK, N, K, V>;
+    type Type = RocksDbMapState<IK, N, K, V, KS, TS>;
 
-    fn new_map_state(&mut self, name: &str, init_item_key: IK, init_namespace: N) -> Self::Type {
-        let common = StateCommon::new_for_map_state(self, name, init_item_key, init_namespace);
+    fn new_map_state(
+        &mut self,
+        name: &str,
+        init_item_key: IK,
+        init_namespace: N,
+        key_serializer: KS,
+        value_serializer: TS,
+    ) -> Self::Type {
+        let common = StateCommon::new_for_map_state(
+            self,
+            name,
+            init_item_key,
+            init_namespace,
+            key_serializer,
+            value_serializer,
+        );
         RocksDbMapState {
             common,
             _phantom: Default::default(),
@@ -425,16 +457,31 @@ where
     }
 }
 
-impl<IK, N, T> VecStateBuilder<IK, N, T> for RocksDb
+impl<IK, N, T, KS, TS> VecStateBuilder<IK, N, T, KS, TS> for RocksDb
 where
-    IK: Serialize,
-    N: Serialize,
-    T: Serialize + for<'a> Deserialize<'a>,
+    IK: SerializableFixedSizeWith<KS>,
+    N: SerializableFixedSizeWith<KS>,
+    (): SerializableWith<KS>,
+    T: SerializableWith<TS> + DeserializableWith<TS>,
 {
-    type Type = RocksDbVecState<IK, N, T>;
+    type Type = RocksDbVecState<IK, N, T, KS, TS>;
 
-    fn new_vec_state(&mut self, name: &str, init_item_key: IK, init_namespace: N) -> Self::Type {
-        let common = StateCommon::new_for_vec_state(self, name, init_item_key, init_namespace);
+    fn new_vec_state(
+        &mut self,
+        name: &str,
+        init_item_key: IK,
+        init_namespace: N,
+        key_serializer: KS,
+        value_serializer: TS,
+    ) -> Self::Type {
+        let common = StateCommon::new_for_vec_state(
+            self,
+            name,
+            init_item_key,
+            init_namespace,
+            key_serializer,
+            value_serializer,
+        );
         RocksDbVecState {
             common,
             _phantom: Default::default(),
@@ -442,14 +489,16 @@ where
     }
 }
 
-impl<IK, N, T, F> ReducingStateBuilder<IK, N, T, F> for RocksDb
+impl<IK, N, T, F, KS, TS> ReducingStateBuilder<IK, N, T, F, KS, TS> for RocksDb
 where
-    IK: Serialize,
-    N: Serialize,
-    T: Serialize + for<'a> Deserialize<'a>,
+    IK: SerializableFixedSizeWith<KS>,
+    N: SerializableFixedSizeWith<KS>,
+    (): SerializableWith<KS>,
+    T: SerializableWith<TS> + DeserializableWith<TS>,
     F: Fn(&T, &T) -> T + Send + Sync + Clone + 'static,
+    TS: Send + Sync + Clone + 'static,
 {
-    type Type = RocksDbReducingState<IK, N, T, F>;
+    type Type = RocksDbReducingState<IK, N, T, F, KS, TS>;
 
     fn new_reducing_state(
         &mut self,
@@ -457,6 +506,8 @@ where
         init_item_key: IK,
         init_namespace: N,
         reduce_fn: F,
+        key_serializer: KS,
+        value_serializer: TS,
     ) -> Self::Type {
         let common = StateCommon::new_for_reducing_state(
             self,
@@ -464,6 +515,8 @@ where
             init_item_key,
             init_namespace,
             reduce_fn.clone(),
+            key_serializer,
+            value_serializer,
         );
         RocksDbReducingState {
             common,
@@ -473,15 +526,17 @@ where
     }
 }
 
-impl<IK, N, T, AGG> AggregatingStateBuilder<IK, N, T, AGG> for RocksDb
+impl<IK, N, T, AGG, KS, TS> AggregatingStateBuilder<IK, N, T, AGG, KS, TS> for RocksDb
 where
-    IK: Serialize,
-    N: Serialize,
-    T: Serialize + for<'a> Deserialize<'a>,
+    IK: SerializableFixedSizeWith<KS>,
+    N: SerializableFixedSizeWith<KS>,
+    (): SerializableWith<KS>,
+    T: SerializableWith<TS> + DeserializableWith<TS>,
     AGG: Aggregator<T> + Send + Sync + Clone + 'static,
-    AGG::Accumulator: Serialize + for<'a> Deserialize<'a>,
+    AGG::Accumulator: SerializableWith<TS> + DeserializableWith<TS>,
+    TS: Send + Sync + Clone + 'static,
 {
-    type Type = RocksDbAggregatingState<IK, N, T, AGG>;
+    type Type = RocksDbAggregatingState<IK, N, T, AGG, KS, TS>;
 
     fn new_aggregating_state(
         &mut self,
@@ -489,6 +544,8 @@ where
         init_item_key: IK,
         init_namespace: N,
         aggregator: AGG,
+        key_serializer: KS,
+        value_serializer: TS,
     ) -> Self::Type {
         let common = StateCommon::new_for_aggregating_state(
             self,
@@ -496,6 +553,8 @@ where
             init_item_key,
             init_namespace,
             aggregator.clone(),
+            key_serializer,
+            value_serializer,
         );
         RocksDbAggregatingState {
             common,
@@ -508,22 +567,21 @@ where
 mod state_common {
     use super::*;
 
-    pub(crate) struct StateCommon<IK, N> {
+    pub(crate) struct StateCommon<IK, N, KS, TS> {
         pub cf_name: String,
         pub item_key: IK,
         pub namespace: N,
+        pub key_serializer: KS,
+        pub value_serializer: TS,
     }
 
-    fn common_options<IK: Serialize, N: Serialize>(item_key: &IK, namespace: &N) -> Options {
-        // The line below should yield the same size for any values of given types IK, N. This is
-        // not enforced anywhere yet, but we rely on it. For example, neither IK nor N should be
-        // Vec<T> or String, because those types serialize to variable length byte arrays.
-        // TODO: restrict possible IK and N with a trait? We could add an associated const there,
-        //  so the computation below is eliminated.
-        let prefix_size = bincode::serialized_size(&(item_key, namespace))
-            .expect("Couldn't compute prefix size for column family"); // TODO: propagate
+    fn common_options<IK, N, KS>(_item_key: &IK, _namespace: &N, _key_serializer: &KS) -> Options
+    where
+        IK: SerializableFixedSizeWith<KS>,
+        N: SerializableFixedSizeWith<KS>,
+    {
+        let prefix_size = IK::SIZE + N::SIZE;
 
-        // base opts
         let mut opts = Options::default();
         // for map state to work properly, but useful for all the states, so the bloom filters get
         // populated
@@ -532,17 +590,20 @@ mod state_common {
         opts
     }
 
-    impl<IK, N> StateCommon<IK, N>
+    impl<IK, N, KS, TS> StateCommon<IK, N, KS, TS>
     where
-        IK: Serialize,
-        N: Serialize,
+        IK: SerializableFixedSizeWith<KS>,
+        N: SerializableFixedSizeWith<KS>,
     {
         pub fn get_db_key<UK>(&self, user_key: &UK) -> ArconResult<Vec<u8>>
         where
-            UK: Serialize,
+            UK: SerializableWith<KS>,
         {
-            let res = bincode::serialize(&(&self.item_key, &self.namespace, user_key))
-                .map_err(|e| arcon_err_kind!("Could not serialize keys and namespace: {}", e))?;
+            // maybe try adding a size hint for stuff that impls SerializableWith?
+            let mut res = Vec::with_capacity(IK::SIZE + N::SIZE);
+            IK::serialize_into(&self.key_serializer, &mut res, &self.item_key)?;
+            N::serialize_into(&self.key_serializer, &mut res, &self.namespace)?;
+            UK::serialize_into(&self.key_serializer, &mut res, user_key)?;
 
             Ok(res)
         }
@@ -552,14 +613,18 @@ mod state_common {
             name: &str,
             item_key: IK,
             namespace: N,
-        ) -> StateCommon<IK, N> {
-            let opts = common_options(&item_key, &namespace);
+            key_serializer: KS,
+            value_serializer: TS,
+        ) -> StateCommon<IK, N, KS, TS> {
+            let opts = common_options(&item_key, &namespace, &key_serializer);
             let cf_name = backend.get_or_create_column_family(name, opts);
 
             StateCommon {
                 cf_name,
                 item_key,
                 namespace,
+                key_serializer,
+                value_serializer,
             }
         }
 
@@ -568,9 +633,18 @@ mod state_common {
             name: &str,
             item_key: IK,
             namespace: N,
-        ) -> StateCommon<IK, N> {
+            key_serializer: KS,
+            value_serializer: TS,
+        ) -> StateCommon<IK, N, KS, TS> {
             let full_name = format!("value_{}", name);
-            Self::new_for_basic_state(backend, &full_name, item_key, namespace)
+            Self::new_for_basic_state(
+                backend,
+                &full_name,
+                item_key,
+                namespace,
+                key_serializer,
+                value_serializer,
+            )
         }
 
         pub fn new_for_map_state(
@@ -578,9 +652,18 @@ mod state_common {
             name: &str,
             item_key: IK,
             namespace: N,
-        ) -> StateCommon<IK, N> {
+            key_serializer: KS,
+            value_serializer: TS,
+        ) -> StateCommon<IK, N, KS, TS> {
             let full_name = format!("map_{}", name);
-            Self::new_for_basic_state(backend, &full_name, item_key, namespace)
+            Self::new_for_basic_state(
+                backend,
+                &full_name,
+                item_key,
+                namespace,
+                key_serializer,
+                value_serializer,
+            )
         }
 
         pub fn new_for_vec_state(
@@ -588,8 +671,10 @@ mod state_common {
             name: &str,
             item_key: IK,
             namespace: N,
-        ) -> StateCommon<IK, N> {
-            let mut opts = common_options(&item_key, &namespace);
+            key_serializer: KS,
+            value_serializer: TS,
+        ) -> StateCommon<IK, N, KS, TS> {
+            let mut opts = common_options(&item_key, &namespace, &key_serializer);
 
             opts.set_merge_operator_associative("vec_merge", vec_state::vec_merge);
 
@@ -599,6 +684,8 @@ mod state_common {
                 cf_name,
                 item_key,
                 namespace,
+                key_serializer,
+                value_serializer,
             }
         }
 
@@ -608,14 +695,18 @@ mod state_common {
             item_key: IK,
             namespace: N,
             reduce_fn: F,
-        ) -> StateCommon<IK, N>
+            key_serializer: KS,
+            value_serializer: TS,
+        ) -> StateCommon<IK, N, KS, TS>
         where
-            T: Serialize + for<'a> Deserialize<'a>,
+            T: SerializableWith<TS> + DeserializableWith<TS>,
             F: Fn(&T, &T) -> T + Sync + Send + Clone + 'static,
+            TS: Send + Sync + Clone + 'static,
         {
-            let mut opts = common_options(&item_key, &namespace);
+            let mut opts = common_options(&item_key, &namespace, &key_serializer);
 
-            let reducing_merge = reducing_state::make_reducing_merge(reduce_fn);
+            let reducing_merge =
+                reducing_state::make_reducing_merge(reduce_fn, value_serializer.clone());
             opts.set_merge_operator_associative("reducing_merge", reducing_merge);
 
             let full_name = format!("reducing_{}", name);
@@ -624,6 +715,8 @@ mod state_common {
                 cf_name,
                 item_key,
                 namespace,
+                key_serializer,
+                value_serializer,
             }
         }
 
@@ -633,15 +726,19 @@ mod state_common {
             item_key: IK,
             namespace: N,
             aggregator: AGG,
-        ) -> StateCommon<IK, N>
+            key_serializer: KS,
+            value_serializer: TS,
+        ) -> StateCommon<IK, N, KS, TS>
         where
-            T: for<'a> Deserialize<'a>,
+            T: DeserializableWith<TS>,
             AGG: Aggregator<T> + Send + Sync + Clone + 'static,
-            AGG::Accumulator: Serialize + for<'a> Deserialize<'a>,
+            AGG::Accumulator: SerializableWith<TS> + DeserializableWith<TS>,
+            TS: Send + Sync + Clone + 'static,
         {
-            let mut opts = common_options(&item_key, &namespace);
+            let mut opts = common_options(&item_key, &namespace, &key_serializer);
 
-            let aggregate_merge = aggregating_state::make_aggregating_merge(aggregator);
+            let aggregate_merge =
+                aggregating_state::make_aggregating_merge(aggregator, value_serializer.clone());
             opts.set_merge_operator_associative("aggregate_merge", aggregate_merge);
 
             let full_name = format!("aggregating_{}", name);
@@ -650,6 +747,8 @@ mod state_common {
                 cf_name,
                 item_key,
                 namespace,
+                key_serializer,
+                value_serializer,
             }
         }
     }
@@ -664,6 +763,7 @@ mod vec_state;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::state_backend::serialization::Bincode;
     use std::{
         ops::{Deref, DerefMut},
         path::Path,
@@ -725,6 +825,8 @@ mod tests {
             cf_name: "".to_string(),
             item_key: (),
             namespace: (),
+            key_serializer: Bincode,
+            value_serializer: Bincode,
         };
 
         let v = state.get_db_key(&()).unwrap();
@@ -806,7 +908,7 @@ mod tests {
     #[test]
     fn checkpoint_restore_state_test() {
         let mut original = TestDb::new();
-        let a_value = original.new_value_state("a", (), ());
+        let a_value = original.new_value_state("a", (), (), Bincode, Bincode);
         a_value.set(&mut original, 420).unwrap();
 
         let checkpoint_dir = original.checkpoint();
@@ -819,7 +921,7 @@ mod tests {
         // TODO: serialize value state metadata (type names, serialization, etc.) into rocksdb, so
         //   that type mismatches are caught early. Right now it would be possible to, let's say,
         //   store an integer, and then read a float from the restored state backend
-        let a_value_restored = restored.new_value_state("a", (), ());
+        let a_value_restored = restored.new_value_state("a", (), (), Bincode, Bincode);
         assert_eq!(a_value_restored.get(&restored).unwrap(), 420);
 
         a_value_restored.set(&mut restored, 1337).unwrap();
@@ -830,15 +932,16 @@ mod tests {
     #[test]
     fn missing_state_raises_errors() {
         let mut original = TestDb::new();
-        let a_value = original.new_value_state("a", (), ());
-        let b_value = original.new_value_state("b", (), ());
+        let a_value = original.new_value_state("a", (), (), Bincode, Bincode);
+        let b_value = original.new_value_state("b", (), (), Bincode, Bincode);
         a_value.set(&mut original, 420).unwrap();
         b_value.set(&mut original, 69).unwrap();
 
         let checkpoint_dir = original.checkpoint();
 
         let mut restored = TestDb::from_checkpoint(&checkpoint_dir.to_string_lossy());
-        let a_value_restored: RocksDbValueState<_, _, i32> = restored.new_value_state("a", (), ());
+        let a_value_restored: RocksDbValueState<_, _, i32, _, _> =
+            restored.new_value_state("a", (), (), Bincode, Bincode);
         // original backend had two states created, and here we try to mess with state before we
         // declare all the states
         if let ErrorKind::ArconError(message) = a_value_restored.get(&restored).unwrap_err().kind()
@@ -850,5 +953,14 @@ mod tests {
         } else {
             panic!("Error should have been returned")
         }
+    }
+
+    #[test]
+    fn test_key_serialization() {
+        let mut db = TestDb::new();
+        let state =
+            StateCommon::new_for_map_state(&mut db, "test-name", 0u8, 0u8, Bincode, Bincode);
+        let key = state.get_db_key(&"foobar".to_string()).unwrap();
+        assert_eq!(key.len(), 1 + 1 + std::mem::size_of::<usize>() + 6);
     }
 }

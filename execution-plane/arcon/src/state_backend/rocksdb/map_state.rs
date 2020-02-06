@@ -6,21 +6,23 @@ use crate::{
     prelude::ArconResult,
     state_backend::{
         rocksdb::{state_common::StateCommon, RocksDb},
+        serialization::{DeserializableWith, SerializableFixedSizeWith, SerializableWith},
         state_types::{MapState, State},
     },
 };
-use serde::{Deserialize, Serialize};
+
 use std::marker::PhantomData;
 
-pub struct RocksDbMapState<IK, N, K, V> {
-    pub(crate) common: StateCommon<IK, N>,
+pub struct RocksDbMapState<IK, N, K, V, KS, TS> {
+    pub(crate) common: StateCommon<IK, N, KS, TS>,
     pub(crate) _phantom: PhantomData<(K, V)>,
 }
 
-impl<IK, N, K, V> State<RocksDb, IK, N> for RocksDbMapState<IK, N, K, V>
+impl<IK, N, K, V, KS, TS> State<RocksDb, IK, N, KS, TS> for RocksDbMapState<IK, N, K, V, KS, TS>
 where
-    IK: Serialize,
-    N: Serialize,
+    IK: SerializableFixedSizeWith<KS>,
+    N: SerializableFixedSizeWith<KS>,
+    (): SerializableWith<KS>,
 {
     fn clear(&self, backend: &mut RocksDb) -> ArconResult<()> {
         // () is not serialized, and the user key is the tail of the db key, so in effect we get
@@ -32,26 +34,28 @@ where
     delegate_key_and_namespace!(common);
 }
 
-impl<IK, N, K, V> MapState<RocksDb, IK, N, K, V> for RocksDbMapState<IK, N, K, V>
+impl<IK, N, K, V, KS, TS> MapState<RocksDb, IK, N, K, V, KS, TS>
+    for RocksDbMapState<IK, N, K, V, KS, TS>
 where
-    IK: Serialize + for<'a> Deserialize<'a>,
-    N: Serialize + for<'a> Deserialize<'a>,
-    K: Serialize + for<'a> Deserialize<'a>,
-    V: Serialize + for<'a> Deserialize<'a>,
+    IK: SerializableFixedSizeWith<KS> + DeserializableWith<KS>,
+    N: SerializableFixedSizeWith<KS> + DeserializableWith<KS>,
+    K: SerializableWith<KS> + DeserializableWith<KS>,
+    (): SerializableWith<KS>,
+    V: SerializableWith<TS> + DeserializableWith<TS>,
+    KS: Clone + 'static,
+    TS: Clone + 'static,
 {
     fn get(&self, backend: &RocksDb, key: &K) -> ArconResult<V> {
         let key = self.common.get_db_key(key)?;
         let serialized = backend.get(&self.common.cf_name, &key)?;
-        let value = bincode::deserialize(&serialized)
-            .map_err(|e| arcon_err_kind!("Cannot deserialize map state value: {}", e))?;
+        let value = V::deserialize(&self.common.value_serializer, &serialized)?;
 
         Ok(value)
     }
 
     fn put(&self, backend: &mut RocksDb, key: K, value: V) -> ArconResult<()> {
         let key = self.common.get_db_key(&key)?;
-        let serialized = bincode::serialize(&value)
-            .map_err(|e| arcon_err_kind!("Could not serialize map state value: {}", e))?;
+        let serialized = V::serialize(&self.common.value_serializer, &value)?;
         backend.put(&self.common.cf_name, key, serialized)?;
 
         Ok(())
@@ -80,8 +84,7 @@ where
 
         for (user_key, value) in key_value_pairs {
             let key = self.common.get_db_key(&user_key)?;
-            let serialized = bincode::serialize(&value)
-                .map_err(|e| arcon_err_kind!("Could not serialize map state value: {}", e))?;
+            let serialized = V::serialize(&self.common.value_serializer, &value)?;
             wb.put_cf(cf, key, serialized)
                 .map_err(|e| arcon_err_kind!("Could not create put operation: {}", e))?;
         }
@@ -110,17 +113,20 @@ where
 
         let prefix = self.common.get_db_key(&())?;
         let cf = backend.get_cf_handle(&self.common.cf_name)?;
+        let key_serializer = self.common.key_serializer.clone();
+        let value_serializer = self.common.value_serializer.clone();
         // NOTE: prefix_iterator only works as expected when the cf has proper prefix_extractor
         //   option set. We do that in RocksDb::create_cf_options_for
         let iter = backend
             .db
             .prefix_iterator_cf(cf, prefix)
             .map_err(|e| arcon_err_kind!("Could not create prefix iterator: {}", e))?
-            .map(|(db_key, serialized_value)| {
-                let (_, _, key): (IK, N, K) = bincode::deserialize(&db_key)
-                    .map_err(|e| arcon_err_kind!("Could not deserialize map state key: {}", e))?;
-                let value: V = bincode::deserialize(&serialized_value)
-                    .map_err(|e| arcon_err_kind!("Could not deserialize map state value: {}", e))?;
+            .map(move |(db_key, serialized_value)| {
+                let mut key_cursor = &db_key[..];
+                let _item_key = IK::deserialize_from(&key_serializer, &mut key_cursor)?;
+                let _namespace = N::deserialize_from(&key_serializer, &mut key_cursor)?;
+                let key = K::deserialize_from(&key_serializer, &mut key_cursor)?;
+                let value: V = V::deserialize(&value_serializer, &serialized_value)?;
 
                 Ok((key, value))
             })
@@ -136,13 +142,17 @@ where
 
         let prefix = self.common.get_db_key(&())?;
         let cf = backend.get_cf_handle(&self.common.cf_name)?;
+        let key_serializer = self.common.key_serializer.clone();
+
         let iter = backend
             .db
             .prefix_iterator_cf(cf, prefix)
             .map_err(|e| arcon_err_kind!("Could not create prefix iterator: {}", e))?
-            .map(|(db_key, _)| {
-                let (_, _, key): (IK, N, K) = bincode::deserialize(&db_key)
-                    .map_err(|e| arcon_err_kind!("Could not deserialize map state key: {}", e))?;
+            .map(move |(db_key, _)| {
+                let mut key_cursor = &db_key[..];
+                let _ = IK::deserialize_from(&key_serializer, &mut key_cursor)?;
+                let _ = N::deserialize_from(&key_serializer, &mut key_cursor)?;
+                let key = K::deserialize_from(&key_serializer, &mut key_cursor)?;
 
                 Ok(key)
             })
@@ -158,13 +168,14 @@ where
 
         let prefix = self.common.get_db_key(&())?;
         let cf = backend.get_cf_handle(&self.common.cf_name)?;
+        let value_serializer = self.common.value_serializer.clone();
+
         let iter = backend
             .db
             .prefix_iterator_cf(cf, prefix)
             .map_err(|e| arcon_err_kind!("Could not create prefix iterator: {}", e))?
-            .map(|(_, serialized_value)| {
-                let value: V = bincode::deserialize(&serialized_value)
-                    .map_err(|e| arcon_err_kind!("Could not deserialize map state value: {}", e))?;
+            .map(move |(_, serialized_value)| {
+                let value: V = V::deserialize(&value_serializer, &serialized_value)?;
 
                 Ok(value)
             })
@@ -192,12 +203,12 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::state_backend::{rocksdb::tests::TestDb, MapStateBuilder};
+    use crate::state_backend::{rocksdb::tests::TestDb, serialization::Bincode, MapStateBuilder};
 
     #[test]
     fn map_state_test() {
         let mut db = TestDb::new();
-        let map_state = db.new_map_state("test_state", (), ());
+        let map_state = db.new_map_state("test_state", (), (), Bincode, Bincode);
 
         // TODO: &String is weird, maybe look at how it's done with the keys in std hash-map
         assert!(!map_state.contains(&db, &"first key".to_string()).unwrap());
@@ -223,7 +234,7 @@ mod test {
     #[test]
     fn clearing_test() {
         let mut db = TestDb::new();
-        let mut map_state = db.new_map_state("test_state", 0u8, 0u8);
+        let mut map_state = db.new_map_state("test_state", 0u8, 0u8, Bincode, Bincode);
 
         let mut expected_for_key_zero = vec![];
         for i in 0..10 {

@@ -6,15 +6,15 @@ use crate::{
     prelude::ArconResult,
     state_backend::{
         rocksdb::{state_common::StateCommon, RocksDb},
+        serialization::{DeserializableWith, SerializableFixedSizeWith, SerializableWith},
         state_types::{AppendingState, MergingState, ReducingState, State},
     },
 };
 use itertools::Itertools;
-use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 
-pub struct RocksDbReducingState<IK, N, T, F> {
-    pub(crate) common: StateCommon<IK, N>,
+pub struct RocksDbReducingState<IK, N, T, F, KS, TS> {
+    pub(crate) common: StateCommon<IK, N, KS, TS>,
 
     // here mostly for debugging, we may fall back to it in the future if rocksdb merge proves unreliable
     #[allow(unused)]
@@ -22,10 +22,12 @@ pub struct RocksDbReducingState<IK, N, T, F> {
     pub(crate) _phantom: PhantomData<T>,
 }
 
-impl<IK, N, T, F> State<RocksDb, IK, N> for RocksDbReducingState<IK, N, T, F>
+impl<IK, N, T, F, KS, TS> State<RocksDb, IK, N, KS, TS>
+    for RocksDbReducingState<IK, N, T, F, KS, TS>
 where
-    IK: Serialize,
-    N: Serialize,
+    IK: SerializableFixedSizeWith<KS>,
+    N: SerializableFixedSizeWith<KS>,
+    (): SerializableWith<KS>,
 {
     fn clear(&self, backend: &mut RocksDb) -> ArconResult<()> {
         let key = self.common.get_db_key(&())?;
@@ -36,16 +38,17 @@ where
     delegate_key_and_namespace!(common);
 }
 
-pub fn make_reducing_merge<T, F>(reduce_fn: F) -> impl MergeFn + Clone
+pub fn make_reducing_merge<T, F, TS>(reduce_fn: F, value_serializer: TS) -> impl MergeFn + Clone
 where
     F: Fn(&T, &T) -> T + Send + Sync + Clone + 'static,
-    T: Serialize + for<'a> Deserialize<'a>,
+    T: SerializableWith<TS> + DeserializableWith<TS>,
+    TS: Send + Sync + Clone + 'static,
 {
     move |_key: &[u8], first: Option<&[u8]>, rest: &mut MergeOperands| {
         let res = first
             .into_iter()
             .chain(rest)
-            .map(bincode::deserialize)
+            .map(|bytes| T::deserialize(&value_serializer, bytes))
             .fold_results(None, |acc, value| match acc {
                 None => Some(value),
                 Some(old) => Some(reduce_fn(&old, &value)),
@@ -54,7 +57,7 @@ where
         // TODO: change eprintlns to actual logs
         // we don't really have a way to send results back to rust across rocksdb ffi, so we just log the errors
         match res {
-            Ok(Some(v)) => match bincode::serialize(&v) {
+            Ok(Some(v)) => match T::serialize(&value_serializer, &v) {
                 Ok(serialized) => Some(serialized),
                 Err(e) => {
                     eprintln!("reduce state merge result serialization error: {}", e);
@@ -73,19 +76,20 @@ where
     }
 }
 
-impl<IK, N, T, F> AppendingState<RocksDb, IK, N, T, T> for RocksDbReducingState<IK, N, T, F>
+impl<IK, N, T, F, KS, TS> AppendingState<RocksDb, IK, N, T, T, KS, TS>
+    for RocksDbReducingState<IK, N, T, F, KS, TS>
 // TODO: if we made the (backend-)mutating methods take &mut self, F could be FnMut
 where
-    IK: Serialize,
-    N: Serialize,
-    T: Serialize + for<'a> Deserialize<'a>,
+    IK: SerializableFixedSizeWith<KS>,
+    N: SerializableFixedSizeWith<KS>,
+    (): SerializableWith<KS>,
+    T: SerializableWith<TS> + DeserializableWith<TS>,
     F: Fn(&T, &T) -> T,
 {
     fn get(&self, backend: &RocksDb) -> ArconResult<T> {
         let key = self.common.get_db_key(&())?;
         let storage = backend.get(&self.common.cf_name, &key)?;
-        let value = bincode::deserialize(&*storage)
-            .map_err(|e| arcon_err_kind!("Could not deserialize reducing state value: {}", e))?;
+        let value = T::deserialize(&self.common.value_serializer, &*storage)?;
 
         Ok(value)
     }
@@ -94,8 +98,7 @@ where
         let backend = backend.initialized_mut()?;
 
         let key = self.common.get_db_key(&())?;
-        let serialized = bincode::serialize(&value)
-            .map_err(|e| arcon_err_kind!("Could not serialize reducing state value: {}", e))?;
+        let serialized = T::serialize(&self.common.value_serializer, &value)?;
 
         let cf = backend.get_cf_handle(&self.common.cf_name)?;
         // See the make_reducing_merge function in this module. Its result is set as the merging operator for this state.
@@ -106,20 +109,24 @@ where
     }
 }
 
-impl<IK, N, T, F> MergingState<RocksDb, IK, N, T, T> for RocksDbReducingState<IK, N, T, F>
+impl<IK, N, T, F, KS, TS> MergingState<RocksDb, IK, N, T, T, KS, TS>
+    for RocksDbReducingState<IK, N, T, F, KS, TS>
 where
-    IK: Serialize,
-    N: Serialize,
-    T: Serialize + for<'a> Deserialize<'a>,
+    IK: SerializableFixedSizeWith<KS>,
+    N: SerializableFixedSizeWith<KS>,
+    (): SerializableWith<KS>,
+    T: SerializableWith<TS> + DeserializableWith<TS>,
     F: Fn(&T, &T) -> T,
 {
 }
 
-impl<IK, N, T, F> ReducingState<RocksDb, IK, N, T> for RocksDbReducingState<IK, N, T, F>
+impl<IK, N, T, F, KS, TS> ReducingState<RocksDb, IK, N, T, KS, TS>
+    for RocksDbReducingState<IK, N, T, F, KS, TS>
 where
-    IK: Serialize,
-    N: Serialize,
-    T: Serialize + for<'a> Deserialize<'a>,
+    IK: SerializableFixedSizeWith<KS>,
+    N: SerializableFixedSizeWith<KS>,
+    (): SerializableWith<KS>,
+    T: SerializableWith<TS> + DeserializableWith<TS>,
     F: Fn(&T, &T) -> T,
 {
 }
@@ -127,13 +134,21 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::state_backend::{rocksdb::tests::TestDb, ReducingStateBuilder};
+    use crate::state_backend::{
+        rocksdb::tests::TestDb, serialization::Bincode, ReducingStateBuilder,
+    };
 
     #[test]
     fn reducing_state_test() {
         let mut db = TestDb::new();
-        let reducing_state =
-            db.new_reducing_state("test_state", (), (), |old: &i32, new: &i32| *old.max(new));
+        let reducing_state = db.new_reducing_state(
+            "test_state",
+            (),
+            (),
+            |old: &i32, new: &i32| *old.max(new),
+            Bincode,
+            Bincode,
+        );
 
         reducing_state.append(&mut db, 7).unwrap();
         reducing_state.append(&mut db, 42).unwrap();
@@ -145,8 +160,22 @@ mod test {
     #[test]
     fn different_funcs_test() {
         let mut db = TestDb::new();
-        let rs1 = db.new_reducing_state("rs1", (), (), |old: &i32, new: &i32| *old.max(new));
-        let rs2 = db.new_reducing_state("rs2", (), (), |old: &i32, new: &i32| *old.min(new));
+        let rs1 = db.new_reducing_state(
+            "rs1",
+            (),
+            (),
+            |old: &i32, new: &i32| *old.max(new),
+            Bincode,
+            Bincode,
+        );
+        let rs2 = db.new_reducing_state(
+            "rs2",
+            (),
+            (),
+            |old: &i32, new: &i32| *old.min(new),
+            Bincode,
+            Bincode,
+        );
 
         rs1.append(&mut db, 7).unwrap();
         rs2.append(&mut db, 7).unwrap();

@@ -27,40 +27,65 @@ pub trait StateBackend {
 
 //// builders ////
 // ideally this would be a part of the StateBackend trait, but we lack generic associated types
-pub trait ValueStateBuilder<IK, N, T>: Sized {
-    type Type: ValueState<Self, IK, N, T>;
-    fn new_value_state(&mut self, name: &str, init_item_key: IK, init_namespace: N) -> Self::Type;
+pub trait ValueStateBuilder<IK, N, T, KS, TS>: Sized {
+    type Type: ValueState<Self, IK, N, T, KS, TS>;
+    fn new_value_state(
+        &mut self,
+        name: &str,
+        init_item_key: IK,
+        init_namespace: N,
+        key_serializer: KS,
+        value_serializer: TS,
+    ) -> Self::Type;
 }
 
-pub trait MapStateBuilder<IK, N, K, V>: Sized {
-    type Type: MapState<Self, IK, N, K, V>;
-    fn new_map_state(&mut self, name: &str, init_item_key: IK, init_namespace: N) -> Self::Type;
+pub trait MapStateBuilder<IK, N, K, V, KS, TS>: Sized {
+    type Type: MapState<Self, IK, N, K, V, KS, TS>;
+    fn new_map_state(
+        &mut self,
+        name: &str,
+        init_item_key: IK,
+        init_namespace: N,
+        key_serializer: KS,
+        value_serializer: TS,
+    ) -> Self::Type;
 }
 
-pub trait VecStateBuilder<IK, N, T>: Sized {
-    type Type: VecState<Self, IK, N, T>;
-    fn new_vec_state(&mut self, name: &str, init_item_key: IK, init_namespace: N) -> Self::Type;
+pub trait VecStateBuilder<IK, N, T, KS, TS>: Sized {
+    type Type: VecState<Self, IK, N, T, KS, TS>;
+    fn new_vec_state(
+        &mut self,
+        name: &str,
+        init_item_key: IK,
+        init_namespace: N,
+        key_serializer: KS,
+        value_serializer: TS,
+    ) -> Self::Type;
 }
 
-pub trait ReducingStateBuilder<IK, N, T, F>: Sized {
-    type Type: ReducingState<Self, IK, N, T>;
+pub trait ReducingStateBuilder<IK, N, T, F, KS, TS>: Sized {
+    type Type: ReducingState<Self, IK, N, T, KS, TS>;
     fn new_reducing_state(
         &mut self,
         name: &str,
         init_item_key: IK,
         init_namespace: N,
         reduce_fn: F,
+        key_serializer: KS,
+        value_serializer: TS,
     ) -> Self::Type;
 }
 
-pub trait AggregatingStateBuilder<IK, N, T, AGG: Aggregator<T>>: Sized {
-    type Type: AggregatingState<Self, IK, N, T, AGG::Result>;
+pub trait AggregatingStateBuilder<IK, N, T, AGG: Aggregator<T>, KS, TS>: Sized {
+    type Type: AggregatingState<Self, IK, N, T, AGG::Result, KS, TS>;
     fn new_aggregating_state(
         &mut self,
         name: &str,
         init_item_key: IK,
         init_namespace: N,
         aggregator: AGG,
+        key_serializer: KS,
+        value_serializer: TS,
     ) -> Self::Type;
 }
 
@@ -78,7 +103,9 @@ mod state_types {
     /// `SB` - state backend type
     /// `IK` - type of key of the item currently in the stream
     /// `N`  - type of the namespace
-    pub trait State<SB, IK, N> {
+    /// `KS` - type of the key serializer (actually item key, namespace, and user key)
+    /// `TS` - type of the value serializer
+    pub trait State<SB, IK, N, KS, TS> {
         fn clear(&self, backend: &mut SB) -> ArconResult<()>;
 
         fn get_current_key(&self) -> ArconResult<&IK>;
@@ -111,16 +138,19 @@ mod state_types {
     }
 
     // TODO: since we don't have any state that is appending, but not merging, maybe consider using one trait?
-    pub trait AppendingState<SB, IK, N, IN, OUT>: State<SB, IK, N> {
+    pub trait AppendingState<SB, IK, N, IN, OUT, KS, TS>: State<SB, IK, N, KS, TS> {
         fn get(&self, backend: &SB) -> ArconResult<OUT>;
         fn append(&self, backend: &mut SB, value: IN) -> ArconResult<()>;
     }
 
-    pub trait MergingState<SB, IK, N, IN, OUT>: AppendingState<SB, IK, N, IN, OUT> {}
+    pub trait MergingState<SB, IK, N, IN, OUT, KS, TS>:
+        AppendingState<SB, IK, N, IN, OUT, KS, TS>
+    {
+    }
 
     //// concrete-ish states ////
 
-    pub trait ValueState<SB, IK, N, T>: State<SB, IK, N> {
+    pub trait ValueState<SB, IK, N, T, KS, TS>: State<SB, IK, N, KS, TS> {
         // bikeshed: get / value (Flink)
         fn get(&self, backend: &SB) -> ArconResult<T>;
 
@@ -128,7 +158,7 @@ mod state_types {
         fn set(&self, backend: &mut SB, new_value: T) -> ArconResult<()>;
     }
 
-    pub trait MapState<SB, IK, N, K, V>: State<SB, IK, N> {
+    pub trait MapState<SB, IK, N, K, V, KS, TS>: State<SB, IK, N, KS, TS> {
         fn get(&self, backend: &SB, key: &K) -> ArconResult<V>;
         fn put(&self, backend: &mut SB, key: K, value: V) -> ArconResult<()>;
 
@@ -170,7 +200,7 @@ mod state_types {
 
     // analogous to ListState in Flink
     // TODO: Q: Should MergingState::OUT be Vec, or something else? More abstract?
-    pub trait VecState<SB, IK, N, T>: MergingState<SB, IK, N, T, Vec<T>> {
+    pub trait VecState<SB, IK, N, T, KS, TS>: MergingState<SB, IK, N, T, Vec<T>, KS, TS> {
         // bikeshed: set / update (Flink)
         fn set(&self, backend: &mut SB, value: Vec<T>) -> ArconResult<()>;
         fn add_all(&self, backend: &mut SB, values: impl IntoIterator<Item = T>) -> ArconResult<()>
@@ -181,12 +211,15 @@ mod state_types {
             backend: &mut SB,
             values: &mut dyn Iterator<Item = T>,
         ) -> ArconResult<()>;
-        fn len(&self, backend: &SB) -> ArconResult<usize>;
+        //        fn len(&self, backend: &SB) -> ArconResult<usize>; // can be problematic
     }
 
-    pub trait ReducingState<SB, IK, N, T>: MergingState<SB, IK, N, T, T> {}
+    pub trait ReducingState<SB, IK, N, T, KS, TS>: MergingState<SB, IK, N, T, T, KS, TS> {}
 
-    pub trait AggregatingState<SB, IK, N, IN, OUT>: MergingState<SB, IK, N, IN, OUT> {}
+    pub trait AggregatingState<SB, IK, N, IN, OUT, KS, TS>:
+        MergingState<SB, IK, N, IN, OUT, KS, TS>
+    {
+    }
 
     pub trait Aggregator<T> {
         type Accumulator;
@@ -282,6 +315,6 @@ mod state_types {
 
 pub mod serialization;
 
-pub mod in_memory;
+//pub mod in_memory; // TODO: fix serialization
 #[cfg(feature = "arcon_rocksdb")]
 pub mod rocksdb;
