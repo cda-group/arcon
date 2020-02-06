@@ -75,10 +75,9 @@ mod state_types {
     //// abstract states ////
     /// State inside a stream.
     ///
-    /// `IK` - type of key of the item currently in the stream
-    /// `N` - type of the namespace
-    /// `UK` - type of user-defined key, `()` when not `MapState`
     /// `SB` - state backend type
+    /// `IK` - type of key of the item currently in the stream
+    /// `N`  - type of the namespace
     pub trait State<SB, IK, N> {
         fn clear(&self, backend: &mut SB) -> ArconResult<()>;
 
@@ -111,14 +110,6 @@ mod state_types {
         };
     }
 
-    pub enum StateType {
-        ValueState,
-        MapState,
-        VecState,
-        ReducingState,
-        AggregatingState,
-    }
-
     // TODO: since we don't have any state that is appending, but not merging, maybe consider using one trait?
     pub trait AppendingState<SB, IK, N, IN, OUT>: State<SB, IK, N> {
         fn get(&self, backend: &SB) -> ArconResult<OUT>;
@@ -130,8 +121,6 @@ mod state_types {
     //// concrete-ish states ////
 
     pub trait ValueState<SB, IK, N, T>: State<SB, IK, N> {
-        const TYPE: StateType = StateType::ValueState;
-
         // bikeshed: get / value (Flink)
         fn get(&self, backend: &SB) -> ArconResult<T>;
 
@@ -140,8 +129,6 @@ mod state_types {
     }
 
     pub trait MapState<SB, IK, N, K, V>: State<SB, IK, N> {
-        const TYPE: StateType = StateType::MapState;
-
         fn get(&self, backend: &SB, key: &K) -> ArconResult<V>;
         fn put(&self, backend: &mut SB, key: K, value: V) -> ArconResult<()>;
 
@@ -184,8 +171,6 @@ mod state_types {
     // analogous to ListState in Flink
     // TODO: Q: Should MergingState::OUT be Vec, or something else? More abstract?
     pub trait VecState<SB, IK, N, T>: MergingState<SB, IK, N, T, Vec<T>> {
-        const TYPE: StateType = StateType::VecState;
-
         // bikeshed: set / update (Flink)
         fn set(&self, backend: &mut SB, value: Vec<T>) -> ArconResult<()>;
         fn add_all(&self, backend: &mut SB, values: impl IntoIterator<Item = T>) -> ArconResult<()>
@@ -199,13 +184,9 @@ mod state_types {
         fn len(&self, backend: &SB) -> ArconResult<usize>;
     }
 
-    pub trait ReducingState<SB, IK, N, T>: MergingState<SB, IK, N, T, T> {
-        const TYPE: StateType = StateType::ReducingState;
-    }
+    pub trait ReducingState<SB, IK, N, T>: MergingState<SB, IK, N, T, T> {}
 
-    pub trait AggregatingState<SB, IK, N, IN, OUT>: MergingState<SB, IK, N, IN, OUT> {
-        const TYPE: StateType = StateType::AggregatingState;
-    }
+    pub trait AggregatingState<SB, IK, N, IN, OUT>: MergingState<SB, IK, N, IN, OUT> {}
 
     pub trait Aggregator<T> {
         type Accumulator;
@@ -298,6 +279,8 @@ mod state_types {
     //        AggregatingState<(), i32, (), i32, String>
     //    );
 }
+
+pub mod serialization;
 
 pub mod in_memory;
 #[cfg(feature = "arcon_rocksdb")]
