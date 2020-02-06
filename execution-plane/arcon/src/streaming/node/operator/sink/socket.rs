@@ -5,15 +5,11 @@ use crate::prelude::*;
 use ::serde::Serialize;
 use bytes::Bytes;
 use futures::{channel, executor::block_on, SinkExt, StreamExt};
-use std::{
-    marker::PhantomData,
-    net::SocketAddr,
-    thread::{Builder, JoinHandle},
-};
-use tokio::{
-    net::UdpSocket,
-    runtime::{Handle, Runtime},
-};
+use std::marker::PhantomData;
+use std::net::SocketAddr;
+use std::thread::{Builder, JoinHandle};
+use tokio::net::UdpSocket;
+use tokio::runtime::{Handle, Runtime};
 
 pub struct SocketSink<IN>
 where
