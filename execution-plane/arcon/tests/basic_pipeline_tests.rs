@@ -1,7 +1,6 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-
 //! The following tests will look similar to the generated code from `arcon_codegen`.
 //! The purpose of these tests are to verify the results of end-to-end pipelines.
 
@@ -53,7 +52,8 @@ fn normalise_pipeline_test() {
         .hold()
         .expect("failed to fetch strong ref");
     let channel = Channel::Local(actor_ref);
-    let channel_strategy: Box<dyn ChannelStrategy<i64>> = Box::new(Forward::new(channel));
+    let channel_strategy: Box<dyn ChannelStrategy<i64>> =
+        Box::new(Forward::new(channel, NodeID::new(4)));
 
     fn map_fn(x: NormaliseElements) -> i64 {
         x.data.iter().map(|x| x + 3).sum()
@@ -81,8 +81,10 @@ fn normalise_pipeline_test() {
     let window: Box<dyn Window<i64, NormaliseElements>> = Box::new(AppenderWindow::new(&window_fn));
 
     let node_4_actor_ref = node_4.actor_ref().hold().expect("Failed to fetch ref");
-    let channel_strategy: Box<Forward<NormaliseElements>> =
-        Box::new(Forward::new(Channel::Local(node_4_actor_ref)));
+    let channel_strategy: Box<Forward<NormaliseElements>> = Box::new(Forward::new(
+        Channel::Local(node_4_actor_ref),
+        NodeID::new(3),
+    ));
 
     let node_3 = system.create_and_start(move || {
         Node::<i64, NormaliseElements>::new(
@@ -99,7 +101,8 @@ fn normalise_pipeline_test() {
 
     let node_3_actor_ref = node_3.actor_ref().hold().expect("Failed to fetch ref");
     let channel = Channel::Local(node_3_actor_ref);
-    let channel_strategy: Box<dyn ChannelStrategy<i64>> = Box::new(Forward::new(channel));
+    let channel_strategy: Box<dyn ChannelStrategy<i64>> =
+        Box::new(Forward::new(channel, NodeID::new(2)));
     fn filter_fn(x: &i64) -> bool {
         *x < 5
     }
@@ -118,7 +121,8 @@ fn normalise_pipeline_test() {
         .hold()
         .expect("Failed to fetch strong ref");
     let channel = Channel::Local(actor_ref);
-    let channel_strategy: Box<dyn ChannelStrategy<i64>> = Box::new(Forward::new(channel));
+    let channel_strategy: Box<dyn ChannelStrategy<i64>> =
+        Box::new(Forward::new(channel, NodeID::new(1)));
 
     // Watermark per 5 lines in the file
     let wm_interval = 5;

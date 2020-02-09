@@ -1,75 +1,74 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::data::{ArconMessage, ArconType};
-use crate::error::*;
-use crate::streaming::channel::strategy::*;
-use crate::streaming::channel::Channel;
+use crate::data::{ArconEvent, ArconMessage, ArconType, NodeID};
+use crate::prelude::KompactSystem;
+use crate::streaming::channel::{strategy::ChannelStrategy, Channel};
 
 pub struct RoundRobin<A>
 where
-    A: 'static + ArconType,
+    A: ArconType,
 {
-    out_channels: Vec<Channel<A>>,
+    channels: Vec<Channel<A>>,
+    sender_id: NodeID,
     curr_index: usize,
+    buffer: Vec<ArconEvent<A>>,
 }
 
 impl<A> RoundRobin<A>
 where
-    A: 'static + ArconType,
+    A: ArconType,
 {
-    pub fn new(out_channels: Vec<Channel<A>>) -> RoundRobin<A> {
+    pub fn new(channels: Vec<Channel<A>>, sender_id: NodeID) -> RoundRobin<A> {
         RoundRobin {
-            out_channels,
+            channels,
+            sender_id,
             curr_index: 0,
+            buffer: Vec::new(),
         }
     }
 }
 
 impl<A> ChannelStrategy<A> for RoundRobin<A>
 where
-    A: 'static + ArconType,
+    A: ArconType,
 {
-    fn output(&mut self, message: ArconMessage<A>, source: &KompactSystem) -> ArconResult<()> {
-        match message.event {
-            ArconEvent::Element(_) => {
-                if self.out_channels.is_empty() {
-                    return arcon_err!("{}", "Vector of Channels is empty");
-                }
+    fn add(&mut self, event: ArconEvent<A>) {
+        self.buffer.push(event);
+    }
 
-                if let Some(channel) = self.out_channels.get(self.curr_index) {
-                    channel_output(channel, message, source)?;
-                    self.curr_index += 1;
+    fn flush(&mut self, source: &KompactSystem) {
+        if let Some(channel) = self.channels.get(self.curr_index) {
+            let msg = ArconMessage {
+                events: self.buffer.clone(),
+                sender: self.sender_id,
+            };
 
-                    if self.curr_index >= self.out_channels.len() {
-                        self.curr_index = 0;
-                    }
+            self.send(&channel, msg, source);
 
-                    Ok(())
-                } else {
-                    arcon_err!("Unable to select channel")
-                }
+            // TODO: fix this..
+            self.buffer.truncate(0);
+
+            self.curr_index += 1;
+
+            if self.curr_index >= self.channels.len() {
+                self.curr_index = 0;
             }
-            _ => {
-                for channel in &self.out_channels {
-                    channel_output(channel, message.clone(), source)?;
-                }
-                Ok(())
-            }
+        } else {
+            panic!("Bad channel setup");
         }
     }
 
-    fn add_channel(&mut self, channel: Channel<A>) {
-        self.out_channels.push(channel);
-    }
-    fn remove_channel(&mut self, _channel: Channel<A>) {
-        unimplemented!();
+    fn add_and_flush(&mut self, event: ArconEvent<A>, source: &KompactSystem) {
+        self.add(event);
+        self.flush(source);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::data::ArconElement;
     use crate::prelude::DebugNode;
     use crate::streaming::channel::strategy::tests::*;
     use kompact::prelude::*;
@@ -95,12 +94,11 @@ mod tests {
         }
 
         let mut channel_strategy: Box<dyn ChannelStrategy<Input>> =
-            Box::new(RoundRobin::new(channels));
+            Box::new(RoundRobin::new(channels, NodeID::new(1)));
 
         for _i in 0..total_msgs {
-            let input = ArconMessage::element(Input { id: 1 }, None, 1.into());
-            // Just assume it is all sent from same comp
-            let _ = channel_strategy.output(input, &system);
+            let elem = ArconElement::new(Input { id: 1 });
+            let _ = channel_strategy.add_and_flush(ArconEvent::Element(elem), &system);
         }
 
         std::thread::sleep(std::time::Duration::from_secs(1));

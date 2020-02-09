@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::prelude::*;
+use futures::executor::block_on_stream;
 use rdkafka::config::ClientConfig;
 use rdkafka::consumer::stream_consumer::StreamConsumer;
 use rdkafka::consumer::{CommitMode, Consumer};
@@ -10,7 +11,6 @@ use rdkafka::message::*;
 use rdkafka::topic_partition_list::Offset;
 use std::collections::HashMap;
 use std::time::Duration;
-use futures::executor::block_on_stream;
 
 /*
     KafkaSource: work in progress
@@ -84,22 +84,24 @@ where
             }
         }
     }
-    pub fn output_event(&mut self, data: OUT, timestamp: Option<u64>) -> () {
-        if let Err(err) = self.out_channels.output(
-            ArconMessage::element(data, timestamp, self.id),
-            &self.ctx.system(),
-        ) {
-            error!(self.ctx.log(), "Unable to output Element, error {}", err);
+    pub fn output_event(&mut self, data: OUT, ts: Option<u64>) -> () {
+        match ts {
+            Some(time) => self
+                .out_channels
+                .add(ArconEvent::Element(ArconElement::with_timestamp(
+                    data, time,
+                ))),
+            None => self
+                .out_channels
+                .add(ArconEvent::Element(ArconElement::new(data))),
         }
     }
     pub fn output_watermark(&mut self) -> () {
         let ts = self.max_timestamp;
-        if let Err(err) = self
-            .out_channels
-            .output(ArconMessage::watermark(ts, self.id), &self.ctx.system())
-        {
-            error!(self.ctx.log(), "Unable to output watermark, error {}", err);
-        }
+        self.out_channels.add_and_flush(
+            ArconEvent::Watermark(Watermark::new(ts)),
+            &self.ctx().system(),
+        );
     }
     pub fn commit_epoch(&mut self, epoch: &u64) -> () {
         if let Some(commit_offset) = self.epoch_offset.get(epoch) {
@@ -125,12 +127,10 @@ where
     }
     pub fn new_epoch(&mut self) -> () {
         self.epoch_offset.insert(self.epoch, self.offset);
-        if let Err(err) = self.out_channels.output(
-            ArconMessage::epoch(self.epoch, self.id.clone()),
-            &self.ctx.system(),
-        ) {
-            error!(self.ctx.log(), "Unable to output Epoch, error {}", err);
-        }
+        self.out_channels.add_and_flush(
+            ArconEvent::Epoch(Epoch::new(self.epoch)),
+            &self.ctx().system(),
+        );
         self.epoch = self.epoch + 1;
     }
 
@@ -275,8 +275,10 @@ mod tests {
         let (sink, _) = system.create_and_register(move || DebugNode::<Thing>::new());
         let sink_ref = sink.actor_ref().hold().expect("failed to fetch strong ref");
 
-        let out_channels: Box<Forward<Thing>> =
-            Box::new(Forward::new(Channel::Local(sink_ref.clone())));
+        let out_channels: Box<Forward<Thing>> = Box::new(Forward::new(
+            Channel::Local(sink_ref.clone()),
+            NodeID::new(0),
+        ));
 
         let kafka_source: KafkaSource<Thing> = KafkaSource::new(
             out_channels,

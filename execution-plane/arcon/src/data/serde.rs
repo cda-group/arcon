@@ -68,7 +68,8 @@ pub(crate) mod reliable_remote {
                         SerError::InvalidData("Failed to decode Watermark".to_string())
                     })?;
                     Ok(ArconMessage::<A> {
-                        event: ArconEvent::<A>::Watermark(wm),
+                        // TODO: fix
+                        events: vec![ArconEvent::<A>::Watermark(wm)],
                         sender: res.sender.unwrap(),
                     })
                 }
@@ -77,7 +78,7 @@ pub(crate) mod reliable_remote {
                     let epoch = Epoch::decode(&mut buf)
                         .map_err(|_| SerError::InvalidData("Failed to decode Epoch".to_string()))?;
                     Ok(ArconMessage::<A> {
-                        event: ArconEvent::<A>::Epoch(epoch),
+                        events: vec![ArconEvent::<A>::Epoch(epoch)],
                         sender: res.sender.unwrap(),
                     })
                 }
@@ -92,6 +93,7 @@ pub(crate) mod reliable_remote {
             Self::SID
         }
         fn size_hint(&self) -> Option<usize> {
+            /*
             let event_len = match &self.0.event {
                 ArconEvent::Element(e) => e.data.encoded_len(),
                 ArconEvent::Watermark(w) => w.encoded_len(),
@@ -100,9 +102,14 @@ pub(crate) mod reliable_remote {
 
             let size = event_len + 2 + 2 + 2; //  sender + timestamp + payload type
             Some(size)
+            */
+            // TODO: FIX
+            None
         }
 
-        fn serialise(&self, buf: &mut dyn BufMut) -> Result<(), SerError> {
+        fn serialise(&self, _: &mut dyn BufMut) -> Result<(), SerError> {
+            panic!("FIX");
+            /*
             // TODO: Quite inefficient as of now. fix..
             match &self.0.event {
                 ArconEvent::Element(elem) => {
@@ -155,7 +162,8 @@ pub(crate) mod reliable_remote {
                     buf.put_slice(&data_buf);
                 }
             }
-            Ok(())
+            */
+            //Ok(())
         }
 
         fn local(self: Box<Self>) -> Result<Box<dyn Any + Send>, Box<dyn Serialisable>> {
@@ -253,15 +261,15 @@ mod test {
 
         let channel = Channel::Remote((remote_path, ArconSerde::Unsafe));
         let mut channel_strategy: Box<dyn ChannelStrategy<ArconDataTest>> =
-            Box::new(Forward::new(channel));
+            Box::new(Forward::new(channel, 1.into()));
 
         let items = vec![1, 2, 3, 4, 5, 6, 7];
         let data = ArconDataTest {
             id: 1,
             items: items.clone(),
         };
-        let element = ArconMessage::element(data, None, 1.into());
-        let _ = channel_strategy.output(element, &local);
+        let element = ArconElement::new(data);
+        channel_strategy.add_and_flush(ArconEvent::Element(element), &local);
         std::thread::sleep(timeout);
         {
             let comp_inspect = &comp.definition().lock().unwrap();

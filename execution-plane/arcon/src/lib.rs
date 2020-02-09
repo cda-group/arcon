@@ -27,7 +27,7 @@ pub mod macros {
 pub mod prelude {
     pub use crate::streaming::channel::strategy::{
         broadcast::Broadcast, forward::Forward, key_by::KeyBy, mute::Mute, round_robin::RoundRobin,
-        shuffle::Shuffle, ChannelStrategy,
+        ChannelStrategy,
     };
 
     pub use crate::streaming::channel::Channel;

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::data::NodeID;
-use crate::data::{ArconMessage, ArconType};
+use crate::data::{ArconElement, ArconEvent, ArconType, Watermark};
 use crate::streaming::channel::strategy::ChannelStrategy;
 use kompact::prelude::*;
 use std::fs::File;
@@ -24,7 +24,7 @@ pub struct LocalFileSource<A: 'static + ArconType + FromStr> {
     channel_strategy: Box<dyn ChannelStrategy<A>>,
     file_path: String,
     watermark_interval: u64, // If 0: no watermarks/timestamps generated
-    id: NodeID,
+    _id: NodeID,
 }
 
 impl<A: ArconType + FromStr> LocalFileSource<A> {
@@ -39,7 +39,7 @@ impl<A: ArconType + FromStr> LocalFileSource<A> {
             channel_strategy: strategy,
             file_path,
             watermark_interval,
-            id,
+            _id: id,
         }
     }
     pub fn process_file(&mut self) {
@@ -53,24 +53,16 @@ impl<A: ArconType + FromStr> LocalFileSource<A> {
                         if let Ok(v) = l.parse::<A>() {
                             match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
                                 Ok(ts) => {
-                                    if let Err(err) = self.channel_strategy.output(
-                                        ArconMessage::element(v, Some(ts.as_secs()), self.id),
-                                        &self.ctx.system(),
-                                    ) {
-                                        error!(
-                                            self.ctx.log(),
-                                            "Unable to output event, error {}", err
-                                        );
-                                    } else {
-                                        counter += 1;
-                                        if counter == self.watermark_interval {
-                                            let _ = self.channel_strategy.output(
-                                                ArconMessage::watermark(ts.as_secs(), self.id),
-                                                &self.ctx.system(),
-                                            );
-                                            counter = 0;
-                                        }
+                                    let element = ArconElement::with_timestamp(v, ts.as_secs());
+                                    self.channel_strategy.add(ArconEvent::Element(element));
+                                    counter += 1;
+                                    if counter == self.watermark_interval {
+                                        self.channel_strategy.add(ArconEvent::Watermark(
+                                            Watermark::new(ts.as_secs()),
+                                        ));
+                                        counter = 0;
                                     }
+                                    self.channel_strategy.flush(&self.ctx().system());
                                 }
                                 _ => {
                                     error!(self.ctx.log(), "Failed to read SystemTime");
@@ -103,12 +95,10 @@ impl<A: ArconType + FromStr> LocalFileSource<A> {
     pub fn output_watermark(&mut self) {
         match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
             Ok(ts) => {
-                if let Err(err) = self.channel_strategy.output(
-                    ArconMessage::watermark(ts.as_secs(), self.id),
-                    &self.ctx.system(),
-                ) {
-                    error!(self.ctx.log(), "Unable to output watermark, error {}", err);
-                }
+                self.channel_strategy.add_and_flush(
+                    ArconEvent::Watermark(Watermark::new(ts.as_secs())),
+                    &self.ctx().system(),
+                );
             }
             _ => {
                 error!(self.ctx.log(), "Failed to read SystemTime");
@@ -173,7 +163,7 @@ mod tests {
 
         let actor_ref = sink.actor_ref().hold().expect("fail");
         let channel = Channel::Local(actor_ref);
-        let channel_strategy = Box::new(Forward::new(channel));
+        let channel_strategy = Box::new(Forward::new(channel, NodeID::new(1)));
         let file_source: LocalFileSource<u64> =
             LocalFileSource::new(String::from(&file_path), channel_strategy, 5, 1.into());
         let (source, _) = system.create_and_register(move || file_source);
@@ -197,7 +187,7 @@ mod tests {
 
         let actor_ref = sink.actor_ref().hold().expect("fail");
         let channel = Channel::Local(actor_ref);
-        let channel_strategy = Box::new(Forward::new(channel));
+        let channel_strategy = Box::new(Forward::new(channel, NodeID::new(1)));
 
         let file_source: LocalFileSource<u64> =
             LocalFileSource::new(String::from(&file_path), channel_strategy, 5, 1.into());
@@ -219,7 +209,7 @@ mod tests {
 
         let actor_ref = sink.actor_ref().hold().expect("fail");
         let channel = Channel::Local(actor_ref);
-        let channel_strategy = Box::new(Forward::new(channel));
+        let channel_strategy = Box::new(Forward::new(channel, NodeID::new(1)));
 
         let file_source: LocalFileSource<f32> =
             LocalFileSource::new(String::from(&file_path), channel_strategy, 5, 1.into());
@@ -243,7 +233,7 @@ mod tests {
 
         let actor_ref = sink.actor_ref().hold().expect("fail");
         let channel = Channel::Local(actor_ref);
-        let channel_strategy = Box::new(Forward::new(channel));
+        let channel_strategy = Box::new(Forward::new(channel, NodeID::new(1)));
 
         let file_source: LocalFileSource<f32> =
             LocalFileSource::new(String::from(&file_path), channel_strategy, 5, 1.into());

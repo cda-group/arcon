@@ -36,9 +36,10 @@ impl<A> ChannelStrategy<A> for Mute<A>
 where
     A: 'static + ArconType,
 {
-    fn output(&mut self, _message: ArconMessage<A>, _source: &KompactSystem) -> ArconResult<()> {
-        Ok(())
+    fn add(&mut self, _: ArconEvent<A>) {
+        // do nothing..
     }
-    fn add_channel(&mut self, _channel: Channel<A>) {}
-    fn remove_channel(&mut self, _channel: Channel<A>) {}
+    fn flush(&mut self, _: &KompactSystem) {}
+
+    fn add_and_flush(&mut self, _: ArconEvent<A>, _: &KompactSystem) {}
 }

@@ -1,25 +1,29 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::data::{ArconMessage, ArconType};
+use crate::data::{ArconEvent, ArconMessage, ArconType, NodeID};
 use crate::prelude::KompactSystem;
-use crate::streaming::channel::strategy::{channel_output, ChannelStrategy};
-use crate::streaming::channel::Channel;
-use arcon_error::ArconResult;
+use crate::streaming::channel::{strategy::ChannelStrategy, Channel};
 
 pub struct Broadcast<A>
 where
-    A: 'static + ArconType,
+    A: ArconType,
 {
-    out_channels: Vec<Channel<A>>,
+    channels: Vec<Channel<A>>,
+    sender_id: NodeID,
+    buffer: Vec<ArconEvent<A>>,
 }
 
 impl<A> Broadcast<A>
 where
-    A: 'static + ArconType,
+    A: ArconType,
 {
-    pub fn new(out_channels: Vec<Channel<A>>) -> Broadcast<A> {
-        Broadcast { out_channels }
+    pub fn new(channels: Vec<Channel<A>>, sender_id: NodeID) -> Broadcast<A> {
+        Broadcast {
+            channels,
+            sender_id,
+            buffer: Vec::new(),
+        }
     }
 }
 
@@ -27,24 +31,34 @@ impl<A> ChannelStrategy<A> for Broadcast<A>
 where
     A: 'static + ArconType,
 {
-    fn output(&mut self, message: ArconMessage<A>, source: &KompactSystem) -> ArconResult<()> {
-        for channel in &self.out_channels {
-            channel_output(channel, message.clone(), source)?;
-        }
-        Ok(())
+    fn add(&mut self, event: ArconEvent<A>) {
+        self.buffer.push(event);
     }
 
-    fn add_channel(&mut self, channel: Channel<A>) {
-        self.out_channels.push(channel);
+    fn flush(&mut self, source: &KompactSystem) {
+        let msg = ArconMessage {
+            events: self.buffer.clone(),
+            sender: self.sender_id,
+        };
+
+        for channel in &self.channels {
+            self.send(channel, msg.clone(), source);
+        }
+
+        // TODO: fix this..
+        self.buffer.truncate(0);
     }
-    fn remove_channel(&mut self, _channel: Channel<A>) {
-        unimplemented!();
+
+    fn add_and_flush(&mut self, event: ArconEvent<A>, source: &KompactSystem) {
+        self.add(event);
+        self.flush(source);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::data::ArconElement;
     use crate::prelude::DebugNode;
     use crate::streaming::channel::strategy::tests::*;
     use crate::streaming::channel::ArconSerde;
@@ -70,12 +84,12 @@ mod tests {
         }
 
         let mut channel_strategy: Box<dyn ChannelStrategy<Input>> =
-            Box::new(Broadcast::new(channels));
+            Box::new(Broadcast::new(channels, NodeID::new(1)));
 
         for _i in 0..total_msgs {
-            let input = ArconMessage::element(Input { id: 1 }, None, 1.into());
+            let elem = ArconElement::new(Input { id: 1 });
             // Just assume it is all sent from same comp
-            let _ = channel_strategy.output(input, &system);
+            channel_strategy.add_and_flush(ArconEvent::Element(elem), &system);
         }
 
         std::thread::sleep(std::time::Duration::from_secs(1));
@@ -132,12 +146,12 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_secs(1));
 
         let mut channel_strategy: Box<dyn ChannelStrategy<Input>> =
-            Box::new(Broadcast::new(channels));
+            Box::new(Broadcast::new(channels, NodeID::new(1)));
 
         for _i in 0..total_msgs {
-            let input = ArconMessage::element(Input { id: 1 }, None, 1.into());
+            let elem = ArconElement::new(Input { id: 1 });
             // Just assume it is all sent from same comp
-            let _ = channel_strategy.output(input, &system);
+            channel_strategy.add_and_flush(ArconEvent::Element(elem), &system);
         }
 
         std::thread::sleep(std::time::Duration::from_secs(1));

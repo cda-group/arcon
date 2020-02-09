@@ -21,8 +21,8 @@ where
     OUT: ArconType,
 {
     ctx: ComponentContext<Node<IN, OUT>>,
-    id: NodeID,
-    out_channels: Box<dyn ChannelStrategy<OUT>>,
+    _id: NodeID,
+    channel_strategy: Box<dyn ChannelStrategy<OUT>>,
     in_channels: Vec<NodeID>,
     operator: Box<dyn Operator<IN, OUT> + Send>,
     watermarks: BTreeMap<NodeID, Watermark>,
@@ -40,7 +40,7 @@ where
     pub fn new(
         id: NodeID,
         in_channels: Vec<NodeID>,
-        out_channels: Box<dyn ChannelStrategy<OUT>>,
+        channel_strategy: Box<dyn ChannelStrategy<OUT>>,
         operator: Box<dyn Operator<IN, OUT> + Send>,
     ) -> Node<IN, OUT> {
         // Initiate our watermarks
@@ -51,8 +51,8 @@ where
 
         Node {
             ctx: ComponentContext::new(),
-            id,
-            out_channels,
+            _id: id,
+            channel_strategy,
             in_channels,
             operator,
             watermarks,
@@ -74,91 +74,100 @@ where
             return Ok(());
         }
 
-        match message.event {
-            ArconEvent::Element(e) => {
-                let results = self.operator.handle_element(e)?;
-                for result in results {
-                    self.output_event(result)?;
+        for event in message.events.into_iter() {
+            match event {
+                ArconEvent::Element(e) => {
+                    let results = self.operator.handle_element(e)?;
+                    for result in results {
+                        self.output_event(result);
+                    }
                 }
-            }
-            ArconEvent::Watermark(w) => {
-                // Insert the watermark and try early return
-                if let Some(old) = self.watermarks.insert(message.sender.clone(), w) {
-                    if old.timestamp > self.current_watermark {
+                ArconEvent::Watermark(w) => {
+                    // Insert the watermark and try early return
+                    if let Some(old) = self.watermarks.insert(message.sender.clone(), w) {
+                        if old.timestamp > self.current_watermark {
+                            return Ok(());
+                        }
+                    }
+                    // A different early return
+                    if w.timestamp <= self.current_watermark {
                         return Ok(());
                     }
-                }
-                // A different early return
-                if w.timestamp <= self.current_watermark {
-                    return Ok(());
-                }
 
-                // Let new_watermark take the value of the lowest watermark
-                let mut new_watermark = w;
-                for some_watermark in self.watermarks.values() {
-                    if some_watermark.timestamp < new_watermark.timestamp {
-                        new_watermark = *some_watermark;
-                    }
-                }
-
-                // Finally, handle the watermark:
-                if new_watermark.timestamp > self.current_watermark {
-                    // Update the stored watermark
-                    self.current_watermark = new_watermark.timestamp;
-
-                    // Handle the watermark
-                    for result in self.operator.handle_watermark(new_watermark)? {
-                        self.output_event(result)?;
+                    // Let new_watermark take the value of the lowest watermark
+                    let mut new_watermark = w;
+                    for some_watermark in self.watermarks.values() {
+                        if some_watermark.timestamp < new_watermark.timestamp {
+                            new_watermark = *some_watermark;
+                        }
                     }
 
-                    // Forward the watermark
-                    self.output_event(ArconEvent::Watermark(new_watermark))?;
+                    // Finally, handle the watermark:
+                    if new_watermark.timestamp > self.current_watermark {
+                        // Update the stored watermark
+                        self.current_watermark = new_watermark.timestamp;
+
+                        // Handle the watermark
+                        for result in self.operator.handle_watermark(new_watermark)? {
+                            self.output_event(result);
+                        }
+
+                        // Forward the watermark
+                        // NOTE: Flush channel buffer directly as not to slow down event-time triggers
+                        self.channel_strategy.add_and_flush(
+                            ArconEvent::Watermark(new_watermark),
+                            &self.ctx().system(),
+                        );
+                    }
                 }
-            }
-            ArconEvent::Epoch(e) => {
-                // Add the sender to the blocked set.
-                self.blocked_channels.insert(message.sender.clone());
+                ArconEvent::Epoch(e) => {
+                    // Add the sender to the blocked set.
+                    self.blocked_channels.insert(message.sender.clone());
 
-                // If all senders blocked we can transition to new Epoch
-                if self.blocked_channels.len() == self.in_channels.len() {
-                    // update current epoch
-                    self.current_epoch = e.epoch;
+                    // If all senders blocked we can transition to new Epoch
+                    if self.blocked_channels.len() == self.in_channels.len() {
+                        // update current epoch
+                        self.current_epoch = e.epoch;
 
-                    // call handle_epoch on our operator
-                    let _operator_state = self.operator.handle_epoch(e)?;
+                        // call handle_epoch on our operator
+                        let _operator_state = self.operator.handle_epoch(e)?;
 
-                    // store the state
-                    self.save_state()?;
+                        // store the state
+                        self.save_state()?;
 
-                    // forward the epoch
-                    self.output_event(ArconEvent::Epoch(e))?;
+                        // forward the epoch
+                        self.output_event(ArconEvent::Epoch(e));
 
-                    // flush the blocked_channels list
-                    self.blocked_channels.clear();
+                        // flush the blocked_channels list
+                        self.blocked_channels.clear();
 
-                    // Handle the message buffer.
-                    if !self.message_buffer.is_empty() {
-                        // Create a new message buffer
-                        let mut message_buffer = LinkedList::<ArconMessage<IN>>::new();
-                        // Swap the current and the new message buffer
-                        mem::swap(&mut message_buffer, &mut self.message_buffer);
-                        // Iterate over the message-buffer until empty
-                        while let Some(message) = message_buffer.pop_front() {
-                            self.handle_message(message)?;
+                        // Handle the message buffer.
+                        if !self.message_buffer.is_empty() {
+                            // Create a new message buffer
+                            let mut message_buffer = LinkedList::<ArconMessage<IN>>::new();
+                            // Swap the current and the new message buffer
+                            mem::swap(&mut message_buffer, &mut self.message_buffer);
+                            // Iterate over the message-buffer until empty
+                            while let Some(message) = message_buffer.pop_front() {
+                                self.handle_message(message)?;
+                            }
                         }
                     }
                 }
             }
+
+            // TODO: improve
+            self.channel_strategy.flush(&self.ctx().system());
         }
+
         Ok(())
     }
-    fn output_event(&mut self, event: ArconEvent<OUT>) -> ArconResult<()> {
-        let message = ArconMessage {
-            event,
-            sender: self.id,
-        };
-        self.out_channels.output(message, &self.ctx.system())
+
+    // Is this really needed..
+    fn output_event(&mut self, event: ArconEvent<OUT>) {
+        self.channel_strategy.add(event);
     }
+
     fn save_state(&mut self) -> ArconResult<()> {
         // todo
         Ok(())
@@ -235,7 +244,8 @@ mod tests {
         let actor_ref: ActorRefStrong<ArconMessage<i32>> =
             sink.actor_ref().hold().expect("Failed to fetch");
         let channel = Channel::Local(actor_ref);
-        let channel_strategy: Box<dyn ChannelStrategy<i32>> = Box::new(Forward::new(channel));
+        let channel_strategy: Box<dyn ChannelStrategy<i32>> =
+            Box::new(Forward::new(channel, NodeID::new(0)));
 
         fn node_fn(x: &i32) -> bool {
             *x >= 0

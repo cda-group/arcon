@@ -219,8 +219,10 @@ mod tests {
         let (sink, _) = system.create_and_register(move || DebugNode::new());
         let sink_ref: ActorRefStrong<ArconMessage<u64>> =
             sink.actor_ref().hold().expect("failed to get strong ref");
-        let channel_strategy: Box<Forward<u64>> =
-            Box::new(Forward::new(Channel::Local(sink_ref.clone())));
+        let channel_strategy: Box<Forward<u64>> = Box::new(Forward::new(
+            Channel::Local(sink_ref.clone()),
+            NodeID::new(1),
+        ));
 
         fn appender_fn(u: &[Item]) -> u64 {
             u.len() as u64

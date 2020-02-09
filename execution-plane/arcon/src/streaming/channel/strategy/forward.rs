@@ -2,37 +2,53 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::prelude::*;
-use crate::streaming::channel::strategy::{channel_output, ChannelStrategy};
-use crate::streaming::channel::Channel;
+use crate::streaming::channel::{strategy::ChannelStrategy, Channel};
 
 pub struct Forward<A>
 where
-    A: 'static + ArconType,
+    A: ArconType,
 {
-    out_channel: Channel<A>,
+    channel: Channel<A>,
+    sender_id: NodeID,
+    buffer: Vec<ArconEvent<A>>,
 }
 
 impl<A> Forward<A>
 where
-    A: 'static + ArconType,
+    A: ArconType,
 {
-    pub fn new(out_channel: Channel<A>) -> Forward<A> {
-        Forward { out_channel }
+    pub fn new(channel: Channel<A>, sender_id: NodeID) -> Forward<A> {
+        Forward {
+            channel,
+            sender_id,
+            buffer: Vec::new(),
+        }
     }
 }
 
 impl<A> ChannelStrategy<A> for Forward<A>
 where
-    A: 'static + ArconType,
+    A: ArconType,
 {
-    fn output(&mut self, message: ArconMessage<A>, source: &KompactSystem) -> ArconResult<()> {
-        channel_output(&self.out_channel, message, source)
+    fn add(&mut self, event: ArconEvent<A>) {
+        self.buffer.push(event);
     }
-    fn add_channel(&mut self, _channel: Channel<A>) {
-        // ignore
+
+    fn flush(&mut self, source: &KompactSystem) {
+        let msg = ArconMessage {
+            events: self.buffer.clone(),
+            sender: self.sender_id,
+        };
+
+        self.send(&self.channel, msg, source);
+
+        // TODO: fix this..
+        self.buffer.truncate(0);
     }
-    fn remove_channel(&mut self, _channel: Channel<A>) {
-        // ignore
+
+    fn add_and_flush(&mut self, event: ArconEvent<A>, source: &KompactSystem) {
+        self.add(event);
+        self.flush(source);
     }
 }
 
@@ -51,11 +67,11 @@ mod tests {
         let actor_ref: ActorRefStrong<ArconMessage<Input>> =
             comp.actor_ref().hold().expect("failed to fetch");
         let mut channel_strategy: Box<dyn ChannelStrategy<Input>> =
-            Box::new(Forward::new(Channel::Local(actor_ref)));
+            Box::new(Forward::new(Channel::Local(actor_ref), 1.into()));
 
         for _i in 0..total_msgs {
-            let input = ArconMessage::element(Input { id: 1 }, None, 1.into());
-            let _ = channel_strategy.output(input, &system);
+            let elem = ArconElement::new(Input { id: 1 });
+            let _ = channel_strategy.add_and_flush(ArconEvent::Element(elem), &system);
         }
 
         std::thread::sleep(std::time::Duration::from_secs(1));

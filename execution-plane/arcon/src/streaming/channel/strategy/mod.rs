@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::data::serde::{reliable_remote::ReliableSerde, unsafe_remote::UnsafeSerde};
-use crate::data::*;
+use crate::data::{ArconEvent, ArconMessage, ArconType};
 use crate::error::*;
 use crate::prelude::KompactSystem;
 use crate::streaming::channel::{ArconSerde, Channel};
@@ -12,18 +12,46 @@ pub mod forward;
 pub mod key_by;
 pub mod mute;
 pub mod round_robin;
-pub mod shuffle;
 
 /// `ChannelStrategy` is used to output events to one or more channels
 ///
 /// A: The Event to be sent
-pub trait ChannelStrategy<A>: Send + Sync
+pub trait ChannelStrategy<A>: Send
 where
     A: ArconType,
 {
-    fn output(&mut self, event: ArconMessage<A>, source: &KompactSystem) -> ArconResult<()>;
-    fn add_channel(&mut self, channel: Channel<A>);
-    fn remove_channel(&mut self, channel: Channel<A>);
+    /// Add event to outgoing buffer
+    fn add(&mut self, event: ArconEvent<A>);
+    /// Flush batch of events out
+    fn flush(&mut self, source: &KompactSystem);
+    /// Add event and flush directly
+    fn add_and_flush(&mut self, event: ArconEvent<A>, source: &KompactSystem);
+    /// Internal helper for sending
+    fn send(&self, channel: &Channel<A>, message: ArconMessage<A>, source: &KompactSystem) {
+        match channel {
+            Channel::Local(actor_ref) => {
+                actor_ref.tell(message);
+            }
+            Channel::Remote((actor_path, arcon_serde)) => match &arcon_serde {
+                ArconSerde::Unsafe => {
+                    let unsafe_msg = UnsafeSerde(message);
+                    actor_path.tell(unsafe_msg, source);
+                }
+                ArconSerde::Reliable => {
+                    let reliable_msg = ReliableSerde(message);
+                    actor_path.tell(reliable_msg, source);
+                }
+            },
+        }
+    }
+    /// Dynamically add channel
+    fn add_channel(&mut self, _: Channel<A>) {
+        unimplemented!();
+    }
+    /// Dynamically remove channel
+    fn remove_channel(&mut self, _: Channel<A>) {
+        unimplemented!();
+    }
 }
 
 /// `channel_output` takes an event and sends it to another component.

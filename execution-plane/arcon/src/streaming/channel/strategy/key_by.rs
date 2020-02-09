@@ -6,6 +6,7 @@ use crate::prelude::KompactSystem;
 use crate::prelude::*;
 use crate::streaming::channel::strategy::channel_output;
 use fnv::FnvHasher;
+use std::collections::HashMap;
 use std::default::Default;
 use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
 
@@ -18,80 +19,108 @@ type DefaultHashBuilder = BuildHasherDefault<FnvHasher>;
 #[derive(Default)]
 pub struct KeyBy<A, H = DefaultHashBuilder>
 where
-    A: 'static + ArconType + Hash,
+    A: ArconType + Hash,
 {
     builder: H,
     parallelism: u32,
-    nodes: Vec<Channel<A>>,
+    sender_id: NodeID,
+    buffer_map: HashMap<usize, (Channel<A>, Vec<ArconEvent<A>>)>,
 }
 
 impl<A> KeyBy<A>
 where
-    A: 'static + ArconType + Hash,
+    A: ArconType + Hash,
 {
-    pub fn new(parallelism: u32, channels: Vec<Channel<A>>) -> KeyBy<A> {
+    pub fn new(parallelism: u32, channels: Vec<Channel<A>>, sender_id: NodeID) -> KeyBy<A> {
         assert_eq!(channels.len(), parallelism as usize);
+        let mut buffer_map: HashMap<usize, (Channel<A>, Vec<ArconEvent<A>>)> = HashMap::new();
+
+        for (i, channel) in channels.into_iter().enumerate() {
+            buffer_map.insert(i, (channel, Vec::new()));
+        }
+
         KeyBy {
             builder: Default::default(),
             parallelism,
-            nodes: channels,
+            sender_id,
+            buffer_map,
         }
     }
 
     pub fn with_hasher<B>(
         parallelism: u32,
         channels: Vec<Channel<A>>,
+        sender_id: NodeID,
     ) -> KeyBy<A, BuildHasherDefault<B>>
     where
         B: Hasher + Default,
     {
         assert_eq!(channels.len(), parallelism as usize);
+        let mut buffer_map: HashMap<usize, (Channel<A>, Vec<ArconEvent<A>>)> = HashMap::new();
+
+        for (i, channel) in channels.into_iter().enumerate() {
+            buffer_map.insert(i, (channel, Vec::new()));
+        }
         KeyBy {
             builder: BuildHasherDefault::<B>::default(),
+            sender_id,
             parallelism,
-            nodes: channels,
+            buffer_map,
         }
     }
 }
 
 impl<A, B> ChannelStrategy<A> for KeyBy<A, B>
 where
-    A: 'static + ArconType + Hash,
+    A: ArconType + Hash,
     B: BuildHasher + Send + Sync,
 {
-    fn output(&mut self, message: ArconMessage<A>, source: &KompactSystem) -> ArconResult<()> {
-        match &message.event {
+    fn add(&mut self, event: ArconEvent<A>) {
+        match &event {
             ArconEvent::Element(element) => {
                 let mut h = self.builder.build_hasher();
                 element.data.hash(&mut h);
                 let hash = h.finish() as u32;
                 let index = (hash % self.parallelism) as usize;
-                if let Some(channel) = self.nodes.get(index) {
-                    channel_output(channel, message, source)?;
+                if let Some((_, buffer)) = self.buffer_map.get_mut(&index) {
+                    buffer.push(event);
                 } else {
-                    panic!("Something went wrong while finding channel!..");
+                    panic!("Bad KeyBy setup");
                 }
             }
             _ => {
-                for channel in self.nodes.iter() {
-                    channel_output(channel, message.clone(), source)?;
+                // Push watermark/epoch into all outgoing buffers
+                for (_, (_, buffer)) in self.buffer_map.iter_mut() {
+                    buffer.push(event.clone());
                 }
             }
         }
-        Ok(())
     }
 
-    fn add_channel(&mut self, _channel: Channel<A>) {
-        unimplemented!();
+    fn flush(&mut self, source: &KompactSystem) {
+        let sender_id = self.sender_id;
+        for (_, (ref channel, buffer)) in self.buffer_map.iter_mut() {
+            let msg = ArconMessage {
+                events: buffer.clone(),
+                sender: sender_id,
+            };
+            // double borrow uuuh
+            //self.send(channel, msg, source);
+            let _ = channel_output(channel, msg, source);
+            buffer.clear();
+        }
     }
-    fn remove_channel(&mut self, _channel: Channel<A>) {
-        unimplemented!();
+
+    fn add_and_flush(&mut self, event: ArconEvent<A>, source: &KompactSystem) {
+        self.add(event);
+        self.flush(source);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::data::ArconEvent;
     use crate::streaming::channel::strategy::tests::*;
     use kompact::prelude::*;
     use rand::Rng;
@@ -116,22 +145,23 @@ mod tests {
         }
 
         let mut channel_strategy: Box<dyn ChannelStrategy<Input>> =
-            Box::new(KeyBy::new(parallelism, channels));
+            Box::new(KeyBy::new(parallelism, channels, NodeID::new(1)));
 
         let mut rng = rand::thread_rng();
 
-        let mut inputs: Vec<ArconMessage<Input>> = Vec::new();
+        let mut inputs: Vec<ArconEvent<Input>> = Vec::new();
         for _i in 0..total_msgs {
             let input = Input {
                 id: rng.gen_range(0, 100),
             };
-            inputs.push(ArconMessage::element(input, None, 1.into()));
+            let elem = ArconElement::new(input);
+            inputs.push(ArconEvent::Element(elem));
         }
 
         for input in inputs {
-            // Just assume it is all sent from same comp
-            let _ = channel_strategy.output(input, &system);
+            let _ = channel_strategy.add(input);
         }
+        let _ = channel_strategy.flush(&system);
 
         std::thread::sleep(std::time::Duration::from_secs(1));
 

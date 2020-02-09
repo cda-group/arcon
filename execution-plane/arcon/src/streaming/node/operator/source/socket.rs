@@ -23,8 +23,8 @@ pub enum SocketKind {
 /// AND it will add a timestamp of the ingestion time to each event outputted
 #[derive(ComponentDefinition)]
 pub struct SocketSource<OUT>
-    where
-        OUT: 'static + ArconType + FromStr,
+where
+    OUT: 'static + ArconType + FromStr,
 {
     ctx: ComponentContext<SocketSource<OUT>>,
     out_channels: Box<dyn ChannelStrategy<OUT>>,
@@ -39,8 +39,8 @@ pub struct SocketSource<OUT>
 }
 
 impl<OUT> SocketSource<OUT>
-    where
-        OUT: 'static + ArconType + FromStr,
+where
+    OUT: 'static + ArconType + FromStr,
 {
     pub fn new(
         sock_addr: SocketAddr,
@@ -67,58 +67,46 @@ impl<OUT> SocketSource<OUT>
         if self.watermark_interval > 0 {
             if ts.is_some() {
                 debug!(self.ctx.log(), "Extracted timestamp and using that");
-                if let Err(err) = self
-                    .out_channels
-                    .output(ArconMessage::element(data, ts, self.id), &self.ctx.system())
-                {
-                    error!(self.ctx.log(), "Unable to output event, error {}", err);
-                }
+                self.out_channels
+                    .add(ArconEvent::Element(ArconElement::with_timestamp(
+                        data,
+                        ts.unwrap(),
+                    )));
             } else {
                 // This should be replaced with a Timestamp extractor, we use ingestiontime for now
                 match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
                     Ok(ts) => {
-                        if let Err(err) = self.out_channels.output(
-                            ArconMessage::element(data, Some(ts.as_secs()), self.id),
-                            &self.ctx.system(),
-                        ) {
-                            error!(self.ctx.log(), "Unable to output event, error {}", err);
-                        }
+                        self.out_channels
+                            .add(ArconEvent::Element(ArconElement::with_timestamp(
+                                data,
+                                ts.as_secs(),
+                            )));
                     }
                     _ => {
                         error!(self.ctx.log(), "Failed to read SystemTime");
                     }
                 }
             }
-        } else if let Err(err) = self.out_channels.output(
-            ArconMessage {
-                event: ArconEvent::Element(ArconElement::new(data)),
-                sender: self.id,
-            },
-            &self.ctx.system(),
-        ) {
-            error!(self.ctx.log(), "Unable to output event, error {}", err);
+        } else {
+            self.out_channels.add_and_flush(
+                ArconEvent::Element(ArconElement::new(data)),
+                &self.ctx().system(),
+            );
         }
     }
     pub fn output_watermark(&mut self) {
         if self.watermark_index.is_some() {
-            if let Err(err) = self.out_channels.output(
-                ArconMessage {
-                    event: ArconEvent::Watermark(Watermark::new(self.max_timestamp)),
-                    sender: self.id,
-                },
-                &self.ctx.system(),
-            ) {
-                error!(self.ctx.log(), "Unable to output watermark, error {}", err);
-            }
+            self.out_channels.add_and_flush(
+                ArconEvent::Watermark(Watermark::new(self.max_timestamp)),
+                &self.ctx().system(),
+            );
         } else {
             match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
                 Ok(n) => {
-                    if let Err(err) = self.out_channels.output(
-                        ArconMessage::watermark(n.as_secs(), self.id),
-                        &self.ctx.system(),
-                    ) {
-                        error!(self.ctx.log(), "Unable to output watermark, error {}", err);
-                    }
+                    self.out_channels.add_and_flush(
+                        ArconEvent::Watermark(Watermark::new(n.as_secs())),
+                        &self.ctx().system(),
+                    );
                 }
                 _ => {
                     error!(self.ctx.log(), "Failed to read SystemTime");
@@ -129,8 +117,8 @@ impl<OUT> SocketSource<OUT>
 }
 
 impl<OUT> Provide<ControlPort> for SocketSource<OUT>
-    where
-        OUT: 'static + ArconType + FromStr,
+where
+    OUT: 'static + ArconType + FromStr,
 {
     fn handle(&mut self, event: ControlEvent) {
         if let ControlEvent::Start = event {
@@ -148,12 +136,12 @@ impl<OUT> Provide<ControlPort> for SocketSource<OUT>
             }
             match self.sock_kind {
                 SocketKind::Tcp => {
-                    let _ = system
-                        .create_and_start(move || IO::tcp(self.sock_addr, self.actor_ref()));
+                    let _ =
+                        system.create_and_start(move || IO::tcp(self.sock_addr, self.actor_ref()));
                 }
                 SocketKind::Udp => {
-                    let _ = system
-                        .create_and_start(move || IO::udp(self.sock_addr, self.actor_ref()));
+                    let _ =
+                        system.create_and_start(move || IO::udp(self.sock_addr, self.actor_ref()));
                 }
             }
         }
@@ -161,8 +149,8 @@ impl<OUT> Provide<ControlPort> for SocketSource<OUT>
 }
 
 impl<OUT> Actor for SocketSource<OUT>
-    where
-        OUT: 'static + ArconType + FromStr,
+where
+    OUT: 'static + ArconType + FromStr,
 {
     type Message = Box<dyn Any + Send>;
     fn receive_local(&mut self, msg: Self::Message) {
@@ -256,8 +244,10 @@ mod tests {
         let (sink, _) = system.create_and_register(move || DebugNode::<u32>::new());
         let sink_ref = sink.actor_ref().hold().expect("Failed to fetch strong ref");
 
-        let out_channels: Box<Forward<u32>> =
-            Box::new(Forward::new(Channel::Local(sink_ref.clone())));
+        let out_channels: Box<Forward<u32>> = Box::new(Forward::new(
+            Channel::Local(sink_ref.clone()),
+            NodeID::new(1),
+        ));
 
         let socket_source: SocketSource<u32> =
             SocketSource::new(addr, SocketKind::Tcp, out_channels, 0, None, 1.into());
@@ -295,8 +285,10 @@ mod tests {
         let (sink, _) = system.create_and_register(move || DebugNode::<f32>::new());
         let sink_ref = sink.actor_ref().hold().expect("failed to fetch strong ref");
 
-        let out_channels: Box<Forward<f32>> =
-            Box::new(Forward::new(Channel::Local(sink_ref.clone())));
+        let out_channels: Box<Forward<f32>> = Box::new(Forward::new(
+            Channel::Local(sink_ref.clone()),
+            NodeID::new(1),
+        ));
 
         let socket_source: SocketSource<f32> =
             SocketSource::new(addr, SocketKind::Tcp, out_channels, 0, None, 1.into());
@@ -307,22 +299,26 @@ mod tests {
         wait(1);
 
         // The actual test:
-        Runtime::new().expect("couldn't create tokio runtime").block_on(async move {
-            let client_write = |src_bytes: &'static [u8]| async move {
-                let mut stream = TcpStream::connect(&addr).await.expect("couldn't connect");
-                stream.write_all(src_bytes).await.expect("write failed");
-            };
+        Runtime::new()
+            .expect("couldn't create tokio runtime")
+            .block_on(async move {
+                let client_write = |src_bytes: &'static [u8]| {
+                    async move {
+                        let mut stream = TcpStream::connect(&addr).await.expect("couldn't connect");
+                        stream.write_all(src_bytes).await.expect("write failed");
+                    }
+                };
 
-            let client1 = client_write(b"123");
-            let client2 = client_write(b"4.56");
-            let client3 = client_write(b"78.9");
+                let client1 = client_write(b"123");
+                let client2 = client_write(b"4.56");
+                let client3 = client_write(b"78.9");
 
-            client1.await;
-            client2.await;
-            client3.await;
-        });
+                client1.await;
+                client2.await;
+                client3.await;
+            });
 
-        wait(1);
+        wait(2);
 
         let source_inspect = source.definition().lock().unwrap();
         assert_eq!(source_inspect.received, 3);
@@ -347,8 +343,10 @@ mod tests {
         let (sink, _) = system.create_and_register(move || DebugNode::<u32>::new());
         let sink_ref = sink.actor_ref().hold().expect("failed to fetch strong ref");
 
-        let out_channels: Box<Forward<u32>> =
-            Box::new(Forward::new(Channel::Local(sink_ref.clone())));
+        let out_channels: Box<Forward<u32>> = Box::new(Forward::new(
+            Channel::Local(sink_ref.clone()),
+            NodeID::new(1),
+        ));
 
         let socket_source: SocketSource<u32> =
             SocketSource::new(addr, SocketKind::Tcp, out_channels, 3, None, 1.into());

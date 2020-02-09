@@ -88,7 +88,9 @@ impl From<u32> for NodeID {
 
 #[derive(Clone, Debug, Abomonation)]
 pub struct ArconMessage<A: ArconType> {
-    pub event: ArconEvent<A>,
+    /// Buffer of ArconEvents
+    pub events: Vec<ArconEvent<A>>,
+    /// ID identifying where the message is sent from
     pub sender: NodeID,
 }
 
@@ -96,19 +98,19 @@ pub struct ArconMessage<A: ArconType> {
 impl<A: ArconType> ArconMessage<A> {
     pub fn watermark(timestamp: u64, sender: NodeID) -> ArconMessage<A> {
         ArconMessage {
-            event: ArconEvent::<A>::Watermark(Watermark { timestamp }),
+            events: vec![ArconEvent::<A>::Watermark(Watermark { timestamp })],
             sender,
         }
     }
     pub fn epoch(epoch: u64, sender: NodeID) -> ArconMessage<A> {
         ArconMessage {
-            event: ArconEvent::<A>::Epoch(Epoch { epoch }),
+            events: vec![ArconEvent::<A>::Epoch(Epoch { epoch })],
             sender,
         }
     }
     pub fn element(data: A, timestamp: Option<u64>, sender: NodeID) -> ArconMessage<A> {
         ArconMessage {
-            event: ArconEvent::Element(ArconElement { data, timestamp }),
+            events: vec![ArconEvent::Element(ArconElement { data, timestamp })],
             sender,
         }
     }

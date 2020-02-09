@@ -26,17 +26,19 @@ where
             epochs: Vec::new(),
         }
     }
-    fn handle_event(&mut self, event: ArconEvent<IN>) {
-        match event {
-            ArconEvent::Element(e) => {
-                info!(self.ctx.log(), "Sink element: {:?}", e.data);
-                self.data.push(e);
-            }
-            ArconEvent::Watermark(w) => {
-                self.watermarks.push(w);
-            }
-            ArconEvent::Epoch(e) => {
-                self.epochs.push(e);
+    fn handle_msg(&mut self, msg: ArconMessage<IN>) {
+        for event in msg.events.into_iter() {
+            match event {
+                ArconEvent::Element(e) => {
+                    info!(self.ctx.log(), "Sink element: {:?}", e.data);
+                    self.data.push(e);
+                }
+                ArconEvent::Watermark(w) => {
+                    self.watermarks.push(w);
+                }
+                ArconEvent::Epoch(e) => {
+                    self.epochs.push(e);
+                }
             }
         }
     }
@@ -77,7 +79,7 @@ where
     type Message = ArconMessage<IN>;
 
     fn receive_local(&mut self, msg: Self::Message) {
-        self.handle_event(msg.event);
+        self.handle_msg(msg);
     }
     fn receive_network(&mut self, msg: NetMessage) {
         let arcon_msg: ArconResult<ArconMessage<IN>> = match *msg.ser_id() {
@@ -92,7 +94,7 @@ where
 
         match arcon_msg {
             Ok(m) => {
-                self.handle_event(m.event);
+                self.handle_msg(m);
             }
             Err(e) => error!(self.ctx.log(), "Error ArconNetworkMessage: {:?}", e),
         }
