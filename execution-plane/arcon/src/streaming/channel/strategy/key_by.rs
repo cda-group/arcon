@@ -4,7 +4,7 @@
 use crate::data::{ArconEvent, ArconType};
 use crate::prelude::KompactSystem;
 use crate::prelude::*;
-use crate::streaming::channel::strategy::channel_output;
+use crate::streaming::channel::strategy::send;
 use fnv::FnvHasher;
 use std::collections::HashMap;
 use std::default::Default;
@@ -104,9 +104,7 @@ where
                 events: buffer.clone(),
                 sender: sender_id,
             };
-            // double borrow uuuh
-            //self.send(channel, msg, source);
-            let _ = channel_output(channel, msg, source);
+            send(channel, msg, source);
             buffer.clear();
         }
     }

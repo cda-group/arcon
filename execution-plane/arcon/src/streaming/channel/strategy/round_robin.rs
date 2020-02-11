@@ -3,7 +3,7 @@
 
 use crate::data::{ArconEvent, ArconMessage, ArconType, NodeID};
 use crate::prelude::KompactSystem;
-use crate::streaming::channel::{strategy::ChannelStrategy, Channel};
+use crate::streaming::channel::{strategy::send, strategy::ChannelStrategy, Channel};
 
 pub struct RoundRobin<A>
 where
@@ -44,7 +44,7 @@ where
                 sender: self.sender_id,
             };
 
-            self.send(&channel, msg, source);
+            send(&channel, msg, source);
 
             // TODO: fix this..
             self.buffer.truncate(0);

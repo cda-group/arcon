@@ -3,7 +3,7 @@
 
 use crate::data::{ArconEvent, ArconMessage, ArconType, NodeID};
 use crate::prelude::KompactSystem;
-use crate::streaming::channel::{strategy::ChannelStrategy, Channel};
+use crate::streaming::channel::{strategy::send, strategy::ChannelStrategy, Channel};
 
 pub struct Broadcast<A>
 where
@@ -42,7 +42,7 @@ where
         };
 
         for channel in &self.channels {
-            self.send(channel, msg.clone(), source);
+            send(channel, msg.clone(), source);
         }
 
         // TODO: fix this..

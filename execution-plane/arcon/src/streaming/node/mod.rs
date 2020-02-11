@@ -3,6 +3,7 @@
 
 pub mod debug;
 pub mod operator;
+pub mod source;
 
 use crate::prelude::*;
 pub use debug::DebugNode;

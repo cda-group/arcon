@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::prelude::*;
-use crate::streaming::channel::{strategy::ChannelStrategy, Channel};
+use crate::streaming::channel::{strategy::send, strategy::ChannelStrategy, Channel};
 
 pub struct Forward<A>
 where
@@ -40,8 +40,7 @@ where
             sender: self.sender_id,
         };
 
-        self.send(&self.channel, msg, source);
-
+        send(&self.channel, msg, source);
         // TODO: fix this..
         self.buffer.truncate(0);
     }

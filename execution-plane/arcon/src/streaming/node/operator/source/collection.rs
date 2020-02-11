@@ -1,148 +1,143 @@
 use crate::data::ArconType;
-use kompact::*;
-use std::sync::Arc;
-/*
-    CollectionSource:
-    Allows generation of events from a rust Vec.
-    Parameters: The Vec from which it will create events and a subscriber for where to send events.
-    Each instance in the collection will be sent as an event.
-*/
+use crate::streaming::node::source::SourceContext;
+use kompact::prelude::*;
+
 #[derive(ComponentDefinition)]
-pub struct CollectionSource<A: 'static + ArconType> {
-    ctx: ComponentContext<CollectionSource<A>>,
-    subscriber: Arc<ActorRef>,
-    collection: Vec<A>,
+pub struct CollectionSource<IN, OUT>
+where
+    IN: ArconType,
+    OUT: ArconType,
+{
+    ctx: ComponentContext<Self>,
+    source_ctx: SourceContext<IN, OUT>,
+    collection: Option<Vec<IN>>,
 }
 
-impl<A: ArconType> CollectionSource<A> {
-    pub fn new(collection: Vec<A>, subscriber: ActorRef) -> CollectionSource<A> {
+impl<IN, OUT> CollectionSource<IN, OUT>
+where
+    IN: ArconType,
+    OUT: ArconType,
+{
+    pub fn new(collection: Vec<IN>, source_ctx: SourceContext<IN, OUT>) -> Self {
         CollectionSource {
             ctx: ComponentContext::new(),
-            subscriber: Arc::new(subscriber),
-            collection,
+            source_ctx,
+            collection: Some(collection),
         }
     }
-    pub fn process_collection(&self) {
-        let actor_ref = self.actor_ref();
-        for element in &self.collection {
-            self.subscriber.tell(Arc::new(element.clone()), &actor_ref);
+    pub fn process_collection(&mut self) {
+        let mut counter: u64 = 0;
+        for record in self.collection.take().unwrap() {
+            let elem = self.source_ctx.extract_element(record);
+            let system = &self.ctx().system();
+            self.source_ctx.process(elem, system);
+
+            counter += 1;
+
+            if counter == self.source_ctx.watermark_interval {
+                self.source_ctx.generate_watermark(system);
+                counter = 0;
+            }
         }
     }
 }
 
-impl<A: ArconType> Provide<ControlPort> for CollectionSource<A> {
+impl<IN, OUT> Provide<ControlPort> for CollectionSource<IN, OUT>
+where
+    IN: ArconType,
+    OUT: ArconType,
+{
     fn handle(&mut self, event: ControlEvent) -> () {
-        match event {
-            ControlEvent::Start => {
-                self.process_collection();
-            }
-            _ => {
-                error!(self.ctx.log(), "bad ControlEvent");
-            }
+        if let ControlEvent::Start = event {
+            self.process_collection();
         }
     }
 }
 
-impl<A: ArconType> Actor for CollectionSource<A> {
-    fn receive_local(&mut self, _sender: ActorRef, _msg: &Any) {}
-
-    fn receive_message(&mut self, _sender: ActorPath, _ser_id: u64, _buf: &mut Buf) {}
+impl<IN, OUT> Actor for CollectionSource<IN, OUT>
+where
+    IN: ArconType,
+    OUT: ArconType,
+{
+    type Message = ();
+    fn receive_local(&mut self, _msg: Self::Message) {}
+    fn receive_network(&mut self, _msg: NetMessage) {}
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{thread, time};
+    use crate::prelude::{Channel, DebugNode, Filter, Forward, NodeID};
+    use kompact::default_components::DeadletterBox;
+    use kompact::prelude::KompactSystem;
+    use std::sync::Arc;
 
-    // Stub for window-results
-    mod sink {
-        use super::*;
-
-        #[derive(ComponentDefinition)]
-        pub struct Sink<A: 'static + ArconType> {
-            ctx: ComponentContext<Sink<A>>,
-            pub result: Vec<A>,
-        }
-        impl<A: ArconType> Sink<A> {
-            pub fn new(_t: A) -> Sink<A> {
-                Sink {
-                    ctx: ComponentContext::new(),
-                    result: Vec::new(),
-                }
-            }
-        }
-        impl<A: ArconType> Provide<ControlPort> for Sink<A> {
-            fn handle(&mut self, _event: ControlEvent) -> () {}
-        }
-        impl<A: ArconType> Actor for Sink<A> {
-            fn receive_local(&mut self, _sender: ActorRef, msg: &Any) {
-                if let Some(m) = msg.downcast_ref::<A>() {
-                    self.result.push((*m).clone());
-                }
-            }
-            fn receive_message(&mut self, _sender: ActorPath, _ser_id: u64, _buf: &mut Buf) {}
-        }
-    }
-
-    // Shared methods for test cases
-    fn wait(time: u64) -> () {
-        thread::sleep(time::Duration::from_secs(time));
-    }
-    fn test_setup<A: ArconType>(
-        a: A,
-    ) -> (
-        kompact::KompactSystem,
-        Arc<kompact::Component<sink::Sink<A>>>,
-    ) {
+    // Perhaps move this to some common place?
+    fn test_setup<A: ArconType>() -> (KompactSystem, Arc<Component<DebugNode<A>>>) {
         // Kompact set-up
-        let cfg = KompactConfig::new();
-        let system = KompactSystem::new(cfg).expect("KompactSystem");
+        let mut cfg = KompactConfig::new();
+        cfg.system_components(DeadletterBox::new, NetworkConfig::default().build());
+        let system = cfg.build().expect("KompactSystem");
 
-        let (sink, _) = system.create_and_register(move || sink::Sink::new(a));
+        let (sink, _) = system.create_and_register(move || {
+            let s: DebugNode<A> = DebugNode::new();
+            s
+        });
 
         system.start(&sink);
 
         return (system, sink);
     }
-    // Test cases
-    #[test]
-    fn collection_f32() {
-        let (system, sink) = test_setup(1 as f32);
-        let mut collection = Vec::new();
-        collection.push(123 as f32);
-        collection.push(321.9 as f32);
 
-        let file_source: CollectionSource<f32> =
-            CollectionSource::new(collection, sink.actor_ref());
-        let (source, _) = system.create_and_register(move || file_source);
-        system.start(&source);
-        wait(1);
+    #[test]
+    fn collection_source_test() {
+        let (system, sink) = test_setup::<u64>();
+        // Configure channel strategy for sink
+        let actor_ref = sink.actor_ref().hold().expect("fail");
+        let channel = Channel::Local(actor_ref);
+        let channel_strategy = Box::new(Forward::new(channel, NodeID::new(1)));
+
+        // Our operator function
+        fn filter_fn(x: &u64) -> bool {
+            *x < 1000
+        }
+
+        let operator = Box::new(Filter::<u64>::new(&filter_fn));
+
+        // Set up SourceContext
+        let buffer_limit = 200;
+        let buffer_timeout = 0; // Not needed for CollectionSource
+        let watermark_interval = 50;
+        let collection_elements = 2000;
+
+        let source_context = SourceContext::new(
+            buffer_timeout,
+            buffer_limit,
+            watermark_interval,
+            None, // no timestamp extractor
+            channel_strategy,
+            operator,
+        );
+
+        // Generate collection
+        let collection: Vec<u64> = (0..collection_elements).collect();
+
+        // Set up CollectionSource component
+        let collection_source: CollectionSource<u64, u64> =
+            CollectionSource::new(collection, source_context);
+        let _ = system.create_and_start(move || collection_source);
+
+        // Wait a bit in order for all results to come in...
+        std::thread::sleep(std::time::Duration::from_secs(1));
 
         let sink_inspect = sink.definition().lock().unwrap();
-        let r0 = sink_inspect.result[0];
-        let r1 = sink_inspect.result[1];
-        assert_eq!(sink_inspect.result.len(), (2 as usize));
-        assert_eq!(r0, 123 as f32);
-        assert_eq!(r1, 321.9 as f32);
-    } /* Need to change ArconType
-      #[test]
-      fn collection_tuple() {
-          let (system, sink) = test_setup((1 as f32, 1 as u8));
-          let mut collection = Vec::new();
-          collection.push((123 as f32, 2 as u8));
-          collection.push((123.33 as f32, 3 as u8));
+        let data_len = sink_inspect.data.len();
+        let watermark_len = sink_inspect.watermarks.len();
 
-          let file_source: CollectionSource<(f32, u8)> =
-              CollectionSource::new(collection, sink.actor_ref());
-          let (source, _) = system.create_and_register(move || file_source);
-          system.start(&source);
-          wait(1);
-
-          let sink_inspect = sink.definition().lock().unwrap();
-          let r0 = sink_inspect.result[0];
-          let r1 = sink_inspect.result[1];
-          assert_eq!(sink_inspect.result.len(), (2 as usize));
-          assert_eq!(r0, (123 as f32, 2 as u8));
-          assert_eq!(r1, (123.33 as f32, 3 as u8));
-      } */
+        assert_eq!(
+            watermark_len as u64,
+            collection_elements / watermark_interval
+        );
+        assert_eq!(data_len, 1000);
+    }
 }
