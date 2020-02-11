@@ -5,22 +5,24 @@ use crate::{
     prelude::ArconResult,
     state_backend::{
         in_memory::{InMemory, StateCommon},
+        serialization::{DeserializableWith, SerializableFixedSizeWith, SerializableWith},
         state_types::{AppendingState, MergingState, ReducingState, State},
     },
 };
-use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 
-pub struct InMemoryReducingState<IK, N, T, F> {
-    pub(crate) common: StateCommon<IK, N>,
+pub struct InMemoryReducingState<IK, N, T, F, KS, TS> {
+    pub(crate) common: StateCommon<IK, N, KS, TS>,
     pub(crate) reduce_fn: F,
     pub(crate) _phantom: PhantomData<T>,
 }
 
-impl<IK, N, T, F> State<InMemory, IK, N> for InMemoryReducingState<IK, N, T, F>
+impl<IK, N, T, F, KS, TS> State<InMemory, IK, N, KS, TS>
+    for InMemoryReducingState<IK, N, T, F, KS, TS>
 where
-    IK: Serialize,
-    N: Serialize,
+    IK: SerializableFixedSizeWith<KS>,
+    N: SerializableFixedSizeWith<KS>,
+    (): SerializableWith<KS>,
 {
     fn clear(&self, backend: &mut InMemory) -> ArconResult<()> {
         let key = self.common.get_db_key(&())?;
@@ -31,19 +33,20 @@ where
     delegate_key_and_namespace!(common);
 }
 
-impl<IK, N, T, F> AppendingState<InMemory, IK, N, T, T> for InMemoryReducingState<IK, N, T, F>
+impl<IK, N, T, F, KS, TS> AppendingState<InMemory, IK, N, T, T, KS, TS>
+    for InMemoryReducingState<IK, N, T, F, KS, TS>
 // TODO: if we made the (backend-)mutating methods take &mut self, F could be FnMut
 where
-    IK: Serialize,
-    N: Serialize,
-    T: Serialize + for<'a> Deserialize<'a>,
+    IK: SerializableFixedSizeWith<KS>,
+    N: SerializableFixedSizeWith<KS>,
+    (): SerializableWith<KS>,
+    T: SerializableWith<TS> + DeserializableWith<TS>,
     F: Fn(&T, &T) -> T,
 {
     fn get(&self, backend: &InMemory) -> ArconResult<T> {
         let key = self.common.get_db_key(&())?;
         let storage = backend.get(&key)?;
-        let value = bincode::deserialize(storage)
-            .map_err(|e| arcon_err_kind!("Could not deserialize reducing state value: {}", e))?;
+        let value = T::deserialize(&self.common.value_serializer, storage)?;
 
         Ok(value)
     }
@@ -52,37 +55,42 @@ where
         let key = self.common.get_db_key(&())?;
         let storage = backend.get_mut_or_init_empty(&key)?;
         if storage.is_empty() {
-            bincode::serialize_into(storage, &value)
-                .map_err(|e| arcon_err_kind!("Could not serialize reducing state value: {}", e))?;
+            T::serialize_into(&self.common.value_serializer, storage, &value)?;
             return Ok(());
         }
 
-        let old_value = bincode::deserialize(storage)
-            .map_err(|e| arcon_err_kind!("Could not deserialize reducing state value: {}", e))?;
+        let old_value = T::deserialize(&self.common.value_serializer, storage)?;
 
         let new_value = (self.reduce_fn)(&old_value, &value);
-        bincode::serialize_into(storage.as_mut_slice(), &new_value)
-            .map_err(|e| arcon_err_kind!("Could not serialize reducing state value: {}", e))?;
+        T::serialize_into(
+            &self.common.value_serializer,
+            storage.as_mut_slice(),
+            &new_value,
+        )?;
 
         Ok(())
     }
 }
 
-impl<IK, N, T, F> MergingState<InMemory, IK, N, T, T> for InMemoryReducingState<IK, N, T, F>
+impl<IK, N, T, F, KS, TS> MergingState<InMemory, IK, N, T, T, KS, TS>
+    for InMemoryReducingState<IK, N, T, F, KS, TS>
 // TODO: if we made the (backend-)mutating methods take &mut self, F could be FnMut
 where
-    IK: Serialize,
-    N: Serialize,
-    T: Serialize + for<'a> Deserialize<'a>,
+    IK: SerializableFixedSizeWith<KS>,
+    N: SerializableFixedSizeWith<KS>,
+    (): SerializableWith<KS>,
+    T: SerializableWith<TS> + DeserializableWith<TS>,
     F: Fn(&T, &T) -> T,
 {
 }
 
-impl<IK, N, T, F> ReducingState<InMemory, IK, N, T> for InMemoryReducingState<IK, N, T, F>
+impl<IK, N, T, F, KS, TS> ReducingState<InMemory, IK, N, T, KS, TS>
+    for InMemoryReducingState<IK, N, T, F, KS, TS>
 where
-    IK: Serialize,
-    N: Serialize,
-    T: Serialize + for<'a> Deserialize<'a>,
+    IK: SerializableFixedSizeWith<KS>,
+    N: SerializableFixedSizeWith<KS>,
+    (): SerializableWith<KS>,
+    T: SerializableWith<TS> + DeserializableWith<TS>,
     F: Fn(&T, &T) -> T,
 {
 }
@@ -90,13 +98,19 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::state_backend::{ReducingStateBuilder, StateBackend};
+    use crate::state_backend::{serialization::Bincode, ReducingStateBuilder, StateBackend};
 
     #[test]
     fn reducing_state_test() {
         let mut db = InMemory::new("test").unwrap();
-        let reducing_state =
-            db.new_reducing_state("test_state", (), (), |old: &i32, new: &i32| *old.max(new));
+        let reducing_state = db.new_reducing_state(
+            "test_state",
+            (),
+            (),
+            |old: &i32, new: &i32| *old.max(new),
+            Bincode,
+            Bincode,
+        );
 
         reducing_state.append(&mut db, 7).unwrap();
         reducing_state.append(&mut db, 42).unwrap();

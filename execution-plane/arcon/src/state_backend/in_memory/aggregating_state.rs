@@ -5,22 +5,24 @@ use crate::{
     prelude::ArconResult,
     state_backend::{
         in_memory::{InMemory, StateCommon},
+        serialization::{DeserializableWith, SerializableFixedSizeWith, SerializableWith},
         state_types::{AggregatingState, Aggregator, AppendingState, MergingState, State},
     },
 };
-use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 
-pub struct InMemoryAggregatingState<IK, N, T, AGG> {
-    pub(crate) common: StateCommon<IK, N>,
+pub struct InMemoryAggregatingState<IK, N, T, AGG, KS, TS> {
+    pub(crate) common: StateCommon<IK, N, KS, TS>,
     pub(crate) aggregator: AGG,
     pub(crate) _phantom: PhantomData<T>,
 }
 
-impl<IK, N, T, AGG> State<InMemory, IK, N> for InMemoryAggregatingState<IK, N, T, AGG>
+impl<IK, N, T, AGG, KS, TS> State<InMemory, IK, N, KS, TS>
+    for InMemoryAggregatingState<IK, N, T, AGG, KS, TS>
 where
-    IK: Serialize,
-    N: Serialize,
+    IK: SerializableFixedSizeWith<KS>,
+    N: SerializableFixedSizeWith<KS>,
+    (): SerializableWith<KS>,
 {
     fn clear(&self, backend: &mut InMemory) -> ArconResult<()> {
         let key = self.common.get_db_key(&())?;
@@ -31,21 +33,21 @@ where
     delegate_key_and_namespace!(common);
 }
 
-impl<IK, N, T, AGG> AppendingState<InMemory, IK, N, T, AGG::Result>
-    for InMemoryAggregatingState<IK, N, T, AGG>
+impl<IK, N, T, AGG, KS, TS> AppendingState<InMemory, IK, N, T, AGG::Result, KS, TS>
+    for InMemoryAggregatingState<IK, N, T, AGG, KS, TS>
 where
-    IK: Serialize,
-    N: Serialize,
+    IK: SerializableFixedSizeWith<KS>,
+    N: SerializableFixedSizeWith<KS>,
+    (): SerializableWith<KS>,
     AGG: Aggregator<T>,
-    AGG::Accumulator: Serialize + for<'a> Deserialize<'a>,
+    AGG::Accumulator: SerializableWith<TS> + DeserializableWith<TS>,
 {
     fn get(&self, backend: &InMemory) -> ArconResult<AGG::Result> {
         // TODO: do we want to return R based on a new accumulator if not found?
         let key = self.common.get_db_key(&())?;
         let serialized = backend.get(&key)?;
-        let current_accumulator = bincode::deserialize(serialized).map_err(|e| {
-            arcon_err_kind!("Could not deserialize aggregating state accumulator: {}", e)
-        })?;
+        let current_accumulator =
+            AGG::Accumulator::deserialize(&self.common.value_serializer, serialized)?;
         Ok(self.aggregator.accumulator_into_result(current_accumulator))
     }
 
@@ -56,39 +58,41 @@ where
         let mut current_accumulator = if accumulator_buffer.is_empty() {
             self.aggregator.create_accumulator()
         } else {
-            bincode::deserialize(&*accumulator_buffer).map_err(|e| {
-                arcon_err_kind!("Could not deserialize aggregating state accumulator: {}", e)
-            })?
+            AGG::Accumulator::deserialize(&self.common.value_serializer, &*accumulator_buffer)?
         };
 
         self.aggregator.add(&mut current_accumulator, value);
         accumulator_buffer.clear();
 
-        bincode::serialize_into(accumulator_buffer, &current_accumulator).map_err(|e| {
-            arcon_err_kind!("Could not serialize aggregating state accumulator: {}", e)
-        })?;
+        AGG::Accumulator::serialize_into(
+            &self.common.value_serializer,
+            accumulator_buffer,
+            &current_accumulator,
+        )?;
 
         Ok(())
     }
 }
 
-impl<IK, N, T, AGG> MergingState<InMemory, IK, N, T, AGG::Result>
-    for InMemoryAggregatingState<IK, N, T, AGG>
+impl<IK, N, T, AGG, KS, TS> MergingState<InMemory, IK, N, T, AGG::Result, KS, TS>
+    for InMemoryAggregatingState<IK, N, T, AGG, KS, TS>
 where
-    IK: Serialize,
-    N: Serialize,
+    IK: SerializableFixedSizeWith<KS>,
+    N: SerializableFixedSizeWith<KS>,
+    (): SerializableWith<KS>,
     AGG: Aggregator<T>,
-    AGG::Accumulator: Serialize + for<'a> Deserialize<'a>,
+    AGG::Accumulator: SerializableWith<TS> + DeserializableWith<TS>,
 {
 }
 
-impl<IK, N, T, AGG> AggregatingState<InMemory, IK, N, T, AGG::Result>
-    for InMemoryAggregatingState<IK, N, T, AGG>
+impl<IK, N, T, AGG, KS, TS> AggregatingState<InMemory, IK, N, T, AGG::Result, KS, TS>
+    for InMemoryAggregatingState<IK, N, T, AGG, KS, TS>
 where
-    IK: Serialize,
-    N: Serialize,
+    IK: SerializableFixedSizeWith<KS>,
+    N: SerializableFixedSizeWith<KS>,
+    (): SerializableWith<KS>,
     AGG: Aggregator<T>,
-    AGG::Accumulator: Serialize + for<'a> Deserialize<'a>,
+    AGG::Accumulator: SerializableWith<TS> + DeserializableWith<TS>,
 {
 }
 
@@ -96,7 +100,8 @@ where
 mod test {
     use super::*;
     use crate::state_backend::{
-        state_types::ClosuresAggregator, AggregatingStateBuilder, StateBackend,
+        serialization::Bincode, state_types::ClosuresAggregator, AggregatingStateBuilder,
+        StateBackend,
     };
 
     #[test]
@@ -115,6 +120,8 @@ mod test {
                 },
                 |v| format!("{:?}", v),
             ),
+            Bincode,
+            Bincode,
         );
 
         aggregating_state.append(&mut db, 1).unwrap();

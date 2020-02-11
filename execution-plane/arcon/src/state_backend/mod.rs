@@ -96,6 +96,7 @@ mod state_types {
     //  rid of the hierarchy altogether?
 
     use super::*;
+    use crate::state_backend::serialization::SerializableFixedSizeWith;
 
     //// abstract states ////
     /// State inside a stream.
@@ -180,20 +181,12 @@ mod state_types {
         fn remove(&self, backend: &mut SB, key: &K) -> ArconResult<()>;
         fn contains(&self, backend: &SB, key: &K) -> ArconResult<bool>;
 
+        // unboxed iterators would require associated types generic over backend's lifetime
+        // TODO: impl this when GATs land on nightly
+
         fn iter<'a>(&self, backend: &'a SB) -> ArconResult<Box<dyn Iterator<Item = (K, V)> + 'a>>;
-        // makes it not object-safe :(
-        //        type Iter: Iterator<Item=(K, V)>;
-        //        fn entries_unboxed(&self) -> ArconResult<Self::Iter> where Self: Sized;
-
         fn keys<'a>(&self, backend: &'a SB) -> ArconResult<Box<dyn Iterator<Item = K> + 'a>>;
-        // makes it not object-safe :(
-        //        type KeysIter: Iterator<Item=K>;
-        //        fn keys_unboxed(&self) -> ArconResult<Self::KeysIter> where Self: Sized;
-
         fn values<'a>(&self, backend: &'a SB) -> ArconResult<Box<dyn Iterator<Item = V> + 'a>>;
-        // makes it not object-safe :(
-        //        type ValuesIter: Iterator<Item=V>;
-        //        fn values_unboxed(&self) -> ArconResult<Self::ValuesIter> where Self: Sized;
 
         fn is_empty(&self, backend: &SB) -> ArconResult<bool>;
     }
@@ -211,7 +204,10 @@ mod state_types {
             backend: &mut SB,
             values: &mut dyn Iterator<Item = T>,
         ) -> ArconResult<()>;
-        //        fn len(&self, backend: &SB) -> ArconResult<usize>; // can be problematic
+
+        fn len(&self, backend: &SB) -> ArconResult<usize>
+        where
+            T: SerializableFixedSizeWith<TS>; // can be problematic
     }
 
     pub trait ReducingState<SB, IK, N, T, KS, TS>: MergingState<SB, IK, N, T, T, KS, TS> {}
@@ -226,7 +222,7 @@ mod state_types {
         type Result;
 
         fn create_accumulator(&self) -> Self::Accumulator;
-        // bikeshed - immutable + return value instead of mutable acc? (like in flink)
+        // bikeshed - immutable + return value instead of mutable acc? (like in Flink)
         fn add(&self, acc: &mut Self::Accumulator, value: T);
         fn merge_accumulators(
             &self,
@@ -315,6 +311,6 @@ mod state_types {
 
 pub mod serialization;
 
-//pub mod in_memory; // TODO: fix serialization
+pub mod in_memory;
 #[cfg(feature = "arcon_rocksdb")]
 pub mod rocksdb;

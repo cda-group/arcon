@@ -10,6 +10,7 @@ use crate::{
         state_types::{AppendingState, MergingState, State, VecState},
     },
 };
+use error::ErrorKind;
 use rocksdb::WriteBatch;
 use std::marker::PhantomData;
 
@@ -141,41 +142,40 @@ where
         self.add_all(backend, values)
     }
 
-    //    /// for types that don't satisfy the extra bounds, do .get().len()
-    //    fn len(&self, backend: &RocksDb) -> ArconResult<usize>
-    //    where
-    //        T: SerializableFixedSizeWith<TS>,
-    //    {
-    //        let key = self.common.get_db_key(&())?;
-    //        let storage = backend.get(&self.common.cf_name, &key);
-    //
-    //        match storage {
-    //            Err(e) => match e.kind() {
-    //                ErrorKind::ArconError(message) if &*message == "Value not found" => Ok(0),
-    //                _ => Err(e),
-    //            },
-    //            Ok(buf) => {
-    //                let mut reader = &*buf;
-    //                if buf.is_empty() {
-    //                    return Ok(0);
-    //                }
-    //
-    //                debug_assert_ne!(T::SIZE, 0);
-    //
-    //                let len = buf.len() / T::SIZE;
-    //                let rem = buf.len() % T::SIZE;
-    //
-    //                // sanity check
-    //                if rem != 0 {
-    //                    return arcon_err!(
-    //                        "vec state storage length is not a multiple of element size"
-    //                    );
-    //                }
-    //
-    //                Ok(len)
-    //            }
-    //        }
-    //    }
+    /// for types that don't satisfy the extra bounds, do .get().len()
+    fn len(&self, backend: &RocksDb) -> ArconResult<usize>
+    where
+        T: SerializableFixedSizeWith<TS>,
+    {
+        let key = self.common.get_db_key(&())?;
+        let storage = backend.get(&self.common.cf_name, &key);
+
+        match storage {
+            Err(e) => match e.kind() {
+                ErrorKind::ArconError(message) if &*message == "Value not found" => Ok(0),
+                _ => Err(e),
+            },
+            Ok(buf) => {
+                if buf.is_empty() {
+                    return Ok(0);
+                }
+
+                debug_assert_ne!(T::SIZE, 0);
+
+                let len = buf.len() / T::SIZE;
+                let rem = buf.len() % T::SIZE;
+
+                // sanity check
+                if rem != 0 {
+                    return arcon_err!(
+                        "vec state storage length is not a multiple of element size"
+                    );
+                }
+
+                Ok(len)
+            }
+        }
+    }
 }
 
 #[cfg(test)]

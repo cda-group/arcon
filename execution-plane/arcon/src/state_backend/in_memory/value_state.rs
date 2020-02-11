@@ -5,22 +5,23 @@ use crate::{
     prelude::ArconResult,
     state_backend::{
         in_memory::{InMemory, StateCommon},
+        serialization::{DeserializableWith, SerializableFixedSizeWith, SerializableWith},
         state_types::{State, ValueState},
     },
 };
-use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 
-pub struct InMemoryValueState<IK, N, T> {
-    pub(crate) common: StateCommon<IK, N>,
+pub struct InMemoryValueState<IK, N, T, KS, TS> {
+    pub(crate) common: StateCommon<IK, N, KS, TS>,
     pub(crate) _phantom: PhantomData<T>,
 }
 
-impl<IK, N, T> State<InMemory, IK, N> for InMemoryValueState<IK, N, T>
+impl<IK, N, T, KS, TS> State<InMemory, IK, N, KS, TS> for InMemoryValueState<IK, N, T, KS, TS>
 where
-    IK: Serialize,
-    N: Serialize,
-    T: Serialize,
+    IK: SerializableFixedSizeWith<KS>,
+    N: SerializableFixedSizeWith<KS>,
+    (): SerializableWith<KS>,
+    T: SerializableWith<TS>,
 {
     fn clear(&self, backend: &mut InMemory) -> ArconResult<()> {
         let key = self.common.get_db_key(&())?;
@@ -31,25 +32,24 @@ where
     delegate_key_and_namespace!(common);
 }
 
-impl<IK, N, T> ValueState<InMemory, IK, N, T> for InMemoryValueState<IK, N, T>
+impl<IK, N, T, KS, TS> ValueState<InMemory, IK, N, T, KS, TS>
+    for InMemoryValueState<IK, N, T, KS, TS>
 where
-    IK: Serialize,
-    N: Serialize,
-    T: Serialize,
-    T: for<'a> Deserialize<'a>,
+    IK: SerializableFixedSizeWith<KS>,
+    N: SerializableFixedSizeWith<KS>,
+    (): SerializableWith<KS>, // TODO: this is ridiculous
+    T: SerializableWith<TS> + DeserializableWith<TS>,
 {
     fn get(&self, backend: &InMemory) -> ArconResult<T> {
         let key = self.common.get_db_key(&())?;
         let serialized = backend.get(&key)?;
-        let value = bincode::deserialize(&serialized)
-            .map_err(|e| arcon_err_kind!("Cannot deserialize value state: {}", e))?;
+        let value = T::deserialize(&self.common.value_serializer, &serialized)?;
         Ok(value)
     }
 
     fn set(&self, backend: &mut InMemory, new_value: T) -> ArconResult<()> {
         let key = self.common.get_db_key(&())?;
-        let serialized = bincode::serialize(&new_value)
-            .map_err(|e| arcon_err_kind!("Cannot serialize value state: {}", e))?;
+        let serialized = T::serialize(&self.common.value_serializer, &new_value)?;
         backend.put(key, serialized)?;
         Ok(())
     }
@@ -58,12 +58,12 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::state_backend::{StateBackend, ValueStateBuilder};
+    use crate::state_backend::{serialization::Bincode, StateBackend, ValueStateBuilder};
 
     #[test]
     fn in_memory_value_state_test() {
         let mut db = InMemory::new("test").unwrap();
-        let value_state = db.new_value_state("test_state", (), ());
+        let value_state = db.new_value_state("test_state", (), (), Bincode, Bincode);
 
         let unset = value_state.get(&db);
         assert!(unset.is_err());
@@ -80,8 +80,8 @@ mod test {
     #[test]
     fn in_memory_value_states_are_independant() {
         let mut db = InMemory::new("test").unwrap();
-        let v1 = db.new_value_state("test1", (), ());
-        let v2 = db.new_value_state("test2", (), ());
+        let v1 = db.new_value_state("test1", (), (), Bincode, Bincode);
+        let v2 = db.new_value_state("test2", (), (), Bincode, Bincode);
 
         v1.set(&mut db, 123).unwrap();
         v2.set(&mut db, 456).unwrap();
@@ -101,7 +101,7 @@ mod test {
     #[test]
     fn in_memory_value_states_handle_state_for_different_keys_and_namespaces() {
         let mut db = InMemory::new("test").unwrap();
-        let mut value_state = db.new_value_state("test_state", 0, 0);
+        let mut value_state = db.new_value_state("test_state", 0, 0, Bincode, Bincode);
 
         value_state.set(&mut db, 0).unwrap();
         value_state.set_current_key(1).unwrap();
