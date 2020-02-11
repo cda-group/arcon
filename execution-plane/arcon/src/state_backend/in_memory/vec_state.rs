@@ -5,22 +5,23 @@ use crate::{
     prelude::ArconResult,
     state_backend::{
         in_memory::{InMemory, StateCommon},
+        serialization::{DeserializableWith, SerializableFixedSizeWith, SerializableWith},
         state_types::{AppendingState, MergingState, State, VecState},
     },
 };
 use error::ErrorKind;
-use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 
-pub struct InMemoryVecState<IK, N, T> {
-    pub(crate) common: StateCommon<IK, N>,
+pub struct InMemoryVecState<IK, N, T, KS, TS> {
+    pub(crate) common: StateCommon<IK, N, KS, TS>,
     pub(crate) _phantom: PhantomData<T>,
 }
 
-impl<IK, N, T> State<InMemory, IK, N> for InMemoryVecState<IK, N, T>
+impl<IK, N, T, KS, TS> State<InMemory, IK, N, KS, TS> for InMemoryVecState<IK, N, T, KS, TS>
 where
-    IK: Serialize,
-    N: Serialize,
+    IK: SerializableFixedSizeWith<KS>,
+    N: SerializableFixedSizeWith<KS>,
+    (): SerializableWith<KS>,
 {
     fn clear(&self, backend: &mut InMemory) -> ArconResult<()> {
         let key = self.common.get_db_key(&())?;
@@ -31,23 +32,23 @@ where
     delegate_key_and_namespace!(common);
 }
 
-impl<IK, N, T> AppendingState<InMemory, IK, N, T, Vec<T>> for InMemoryVecState<IK, N, T>
+impl<IK, N, T, KS, TS> AppendingState<InMemory, IK, N, T, Vec<T>, KS, TS>
+    for InMemoryVecState<IK, N, T, KS, TS>
 where
-    IK: Serialize,
-    N: Serialize,
-    T: Serialize,
-    T: for<'a> Deserialize<'a>,
+    IK: SerializableFixedSizeWith<KS>,
+    N: SerializableFixedSizeWith<KS>,
+    (): SerializableWith<KS>,
+    T: SerializableWith<TS> + DeserializableWith<TS>,
 {
     fn get(&self, backend: &InMemory) -> ArconResult<Vec<T>> {
         let key = self.common.get_db_key(&())?;
         let serialized = backend.get(&key)?;
 
-        // reader is updated in the loop to point at the yet unconsumed part of the serialized data
-        let mut reader = &serialized[..];
+        // cursor is updated in the loop to point at the yet unconsumed part of the serialized data
+        let mut cursor = &serialized[..];
         let mut res = vec![];
-        while !reader.is_empty() {
-            let val = bincode::deserialize_from(&mut reader)
-                .map_err(|e| arcon_err_kind!("Could not deserialize vec state value: {}", e))?;
+        while !cursor.is_empty() {
+            let val = T::deserialize_from(&self.common.value_serializer, &mut cursor)?;
             res.push(val);
         }
 
@@ -58,33 +59,32 @@ where
         let key = self.common.get_db_key(&())?;
         let storage = backend.get_mut_or_init_empty(&key)?;
 
-        bincode::serialize_into(storage, &value)
-            .map_err(|e| arcon_err_kind!("Could not serialize vec state value: {}", e))
+        T::serialize_into(&self.common.value_serializer, storage, &value)
     }
 }
 
-impl<IK, N, T> MergingState<InMemory, IK, N, T, Vec<T>> for InMemoryVecState<IK, N, T>
+impl<IK, N, T, KS, TS> MergingState<InMemory, IK, N, T, Vec<T>, KS, TS>
+    for InMemoryVecState<IK, N, T, KS, TS>
 where
-    IK: Serialize,
-    N: Serialize,
-    T: Serialize,
-    T: for<'a> Deserialize<'a>,
+    IK: SerializableFixedSizeWith<KS>,
+    N: SerializableFixedSizeWith<KS>,
+    (): SerializableWith<KS>,
+    T: SerializableWith<TS> + DeserializableWith<TS>,
 {
 }
 
-impl<IK, N, T> VecState<InMemory, IK, N, T> for InMemoryVecState<IK, N, T>
+impl<IK, N, T, KS, TS> VecState<InMemory, IK, N, T, KS, TS> for InMemoryVecState<IK, N, T, KS, TS>
 where
-    IK: Serialize,
-    N: Serialize,
-    T: Serialize,
-    T: for<'a> Deserialize<'a>,
+    IK: SerializableFixedSizeWith<KS>,
+    N: SerializableFixedSizeWith<KS>,
+    (): SerializableWith<KS>,
+    T: SerializableWith<TS> + DeserializableWith<TS>,
 {
     fn set(&self, backend: &mut InMemory, value: Vec<T>) -> ArconResult<()> {
         let key = self.common.get_db_key(&())?;
         let mut storage = vec![];
         for elem in value {
-            bincode::serialize_into(&mut storage, &elem)
-                .map_err(|e| arcon_err_kind!("Could not serialize vec state value: {}", e))?;
+            T::serialize_into(&self.common.value_serializer, &mut storage, &elem)?;
         }
         backend.put(key, storage)
     }
@@ -101,8 +101,7 @@ where
         let mut storage = backend.get_mut_or_init_empty(&key)?;
 
         for value in values {
-            bincode::serialize_into(&mut storage, &value)
-                .map_err(|e| arcon_err_kind!("Could not serialize vec state value: {}", e))?;
+            T::serialize_into(&self.common.value_serializer, &mut storage, &value)?;
         }
 
         Ok(())
@@ -116,7 +115,10 @@ where
         self.add_all(backend, values)
     }
 
-    fn len(&self, backend: &InMemory) -> ArconResult<usize> {
+    fn len(&self, backend: &InMemory) -> ArconResult<usize>
+    where
+        T: SerializableFixedSizeWith<TS>,
+    {
         let key = self.common.get_db_key(&())?;
         let storage = backend.get(&key);
 
@@ -126,28 +128,14 @@ where
                 _ => Err(e),
             },
             Ok(buf) => {
-                let mut reader = buf;
                 if buf.is_empty() {
                     return Ok(0);
                 }
 
-                // We rely on every possible value of type T having the same serialized size.
-                // TODO: introduce a trait for types that serialize to a fixed-size byte array and
-                //   add that as a trait bound on T
-                let first_value: T = bincode::deserialize_from(&mut reader)
-                    .map_err(|e| arcon_err_kind!("Could not deserialize vec state value: {}", e))?;
-                let first_value_serialized_size =
-                    bincode::serialized_size(&first_value).map_err(|e| {
-                        arcon_err_kind!(
-                            "Could not get the size of serialized vec state value: {}",
-                            e
-                        )
-                    })? as usize;
+                debug_assert_ne!(T::SIZE, 0);
 
-                debug_assert_ne!(first_value_serialized_size, 0);
-
-                let len = buf.len() / first_value_serialized_size;
-                let rem = buf.len() % first_value_serialized_size;
+                let len = buf.len() / T::SIZE;
+                let rem = buf.len() % T::SIZE;
 
                 // sanity check
                 if rem != 0 {
@@ -165,12 +153,12 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::state_backend::{StateBackend, VecStateBuilder};
+    use crate::state_backend::{serialization::Bincode, StateBackend, VecStateBuilder};
 
     #[test]
     fn vec_state_test() {
         let mut db = InMemory::new("test").unwrap();
-        let vec_state = db.new_vec_state("test_state", (), ());
+        let vec_state = db.new_vec_state("test_state", (), (), Bincode, Bincode);
         assert_eq!(vec_state.len(&db).unwrap(), 0);
 
         vec_state.append(&mut db, 1).unwrap();

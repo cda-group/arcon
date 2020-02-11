@@ -5,21 +5,23 @@ use crate::{
     prelude::ArconResult,
     state_backend::{
         in_memory::{InMemory, StateCommon},
+        serialization::{DeserializableWith, SerializableFixedSizeWith, SerializableWith},
         state_types::{MapState, State},
     },
 };
-use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 
-pub struct InMemoryMapState<IK, N, K, V> {
-    pub(crate) common: StateCommon<IK, N>,
+pub struct InMemoryMapState<IK, N, K, V, KS, TS> {
+    pub(crate) common: StateCommon<IK, N, KS, TS>,
+    // TODO: my phantom datas may be of wrong variance w.r.t. the lifetimes -- investigate
     pub(crate) _phantom: PhantomData<(K, V)>,
 }
 
-impl<IK, N, K, V> State<InMemory, IK, N> for InMemoryMapState<IK, N, K, V>
+impl<IK, N, K, V, KS, TS> State<InMemory, IK, N, KS, TS> for InMemoryMapState<IK, N, K, V, KS, TS>
 where
-    IK: Serialize,
-    N: Serialize,
+    IK: SerializableFixedSizeWith<KS>,
+    N: SerializableFixedSizeWith<KS>,
+    (): SerializableWith<KS>,
 {
     fn clear(&self, backend: &mut InMemory) -> ArconResult<()> {
         // () is not serialized, and the user key is the tail of the db key, so in effect we get
@@ -32,26 +34,28 @@ where
     delegate_key_and_namespace!(common);
 }
 
-impl<IK, N, K, V> MapState<InMemory, IK, N, K, V> for InMemoryMapState<IK, N, K, V>
+impl<IK, N, K, V, KS, TS> MapState<InMemory, IK, N, K, V, KS, TS>
+    for InMemoryMapState<IK, N, K, V, KS, TS>
 where
-    IK: Serialize + for<'a> Deserialize<'a>,
-    N: Serialize + for<'a> Deserialize<'a>,
-    K: Serialize + for<'a> Deserialize<'a>,
-    V: Serialize + for<'a> Deserialize<'a>,
+    IK: SerializableFixedSizeWith<KS> + DeserializableWith<KS>,
+    N: SerializableFixedSizeWith<KS> + DeserializableWith<KS>,
+    (): SerializableWith<KS>,
+    K: SerializableWith<KS> + DeserializableWith<KS>,
+    V: SerializableWith<TS> + DeserializableWith<TS>,
+    KS: Clone + 'static,
+    TS: Clone + 'static,
 {
     fn get(&self, backend: &InMemory, key: &K) -> ArconResult<V> {
         let key = self.common.get_db_key(key)?;
         let serialized = backend.get(&key)?;
-        let value = bincode::deserialize(&serialized)
-            .map_err(|e| arcon_err_kind!("Cannot deserialize map state value: {}", e))?;
+        let value = V::deserialize(&self.common.value_serializer, &serialized)?;
 
         Ok(value)
     }
 
     fn put(&self, backend: &mut InMemory, key: K, value: V) -> ArconResult<()> {
         let key = self.common.get_db_key(&key)?;
-        let serialized = bincode::serialize(&value)
-            .map_err(|e| arcon_err_kind!("Could not serialize map state value: {}", e))?;
+        let serialized = V::serialize(&self.common.value_serializer, &value)?;
         backend.put(key, serialized)?;
 
         Ok(())
@@ -74,7 +78,7 @@ where
         Self: Sized,
     {
         for (k, v) in key_value_pairs.into_iter() {
-            self.put(backend, k, v)?; // TODO: what if one fails? partial insert? should we rollback?
+            self.put(backend, k, v)?; // TODO: what if one fails? partial insert? should we roll back?
         }
 
         Ok(())
@@ -99,13 +103,16 @@ where
     ) -> ArconResult<Box<dyn Iterator<Item = (K, V)> + 'a>> {
         let prefix = self.common.get_db_key(&())?;
         let id_len = self.common.id.as_bytes().len();
+        let key_serializer = self.common.key_serializer.clone();
+        let value_serializer = self.common.value_serializer.clone();
         let iter = backend
             .iter_matching(prefix)
             .map(move |(k, v)| {
-                let (_, _, key): (IK, N, K) = bincode::deserialize(&k[id_len..])
-                    .map_err(|e| arcon_err_kind!("Could not deserialize map state key: {}", e))?;
-                let value: V = bincode::deserialize(v)
-                    .map_err(|e| arcon_err_kind!("Could not deserialize map state value: {}", e))?;
+                let mut cursor = &k[id_len..];
+                let _ = IK::deserialize_from(&key_serializer, &mut cursor)?;
+                let _ = N::deserialize_from(&key_serializer, &mut cursor)?;
+                let key = K::deserialize_from(&key_serializer, &mut cursor)?;
+                let value = V::deserialize(&value_serializer, v)?;
                 Ok((key, value))
             })
             .map(|res: ArconResult<(K, V)>| res.expect("deserialization error"));
@@ -118,11 +125,14 @@ where
     fn keys<'a>(&self, backend: &'a InMemory) -> ArconResult<Box<dyn Iterator<Item = K> + 'a>> {
         let prefix = self.common.get_db_key(&())?;
         let id_len = self.common.id.as_bytes().len();
+        let key_serializer = self.common.key_serializer.clone();
         let iter = backend
             .iter_matching(prefix)
             .map(move |(k, _)| {
-                let (_, _, key): (IK, N, K) = bincode::deserialize(&k[id_len..])
-                    .map_err(|e| arcon_err_kind!("Could not deserialize map state key: {:?}", e))?;
+                let mut cursor = &k[id_len..];
+                let _ = IK::deserialize_from(&key_serializer, &mut cursor)?;
+                let _ = N::deserialize_from(&key_serializer, &mut cursor)?;
+                let key = K::deserialize_from(&key_serializer, &mut cursor)?;
                 Ok(key)
             })
             .map(|res: ArconResult<K>| res.expect("deserialization error"));
@@ -134,11 +144,11 @@ where
 
     fn values<'a>(&self, backend: &'a InMemory) -> ArconResult<Box<dyn Iterator<Item = V> + 'a>> {
         let prefix = self.common.get_db_key(&())?;
+        let value_serializer = self.common.value_serializer.clone();
         let iter = backend
             .iter_matching(prefix)
-            .map(|(_, v)| {
-                let value: V = bincode::deserialize(v)
-                    .map_err(|e| arcon_err_kind!("Could not deserialize map state value: {}", e))?;
+            .map(move |(_, v)| {
+                let value = V::deserialize(&value_serializer, v)?;
                 Ok(value)
             })
             .map(|res: ArconResult<V>| res.expect("deserialization error"));
@@ -157,12 +167,12 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::state_backend::{MapStateBuilder, StateBackend};
+    use crate::state_backend::{serialization::Bincode, MapStateBuilder, StateBackend};
 
     #[test]
     fn map_state_test() {
         let mut db = InMemory::new("test").unwrap();
-        let map_state = db.new_map_state("test_state", (), ());
+        let map_state = db.new_map_state("test_state", (), (), Bincode, Bincode);
 
         // TODO: &String is weird, maybe look at how it's done with the keys in std hash-map
         assert!(!map_state.contains(&db, &"first key".to_string()).unwrap());

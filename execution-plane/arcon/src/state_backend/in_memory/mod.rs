@@ -7,12 +7,12 @@ use crate::state_backend::{
         reducing_state::InMemoryReducingState, value_state::InMemoryValueState,
         vec_state::InMemoryVecState,
     },
+    serialization::{DeserializableWith, SerializableFixedSizeWith, SerializableWith},
     state_types::*,
     AggregatingStateBuilder, MapStateBuilder, ReducingStateBuilder, StateBackend,
     ValueStateBuilder, VecStateBuilder,
 };
 use arcon_error::*;
-use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fmt::Debug};
 use uuid::Uuid;
 
@@ -21,12 +21,19 @@ pub struct InMemory {
 }
 
 impl InMemory {
-    // we don't care about the state name, since it cannot be snapshotted
-    fn new_state_common<IK, N>(&self, init_item_key: IK, init_namespace: N) -> StateCommon<IK, N> {
+    fn new_state_common<IK, N, KS, TS>(
+        &self,
+        item_key: IK,
+        namespace: N,
+        key_serializer: KS,
+        value_serializer: TS,
+    ) -> StateCommon<IK, N, KS, TS> {
         StateCommon {
             id: Uuid::new_v4(),
-            item_key: init_item_key,
-            namespace: init_namespace,
+            item_key,
+            namespace,
+            key_serializer,
+            value_serializer,
         }
     }
 
@@ -87,16 +94,29 @@ impl InMemory {
 
 // since we don't do checkpointing for InMemory state backend, the name of the state is simply discarded
 // TODO: maybe keep it for debugging purposes?
-impl<IK, N, T> ValueStateBuilder<IK, N, T> for InMemory
+impl<IK, N, T, KS, TS> ValueStateBuilder<IK, N, T, KS, TS> for InMemory
 where
-    IK: Serialize,
-    N: Serialize,
-    T: Serialize + for<'a> Deserialize<'a>,
+    IK: SerializableFixedSizeWith<KS>,
+    N: SerializableFixedSizeWith<KS>,
+    (): SerializableWith<KS>,
+    T: SerializableWith<TS> + DeserializableWith<TS>,
 {
-    type Type = InMemoryValueState<IK, N, T>;
+    type Type = InMemoryValueState<IK, N, T, KS, TS>;
 
-    fn new_value_state(&mut self, _name: &str, init_item_key: IK, init_namespace: N) -> Self::Type {
-        let common = self.new_state_common(init_item_key, init_namespace);
+    fn new_value_state(
+        &mut self,
+        _name: &str,
+        init_item_key: IK,
+        init_namespace: N,
+        key_serializer: KS,
+        value_serializer: TS,
+    ) -> Self::Type {
+        let common = self.new_state_common(
+            init_item_key,
+            init_namespace,
+            key_serializer,
+            value_serializer,
+        );
         InMemoryValueState {
             common,
             _phantom: Default::default(),
@@ -104,17 +124,32 @@ where
     }
 }
 
-impl<IK, N, K, V> MapStateBuilder<IK, N, K, V> for InMemory
+impl<IK, N, K, V, KS, TS> MapStateBuilder<IK, N, K, V, KS, TS> for InMemory
 where
-    IK: Serialize + for<'a> Deserialize<'a>,
-    N: Serialize + for<'a> Deserialize<'a>,
-    K: Serialize + for<'a> Deserialize<'a>,
-    V: Serialize + for<'a> Deserialize<'a>,
+    IK: SerializableFixedSizeWith<KS> + DeserializableWith<KS>,
+    N: SerializableFixedSizeWith<KS> + DeserializableWith<KS>,
+    (): SerializableWith<KS>,
+    K: SerializableWith<KS> + DeserializableWith<KS>,
+    V: SerializableWith<TS> + DeserializableWith<TS>,
+    KS: Clone + 'static,
+    TS: Clone + 'static,
 {
-    type Type = InMemoryMapState<IK, N, K, V>;
+    type Type = InMemoryMapState<IK, N, K, V, KS, TS>;
 
-    fn new_map_state(&mut self, _name: &str, init_item_key: IK, init_namespace: N) -> Self::Type {
-        let common = self.new_state_common(init_item_key, init_namespace);
+    fn new_map_state(
+        &mut self,
+        _name: &str,
+        init_item_key: IK,
+        init_namespace: N,
+        key_serializer: KS,
+        value_serializer: TS,
+    ) -> Self::Type {
+        let common = self.new_state_common(
+            init_item_key,
+            init_namespace,
+            key_serializer,
+            value_serializer,
+        );
         InMemoryMapState {
             common,
             _phantom: Default::default(),
@@ -122,16 +157,29 @@ where
     }
 }
 
-impl<IK, N, T> VecStateBuilder<IK, N, T> for InMemory
+impl<IK, N, T, KS, TS> VecStateBuilder<IK, N, T, KS, TS> for InMemory
 where
-    IK: Serialize,
-    N: Serialize,
-    T: Serialize + for<'a> Deserialize<'a>,
+    IK: SerializableFixedSizeWith<KS>,
+    N: SerializableFixedSizeWith<KS>,
+    (): SerializableWith<KS>,
+    T: SerializableWith<TS> + DeserializableWith<TS>,
 {
-    type Type = InMemoryVecState<IK, N, T>;
+    type Type = InMemoryVecState<IK, N, T, KS, TS>;
 
-    fn new_vec_state(&mut self, _name: &str, init_item_key: IK, init_namespace: N) -> Self::Type {
-        let common = self.new_state_common(init_item_key, init_namespace);
+    fn new_vec_state(
+        &mut self,
+        _name: &str,
+        init_item_key: IK,
+        init_namespace: N,
+        key_serializer: KS,
+        value_serializer: TS,
+    ) -> Self::Type {
+        let common = self.new_state_common(
+            init_item_key,
+            init_namespace,
+            key_serializer,
+            value_serializer,
+        );
         InMemoryVecState {
             common,
             _phantom: Default::default(),
@@ -139,14 +187,15 @@ where
     }
 }
 
-impl<IK, N, T, F> ReducingStateBuilder<IK, N, T, F> for InMemory
+impl<IK, N, T, F, KS, TS> ReducingStateBuilder<IK, N, T, F, KS, TS> for InMemory
 where
-    IK: Serialize,
-    N: Serialize,
-    T: Serialize + for<'a> Deserialize<'a>,
+    IK: SerializableFixedSizeWith<KS>,
+    N: SerializableFixedSizeWith<KS>,
+    (): SerializableWith<KS>,
+    T: SerializableWith<TS> + DeserializableWith<TS>,
     F: Fn(&T, &T) -> T,
 {
-    type Type = InMemoryReducingState<IK, N, T, F>;
+    type Type = InMemoryReducingState<IK, N, T, F, KS, TS>;
 
     fn new_reducing_state(
         &mut self,
@@ -154,8 +203,15 @@ where
         init_item_key: IK,
         init_namespace: N,
         reduce_fn: F,
+        key_serializer: KS,
+        value_serializer: TS,
     ) -> Self::Type {
-        let common = self.new_state_common(init_item_key, init_namespace);
+        let common = self.new_state_common(
+            init_item_key,
+            init_namespace,
+            key_serializer,
+            value_serializer,
+        );
         InMemoryReducingState {
             common,
             reduce_fn,
@@ -164,14 +220,15 @@ where
     }
 }
 
-impl<IK, N, T, AGG> AggregatingStateBuilder<IK, N, T, AGG> for InMemory
+impl<IK, N, T, AGG, KS, TS> AggregatingStateBuilder<IK, N, T, AGG, KS, TS> for InMemory
 where
-    IK: Serialize,
-    N: Serialize,
+    IK: SerializableFixedSizeWith<KS>,
+    N: SerializableFixedSizeWith<KS>,
+    (): SerializableWith<KS>,
     AGG: Aggregator<T>,
-    AGG::Accumulator: Serialize + for<'a> Deserialize<'a>,
+    AGG::Accumulator: SerializableWith<TS> + DeserializableWith<TS>,
 {
-    type Type = InMemoryAggregatingState<IK, N, T, AGG>;
+    type Type = InMemoryAggregatingState<IK, N, T, AGG, KS, TS>;
 
     fn new_aggregating_state(
         &mut self,
@@ -179,8 +236,15 @@ where
         init_item_key: IK,
         init_namespace: N,
         aggregator: AGG,
+        key_serializer: KS,
+        value_serializer: TS,
     ) -> Self::Type {
-        let common = self.new_state_common(init_item_key, init_namespace);
+        let common = self.new_state_common(
+            init_item_key,
+            init_namespace,
+            key_serializer,
+            value_serializer,
+        );
         InMemoryAggregatingState {
             common,
             aggregator,
@@ -206,25 +270,28 @@ impl StateBackend for InMemory {
     }
 }
 
-pub(crate) struct StateCommon<IK, N> {
+pub(crate) struct StateCommon<IK, N, KS, TS> {
     id: Uuid,
     item_key: IK,
     namespace: N,
+    key_serializer: KS,
+    value_serializer: TS,
 }
 
-impl<IK, N> StateCommon<IK, N>
+impl<IK, N, KS, TS> StateCommon<IK, N, KS, TS>
 where
-    IK: Serialize,
-    N: Serialize,
+    IK: SerializableFixedSizeWith<KS>,
+    N: SerializableFixedSizeWith<KS>,
 {
     fn get_db_key<UK>(&self, user_key: &UK) -> ArconResult<Vec<u8>>
     where
-        UK: Serialize,
+        UK: SerializableWith<KS>,
     {
-        // UUID is not serializable TODO: there's probably a feature flag for this
+        // UUID is not always serializable, let's just dump the bytes
         let mut res = self.id.as_bytes().to_vec();
-        bincode::serialize_into(&mut res, &(&self.item_key, &self.namespace, user_key))
-            .map_err(|e| arcon_err_kind!("Could not serialize keys and namespace: {}", e))?;
+        IK::serialize_into(&self.key_serializer, &mut res, &self.item_key)?;
+        N::serialize_into(&self.key_serializer, &mut res, &self.namespace)?;
+        UK::serialize_into(&self.key_serializer, &mut res, user_key)?;
 
         Ok(res)
     }
@@ -239,6 +306,7 @@ mod vec_state;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::state_backend::serialization::Bincode;
 
     #[test]
     fn in_mem_test() {
@@ -263,6 +331,8 @@ mod tests {
             id: Uuid::new_v4(),
             item_key: 42,
             namespace: 255,
+            key_serializer: Bincode,
+            value_serializer: Bincode,
         };
 
         let v = state.get_db_key(&()).unwrap();
