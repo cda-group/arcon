@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::prelude::*;
-use crate::streaming::channel::{strategy::send, strategy::ChannelStrategy, Channel};
+use crate::stream::channel::{strategy::send, strategy::ChannelStrategy, Channel};
 
 pub struct Forward<A>
 where
@@ -54,7 +54,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::streaming::channel::strategy::tests::*;
+    use crate::stream::channel::strategy::tests::*;
     use kompact::prelude::*;
 
     #[test]

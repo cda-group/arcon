@@ -3,7 +3,7 @@
 
 use crate::data::NodeID;
 use crate::data::{ArconElement, ArconEvent, ArconType, Watermark};
-use crate::streaming::channel::strategy::ChannelStrategy;
+use crate::stream::channel::strategy::ChannelStrategy;
 use kompact::prelude::*;
 use std::fs::File;
 use std::io::BufRead;

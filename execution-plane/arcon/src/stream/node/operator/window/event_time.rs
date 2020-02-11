@@ -186,8 +186,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::streaming::channel::strategy::forward::*;
-    use crate::streaming::channel::Channel;
+    use crate::stream::channel::strategy::forward::*;
+    use crate::stream::channel::Channel;
     use kompact::prelude::Component;
     use std::sync::Arc;
     use std::time::UNIX_EPOCH;

@@ -1,7 +1,7 @@
 use crate::data::{ArconElement, ArconEvent, ArconType, Watermark};
 use crate::prelude::KompactSystem;
-use crate::streaming::channel::strategy::ChannelStrategy;
-use crate::streaming::node::operator::Operator;
+use crate::stream::channel::strategy::ChannelStrategy;
+use crate::stream::node::operator::Operator;
 use crate::util::SafelySendableFn;
 
 /// Common Source Context for all Source implementations

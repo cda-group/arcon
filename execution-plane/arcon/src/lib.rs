@@ -14,7 +14,7 @@ extern crate keyby;
 
 pub mod data;
 pub mod state_backend;
-pub mod streaming;
+pub mod stream;
 pub mod util;
 
 pub mod macros {
@@ -25,18 +25,18 @@ pub mod macros {
 }
 
 pub mod prelude {
-    pub use crate::streaming::channel::strategy::{
+    pub use crate::stream::channel::strategy::{
         broadcast::Broadcast, forward::Forward, key_by::KeyBy, mute::Mute, round_robin::RoundRobin,
         ChannelStrategy,
     };
 
-    pub use crate::streaming::channel::Channel;
+    pub use crate::stream::channel::Channel;
     #[cfg(feature = "socket")]
-    pub use crate::streaming::node::operator::{
+    pub use crate::stream::node::operator::{
         sink::socket::SocketSink,
         source::socket::{SocketKind, SocketSource},
     };
-    pub use crate::streaming::node::{
+    pub use crate::stream::node::{
         operator::function::{Filter, FlatMap, Map},
         operator::sink::local_file::LocalFileSink,
         operator::source::local_file::LocalFileSource,
@@ -46,7 +46,7 @@ pub mod prelude {
     };
 
     #[cfg(feature = "kafka")]
-    pub use crate::streaming::node::operator::{
+    pub use crate::stream::node::operator::{
         sink::kafka::KafkaSink, source::kafka::KafkaSource,
     };
 

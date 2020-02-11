@@ -56,7 +56,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::streaming::util::mute_strategy;
+    use crate::stream::util::mute_strategy;
     use std::io::{BufRead, BufReader};
     use tempfile::NamedTempFile;
 

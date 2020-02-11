@@ -4,7 +4,7 @@
 use crate::data::{ArconEvent, ArconType};
 use crate::prelude::KompactSystem;
 use crate::prelude::*;
-use crate::streaming::channel::strategy::send;
+use crate::stream::channel::strategy::send;
 use fnv::FnvHasher;
 use std::collections::HashMap;
 use std::default::Default;
@@ -119,7 +119,7 @@ where
 mod tests {
     use super::*;
     use crate::data::ArconEvent;
-    use crate::streaming::channel::strategy::tests::*;
+    use crate::stream::channel::strategy::tests::*;
     use kompact::prelude::*;
     use rand::Rng;
     use std::sync::Arc;

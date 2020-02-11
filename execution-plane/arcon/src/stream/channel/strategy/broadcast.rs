@@ -3,7 +3,7 @@
 
 use crate::data::{ArconEvent, ArconMessage, ArconType, NodeID};
 use crate::prelude::KompactSystem;
-use crate::streaming::channel::{strategy::send, strategy::ChannelStrategy, Channel};
+use crate::stream::channel::{strategy::send, strategy::ChannelStrategy, Channel};
 
 pub struct Broadcast<A>
 where
@@ -60,8 +60,8 @@ mod tests {
     use super::*;
     use crate::data::ArconElement;
     use crate::prelude::DebugNode;
-    use crate::streaming::channel::strategy::tests::*;
-    use crate::streaming::channel::ArconSerde;
+    use crate::stream::channel::strategy::tests::*;
+    use crate::stream::channel::ArconSerde;
     use kompact::prelude::*;
     use std::sync::Arc;
 

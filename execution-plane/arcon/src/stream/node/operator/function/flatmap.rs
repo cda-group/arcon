@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::data::{ArconElement, ArconEvent, ArconType, Epoch, Watermark};
-use crate::streaming::node::operator::Operator;
+use crate::stream::node::operator::Operator;
 use crate::util::SafelySendableFn;
 use arcon_error::ArconResult;
 

@@ -4,7 +4,7 @@
 use crate::data::serde::{reliable_remote::ReliableSerde, unsafe_remote::UnsafeSerde};
 use crate::data::{ArconEvent, ArconMessage, ArconType};
 use crate::prelude::KompactSystem;
-use crate::streaming::channel::{ArconSerde, Channel};
+use crate::stream::channel::{ArconSerde, Channel};
 
 pub mod broadcast;
 pub mod forward;

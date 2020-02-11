@@ -1,5 +1,5 @@
 use crate::data::ArconType;
-use crate::streaming::node::source::SourceContext;
+use crate::stream::node::source::SourceContext;
 use kompact::prelude::*;
 
 #[derive(ComponentDefinition)]
