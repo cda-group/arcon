@@ -91,6 +91,7 @@ where
     }
 
     /// Calls a transformation function on the source data to generate outgoing ArconEvent<OUT>
+    #[inline]
     pub fn process(&mut self, data: ArconElement<IN>, source: &KompactSystem) {
         let events = self.operator.handle_element(data).unwrap();
         for event in events {
@@ -101,6 +102,7 @@ where
     /// Force flush of buffers
     ///
     /// This function should be called when a batch timeout has been reached
+    #[inline]
     pub fn force_flush(&mut self, source: &KompactSystem) {
         self.channel_strategy.flush(source);
         self.buffer_counter = 0;
@@ -126,6 +128,7 @@ where
     /// Build ArconElement
     ///
     /// Extracts timestamp if extractor is available
+    #[inline]
     pub fn extract_element(&mut self, data: IN) -> ArconElement<IN> {
         match &self.ts_extractor {
             Some(ts_fn) => {

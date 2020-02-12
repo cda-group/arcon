@@ -68,6 +68,26 @@ where
             buffer_map,
         }
     }
+    pub fn with_batch_size(
+        parallelism: u32,
+        channels: Vec<Channel<A>>,
+        sender_id: NodeID,
+        batch_size: usize,
+    ) -> KeyBy<A> {
+        assert_eq!(channels.len(), parallelism as usize);
+        let mut buffer_map: HashMap<usize, (Channel<A>, Vec<ArconEvent<A>>)> = HashMap::new();
+
+        for (i, channel) in channels.into_iter().enumerate() {
+            buffer_map.insert(i, (channel, Vec::with_capacity(batch_size)));
+        }
+
+        KeyBy {
+            builder: Default::default(),
+            parallelism,
+            sender_id,
+            buffer_map,
+        }
+    }
 }
 
 impl<A, B> ChannelStrategy<A> for KeyBy<A, B>

@@ -5,12 +5,16 @@ use crate::data::{ArconEvent, ArconMessage, ArconType, NodeID};
 use crate::prelude::KompactSystem;
 use crate::stream::channel::{strategy::send, strategy::ChannelStrategy, Channel};
 
+/// A Broadcast strategy for one-to-many message sending
 pub struct Broadcast<A>
 where
     A: ArconType,
 {
+    /// Vec of Channels that messages are broadcasted to
     channels: Vec<Channel<A>>,
+    /// An Identifier that is embedded in each outgoing message
     sender_id: NodeID,
+    /// A buffer holding outgoing events
     buffer: Vec<ArconEvent<A>>,
 }
 
@@ -25,11 +29,22 @@ where
             buffer: Vec::new(),
         }
     }
+    pub fn with_batch_size(
+        channels: Vec<Channel<A>>,
+        sender_id: NodeID,
+        batch_size: usize,
+    ) -> Broadcast<A> {
+        Broadcast {
+            channels,
+            sender_id,
+            buffer: Vec::with_capacity(batch_size),
+        }
+    }
 }
 
 impl<A> ChannelStrategy<A> for Broadcast<A>
 where
-    A: 'static + ArconType,
+    A: ArconType,
 {
     fn add(&mut self, event: ArconEvent<A>) {
         self.buffer.push(event);
@@ -45,8 +60,7 @@ where
             send(channel, msg.clone(), source);
         }
 
-        // TODO: fix this..
-        self.buffer.truncate(0);
+        self.buffer.clear();
     }
 
     fn add_and_flush(&mut self, event: ArconEvent<A>, source: &KompactSystem) {

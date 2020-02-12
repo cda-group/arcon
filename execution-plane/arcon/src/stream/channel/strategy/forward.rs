@@ -4,12 +4,16 @@
 use crate::prelude::*;
 use crate::stream::channel::{strategy::send, strategy::ChannelStrategy, Channel};
 
+/// `Forward` is a one-to-one channel strategy between two components
 pub struct Forward<A>
 where
     A: ArconType,
 {
+    /// Channel that represents a connection to another component
     channel: Channel<A>,
+    /// An identifier that is embedded with outgoing messages
     sender_id: NodeID,
+    /// A buffer holding outgoing events
     buffer: Vec<ArconEvent<A>>,
 }
 
@@ -17,11 +21,29 @@ impl<A> Forward<A>
 where
     A: ArconType,
 {
+    /// Creates a Forward strategy
+    ///
+    /// `Forward::new` will allocate on demand. Should be used for testing and development only.
     pub fn new(channel: Channel<A>, sender_id: NodeID) -> Forward<A> {
         Forward {
             channel,
             sender_id,
             buffer: Vec::new(),
+        }
+    }
+
+    /// Creates a Forward strategy
+    ///
+    /// `Forward::with_batch_size` will preallocate its buffer according to `batch_size`
+    pub fn with_batch_size(
+        channel: Channel<A>,
+        sender_id: NodeID,
+        batch_size: usize,
+    ) -> Forward<A> {
+        Forward {
+            channel,
+            sender_id,
+            buffer: Vec::with_capacity(batch_size),
         }
     }
 }
@@ -41,8 +63,7 @@ where
         };
 
         send(&self.channel, msg, source);
-        // TODO: fix this..
-        self.buffer.truncate(0);
+        self.buffer.clear();
     }
 
     fn add_and_flush(&mut self, event: ArconEvent<A>, source: &KompactSystem) {

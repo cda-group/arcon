@@ -17,19 +17,16 @@ use std::thread::{Builder, JoinHandle};
 use bytes::BytesMut;
 
 pub enum IOKind {
-    Http,
     Tcp,
     Udp,
 }
 
 #[derive(Debug)]
-pub struct BytesRecv {
-    pub bytes: BytesMut,
+pub enum IOMessage {
+    Bytes(BytesMut),
+    SockClosed,
+    SockErr,
 }
-
-pub struct SockClosed {}
-
-pub struct SockErr {}
 
 #[derive(ComponentDefinition)]
 pub struct IO {
@@ -38,7 +35,7 @@ pub struct IO {
 }
 
 impl IO {
-    pub fn udp(sock_addr: SocketAddr, subscriber: ActorRef<Box<dyn Any + Send>>) -> IO {
+    pub fn udp(sock_addr: SocketAddr, subscriber: ActorRef<IOMessage>) -> IO {
         let th = Builder::new()
             .name(String::from("IOThread"))
             .spawn(move || {
@@ -50,7 +47,7 @@ impl IO {
                     let (_, mut reader) = UdpFramed::new(socket, BytesCodec::new()).split();
 
                     while let Some(Ok((bytes, _from))) = reader.next().await {
-                        subscriber.tell(Box::new(BytesRecv { bytes }) as Box<dyn Any + Send>);
+                        subscriber.tell(IOMessage::Bytes(bytes));
                     }
                 });
             })
@@ -63,7 +60,7 @@ impl IO {
         }
     }
 
-    pub fn tcp(sock_addr: SocketAddr, subscriber: ActorRef<Box<dyn Any + Send>>) -> IO {
+    pub fn tcp(sock_addr: SocketAddr, subscriber: ActorRef<IOMessage>) -> IO {
         let th = Builder::new()
             .name(String::from("IOThread"))
             .spawn(move || {
@@ -93,8 +90,7 @@ impl IO {
                             while let Some(read_res) = reader.next().await {
                                 match read_res {
                                     Ok(bytes) => {
-                                        let tcp_recv = BytesRecv { bytes };
-                                        subscriber.tell(Box::new(tcp_recv) as Box<dyn Any + Send>);
+                                        subscriber.tell(IOMessage::Bytes(bytes));
                                     }
                                     Err(e) => {
                                         res = Err(e);
@@ -104,10 +100,10 @@ impl IO {
 
                             match res {
                                 Ok(()) => {
-                                    subscriber.tell(Box::new(SockClosed {}) as Box<dyn Any + Send>);
+                                    subscriber.tell(IOMessage::SockClosed);
                                 }
                                 Err(_err) => {
-                                    subscriber.tell(Box::new(SockErr {}) as Box<dyn Any + Send>);
+                                    subscriber.tell(IOMessage::SockErr);
                                 }
                             }
                         };
@@ -126,15 +122,12 @@ impl IO {
     }
 }
 
-//unsafe impl Send for IO {} // it is send anyway
-//unsafe impl Sync for IO {} // it's not sync, but: does it need to be?
-
 impl Provide<ControlPort> for IO {
     fn handle(&mut self, _event: ControlEvent) {}
 }
 
 impl Actor for IO {
-    type Message = Box<dyn Any + Send>;
+    type Message = ();
     fn receive_local(&mut self, _msg: Self::Message) {}
     fn receive_network(&mut self, _msg: NetMessage) {}
 }
@@ -144,11 +137,6 @@ pub mod tests {
     use super::*;
     use tokio::io::AsyncWriteExt;
     use tokio::net::TcpStream;
-
-    pub enum IOKind {
-        Tcp,
-        Udp,
-    }
 
     #[derive(ComponentDefinition)]
     pub struct IOSource {
@@ -170,16 +158,20 @@ pub mod tests {
     }
 
     impl Actor for IOSource {
-        type Message = Box<dyn Any + Send>;
+        type Message = IOMessage;
 
         fn receive_local(&mut self, msg: Self::Message) {
-            if let Some(ref recv) = msg.downcast_ref::<BytesRecv>() {
-                debug!(self.ctx.log(), "{:?}", recv.bytes);
-                self.received += 1;
-            } else if let Some(ref _close) = msg.downcast_ref::<SockClosed>() {
-                debug!(self.ctx.log(), "Sock connection closed");
-            } else if let Some(ref _err) = msg.downcast_ref::<SockErr>() {
-                error!(self.ctx.log(), " Sock IO Error");
+            match msg {
+                IOMessage::Bytes(bytes) => {
+                    debug!(self.ctx.log(), "{:?}", bytes);
+                    self.received += 1;
+                }
+                IOMessage::SockClosed => {
+                    debug!(self.ctx.log(), "Sock connection closed");
+                }
+                IOMessage::SockErr => {
+                    error!(self.ctx.log(), " Sock IO Error");
+                }
             }
         }
 
@@ -249,15 +241,5 @@ pub mod tests {
         std::thread::sleep(std::time::Duration::from_millis(100));
         let source = io_source.definition().lock().unwrap();
         assert_eq!(source.received, 1);
-    }
-
-    #[allow(dead_code)]
-    fn assert_io_send_and_sync(io: &IO) {
-        fn assert_send<T: Send>(_t: &T) {}
-        fn assert_sync<T: Sync>(_t: &T) {}
-
-        assert_send(io);
-        // TODO: Q: do we need IO to be Sync?
-        //        assert_sync(io);
     }
 }

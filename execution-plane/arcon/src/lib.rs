@@ -31,24 +31,23 @@ pub mod prelude {
     };
 
     pub use crate::stream::channel::Channel;
+    pub use crate::stream::{
+        node::DebugNode,
+        node::Node,
+        operator::function::{Filter, FlatMap, Map},
+        operator::sink::local_file::LocalFileSink,
+        operator::window::{AppenderWindow, EventTimeWindowAssigner, IncrementalWindow, Window},
+        operator::Operator,
+        source::local_file::LocalFileSource,
+    };
     #[cfg(feature = "socket")]
     pub use crate::stream::{
         operator::sink::socket::SocketSink,
         source::socket::{SocketKind, SocketSource},
     };
-    pub use crate::stream::{
-        operator::function::{Filter, FlatMap, Map},
-        operator::sink::local_file::LocalFileSink,
-        source::local_file::LocalFileSource,
-        operator::window::{AppenderWindow, EventTimeWindowAssigner, IncrementalWindow, Window},
-        operator::Operator,
-        node::DebugNode, node::Node,
-    };
 
     #[cfg(feature = "kafka")]
-    pub use crate::stream::{
-        operator::sink::kafka::KafkaSink, source::kafka::KafkaSource,
-    };
+    pub use crate::stream::{operator::sink::kafka::KafkaSink, source::kafka::KafkaSource};
 
     pub use crate::data::serde::{
         reliable_remote::ReliableSerde, unsafe_remote::UnsafeSerde, ArconSerde,

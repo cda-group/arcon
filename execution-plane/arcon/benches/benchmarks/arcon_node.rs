@@ -44,8 +44,11 @@ pub fn node_forward_bench(b: &mut Bencher, messages: usize) {
         .hold()
         .expect("failed to fetch ref");
     let channel = Channel::Local(actor_ref);
-    let channel_strategy: Box<dyn ChannelStrategy<i32>> =
-        Box::new(Forward::new(channel, NodeID::new(0)));
+    let channel_strategy: Box<dyn ChannelStrategy<i32>> = Box::new(Forward::with_batch_size(
+        channel,
+        NodeID::new(0),
+        BATCH_SIZE,
+    ));
 
     fn map_fn(x: i32) -> i32 {
         x + 10
