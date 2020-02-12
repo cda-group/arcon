@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::data::ArconType;
-use crate::stream::node::source::SourceContext;
+use crate::stream::source::SourceContext;
 use kompact::prelude::*;
 use std::fs::File;
 use std::io::{BufRead, BufReader};

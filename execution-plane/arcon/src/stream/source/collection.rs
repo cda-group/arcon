@@ -1,5 +1,8 @@
+// Copyright (c) 2020, KTH Royal Institute of Technology.
+// SPDX-License-Identifier: AGPL-3.0-only
+
+use super::SourceContext;
 use crate::data::ArconType;
-use crate::stream::node::source::SourceContext;
 use kompact::prelude::*;
 
 #[derive(ComponentDefinition)]

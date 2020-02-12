@@ -3,7 +3,6 @@
 
 pub mod function;
 pub mod sink;
-pub mod source;
 pub mod window;
 
 use crate::data::{ArconElement, ArconEvent, ArconType, Epoch, Watermark};

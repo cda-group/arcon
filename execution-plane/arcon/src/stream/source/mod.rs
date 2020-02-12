@@ -1,8 +1,18 @@
+// Copyright (c) 2020, KTH Royal Institute of Technology.
+// SPDX-License-Identifier: AGPL-3.0-only
+
 use crate::data::{ArconElement, ArconEvent, ArconType, Watermark};
 use crate::prelude::KompactSystem;
 use crate::stream::channel::strategy::ChannelStrategy;
-use crate::stream::node::operator::Operator;
+use crate::stream::operator::Operator;
 use crate::util::SafelySendableFn;
+
+pub mod collection;
+#[cfg(feature = "kafka")]
+pub mod kafka;
+pub mod local_file;
+#[cfg(feature = "socket")]
+pub mod socket;
 
 /// Common Source Context for all Source implementations
 pub struct SourceContext<IN, OUT>

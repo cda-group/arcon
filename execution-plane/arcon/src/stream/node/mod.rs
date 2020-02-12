@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 pub mod debug;
-pub mod operator;
-pub mod source;
 
 use crate::prelude::*;
 pub use debug::DebugNode;

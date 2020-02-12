@@ -1,9 +1,8 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::data::NodeID;
-use crate::data::{ArconElement, ArconEvent, ArconMessage, ArconType, Watermark};
-use crate::streaming::channel::strategy::ChannelStrategy;
+use crate::data::{ArconElement, ArconEvent, NodeID, ArconType, Watermark};
+use crate::stream::channel::strategy::ChannelStrategy;
 use crate::util::io::*;
 use kompact::prelude::*;
 use std::net::SocketAddr;
@@ -136,12 +135,14 @@ where
             }
             match self.sock_kind {
                 SocketKind::Tcp => {
-                    let _ =
-                        system.create_and_start(move || IO::tcp(self.sock_addr, self.actor_ref()));
+                    let comp =
+                        system.create(move || IO::tcp(self.sock_addr, self.actor_ref()));
+                    system.start(&comp);
                 }
                 SocketKind::Udp => {
-                    let _ =
-                        system.create_and_start(move || IO::udp(self.sock_addr, self.actor_ref()));
+                    let comp =
+                        system.create(move || IO::udp(self.sock_addr, self.actor_ref()));
+                    system.start(&comp);
                 }
             }
         }
@@ -220,8 +221,8 @@ where
 mod tests {
     use super::*;
     use crate::prelude::DebugNode;
-    use crate::streaming::channel::strategy::forward::Forward;
-    use crate::streaming::channel::Channel;
+    use crate::stream::channel::strategy::forward::Forward;
+    use crate::stream::channel::Channel;
     use std::{thread, time};
     use tokio::net::TcpStream;
     use tokio::prelude::*;

@@ -7,6 +7,7 @@
 #![allow(bare_trait_objects)]
 extern crate arcon;
 
+/*
 use arcon::macros::*;
 use arcon::prelude::*;
 use std::fs::File;
@@ -151,3 +152,4 @@ fn normalise_pipeline_test() {
     assert_eq!(result[0], 7);
     let _ = system.shutdown();
 }
+*/

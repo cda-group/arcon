@@ -32,22 +32,22 @@ pub mod prelude {
 
     pub use crate::stream::channel::Channel;
     #[cfg(feature = "socket")]
-    pub use crate::stream::node::operator::{
-        sink::socket::SocketSink,
+    pub use crate::stream::{
+        operator::sink::socket::SocketSink,
         source::socket::{SocketKind, SocketSource},
     };
-    pub use crate::stream::node::{
+    pub use crate::stream::{
         operator::function::{Filter, FlatMap, Map},
         operator::sink::local_file::LocalFileSink,
-        operator::source::local_file::LocalFileSource,
+        source::local_file::LocalFileSource,
         operator::window::{AppenderWindow, EventTimeWindowAssigner, IncrementalWindow, Window},
         operator::Operator,
-        DebugNode, Node,
+        node::DebugNode, node::Node,
     };
 
     #[cfg(feature = "kafka")]
-    pub use crate::stream::node::operator::{
-        sink::kafka::KafkaSink, source::kafka::KafkaSource,
+    pub use crate::stream::{
+        operator::sink::kafka::KafkaSink, source::kafka::KafkaSource,
     };
 
     pub use crate::data::serde::{

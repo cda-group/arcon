@@ -3,4 +3,6 @@
 
 pub mod channel;
 pub mod node;
+pub mod operator;
+pub mod source;
 pub mod util;
