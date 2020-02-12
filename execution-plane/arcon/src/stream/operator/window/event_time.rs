@@ -98,7 +98,7 @@ where
     IN: ArconType + Hash,
     OUT: ArconType,
 {
-    fn handle_element(&mut self, element: ArconElement<IN>) -> ArconResult<Vec<ArconEvent<OUT>>> {
+    fn handle_element(&mut self, element: ArconElement<IN>) -> Option<Vec<ArconEvent<OUT>>> {
         let ts = element.timestamp.unwrap_or(0);
         if self.window_start.is_empty() {
             // First element received, set the internal timer
@@ -106,7 +106,7 @@ where
         }
         if ts < self.timer.get_time() - self.late_arrival_time {
             // Late arrival: early return
-            return Ok(Vec::new());
+            return None;
         }
 
         let key = self.get_key(&element);
@@ -136,12 +136,12 @@ where
             match w_map.get_mut(&i) {
                 Some(window) => {
                     // Just insert the element
-                    window.on_element(element.clone().data)?;
+                    let _ = window.on_element(element.clone().data);
                 }
                 None => {
                     // Need to create new window,
                     let mut window = self.window.clone();
-                    window.on_element(element.clone().data)?;
+                    let _ = window.on_element(element.clone().data);
                     w_map.insert(i, window);
                     // Create the window trigger
                     self.new_window_trigger(key, i);
@@ -149,12 +149,12 @@ where
             }
         }
         self.window_maps.insert(key, w_map);
-        Ok(Vec::new())
+        return None;
     }
-    fn handle_watermark(&mut self, w: Watermark) -> ArconResult<Vec<ArconEvent<OUT>>> {
+    fn handle_watermark(&mut self, w: Watermark) -> Option<Vec<ArconEvent<OUT>>> {
         if self.window_start.is_empty() {
             // Early return
-            return Ok(Vec::new());
+            return None;
         }
         let ts = w.timestamp;
 
@@ -176,7 +176,7 @@ where
                 Some(())
             })();
         }
-        Ok(result)
+        Some(result)
     }
     fn handle_epoch(&mut self, _epoch: Epoch) -> ArconResult<Vec<u8>> {
         Ok(Vec::new())

@@ -32,16 +32,16 @@ impl<IN> Operator<IN, IN> for Filter<IN>
 where
     IN: 'static + ArconType,
 {
-    fn handle_element(&mut self, element: ArconElement<IN>) -> ArconResult<Vec<ArconEvent<IN>>> {
+    fn handle_element(&mut self, element: ArconElement<IN>) -> Option<Vec<ArconEvent<IN>>> {
         if self.run_udf(&(element.data)) {
-            Ok(vec![ArconEvent::Element(element)])
+            Some(vec![ArconEvent::Element(element)])
         } else {
-            Ok(Vec::new())
+            None
         }
     }
 
-    fn handle_watermark(&mut self, _w: Watermark) -> ArconResult<Vec<ArconEvent<IN>>> {
-        Ok(Vec::new())
+    fn handle_watermark(&mut self, _w: Watermark) -> Option<Vec<ArconEvent<IN>>> {
+        None
     }
     fn handle_epoch(&mut self, _epoch: Epoch) -> ArconResult<Vec<u8>> {
         Ok(Vec::new())
@@ -75,9 +75,7 @@ mod tests {
             _ => assert!(false),
         }
 
-        let r3 = filter.handle_element(input_three).unwrap();
-        assert!(r3.is_empty());
-        let r4 = filter.handle_element(input_four).unwrap();
-        assert!(r4.is_empty());
+        assert!(filter.handle_element(input_three).is_none());
+        assert!(filter.handle_element(input_four).is_none());
     }
 }

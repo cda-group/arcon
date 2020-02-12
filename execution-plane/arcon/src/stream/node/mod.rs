@@ -76,9 +76,10 @@ where
         for event in message.events.into_iter() {
             match event {
                 ArconEvent::Element(e) => {
-                    let results = self.operator.handle_element(e)?;
-                    for result in results {
-                        self.output_event(result);
+                    if let Some(events) = self.operator.handle_element(e) {
+                        for new_event in events {
+                            self.channel_strategy.add(new_event);
+                        }
                     }
                 }
                 ArconEvent::Watermark(w) => {
@@ -107,8 +108,10 @@ where
                         self.current_watermark = new_watermark.timestamp;
 
                         // Handle the watermark
-                        for result in self.operator.handle_watermark(new_watermark)? {
-                            self.output_event(result);
+                        if let Some(wm_output) = self.operator.handle_watermark(new_watermark) {
+                            for event in wm_output {
+                                self.channel_strategy.add(event);
+                            }
                         }
 
                         // Forward the watermark
@@ -135,7 +138,7 @@ where
                         self.save_state()?;
 
                         // forward the epoch
-                        self.output_event(ArconEvent::Epoch(e));
+                        self.channel_strategy.add(ArconEvent::Epoch(e));
 
                         // flush the blocked_channels list
                         self.blocked_channels.clear();
@@ -154,17 +157,10 @@ where
                     }
                 }
             }
-
-            // TODO: improve
             self.channel_strategy.flush(&self.ctx().system());
         }
 
         Ok(())
-    }
-
-    // Is this really needed..
-    fn output_event(&mut self, event: ArconEvent<OUT>) {
-        self.channel_strategy.add(event);
     }
 
     fn save_state(&mut self) -> ArconResult<()> {

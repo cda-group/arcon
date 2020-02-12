@@ -76,13 +76,12 @@ impl<IN> Operator<IN, IN> for KafkaSink<IN>
 where
     IN: ArconType + ::serde::Serialize + ::serde::de::DeserializeOwned,
 {
-    fn handle_element(&mut self, element: ArconElement<IN>) -> ArconResult<Vec<ArconEvent<IN>>> {
-        //println!("sink buffering element");
+    fn handle_element(&mut self, element: ArconElement<IN>) -> Option<Vec<ArconEvent<IN>>> {
         self.buffer.push(element);
-        Ok(Vec::new())
+        None
     }
-    fn handle_watermark(&mut self, _w: Watermark) -> ArconResult<Vec<ArconEvent<IN>>> {
-        Ok(Vec::new())
+    fn handle_watermark(&mut self, _w: Watermark) -> Option<Vec<ArconEvent<IN>>> {
+        None
     }
     fn handle_epoch(&mut self, _epoch: Epoch) -> ArconResult<Vec<u8>> {
         self.commit_buffer();

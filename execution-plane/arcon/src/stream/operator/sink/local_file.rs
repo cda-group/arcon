@@ -39,14 +39,14 @@ impl<IN> Operator<IN, IN> for LocalFileSink<IN>
 where
     IN: ArconType,
 {
-    fn handle_element(&mut self, element: ArconElement<IN>) -> ArconResult<Vec<ArconEvent<IN>>> {
+    fn handle_element(&mut self, element: ArconElement<IN>) -> Option<Vec<ArconEvent<IN>>> {
         if let Err(err) = writeln!(self.file, "{:?}", element.data) {
             eprintln!("Error while writing to file sink {}", err.to_string());
         }
-        Ok(Vec::new())
+        None
     }
-    fn handle_watermark(&mut self, _w: Watermark) -> ArconResult<Vec<ArconEvent<IN>>> {
-        Ok(Vec::new())
+    fn handle_watermark(&mut self, _w: Watermark) -> Option<Vec<ArconEvent<IN>>> {
+        None
     }
     fn handle_epoch(&mut self, _epoch: Epoch) -> ArconResult<Vec<u8>> {
         Ok(Vec::new())

@@ -36,9 +36,9 @@ where
     IN: 'static + ArconType,
     OUT: 'static + ArconType,
 {
-    fn handle_element(&mut self, element: ArconElement<IN>) -> ArconResult<Vec<ArconEvent<OUT>>> {
+    fn handle_element(&mut self, element: ArconElement<IN>) -> Option<Vec<ArconEvent<OUT>>> {
         let result = self.run_udf(&(element.data));
-        let mut elements = Vec::new();
+        let mut elements = Vec::with_capacity(result.len());
         for item in result {
             elements.push(ArconEvent::Element(ArconElement {
                 data: item,
@@ -46,11 +46,11 @@ where
             }));
         }
 
-        Ok(elements)
+        Some(elements)
     }
 
-    fn handle_watermark(&mut self, _w: Watermark) -> ArconResult<Vec<ArconEvent<OUT>>> {
-        Ok(Vec::new())
+    fn handle_watermark(&mut self, _w: Watermark) -> Option<Vec<ArconEvent<OUT>>> {
+        None
     }
     fn handle_epoch(&mut self, _epoch: Epoch) -> ArconResult<Vec<u8>> {
         Ok(Vec::new())

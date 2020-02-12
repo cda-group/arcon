@@ -93,9 +93,10 @@ where
     /// Calls a transformation function on the source data to generate outgoing ArconEvent<OUT>
     #[inline]
     pub fn process(&mut self, data: ArconElement<IN>, source: &KompactSystem) {
-        let events = self.operator.handle_element(data).unwrap();
-        for event in events {
-            self.output_event(event, source);
+        if let Some(events) = self.operator.handle_element(data) {
+            for event in events {
+                self.output_event(event, source);
+            }
         }
     }
 

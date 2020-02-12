@@ -12,7 +12,9 @@ pub mod key_by;
 pub mod mute;
 pub mod round_robin;
 
-/// `ChannelStrategy` manages batching and sending of message downstream
+/// A `ChannelStrategy` defines a strategy of how messages are sent downstream
+///
+/// Common strategies include (one-to-one)[Forward] and (one-to-many)[Broadcast]
 pub trait ChannelStrategy<A>: Send
 where
     A: ArconType,
