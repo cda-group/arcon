@@ -233,7 +233,7 @@ mod tests {
         let window_assigner =
             EventTimeWindowAssigner::<Item, u64>::new(window, length, slide, late, true);
 
-        let window_node = system.create_and_start(move || {
+        let window_node = system.create(move || {
             Node::<Item, u64>::new(
                 1.into(),
                 vec![0.into()],
@@ -241,6 +241,8 @@ mod tests {
                 Box::new(window_assigner),
             )
         });
+
+        system.start(&window_node);
 
         let win_ref: ActorRefStrong<ArconMessage<Item>> = window_node
             .actor_ref()

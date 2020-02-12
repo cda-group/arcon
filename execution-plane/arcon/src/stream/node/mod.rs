@@ -241,7 +241,8 @@ mod tests {
         // And a debug sink receiving its results
         let system = KompactConfig::default().build().expect("KompactSystem");
 
-        let sink = system.create_and_start(move || DebugNode::<i32>::new());
+        let sink = system.create(move || DebugNode::<i32>::new());
+        system.start(&sink);
         let actor_ref: ActorRefStrong<ArconMessage<i32>> =
             sink.actor_ref().hold().expect("Failed to fetch");
         let channel = Channel::Local(actor_ref);
@@ -252,7 +253,7 @@ mod tests {
             *x >= 0
         }
 
-        let filter_node = system.create_and_start(move || {
+        let filter_node = system.create(move || {
             Node::<i32, i32>::new(
                 0.into(),
                 vec![1.into(), 2.into(), 3.into()],
@@ -260,6 +261,8 @@ mod tests {
                 Box::new(Filter::new(&node_fn)),
             )
         });
+
+        system.start(&filter_node);
 
         return (filter_node.actor_ref(), sink);
     }

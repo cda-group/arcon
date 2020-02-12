@@ -68,7 +68,7 @@ mod tests {
         let file_path = file.path().to_string_lossy().into_owned();
 
         let node_id = NodeID::new(1);
-        let sink_comp = system.create_and_start(move || {
+        let sink_comp = system.create(move || {
             Node::new(
                 0.into(),
                 vec![node_id],
@@ -76,6 +76,9 @@ mod tests {
                 Box::new(LocalFileSink::new(&file_path)),
             )
         });
+
+        system.start(&sink_comp);
+
         let input_one = ArconMessage::element(6 as i32, None, node_id);
         let input_two = ArconMessage::element(2 as i32, None, node_id);
         let input_three = ArconMessage::element(15 as i32, None, node_id);

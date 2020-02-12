@@ -1,113 +1,77 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::data::NodeID;
-use crate::data::{ArconElement, ArconEvent, ArconType, Watermark};
-use crate::stream::channel::strategy::ChannelStrategy;
+use crate::data::ArconType;
+use crate::stream::node::source::SourceContext;
 use kompact::prelude::*;
 use std::fs::File;
-use std::io::BufRead;
-use std::io::BufReader;
+use std::io::{BufRead, BufReader};
 use std::str::FromStr;
-use std::time::Duration;
-use std::time::SystemTime;
-/*
-    LocalFileSource:
-    Allows generation of events from a file.
-    Takes file path and parameters for how to parse it and target for where to send events.
 
-    Each line of the file should contain just one value of type A which supports FromStr
-*/
 #[derive(ComponentDefinition)]
-pub struct LocalFileSource<A: 'static + ArconType + FromStr> {
-    ctx: ComponentContext<LocalFileSource<A>>,
-    channel_strategy: Box<dyn ChannelStrategy<A>>,
+pub struct LocalFileSource<IN, OUT>
+where
+    IN: ArconType + FromStr,
+    OUT: ArconType,
+{
+    ctx: ComponentContext<Self>,
+    source_ctx: SourceContext<IN, OUT>,
     file_path: String,
-    watermark_interval: u64, // If 0: no watermarks/timestamps generated
-    _id: NodeID,
 }
 
-impl<A: ArconType + FromStr> LocalFileSource<A> {
-    pub fn new(
-        file_path: String,
-        strategy: Box<dyn ChannelStrategy<A>>,
-        watermark_interval: u64,
-        id: NodeID,
-    ) -> LocalFileSource<A> {
+impl<IN, OUT> LocalFileSource<IN, OUT>
+where
+    IN: ArconType + FromStr,
+    OUT: ArconType,
+{
+    pub fn new(file_path: String, source_ctx: SourceContext<IN, OUT>) -> Self {
         LocalFileSource {
             ctx: ComponentContext::new(),
-            channel_strategy: strategy,
+            source_ctx,
             file_path,
-            watermark_interval,
-            _id: id,
         }
     }
     pub fn process_file(&mut self) {
         if let Ok(f) = File::open(&self.file_path) {
             let reader = BufReader::new(f);
             let mut counter: u64 = 0;
-
             for line in reader.lines() {
                 match line {
                     Ok(l) => {
-                        if let Ok(v) = l.parse::<A>() {
-                            match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
-                                Ok(ts) => {
-                                    let element = ArconElement::with_timestamp(v, ts.as_secs());
-                                    self.channel_strategy.add(ArconEvent::Element(element));
-                                    counter += 1;
-                                    if counter == self.watermark_interval {
-                                        self.channel_strategy.add(ArconEvent::Watermark(
-                                            Watermark::new(ts.as_secs()),
-                                        ));
-                                        counter = 0;
-                                    }
-                                    self.channel_strategy.flush(&self.ctx().system());
-                                }
-                                _ => {
-                                    error!(self.ctx.log(), "Failed to read SystemTime");
-                                }
+                        if let Ok(data) = l.parse::<IN>() {
+                            let elem = self.source_ctx.extract_element(data);
+                            let system = &self.ctx().system();
+                            self.source_ctx.process(elem, system);
+                            counter += 1;
+
+                            if counter == self.source_ctx.watermark_interval {
+                                self.source_ctx.generate_watermark(system);
+                                counter = 0;
                             }
                         } else {
-                            error!(self.ctx.log(), "Unable to parse line {}", self.file_path);
+                            error!(self.ctx.log(), "Unable to parse line {}", l);
                         }
                     }
-                    _ => {
-                        error!(self.ctx.log(), "Unable to read line {}", self.file_path);
+                    Err(e) => {
+                        error!(
+                            self.ctx.log(),
+                            "Unable to read line with err {}",
+                            e.to_string()
+                        );
                     }
                 }
             }
-
-            // We finished processing the file
-            // Just generate watermarks in a periodic fashion..
-            self.schedule_periodic(
-                Duration::from_secs(0),
-                Duration::from_secs(3),
-                move |self_c, _| {
-                    self_c.output_watermark();
-                },
-            );
         } else {
             error!(self.ctx.log(), "Unable to open file {}", self.file_path);
         }
     }
-
-    pub fn output_watermark(&mut self) {
-        match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
-            Ok(ts) => {
-                self.channel_strategy.add_and_flush(
-                    ArconEvent::Watermark(Watermark::new(ts.as_secs())),
-                    &self.ctx().system(),
-                );
-            }
-            _ => {
-                error!(self.ctx.log(), "Failed to read SystemTime");
-            }
-        }
-    }
 }
 
-impl<A: ArconType + FromStr> Provide<ControlPort> for LocalFileSource<A> {
+impl<IN, OUT> Provide<ControlPort> for LocalFileSource<IN, OUT>
+where
+    IN: ArconType + FromStr,
+    OUT: ArconType,
+{
     fn handle(&mut self, event: ControlEvent) {
         if let ControlEvent::Start = event {
             self.process_file();
@@ -115,8 +79,12 @@ impl<A: ArconType + FromStr> Provide<ControlPort> for LocalFileSource<A> {
     }
 }
 
-impl<A: ArconType + FromStr> Actor for LocalFileSource<A> {
-    type Message = Box<dyn Any + Send>;
+impl<IN, OUT> Actor for LocalFileSource<IN, OUT>
+where
+    IN: ArconType + FromStr,
+    OUT: ArconType,
+{
+    type Message = ();
     fn receive_local(&mut self, _msg: Self::Message) {}
     fn receive_network(&mut self, _msg: NetMessage) {}
 }
@@ -124,7 +92,7 @@ impl<A: ArconType + FromStr> Actor for LocalFileSource<A> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::prelude::{Channel, DebugNode, Forward};
+    use crate::prelude::{Channel, DebugNode, Forward, Map, NodeID};
     use kompact::default_components::DeadletterBox;
     use kompact::prelude::KompactSystem;
     use std::io::prelude::*;
@@ -154,96 +122,103 @@ mod tests {
     }
     // Test cases
     #[test]
-    fn local_file_u64_no_decimal() {
+    fn local_file_u64_test() {
         let (system, sink) = test_setup::<u64>();
         let mut file = NamedTempFile::new().unwrap();
         let file_path = file.path().to_string_lossy().into_owned();
 
-        file.write_all(b"123").unwrap();
+        for _ in 0..50 {
+            file.write_all(b"123\n").unwrap();
+        }
 
         let actor_ref = sink.actor_ref().hold().expect("fail");
         let channel = Channel::Local(actor_ref);
         let channel_strategy = Box::new(Forward::new(channel, NodeID::new(1)));
-        let file_source: LocalFileSource<u64> =
-            LocalFileSource::new(String::from(&file_path), channel_strategy, 5, 1.into());
+
+        // Our map function
+        fn map_fn(x: u64) -> u64 {
+            x + 5
+        }
+
+        let operator = Box::new(Map::<u64, u64>::new(&map_fn));
+
+        // Set up SourceContext
+        let buffer_limit = 200;
+        let buffer_timeout = 0; // Not needed for LocalFileSource
+        let watermark_interval = 25;
+
+        let source_context = SourceContext::new(
+            buffer_timeout,
+            buffer_limit,
+            watermark_interval,
+            None, // no timestamp extractor
+            channel_strategy,
+            operator,
+        );
+
+        let file_source: LocalFileSource<u64, u64> =
+            LocalFileSource::new(String::from(&file_path), source_context);
         let (source, _) = system.create_and_register(move || file_source);
         system.start(&source);
         wait(1);
 
         let sink_inspect = sink.definition().lock().unwrap();
-        assert_eq!(&sink_inspect.data.len(), &(1 as usize));
-        let r0 = &sink_inspect.data[0];
-        assert_eq!(r0.data, 123 as u64);
+        assert_eq!(&sink_inspect.data.len(), &(50 as usize));
+        for item in &sink_inspect.data {
+            // all elements should have been mapped + 5
+            assert_eq!(item.data, 128 as u64);
+        }
     }
 
     #[test]
-    fn local_file_u64_decimal() {
-        // Should not work, Asserts that nothing is received by sink
-        let (system, sink) = test_setup::<u64>();
+    fn local_file_f64_test() {
+        let (system, sink) = test_setup::<f64>();
         let mut file = NamedTempFile::new().unwrap();
         let file_path = file.path().to_string_lossy().into_owned();
 
-        file.write_all(b"123.5").unwrap();
+        let source_elements = 50;
+
+        for i in 0..source_elements {
+            let f = format!("{}.5\n", i);
+            file.write_all(f.as_bytes()).unwrap();
+        }
 
         let actor_ref = sink.actor_ref().hold().expect("fail");
         let channel = Channel::Local(actor_ref);
         let channel_strategy = Box::new(Forward::new(channel, NodeID::new(1)));
 
-        let file_source: LocalFileSource<u64> =
-            LocalFileSource::new(String::from(&file_path), channel_strategy, 5, 1.into());
+        // just pass it on
+        fn map_fn(x: f64) -> f64 {
+            x
+        }
+
+        let operator = Box::new(Map::<f64, f64>::new(&map_fn));
+
+        // Set up SourceContext
+        let buffer_limit = 200;
+        let buffer_timeout = 0; // Not needed for LocalFileSource
+        let watermark_interval = 25;
+
+        let source_context = SourceContext::new(
+            buffer_timeout,
+            buffer_limit,
+            watermark_interval,
+            None, // no timestamp extractor
+            channel_strategy,
+            operator,
+        );
+
+        let file_source: LocalFileSource<f64, f64> =
+            LocalFileSource::new(String::from(&file_path), source_context);
         let (source, _) = system.create_and_register(move || file_source);
         system.start(&source);
         wait(1);
 
         let sink_inspect = sink.definition().lock().unwrap();
-        assert_eq!(&sink_inspect.data.len(), &(0 as usize));
-    }
-
-    #[test]
-    fn local_file_f32_no_decimal() {
-        let (system, sink) = test_setup::<f32>();
-        let mut file = NamedTempFile::new().unwrap();
-        let file_path = file.path().to_string_lossy().into_owned();
-
-        file.write_all(b"123").unwrap();
-
-        let actor_ref = sink.actor_ref().hold().expect("fail");
-        let channel = Channel::Local(actor_ref);
-        let channel_strategy = Box::new(Forward::new(channel, NodeID::new(1)));
-
-        let file_source: LocalFileSource<f32> =
-            LocalFileSource::new(String::from(&file_path), channel_strategy, 5, 1.into());
-        let (source, _) = system.create_and_register(move || file_source);
-        system.start(&source);
-        wait(1);
-
-        let sink_inspect = sink.definition().lock().unwrap();
-        assert_eq!(&sink_inspect.data.len(), &(1 as usize));
-        let r0 = &sink_inspect.data[0];
-        assert_eq!(r0.data, 123 as f32);
-    }
-
-    #[test]
-    fn local_file_f32_decimal() {
-        let (system, sink) = test_setup::<f32>();
-        let mut file = NamedTempFile::new().unwrap();
-        let file_path = file.path().to_string_lossy().into_owned();
-
-        file.write_all(b"123.5").unwrap();
-
-        let actor_ref = sink.actor_ref().hold().expect("fail");
-        let channel = Channel::Local(actor_ref);
-        let channel_strategy = Box::new(Forward::new(channel, NodeID::new(1)));
-
-        let file_source: LocalFileSource<f32> =
-            LocalFileSource::new(String::from(&file_path), channel_strategy, 5, 1.into());
-        let (source, _) = system.create_and_register(move || file_source);
-        system.start(&source);
-        wait(1);
-
-        let sink_inspect = sink.definition().lock().unwrap();
-        assert_eq!(&sink_inspect.data.len(), &(1 as usize));
-        let r0 = &sink_inspect.data[0];
-        assert_eq!(r0.data, 123.5 as f32);
+        assert_eq!(&sink_inspect.data.len(), &(source_elements as usize));
+        for i in 0..source_elements {
+            let expected: f64 = i as f64 + 0.5;
+            assert_eq!(sink_inspect.data[i].data, expected);
+        }
     }
 }

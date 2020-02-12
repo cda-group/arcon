@@ -125,7 +125,8 @@ mod tests {
         // Set up CollectionSource component
         let collection_source: CollectionSource<u64, u64> =
             CollectionSource::new(collection, source_context);
-        let _ = system.create_and_start(move || collection_source);
+        let source = system.create(move || collection_source);
+        system.start(&source);
 
         // Wait a bit in order for all results to come in...
         std::thread::sleep(std::time::Duration::from_secs(1));
