@@ -132,7 +132,7 @@ where
                         self.current_epoch = e.epoch;
 
                         // call handle_epoch on our operator
-                        let _operator_state = self.operator.handle_epoch(e)?;
+                        let _operator_state = self.operator.handle_epoch(e);
 
                         // store the state
                         self.save_state()?;

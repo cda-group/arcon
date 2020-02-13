@@ -149,11 +149,9 @@ mod tests {
 
         // Set up SourceContext
         let buffer_limit = 200;
-        let buffer_timeout = 0; // Not needed
         let watermark_interval = 1; // in seconds currently for SocketSource
 
         let source_context = SourceContext::new(
-            buffer_timeout,
             buffer_limit,
             watermark_interval,
             None, // no timestamp extractor
@@ -219,7 +217,6 @@ mod tests {
 
         // Set up SourceContext
         let buffer_limit = 200;
-        let buffer_timeout = 0; // Not needed
         let watermark_interval = 1; // in seconds currently for SocketSource
 
         fn timestamp_extractor(x: &ExtractorStruct) -> u64 {
@@ -227,7 +224,6 @@ mod tests {
         }
 
         let source_context = SourceContext::new(
-            buffer_timeout,
             buffer_limit,
             watermark_interval,
             Some(&timestamp_extractor),
@@ -251,7 +247,7 @@ mod tests {
 
         Runtime::new().unwrap().block_on(client);
 
-        wait(2);
+        wait(1);
         let sink_inspect = sink.definition().lock().unwrap();
         assert_eq!(sink_inspect.data.len(), (1 as usize));
         assert_eq!(sink_inspect.watermarks.last().unwrap().timestamp, 1);

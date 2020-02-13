@@ -47,8 +47,8 @@ where
     fn handle_watermark(&mut self, _w: Watermark) -> Option<Vec<ArconEvent<OUT>>> {
         None
     }
-    fn handle_epoch(&mut self, _epoch: Epoch) -> ArconResult<Vec<u8>> {
-        Ok(Vec::new())
+    fn handle_epoch(&mut self, _epoch: Epoch) -> Option<ArconResult<Vec<u8>>> {
+        None
     }
 }
 

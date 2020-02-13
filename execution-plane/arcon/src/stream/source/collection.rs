@@ -109,12 +109,10 @@ mod tests {
 
         // Set up SourceContext
         let buffer_limit = 200;
-        let buffer_timeout = 0; // Not needed for CollectionSource
         let watermark_interval = 50;
         let collection_elements = 2000;
 
         let source_context = SourceContext::new(
-            buffer_timeout,
             buffer_limit,
             watermark_interval,
             None, // no timestamp extractor

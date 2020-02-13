@@ -144,11 +144,9 @@ mod tests {
 
         // Set up SourceContext
         let buffer_limit = 200;
-        let buffer_timeout = 0; // Not needed for LocalFileSource
         let watermark_interval = 25;
 
         let source_context = SourceContext::new(
-            buffer_timeout,
             buffer_limit,
             watermark_interval,
             None, // no timestamp extractor
@@ -196,11 +194,9 @@ mod tests {
 
         // Set up SourceContext
         let buffer_limit = 200;
-        let buffer_timeout = 0; // Not needed for LocalFileSource
         let watermark_interval = 25;
 
         let source_context = SourceContext::new(
-            buffer_timeout,
             buffer_limit,
             watermark_interval,
             None, // no timestamp extractor

@@ -14,14 +14,12 @@ pub mod local_file;
 #[cfg(feature = "socket")]
 pub mod socket;
 
-/// Common Source Context for all Source implementations
+/// Common Context for all Source implementations
 pub struct SourceContext<IN, OUT>
 where
     IN: ArconType,
     OUT: ArconType,
 {
-    /// Buffer timeout in ms
-    pub buffer_timeout: u64,
     /// Maximum buffer size before flushing
     buffer_limit: u64,
     /// Counter keeping track of number events buffered
@@ -31,6 +29,10 @@ where
     /// Current Watermark
     current_watermark: u64,
     /// Watermark interval
+    ///
+    /// Controls how often the source generates watermarks. For finite
+    /// sources, `watermark_interval` may be an element counter. Whereas
+    /// in an unbounded source type, it may be the timer timeout period.
     pub watermark_interval: u64,
     /// An Operator to enable fusion of computation within the source
     operator: Box<dyn Operator<IN, OUT> + Send>,
@@ -44,7 +46,6 @@ where
     OUT: ArconType,
 {
     pub fn new(
-        buffer_timeout: u64,
         buffer_limit: u64,
         watermark_interval: u64,
         ts_extractor: Option<&'static dyn for<'r> SafelySendableFn<(&'r IN,), u64>>,
@@ -52,7 +53,6 @@ where
         operator: Box<dyn Operator<IN, OUT> + Send>,
     ) -> Self {
         SourceContext {
-            buffer_timeout,
             buffer_limit,
             buffer_counter: 0,
             ts_extractor,
@@ -79,11 +79,13 @@ where
     }
 
     /// Helper to know whether to use SystemTime or EventTime
+    #[inline]
     fn has_timestamp_extractor(&self) -> bool {
         self.ts_extractor.is_some()
     }
 
     /// Update Watermark if `ts` is of a higher value than the current Watermark
+    #[inline]
     pub fn watermark_update(&mut self, ts: u64) {
         if ts > self.current_watermark {
             self.current_watermark = ts;
@@ -98,15 +100,6 @@ where
                 self.output_event(event, source);
             }
         }
-    }
-
-    /// Force flush of buffers
-    ///
-    /// This function should be called when a batch timeout has been reached
-    #[inline]
-    pub fn force_flush(&mut self, source: &KompactSystem) {
-        self.channel_strategy.flush(source);
-        self.buffer_counter = 0;
     }
 
     /// Internal helper function that handles batching and sending of events

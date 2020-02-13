@@ -178,8 +178,8 @@ where
         }
         Some(result)
     }
-    fn handle_epoch(&mut self, _epoch: Epoch) -> ArconResult<Vec<u8>> {
-        Ok(Vec::new())
+    fn handle_epoch(&mut self, _epoch: Epoch) -> Option<ArconResult<Vec<u8>>> {
+        None
     }
 }
 
