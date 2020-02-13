@@ -22,8 +22,7 @@ pub struct RocksDbAggregatingState<IK, N, T, AGG, KS, TS> {
 pub(crate) const ACCUMULATOR_MARKER: u8 = 0xAC;
 pub(crate) const VALUE_MARKER: u8 = 0x00;
 
-impl<IK, N, T, AGG, KS, TS> State<RocksDb, IK, N, KS, TS>
-    for RocksDbAggregatingState<IK, N, T, AGG, KS, TS>
+impl<IK, N, T, AGG, KS, TS> State<RocksDb, IK, N> for RocksDbAggregatingState<IK, N, T, AGG, KS, TS>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
@@ -98,7 +97,7 @@ where
     }
 }
 
-impl<IK, N, T, AGG, KS, TS> AppendingState<RocksDb, IK, N, T, AGG::Result, KS, TS>
+impl<IK, N, T, AGG, KS, TS> AppendingState<RocksDb, IK, N, T, AGG::Result>
     for RocksDbAggregatingState<IK, N, T, AGG, KS, TS>
 where
     IK: SerializableFixedSizeWith<KS>,
@@ -137,7 +136,7 @@ where
     }
 }
 
-impl<IK, N, T, AGG, KS, TS> MergingState<RocksDb, IK, N, T, AGG::Result, KS, TS>
+impl<IK, N, T, AGG, KS, TS> MergingState<RocksDb, IK, N, T, AGG::Result>
     for RocksDbAggregatingState<IK, N, T, AGG, KS, TS>
 where
     IK: SerializableFixedSizeWith<KS>,
@@ -149,7 +148,7 @@ where
 {
 }
 
-impl<IK, N, T, AGG, KS, TS> AggregatingState<RocksDb, IK, N, T, AGG::Result, KS, TS>
+impl<IK, N, T, AGG, KS, TS> AggregatingState<RocksDb, IK, N, T, AGG::Result>
     for RocksDbAggregatingState<IK, N, T, AGG, KS, TS>
 where
     IK: SerializableFixedSizeWith<KS>,

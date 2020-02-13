@@ -17,7 +17,7 @@ pub struct InMemoryAggregatingState<IK, N, T, AGG, KS, TS> {
     pub(crate) _phantom: PhantomData<T>,
 }
 
-impl<IK, N, T, AGG, KS, TS> State<InMemory, IK, N, KS, TS>
+impl<IK, N, T, AGG, KS, TS> State<InMemory, IK, N>
     for InMemoryAggregatingState<IK, N, T, AGG, KS, TS>
 where
     IK: SerializableFixedSizeWith<KS>,
@@ -33,7 +33,7 @@ where
     delegate_key_and_namespace!(common);
 }
 
-impl<IK, N, T, AGG, KS, TS> AppendingState<InMemory, IK, N, T, AGG::Result, KS, TS>
+impl<IK, N, T, AGG, KS, TS> AppendingState<InMemory, IK, N, T, AGG::Result>
     for InMemoryAggregatingState<IK, N, T, AGG, KS, TS>
 where
     IK: SerializableFixedSizeWith<KS>,
@@ -74,7 +74,7 @@ where
     }
 }
 
-impl<IK, N, T, AGG, KS, TS> MergingState<InMemory, IK, N, T, AGG::Result, KS, TS>
+impl<IK, N, T, AGG, KS, TS> MergingState<InMemory, IK, N, T, AGG::Result>
     for InMemoryAggregatingState<IK, N, T, AGG, KS, TS>
 where
     IK: SerializableFixedSizeWith<KS>,
@@ -85,7 +85,7 @@ where
 {
 }
 
-impl<IK, N, T, AGG, KS, TS> AggregatingState<InMemory, IK, N, T, AGG::Result, KS, TS>
+impl<IK, N, T, AGG, KS, TS> AggregatingState<InMemory, IK, N, T, AGG::Result>
     for InMemoryAggregatingState<IK, N, T, AGG, KS, TS>
 where
     IK: SerializableFixedSizeWith<KS>,

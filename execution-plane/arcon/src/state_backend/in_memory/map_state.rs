@@ -17,7 +17,7 @@ pub struct InMemoryMapState<IK, N, K, V, KS, TS> {
     pub(crate) _phantom: PhantomData<(K, V)>,
 }
 
-impl<IK, N, K, V, KS, TS> State<InMemory, IK, N, KS, TS> for InMemoryMapState<IK, N, K, V, KS, TS>
+impl<IK, N, K, V, KS, TS> State<InMemory, IK, N> for InMemoryMapState<IK, N, K, V, KS, TS>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
@@ -34,8 +34,7 @@ where
     delegate_key_and_namespace!(common);
 }
 
-impl<IK, N, K, V, KS, TS> MapState<InMemory, IK, N, K, V, KS, TS>
-    for InMemoryMapState<IK, N, K, V, KS, TS>
+impl<IK, N, K, V, KS, TS> MapState<InMemory, IK, N, K, V> for InMemoryMapState<IK, N, K, V, KS, TS>
 where
     IK: SerializableFixedSizeWith<KS> + DeserializableWith<KS>,
     N: SerializableFixedSizeWith<KS> + DeserializableWith<KS>,

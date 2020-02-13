@@ -9,7 +9,7 @@ use crate::{
         state_types::{AppendingState, MergingState, State, VecState},
     },
 };
-use error::ErrorKind;
+//use error::ErrorKind;
 use std::marker::PhantomData;
 
 pub struct InMemoryVecState<IK, N, T, KS, TS> {
@@ -17,7 +17,7 @@ pub struct InMemoryVecState<IK, N, T, KS, TS> {
     pub(crate) _phantom: PhantomData<T>,
 }
 
-impl<IK, N, T, KS, TS> State<InMemory, IK, N, KS, TS> for InMemoryVecState<IK, N, T, KS, TS>
+impl<IK, N, T, KS, TS> State<InMemory, IK, N> for InMemoryVecState<IK, N, T, KS, TS>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
@@ -32,7 +32,7 @@ where
     delegate_key_and_namespace!(common);
 }
 
-impl<IK, N, T, KS, TS> AppendingState<InMemory, IK, N, T, Vec<T>, KS, TS>
+impl<IK, N, T, KS, TS> AppendingState<InMemory, IK, N, T, Vec<T>>
     for InMemoryVecState<IK, N, T, KS, TS>
 where
     IK: SerializableFixedSizeWith<KS>,
@@ -63,7 +63,7 @@ where
     }
 }
 
-impl<IK, N, T, KS, TS> MergingState<InMemory, IK, N, T, Vec<T>, KS, TS>
+impl<IK, N, T, KS, TS> MergingState<InMemory, IK, N, T, Vec<T>>
     for InMemoryVecState<IK, N, T, KS, TS>
 where
     IK: SerializableFixedSizeWith<KS>,
@@ -73,7 +73,7 @@ where
 {
 }
 
-impl<IK, N, T, KS, TS> VecState<InMemory, IK, N, T, KS, TS> for InMemoryVecState<IK, N, T, KS, TS>
+impl<IK, N, T, KS, TS> VecState<InMemory, IK, N, T> for InMemoryVecState<IK, N, T, KS, TS>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
@@ -114,40 +114,40 @@ where
     ) -> ArconResult<()> {
         self.add_all(backend, values)
     }
-
-    fn len(&self, backend: &InMemory) -> ArconResult<usize>
-    where
-        T: SerializableFixedSizeWith<TS>,
-    {
-        let key = self.common.get_db_key(&())?;
-        let storage = backend.get(&key);
-
-        match storage {
-            Err(e) => match e.kind() {
-                ErrorKind::ArconError(message) if &*message == "Value not found" => Ok(0),
-                _ => Err(e),
-            },
-            Ok(buf) => {
-                if buf.is_empty() {
-                    return Ok(0);
-                }
-
-                debug_assert_ne!(T::SIZE, 0);
-
-                let len = buf.len() / T::SIZE;
-                let rem = buf.len() % T::SIZE;
-
-                // sanity check
-                if rem != 0 {
-                    return arcon_err!(
-                        "vec state storage length is not a multiple of element size"
-                    );
-                }
-
-                Ok(len)
-            }
-        }
-    }
+    //
+    //    fn len(&self, backend: &InMemory) -> ArconResult<usize>
+    //    where
+    //        T: SerializableFixedSizeWith<TS>,
+    //    {
+    //        let key = self.common.get_db_key(&())?;
+    //        let storage = backend.get(&key);
+    //
+    //        match storage {
+    //            Err(e) => match e.kind() {
+    //                ErrorKind::ArconError(message) if &*message == "Value not found" => Ok(0),
+    //                _ => Err(e),
+    //            },
+    //            Ok(buf) => {
+    //                if buf.is_empty() {
+    //                    return Ok(0);
+    //                }
+    //
+    //                debug_assert_ne!(T::SIZE, 0);
+    //
+    //                let len = buf.len() / T::SIZE;
+    //                let rem = buf.len() % T::SIZE;
+    //
+    //                // sanity check
+    //                if rem != 0 {
+    //                    return arcon_err!(
+    //                        "vec state storage length is not a multiple of element size"
+    //                    );
+    //                }
+    //
+    //                Ok(len)
+    //            }
+    //        }
+    //    }
 }
 
 #[cfg(test)]
@@ -159,7 +159,7 @@ mod test {
     fn vec_state_test() {
         let mut db = InMemory::new("test").unwrap();
         let vec_state = db.new_vec_state("test_state", (), (), Bincode, Bincode);
-        assert_eq!(vec_state.len(&db).unwrap(), 0);
+        //        assert_eq!(vec_state.len(&db).unwrap(), 0);
 
         vec_state.append(&mut db, 1).unwrap();
         vec_state.append(&mut db, 2).unwrap();
@@ -167,6 +167,6 @@ mod test {
         vec_state.add_all(&mut db, vec![4, 5, 6]).unwrap();
 
         assert_eq!(vec_state.get(&db).unwrap(), vec![1, 2, 3, 4, 5, 6]);
-        assert_eq!(vec_state.len(&db).unwrap(), 6);
+        //        assert_eq!(vec_state.len(&db).unwrap(), 6);
     }
 }

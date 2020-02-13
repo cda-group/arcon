@@ -17,8 +17,7 @@ pub struct InMemoryReducingState<IK, N, T, F, KS, TS> {
     pub(crate) _phantom: PhantomData<T>,
 }
 
-impl<IK, N, T, F, KS, TS> State<InMemory, IK, N, KS, TS>
-    for InMemoryReducingState<IK, N, T, F, KS, TS>
+impl<IK, N, T, F, KS, TS> State<InMemory, IK, N> for InMemoryReducingState<IK, N, T, F, KS, TS>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
@@ -33,7 +32,7 @@ where
     delegate_key_and_namespace!(common);
 }
 
-impl<IK, N, T, F, KS, TS> AppendingState<InMemory, IK, N, T, T, KS, TS>
+impl<IK, N, T, F, KS, TS> AppendingState<InMemory, IK, N, T, T>
     for InMemoryReducingState<IK, N, T, F, KS, TS>
 // TODO: if we made the (backend-)mutating methods take &mut self, F could be FnMut
 where
@@ -72,7 +71,7 @@ where
     }
 }
 
-impl<IK, N, T, F, KS, TS> MergingState<InMemory, IK, N, T, T, KS, TS>
+impl<IK, N, T, F, KS, TS> MergingState<InMemory, IK, N, T, T>
     for InMemoryReducingState<IK, N, T, F, KS, TS>
 // TODO: if we made the (backend-)mutating methods take &mut self, F could be FnMut
 where
@@ -84,7 +83,7 @@ where
 {
 }
 
-impl<IK, N, T, F, KS, TS> ReducingState<InMemory, IK, N, T, KS, TS>
+impl<IK, N, T, F, KS, TS> ReducingState<InMemory, IK, N, T>
     for InMemoryReducingState<IK, N, T, F, KS, TS>
 where
     IK: SerializableFixedSizeWith<KS>,

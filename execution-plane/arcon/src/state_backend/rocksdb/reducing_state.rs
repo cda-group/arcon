@@ -22,8 +22,7 @@ pub struct RocksDbReducingState<IK, N, T, F, KS, TS> {
     pub(crate) _phantom: PhantomData<T>,
 }
 
-impl<IK, N, T, F, KS, TS> State<RocksDb, IK, N, KS, TS>
-    for RocksDbReducingState<IK, N, T, F, KS, TS>
+impl<IK, N, T, F, KS, TS> State<RocksDb, IK, N> for RocksDbReducingState<IK, N, T, F, KS, TS>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
@@ -76,7 +75,7 @@ where
     }
 }
 
-impl<IK, N, T, F, KS, TS> AppendingState<RocksDb, IK, N, T, T, KS, TS>
+impl<IK, N, T, F, KS, TS> AppendingState<RocksDb, IK, N, T, T>
     for RocksDbReducingState<IK, N, T, F, KS, TS>
 // TODO: if we made the (backend-)mutating methods take &mut self, F could be FnMut
 where
@@ -109,7 +108,7 @@ where
     }
 }
 
-impl<IK, N, T, F, KS, TS> MergingState<RocksDb, IK, N, T, T, KS, TS>
+impl<IK, N, T, F, KS, TS> MergingState<RocksDb, IK, N, T, T>
     for RocksDbReducingState<IK, N, T, F, KS, TS>
 where
     IK: SerializableFixedSizeWith<KS>,
@@ -120,7 +119,7 @@ where
 {
 }
 
-impl<IK, N, T, F, KS, TS> ReducingState<RocksDb, IK, N, T, KS, TS>
+impl<IK, N, T, F, KS, TS> ReducingState<RocksDb, IK, N, T>
     for RocksDbReducingState<IK, N, T, F, KS, TS>
 where
     IK: SerializableFixedSizeWith<KS>,

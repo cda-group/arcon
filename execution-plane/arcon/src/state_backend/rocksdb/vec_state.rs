@@ -10,7 +10,7 @@ use crate::{
         state_types::{AppendingState, MergingState, State, VecState},
     },
 };
-use error::ErrorKind;
+//use error::ErrorKind;
 use rocksdb::WriteBatch;
 use std::marker::PhantomData;
 
@@ -19,7 +19,7 @@ pub struct RocksDbVecState<IK, N, T, KS, TS> {
     pub(crate) _phantom: PhantomData<T>,
 }
 
-impl<IK, N, T, KS, TS> State<RocksDb, IK, N, KS, TS> for RocksDbVecState<IK, N, T, KS, TS>
+impl<IK, N, T, KS, TS> State<RocksDb, IK, N> for RocksDbVecState<IK, N, T, KS, TS>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
@@ -45,7 +45,7 @@ pub fn vec_merge(_key: &[u8], first: Option<&[u8]>, rest: &mut MergeOperands) ->
     Some(result)
 }
 
-impl<IK, N, T, KS, TS> AppendingState<RocksDb, IK, N, T, Vec<T>, KS, TS>
+impl<IK, N, T, KS, TS> AppendingState<RocksDb, IK, N, T, Vec<T>>
     for RocksDbVecState<IK, N, T, KS, TS>
 where
     IK: SerializableFixedSizeWith<KS>,
@@ -83,8 +83,7 @@ where
     }
 }
 
-impl<IK, N, T, KS, TS> MergingState<RocksDb, IK, N, T, Vec<T>, KS, TS>
-    for RocksDbVecState<IK, N, T, KS, TS>
+impl<IK, N, T, KS, TS> MergingState<RocksDb, IK, N, T, Vec<T>> for RocksDbVecState<IK, N, T, KS, TS>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
@@ -93,7 +92,7 @@ where
 {
 }
 
-impl<IK, N, T, KS, TS> VecState<RocksDb, IK, N, T, KS, TS> for RocksDbVecState<IK, N, T, KS, TS>
+impl<IK, N, T, KS, TS> VecState<RocksDb, IK, N, T> for RocksDbVecState<IK, N, T, KS, TS>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
@@ -142,40 +141,40 @@ where
         self.add_all(backend, values)
     }
 
-    /// for types that don't satisfy the extra bounds, do .get().len()
-    fn len(&self, backend: &RocksDb) -> ArconResult<usize>
-    where
-        T: SerializableFixedSizeWith<TS>,
-    {
-        let key = self.common.get_db_key(&())?;
-        let storage = backend.get(&self.common.cf_name, &key);
-
-        match storage {
-            Err(e) => match e.kind() {
-                ErrorKind::ArconError(message) if &*message == "Value not found" => Ok(0),
-                _ => Err(e),
-            },
-            Ok(buf) => {
-                if buf.is_empty() {
-                    return Ok(0);
-                }
-
-                debug_assert_ne!(T::SIZE, 0);
-
-                let len = buf.len() / T::SIZE;
-                let rem = buf.len() % T::SIZE;
-
-                // sanity check
-                if rem != 0 {
-                    return arcon_err!(
-                        "vec state storage length is not a multiple of element size"
-                    );
-                }
-
-                Ok(len)
-            }
-        }
-    }
+    //    /// for types that don't satisfy the extra bounds, do .get().len()
+    //    fn len(&self, backend: &RocksDb) -> ArconResult<usize>
+    //    where
+    //        T: SerializableFixedSizeWith<TS>,
+    //    {
+    //        let key = self.common.get_db_key(&())?;
+    //        let storage = backend.get(&self.common.cf_name, &key);
+    //
+    //        match storage {
+    //            Err(e) => match e.kind() {
+    //                ErrorKind::ArconError(message) if &*message == "Value not found" => Ok(0),
+    //                _ => Err(e),
+    //            },
+    //            Ok(buf) => {
+    //                if buf.is_empty() {
+    //                    return Ok(0);
+    //                }
+    //
+    //                debug_assert_ne!(T::SIZE, 0);
+    //
+    //                let len = buf.len() / T::SIZE;
+    //                let rem = buf.len() % T::SIZE;
+    //
+    //                // sanity check
+    //                if rem != 0 {
+    //                    return arcon_err!(
+    //                        "vec state storage length is not a multiple of element size"
+    //                    );
+    //                }
+    //
+    //                Ok(len)
+    //            }
+    //        }
+    //    }
 }
 
 #[cfg(test)]

@@ -16,7 +16,7 @@ pub struct RocksDbValueState<IK, N, T, KS, TS> {
     pub(crate) _phantom: PhantomData<T>,
 }
 
-impl<IK, N, T, KS, TS> State<RocksDb, IK, N, KS, TS> for RocksDbValueState<IK, N, T, KS, TS>
+impl<IK, N, T, KS, TS> State<RocksDb, IK, N> for RocksDbValueState<IK, N, T, KS, TS>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
@@ -32,7 +32,7 @@ where
     delegate_key_and_namespace!(common);
 }
 
-impl<IK, N, T, KS, TS> ValueState<RocksDb, IK, N, T, KS, TS> for RocksDbValueState<IK, N, T, KS, TS>
+impl<IK, N, T, KS, TS> ValueState<RocksDb, IK, N, T> for RocksDbValueState<IK, N, T, KS, TS>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
