@@ -7,11 +7,9 @@
 #![allow(bare_trait_objects)]
 extern crate arcon;
 
-/*
 use arcon::macros::*;
 use arcon::prelude::*;
 use std::fs::File;
-use std::io::Write;
 use std::io::{BufRead, BufReader};
 use tempfile::NamedTempFile;
 
@@ -22,52 +20,67 @@ pub struct NormaliseElements {
     pub data: Vec<i64>,
 }
 
+#[arcon]
+#[derive(prost::Message)]
+pub struct SourceData {
+    #[prost(int64, tag = "1")]
+    pub data: i64,
+    #[prost(uint64, tag = "2")]
+    pub timestamp: u64,
+}
+
 /// `normalise_pipeline_test`
-/// LocalFileSource -> Filter -> Window -> Map -> LocalFileSink
+/// CollectionSource -> Window -> Map -> LocalFileSink
 #[test]
 fn normalise_pipeline_test() {
-    let system = KompactConfig::default().build().expect("KompactSystem");
+    // TODO: It can use some more love....
 
-    // Set up Source File
-    let mut source_file = NamedTempFile::new().unwrap();
-    let source_path = source_file.path().to_string_lossy().into_owned();
-    source_file.write_all(b"2\n4").unwrap();
+    let timeout = std::time::Duration::from_millis(500);
+    let system = KompactConfig::default().build().expect("KompactSystem");
 
     // Define Sink File
     let sink_file = NamedTempFile::new().unwrap();
     let sink_path = sink_file.path().to_string_lossy().into_owned();
 
     // Create Sink Component
-    let node_5 = system.create_and_start(move || {
+    let node_4 = system.create(move || {
         Node::new(
-            5.into(),
-            vec![4.into()],
-            Box::new(Mute::new()),
+            4.into(),
+            vec![3.into()],
+            mute_strategy::<i64>(),
             Box::new(LocalFileSink::new(&sink_path)),
         )
     });
+    system
+        .start_notify(&node_4)
+        .wait_timeout(timeout)
+        .expect("node_4 never started!");
 
     // Define Map
-    let actor_ref: ActorRefStrong<ArconMessage<i64>> = node_5
+    let actor_ref: ActorRefStrong<ArconMessage<i64>> = node_4
         .actor_ref()
         .hold()
         .expect("failed to fetch strong ref");
     let channel = Channel::Local(actor_ref);
-    let channel_strategy: Box<dyn ChannelStrategy<i64>> =
-        Box::new(Forward::new(channel, NodeID::new(4)));
+    let channel_strategy = ChannelStrategy::Forward(Forward::new(channel, NodeID::new(3)));
 
     fn map_fn(x: NormaliseElements) -> i64 {
         x.data.iter().map(|x| x + 3).sum()
     }
 
-    let node_4 = system.create_and_start(move || {
+    let node_3 = system.create(move || {
         Node::<NormaliseElements, i64>::new(
-            4.into(),
-            vec![3.into()],
+            3.into(),
+            vec![2.into()],
             channel_strategy,
             Box::new(Map::<NormaliseElements, i64>::new(&map_fn)),
         )
     });
+
+    system
+        .start_notify(&node_3)
+        .wait_timeout(timeout)
+        .expect("node_3 never started!");
 
     // Define Window
 
@@ -81,63 +94,77 @@ fn normalise_pipeline_test() {
 
     let window: Box<dyn Window<i64, NormaliseElements>> = Box::new(AppenderWindow::new(&window_fn));
 
-    let node_4_actor_ref = node_4.actor_ref().hold().expect("Failed to fetch ref");
-    let channel_strategy: Box<Forward<NormaliseElements>> = Box::new(Forward::new(
-        Channel::Local(node_4_actor_ref),
-        NodeID::new(3),
+    let node_3_actor_ref = node_3.actor_ref().hold().expect("Failed to fetch ref");
+    let channel_strategy = ChannelStrategy::Forward(Forward::new(
+        Channel::Local(node_3_actor_ref),
+        NodeID::new(2),
     ));
 
-    let node_3 = system.create_and_start(move || {
+    let node_2 = system.create(move || {
         Node::<i64, NormaliseElements>::new(
-            3.into(),
-            vec![2.into()],
-            channel_strategy,
-            Box::new(EventTimeWindowAssigner::<i64, NormaliseElements>::new(
-                window, 3, 3, 0, false,
-            )),
-        )
-    });
-
-    // Define Filter
-
-    let node_3_actor_ref = node_3.actor_ref().hold().expect("Failed to fetch ref");
-    let channel = Channel::Local(node_3_actor_ref);
-    let channel_strategy: Box<dyn ChannelStrategy<i64>> =
-        Box::new(Forward::new(channel, NodeID::new(2)));
-    fn filter_fn(x: &i64) -> bool {
-        *x < 5
-    }
-    let node_2 = system.create_and_start(move || {
-        Node::<i64, i64>::new(
             2.into(),
             vec![1.into()],
             channel_strategy,
-            Box::new(Filter::<i64>::new(&filter_fn)),
+            Box::new(EventTimeWindowAssigner::<i64, NormaliseElements>::new(
+                window, 2, 2, 0, false,
+            )),
         )
     });
+    system
+        .start_notify(&node_2)
+        .wait_timeout(timeout)
+        .expect("node_2 never started!");
 
     // Define Source
+    fn source_map(x: SourceData) -> i64 {
+        x.data
+    }
+    let operator = Box::new(Map::<SourceData, i64>::new(&source_map));
+
     let actor_ref: ActorRefStrong<ArconMessage<i64>> = node_2
         .actor_ref()
         .hold()
         .expect("Failed to fetch strong ref");
     let channel = Channel::Local(actor_ref);
-    let channel_strategy: Box<dyn ChannelStrategy<i64>> =
-        Box::new(Forward::new(channel, NodeID::new(1)));
+    let channel_strategy = ChannelStrategy::Forward(Forward::new(channel, NodeID::new(1)));
 
-    // Watermark per 5 lines in the file
-    let wm_interval = 5;
-    let _ = system.create_and_start(move || {
-        let source: LocalFileSource<i64> = LocalFileSource::new(
-            String::from(&source_path),
-            channel_strategy,
-            wm_interval,
-            1.into(),
-        );
-        source
+    let buffer_limit = 200;
+    let watermark_interval = 2;
+
+    fn timestamp_extractor(x: &SourceData) -> u64 {
+        x.timestamp
+    }
+
+    let source_context = SourceContext::new(
+        buffer_limit,
+        watermark_interval,
+        Some(&timestamp_extractor),
+        channel_strategy,
+        operator,
+    );
+
+    let mut collection: Vec<SourceData> = Vec::new();
+    collection.push(SourceData {
+        data: 2,
+        timestamp: 1,
+    });
+    collection.push(SourceData {
+        data: 4,
+        timestamp: 3,
     });
 
-    std::thread::sleep(std::time::Duration::from_secs(5));
+    let node_1 = system.create(move || {
+        let collection_source: CollectionSource<SourceData, i64> =
+            CollectionSource::new(collection, source_context);
+        collection_source
+    });
+
+    system
+        .start_notify(&node_1)
+        .wait_timeout(timeout)
+        .expect("node_1 never started!");
+
+    std::thread::sleep(std::time::Duration::from_secs(1));
 
     // Only a single window should have been triggered.
     // Check results from the sink file!
@@ -149,7 +176,6 @@ fn normalise_pipeline_test() {
         .collect();
 
     assert_eq!(result.len(), 1);
-    assert_eq!(result[0], 7);
+    assert_eq!(result[0], 4);
     let _ = system.shutdown();
 }
-*/

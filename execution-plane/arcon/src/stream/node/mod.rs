@@ -21,7 +21,7 @@ where
 {
     ctx: ComponentContext<Node<IN, OUT>>,
     _id: NodeID,
-    channel_strategy: Box<dyn ChannelStrategy<OUT>>,
+    channel_strategy: ChannelStrategy<OUT>,
     in_channels: Vec<NodeID>,
     operator: Box<dyn Operator<IN, OUT> + Send>,
     watermarks: BTreeMap<NodeID, Watermark>,
@@ -39,7 +39,7 @@ where
     pub fn new(
         id: NodeID,
         in_channels: Vec<NodeID>,
-        channel_strategy: Box<dyn ChannelStrategy<OUT>>,
+        channel_strategy: ChannelStrategy<OUT>,
         operator: Box<dyn Operator<IN, OUT> + Send>,
     ) -> Node<IN, OUT> {
         // Initiate our watermarks
@@ -240,8 +240,8 @@ mod tests {
         let actor_ref: ActorRefStrong<ArconMessage<i32>> =
             sink.actor_ref().hold().expect("Failed to fetch");
         let channel = Channel::Local(actor_ref);
-        let channel_strategy: Box<dyn ChannelStrategy<i32>> =
-            Box::new(Forward::new(channel, NodeID::new(0)));
+        let channel_strategy: ChannelStrategy<i32> =
+            ChannelStrategy::Forward(Forward::new(channel, NodeID::new(0)));
 
         fn node_fn(x: &i32) -> bool {
             *x >= 0

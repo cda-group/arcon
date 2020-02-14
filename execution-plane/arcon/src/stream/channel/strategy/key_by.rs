@@ -8,7 +8,7 @@ use crate::stream::channel::strategy::send;
 use fnv::FnvHasher;
 use std::collections::HashMap;
 use std::default::Default;
-use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
+use std::hash::{BuildHasher, BuildHasherDefault, Hasher};
 
 type DefaultHashBuilder = BuildHasherDefault<FnvHasher>;
 
@@ -19,7 +19,7 @@ type DefaultHashBuilder = BuildHasherDefault<FnvHasher>;
 #[derive(Default)]
 pub struct KeyBy<A, H = DefaultHashBuilder>
 where
-    A: ArconType + Hash,
+    A: ArconType,
 {
     builder: H,
     parallelism: u32,
@@ -29,7 +29,7 @@ where
 
 impl<A> KeyBy<A>
 where
-    A: ArconType + Hash,
+    A: ArconType,
 {
     pub fn new(parallelism: u32, channels: Vec<Channel<A>>, sender_id: NodeID) -> KeyBy<A> {
         assert_eq!(channels.len(), parallelism as usize);
@@ -88,14 +88,8 @@ where
             buffer_map,
         }
     }
-}
 
-impl<A, B> ChannelStrategy<A> for KeyBy<A, B>
-where
-    A: ArconType + Hash,
-    B: BuildHasher + Send + Sync,
-{
-    fn add(&mut self, event: ArconEvent<A>) {
+    pub fn add(&mut self, event: ArconEvent<A>) {
         match &event {
             ArconEvent::Element(element) => {
                 let mut h = self.builder.build_hasher();
@@ -117,7 +111,7 @@ where
         }
     }
 
-    fn flush(&mut self, source: &KompactSystem) {
+    pub fn flush(&mut self, source: &KompactSystem) {
         let sender_id = self.sender_id;
         for (_, (ref channel, buffer)) in self.buffer_map.iter_mut() {
             let msg = ArconMessage {
@@ -129,11 +123,13 @@ where
         }
     }
 
-    fn add_and_flush(&mut self, event: ArconEvent<A>, source: &KompactSystem) {
+    pub fn add_and_flush(&mut self, event: ArconEvent<A>, source: &KompactSystem) {
         self.add(event);
         self.flush(source);
     }
 }
+
+/*
 
 #[cfg(test)]
 mod tests {
@@ -192,3 +188,4 @@ mod tests {
         let _ = system.shutdown();
     }
 }
+*/

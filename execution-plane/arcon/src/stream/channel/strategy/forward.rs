@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::prelude::*;
-use crate::stream::channel::{strategy::send, strategy::ChannelStrategy, Channel};
+use crate::stream::channel::{strategy::send, Channel};
 
 /// `Forward` is a one-to-one channel strategy between two components
 pub struct Forward<A>
@@ -46,17 +46,11 @@ where
             buffer: Vec::with_capacity(batch_size),
         }
     }
-}
-
-impl<A> ChannelStrategy<A> for Forward<A>
-where
-    A: ArconType,
-{
-    fn add(&mut self, event: ArconEvent<A>) {
+    pub fn add(&mut self, event: ArconEvent<A>) {
         self.buffer.push(event);
     }
 
-    fn flush(&mut self, source: &KompactSystem) {
+    pub fn flush(&mut self, source: &KompactSystem) {
         let msg = ArconMessage {
             events: self.buffer.clone(),
             sender: self.sender_id,
@@ -66,7 +60,7 @@ where
         self.buffer.clear();
     }
 
-    fn add_and_flush(&mut self, event: ArconEvent<A>, source: &KompactSystem) {
+    pub fn add_and_flush(&mut self, event: ArconEvent<A>, source: &KompactSystem) {
         self.add(event);
         self.flush(source);
     }
@@ -76,6 +70,7 @@ where
 mod tests {
     use super::*;
     use crate::stream::channel::strategy::tests::*;
+    use crate::stream::channel::strategy::ChannelStrategy;
     use kompact::prelude::*;
 
     #[test]
@@ -87,8 +82,8 @@ mod tests {
         system.start(&comp);
         let actor_ref: ActorRefStrong<ArconMessage<Input>> =
             comp.actor_ref().hold().expect("failed to fetch");
-        let mut channel_strategy: Box<dyn ChannelStrategy<Input>> =
-            Box::new(Forward::new(Channel::Local(actor_ref), 1.into()));
+        let mut channel_strategy: ChannelStrategy<Input> =
+            ChannelStrategy::Forward(Forward::new(Channel::Local(actor_ref), 1.into()));
 
         for _i in 0..total_msgs {
             let elem = ArconElement::new(Input { id: 1 });

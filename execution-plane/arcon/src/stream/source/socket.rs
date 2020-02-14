@@ -113,9 +113,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::prelude::{DebugNode, Map, NodeID};
-    use crate::stream::channel::strategy::forward::Forward;
-    use crate::stream::channel::Channel;
+    use crate::prelude::{Channel, ChannelStrategy, DebugNode, Forward, Map, NodeID};
     use std::{thread, time};
     use tokio::net::TcpStream;
     use tokio::prelude::*;
@@ -139,7 +137,7 @@ mod tests {
         let sink_ref = sink.actor_ref().hold().expect("Failed to fetch strong ref");
 
         let channel = Channel::Local(sink_ref);
-        let channel_strategy = Box::new(Forward::new(channel, NodeID::new(1)));
+        let channel_strategy = ChannelStrategy::Forward(Forward::new(channel, NodeID::new(1)));
 
         // just pass it on
         fn map_fn(x: u32) -> u32 {
@@ -206,7 +204,7 @@ mod tests {
         let sink_ref = sink.actor_ref().hold().expect("Failed to fetch strong ref");
 
         let channel = Channel::Local(sink_ref);
-        let channel_strategy = Box::new(Forward::new(channel, NodeID::new(1)));
+        let channel_strategy = ChannelStrategy::Forward(Forward::new(channel, NodeID::new(1)));
 
         // just pass it on
         fn map_fn(x: ExtractorStruct) -> ExtractorStruct {

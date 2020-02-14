@@ -9,8 +9,6 @@ extern crate arcon_macros;
 extern crate arcon_error as error;
 #[cfg_attr(test, macro_use)]
 extern crate abomonation_derive;
-#[cfg_attr(test, macro_use)]
-extern crate keyby;
 
 pub mod data;
 pub mod state_backend;
@@ -21,7 +19,6 @@ pub mod macros {
     pub use crate::data::ArconType;
     pub use abomonation_derive::*;
     pub use arcon_macros::*;
-    pub use keyby::*;
 }
 
 pub mod prelude {
@@ -29,6 +26,8 @@ pub mod prelude {
         broadcast::Broadcast, forward::Forward, key_by::KeyBy, mute::Mute, round_robin::RoundRobin,
         ChannelStrategy,
     };
+
+    pub use crate::stream::util::mute_strategy;
 
     pub use crate::stream::channel::Channel;
     pub use crate::stream::{
@@ -38,7 +37,9 @@ pub mod prelude {
         operator::sink::local_file::LocalFileSink,
         operator::window::{AppenderWindow, EventTimeWindowAssigner, IncrementalWindow, Window},
         operator::Operator,
+        source::collection::CollectionSource,
         source::local_file::LocalFileSource,
+        source::SourceContext,
     };
     #[cfg(feature = "socket")]
     pub use crate::stream::{
@@ -68,9 +69,8 @@ mod tests {
     use crate::macros::*;
     use std::collections::hash_map::DefaultHasher;
 
-    #[key_by(id)]
     #[arcon_decoder(,)]
-    #[arcon]
+    #[arcon_keyed(id)]
     #[derive(prost::Message)]
     pub struct Item {
         #[prost(uint64, tag = "1")]

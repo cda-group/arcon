@@ -260,8 +260,8 @@ mod test {
         ));
 
         let channel = Channel::Remote((remote_path, ArconSerde::Unsafe));
-        let mut channel_strategy: Box<dyn ChannelStrategy<ArconDataTest>> =
-            Box::new(Forward::new(channel, 1.into()));
+        let mut channel_strategy: ChannelStrategy<ArconDataTest> =
+            ChannelStrategy::Forward(Forward::new(channel, 1.into()));
 
         let items = vec![1, 2, 3, 4, 5, 6, 7];
         let data = ArconDataTest {

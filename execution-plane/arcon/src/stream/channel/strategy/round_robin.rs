@@ -3,7 +3,7 @@
 
 use crate::data::{ArconEvent, ArconMessage, ArconType, NodeID};
 use crate::prelude::KompactSystem;
-use crate::stream::channel::{strategy::send, strategy::ChannelStrategy, Channel};
+use crate::stream::channel::{strategy::send, Channel};
 
 pub struct RoundRobin<A>
 where
@@ -27,17 +27,11 @@ where
             buffer: Vec::new(),
         }
     }
-}
-
-impl<A> ChannelStrategy<A> for RoundRobin<A>
-where
-    A: ArconType,
-{
-    fn add(&mut self, event: ArconEvent<A>) {
+    pub fn add(&mut self, event: ArconEvent<A>) {
         self.buffer.push(event);
     }
 
-    fn flush(&mut self, source: &KompactSystem) {
+    pub fn flush(&mut self, source: &KompactSystem) {
         if let Some(channel) = self.channels.get(self.curr_index) {
             let msg = ArconMessage {
                 events: self.buffer.clone(),
@@ -46,8 +40,7 @@ where
 
             send(&channel, msg, source);
 
-            // TODO: fix this..
-            self.buffer.truncate(0);
+            self.buffer.clear();
 
             self.curr_index += 1;
 
@@ -59,7 +52,7 @@ where
         }
     }
 
-    fn add_and_flush(&mut self, event: ArconEvent<A>, source: &KompactSystem) {
+    pub fn add_and_flush(&mut self, event: ArconEvent<A>, source: &KompactSystem) {
         self.add(event);
         self.flush(source);
     }
@@ -69,7 +62,7 @@ where
 mod tests {
     use super::*;
     use crate::data::ArconElement;
-    use crate::prelude::DebugNode;
+    use crate::prelude::{ChannelStrategy, DebugNode};
     use crate::stream::channel::strategy::tests::*;
     use kompact::prelude::*;
     use std::sync::Arc;
@@ -94,8 +87,8 @@ mod tests {
             comps.push(comp);
         }
 
-        let mut channel_strategy: Box<dyn ChannelStrategy<Input>> =
-            Box::new(RoundRobin::new(channels, NodeID::new(1)));
+        let mut channel_strategy: ChannelStrategy<Input> =
+            ChannelStrategy::RoundRobin(RoundRobin::new(channels, NodeID::new(1)));
 
         for _i in 0..total_msgs {
             let elem = ArconElement::new(Input { id: 1 });

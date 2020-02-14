@@ -12,7 +12,7 @@ use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
         * Assigns messages to windows based on event timestamp
         * Time stored as unix timestamps in u64 format (seconds)
         * Windows created on the fly when events for it come in
-        * Events need to implement Hash, use "key_by" macro when setting up the pipeline
+        * Events need to implement Hash, use "arcon_keyed" macro when setting up the pipeline
 */
 
 /// Window Assigner Based on Event Time
@@ -193,8 +193,7 @@ mod tests {
     use std::time::UNIX_EPOCH;
     use std::{thread, time};
 
-    #[key_by(id)]
-    #[arcon]
+    #[arcon_keyed(id)]
     #[derive(prost::Message)]
     pub struct Item {
         #[prost(uint64, tag = "1")]
@@ -219,7 +218,7 @@ mod tests {
         let (sink, _) = system.create_and_register(move || DebugNode::new());
         let sink_ref: ActorRefStrong<ArconMessage<u64>> =
             sink.actor_ref().hold().expect("failed to get strong ref");
-        let channel_strategy: Box<Forward<u64>> = Box::new(Forward::new(
+        let channel_strategy = ChannelStrategy::Forward(Forward::new(
             Channel::Local(sink_ref.clone()),
             NodeID::new(1),
         ));

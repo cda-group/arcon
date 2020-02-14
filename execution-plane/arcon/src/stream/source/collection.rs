@@ -70,7 +70,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::prelude::{Channel, DebugNode, Filter, Forward, NodeID};
+    use crate::prelude::{Channel, ChannelStrategy, DebugNode, Filter, Forward, NodeID};
     use kompact::default_components::DeadletterBox;
     use kompact::prelude::KompactSystem;
     use std::sync::Arc;
@@ -98,7 +98,7 @@ mod tests {
         // Configure channel strategy for sink
         let actor_ref = sink.actor_ref().hold().expect("fail");
         let channel = Channel::Local(actor_ref);
-        let channel_strategy = Box::new(Forward::new(channel, NodeID::new(1)));
+        let channel_strategy = ChannelStrategy::Forward(Forward::new(channel, NodeID::new(1)));
 
         // Our operator function
         fn filter_fn(x: &u64) -> bool {

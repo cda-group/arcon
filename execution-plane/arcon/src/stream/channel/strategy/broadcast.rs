@@ -3,7 +3,7 @@
 
 use crate::data::{ArconEvent, ArconMessage, ArconType, NodeID};
 use crate::prelude::KompactSystem;
-use crate::stream::channel::{strategy::send, strategy::ChannelStrategy, Channel};
+use crate::stream::channel::{strategy::send, Channel};
 
 /// A Broadcast strategy for one-to-many message sending
 pub struct Broadcast<A>
@@ -40,17 +40,11 @@ where
             buffer: Vec::with_capacity(batch_size),
         }
     }
-}
-
-impl<A> ChannelStrategy<A> for Broadcast<A>
-where
-    A: ArconType,
-{
-    fn add(&mut self, event: ArconEvent<A>) {
+    pub fn add(&mut self, event: ArconEvent<A>) {
         self.buffer.push(event);
     }
 
-    fn flush(&mut self, source: &KompactSystem) {
+    pub fn flush(&mut self, source: &KompactSystem) {
         let msg = ArconMessage {
             events: self.buffer.clone(),
             sender: self.sender_id,
@@ -63,7 +57,7 @@ where
         self.buffer.clear();
     }
 
-    fn add_and_flush(&mut self, event: ArconEvent<A>, source: &KompactSystem) {
+    pub fn add_and_flush(&mut self, event: ArconEvent<A>, source: &KompactSystem) {
         self.add(event);
         self.flush(source);
     }
@@ -75,6 +69,7 @@ mod tests {
     use crate::data::ArconElement;
     use crate::prelude::DebugNode;
     use crate::stream::channel::strategy::tests::*;
+    use crate::stream::channel::strategy::ChannelStrategy;
     use crate::stream::channel::ArconSerde;
     use kompact::prelude::*;
     use std::sync::Arc;
@@ -98,8 +93,8 @@ mod tests {
             comps.push(comp);
         }
 
-        let mut channel_strategy: Box<dyn ChannelStrategy<Input>> =
-            Box::new(Broadcast::new(channels, NodeID::new(1)));
+        let mut channel_strategy: ChannelStrategy<Input> =
+            ChannelStrategy::Broadcast(Broadcast::new(channels, NodeID::new(1)));
 
         for _i in 0..total_msgs {
             let elem = ArconElement::new(Input { id: 1 });
@@ -118,6 +113,7 @@ mod tests {
     }
 
     #[test]
+    #[should_panic]
     fn broadcast_local_and_remote() {
         let (system, remote) = {
             let system = || {
@@ -161,8 +157,8 @@ mod tests {
         }
         std::thread::sleep(std::time::Duration::from_secs(1));
 
-        let mut channel_strategy: Box<dyn ChannelStrategy<Input>> =
-            Box::new(Broadcast::new(channels, NodeID::new(1)));
+        let mut channel_strategy: ChannelStrategy<Input> =
+            ChannelStrategy::Broadcast(Broadcast::new(channels, NodeID::new(1)));
 
         for _i in 0..total_msgs {
             let elem = ArconElement::new(Input { id: 1 });

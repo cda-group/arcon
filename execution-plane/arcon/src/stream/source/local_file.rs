@@ -61,6 +61,8 @@ where
                     }
                 }
             }
+            // We are done, generate a watermark...
+            self.source_ctx.generate_watermark(&self.ctx().system());
         } else {
             error!(self.ctx.log(), "Unable to open file {}", self.file_path);
         }
@@ -92,7 +94,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::prelude::{Channel, DebugNode, Forward, Map, NodeID};
+    use crate::data::ArconF64;
+    use crate::prelude::{Channel, ChannelStrategy, DebugNode, Forward, Map, NodeID};
     use kompact::default_components::DeadletterBox;
     use kompact::prelude::KompactSystem;
     use std::io::prelude::*;
@@ -133,7 +136,7 @@ mod tests {
 
         let actor_ref = sink.actor_ref().hold().expect("fail");
         let channel = Channel::Local(actor_ref);
-        let channel_strategy = Box::new(Forward::new(channel, NodeID::new(1)));
+        let channel_strategy = ChannelStrategy::Forward(Forward::new(channel, NodeID::new(1)));
 
         // Our map function
         fn map_fn(x: u64) -> u64 {
@@ -170,7 +173,7 @@ mod tests {
 
     #[test]
     fn local_file_f64_test() {
-        let (system, sink) = test_setup::<f64>();
+        let (system, sink) = test_setup::<ArconF64>();
         let mut file = NamedTempFile::new().unwrap();
         let file_path = file.path().to_string_lossy().into_owned();
 
@@ -183,14 +186,14 @@ mod tests {
 
         let actor_ref = sink.actor_ref().hold().expect("fail");
         let channel = Channel::Local(actor_ref);
-        let channel_strategy = Box::new(Forward::new(channel, NodeID::new(1)));
+        let channel_strategy = ChannelStrategy::Forward(Forward::new(channel, NodeID::new(1)));
 
         // just pass it on
-        fn map_fn(x: f64) -> f64 {
+        fn map_fn(x: ArconF64) -> ArconF64 {
             x
         }
 
-        let operator = Box::new(Map::<f64, f64>::new(&map_fn));
+        let operator = Box::new(Map::<ArconF64, ArconF64>::new(&map_fn));
 
         // Set up SourceContext
         let buffer_limit = 200;
@@ -204,7 +207,7 @@ mod tests {
             operator,
         );
 
-        let file_source: LocalFileSource<f64, f64> =
+        let file_source: LocalFileSource<ArconF64, ArconF64> =
             LocalFileSource::new(String::from(&file_path), source_context);
         let (source, _) = system.create_and_register(move || file_source);
         system.start(&source);
@@ -213,7 +216,7 @@ mod tests {
         let sink_inspect = sink.definition().lock().unwrap();
         assert_eq!(&sink_inspect.data.len(), &(source_elements as usize));
         for i in 0..source_elements {
-            let expected: f64 = i as f64 + 0.5;
+            let expected: ArconF64 = ArconF64::new(i as f64 + 0.5);
             assert_eq!(sink_inspect.data[i].data, expected);
         }
     }

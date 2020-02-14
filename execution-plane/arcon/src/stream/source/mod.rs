@@ -37,7 +37,7 @@ where
     /// An Operator to enable fusion of computation within the source
     operator: Box<dyn Operator<IN, OUT> + Send>,
     /// Strategy for outputting events
-    channel_strategy: Box<dyn ChannelStrategy<OUT>>,
+    channel_strategy: ChannelStrategy<OUT>,
 }
 
 impl<IN, OUT> SourceContext<IN, OUT>
@@ -49,7 +49,7 @@ where
         buffer_limit: u64,
         watermark_interval: u64,
         ts_extractor: Option<&'static dyn for<'r> SafelySendableFn<(&'r IN,), u64>>,
-        channel_strategy: Box<dyn ChannelStrategy<OUT>>,
+        channel_strategy: ChannelStrategy<OUT>,
         operator: Box<dyn Operator<IN, OUT> + Send>,
     ) -> Self {
         SourceContext {

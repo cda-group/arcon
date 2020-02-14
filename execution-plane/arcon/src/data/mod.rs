@@ -8,11 +8,12 @@ use crate::macros::*;
 use abomonation::Abomonation;
 use kompact::prelude::*;
 use std::fmt::Debug;
-use std::hash::Hash;
+use std::hash::{Hash, Hasher};
+use std::ops::Deref;
 
 /// Type that can be passed through the Arcon runtime
 pub trait ArconType:
-    Clone + Debug + Sync + Send + prost::Message + Default + Abomonation + 'static
+    Clone + Debug + Hash + Sync + Send + prost::Message + Default + Abomonation + 'static
 where
     Self: std::marker::Sized,
 {
@@ -144,10 +145,106 @@ impl ArconType for u32 {}
 impl ArconType for u64 {}
 impl ArconType for i32 {}
 impl ArconType for i64 {}
-impl ArconType for f32 {}
-impl ArconType for f64 {}
+impl ArconType for ArconF32 {}
+impl ArconType for ArconF64 {}
 impl ArconType for bool {}
 impl ArconType for String {}
+
+/// Float wrappers for Arcon
+///
+/// The `Hash` impl rounds the floats down to an integer
+/// and then hashes it.
+#[derive(Clone, prost::Message, Abomonation)]
+pub struct ArconF32 {
+    #[prost(float, tag = "1")]
+    pub value: f32,
+}
+
+impl ArconF32 {
+    pub fn new(value: f32) -> ArconF32 {
+        ArconF32 { value }
+    }
+}
+
+impl Hash for ArconF32 {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        let s: u64 = self.value.trunc() as u64;
+        s.hash(state);
+    }
+}
+
+impl From<f32> for ArconF32 {
+    fn from(value: f32) -> Self {
+        ArconF32::new(value)
+    }
+}
+
+impl std::str::FromStr for ArconF32 {
+    type Err = ::std::num::ParseFloatError;
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        let f: f32 = s.parse::<f32>()?;
+        Ok(ArconF32::new(f))
+    }
+}
+impl Deref for ArconF32 {
+    type Target = f32;
+
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+
+impl PartialEq for ArconF32 {
+    fn eq(&self, other: &Self) -> bool {
+        self.value == other.value
+    }
+}
+
+#[derive(Clone, prost::Message, Abomonation)]
+pub struct ArconF64 {
+    #[prost(double, tag = "1")]
+    pub value: f64,
+}
+
+impl ArconF64 {
+    pub fn new(value: f64) -> ArconF64 {
+        ArconF64 { value }
+    }
+}
+
+impl Hash for ArconF64 {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        let s: u64 = self.value.trunc() as u64;
+        s.hash(state);
+    }
+}
+
+impl From<f64> for ArconF64 {
+    fn from(value: f64) -> Self {
+        ArconF64::new(value)
+    }
+}
+
+impl std::str::FromStr for ArconF64 {
+    type Err = ::std::num::ParseFloatError;
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        let f: f64 = s.parse::<f64>()?;
+        Ok(ArconF64::new(f))
+    }
+}
+impl Deref for ArconF64 {
+    type Target = f64;
+
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+
+impl PartialEq for ArconF64 {
+    fn eq(&self, other: &Self) -> bool {
+        self.value == other.value
+    }
+}
 
 #[cfg(test)]
 pub mod test {
