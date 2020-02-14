@@ -164,7 +164,7 @@ where
 mod test {
     use super::*;
     use crate::state_backend::{
-        rocksdb::tests::TestDb, serialization::Bincode, state_types::ClosuresAggregator,
+        rocksdb::test::TestDb, serialization::Bincode, state_types::ClosuresAggregator,
         AggregatingStateBuilder,
     };
 

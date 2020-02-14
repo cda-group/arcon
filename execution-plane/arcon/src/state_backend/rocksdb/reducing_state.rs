@@ -134,7 +134,7 @@ where
 mod test {
     use super::*;
     use crate::state_backend::{
-        rocksdb::tests::TestDb, serialization::Bincode, ReducingStateBuilder,
+        rocksdb::test::TestDb, serialization::Bincode, ReducingStateBuilder,
     };
 
     #[test]

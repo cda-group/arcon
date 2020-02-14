@@ -202,7 +202,7 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::state_backend::{rocksdb::tests::TestDb, serialization::Bincode, MapStateBuilder};
+    use crate::state_backend::{rocksdb::test::TestDb, serialization::Bincode, MapStateBuilder};
 
     #[test]
     fn map_state_test() {

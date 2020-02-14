@@ -57,7 +57,7 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::state_backend::{rocksdb::tests::TestDb, serialization::Bincode, ValueStateBuilder};
+    use crate::state_backend::{rocksdb::test::TestDb, serialization::Bincode, ValueStateBuilder};
 
     #[test]
     fn rocksdb_value_state_test() {

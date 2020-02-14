@@ -180,7 +180,7 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::state_backend::{rocksdb::tests::TestDb, serialization::Bincode, VecStateBuilder};
+    use crate::state_backend::{rocksdb::test::TestDb, serialization::Bincode, VecStateBuilder};
 
     #[test]
     fn vec_state_test() {

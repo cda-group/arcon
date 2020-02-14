@@ -304,7 +304,7 @@ mod value_state;
 mod vec_state;
 
 #[cfg(test)]
-mod tests {
+mod test {
     use super::*;
     use crate::state_backend::serialization::Bincode;
 
