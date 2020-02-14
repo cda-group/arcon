@@ -10,15 +10,14 @@ use crate::state_backend::{
 // here be lil' dragons
 macro_rules! impl_dynamic_builder {
     (
-        $builder_name: ident <$($params: ident),* $(| $($builder_params: ident),*)?>
+        $builder_name: ident <$($builder_params: ident),*> builds $state_name: ident <_, $($params: path),*>
         where {$($bounds: tt)*};
-        $state_name: ident $(extra: <$($state_param_name: path),*>)?;
         $builder_fn: ident $(extra: ($($arg_name: ident : $arg_ty: ty),*))?
     ) => {
-        impl<$($params,)* $($($builder_params,)*)?> $builder_name<$($params,)* $($($builder_params,)*)?> for dyn StateBackend
+        impl<$($builder_params),*> $builder_name<$($builder_params),*> for dyn StateBackend
         where $($bounds)*
         {
-            type Type = Box<dyn $state_name<dyn StateBackend, $($params,)* $($($state_param_name,)*)?>>;
+            type Type = Box<dyn $state_name<dyn StateBackend, $($params),*>>;
 
             fn $builder_fn(
                 &mut self,
@@ -85,14 +84,14 @@ pub trait ValueStateBuilder<IK, N, T, KS, TS> {
 }
 
 impl_dynamic_builder! {
-    ValueStateBuilder<IK, N, T | KS, TS> where {
+    ValueStateBuilder<IK, N, T, KS, TS> builds ValueState<_, IK, N, T> where {
         IK: SerializableFixedSizeWith<KS> + 'static,
         N: SerializableFixedSizeWith<KS> + 'static,
         (): SerializableFixedSizeWith<KS>,
         T: SerializableWith<TS> + DeserializableWith<TS> + 'static,
         KS: 'static,
         TS: 'static,
-    }; ValueState; new_value_state
+    }; new_value_state
 }
 
 pub trait MapStateBuilder<IK, N, K, V, KS, TS> {
@@ -108,7 +107,7 @@ pub trait MapStateBuilder<IK, N, K, V, KS, TS> {
 }
 
 impl_dynamic_builder! {
-    MapStateBuilder<IK, N, K, V | KS, TS> where {
+    MapStateBuilder<IK, N, K, V, KS, TS> builds MapState<_, IK, N, K, V> where {
         IK: SerializableFixedSizeWith<KS> + DeserializableWith<KS> + 'static,
         N: SerializableFixedSizeWith<KS> + DeserializableWith<KS> + 'static,
         (): SerializableFixedSizeWith<KS>,
@@ -116,7 +115,7 @@ impl_dynamic_builder! {
         V: SerializableWith<TS> + DeserializableWith<TS> + 'static,
         KS: Clone + 'static,
         TS: Clone + 'static,
-    }; MapState; new_map_state
+    }; new_map_state
 }
 
 pub trait VecStateBuilder<IK, N, T, KS, TS> {
@@ -132,14 +131,14 @@ pub trait VecStateBuilder<IK, N, T, KS, TS> {
 }
 
 impl_dynamic_builder! {
-    VecStateBuilder<IK, N, T | KS, TS> where {
+    VecStateBuilder<IK, N, T, KS, TS> builds VecState<_, IK, N, T> where {
         IK: SerializableFixedSizeWith<KS> + 'static,
         N: SerializableFixedSizeWith<KS> + 'static,
         (): SerializableWith<KS>,
         T: SerializableWith<TS> + DeserializableWith<TS> + 'static,
         KS: 'static,
         TS: 'static,
-    }; VecState; new_vec_state
+    }; new_vec_state
 }
 
 pub trait ReducingStateBuilder<IK, N, T, F, KS, TS> {
@@ -156,7 +155,7 @@ pub trait ReducingStateBuilder<IK, N, T, F, KS, TS> {
 }
 
 impl_dynamic_builder! {
-    ReducingStateBuilder<IK, N, T | F, KS, TS> where {
+    ReducingStateBuilder<IK, N, T, F, KS, TS> builds ReducingState<_, IK, N, T> where {
         IK: SerializableFixedSizeWith<KS> + 'static,
         N: SerializableFixedSizeWith<KS> + 'static,
         (): SerializableWith<KS>,
@@ -164,7 +163,7 @@ impl_dynamic_builder! {
         KS: Send + Sync + Clone + 'static,
         TS: Send + Sync + Clone + 'static,
         F: Fn(&T, &T) -> T + Send + Sync + Clone + 'static
-    }; ReducingState; new_reducing_state extra: (reduce_fn: F)
+    }; new_reducing_state extra: (reduce_fn: F)
 }
 
 pub trait AggregatingStateBuilder<IK, N, T, AGG: Aggregator<T>, KS, TS> {
@@ -181,7 +180,7 @@ pub trait AggregatingStateBuilder<IK, N, T, AGG: Aggregator<T>, KS, TS> {
 }
 
 impl_dynamic_builder! {
-    AggregatingStateBuilder<IK, N, T | AGG, KS, TS> where {
+    AggregatingStateBuilder<IK, N, T, AGG, KS, TS> builds AggregatingState<_, IK, N, T, AGG::Result> where {
         AGG: Aggregator<T> + Send + Sync + Clone + 'static,
         IK: SerializableFixedSizeWith<KS> + 'static,
         N: SerializableFixedSizeWith<KS> + 'static,
@@ -190,5 +189,5 @@ impl_dynamic_builder! {
         T: SerializableWith<TS> + DeserializableWith<TS> + 'static,
         KS: Send + Sync + Clone + 'static,
         TS: Send + Sync + Clone + 'static,
-    }; AggregatingState extra: <AGG::Result>; new_aggregating_state extra: (aggregator: AGG)
+    }; new_aggregating_state extra: (aggregator: AGG)
 }

@@ -762,10 +762,7 @@ mod vec_state;
 pub mod test {
     use super::*;
     use crate::state_backend::serialization::Bincode;
-    use std::{
-        ops::{Deref, DerefMut},
-        path::Path,
-    };
+    use std::ops::{Deref, DerefMut};
     use tempfile::TempDir;
 
     pub struct TestDb {
@@ -927,6 +924,7 @@ pub mod test {
         assert_eq!(a_value.get(&original).unwrap(), 69);
     }
 
+    #[allow(irrefutable_let_patterns)]
     #[test]
     fn missing_state_raises_errors() {
         let mut original = TestDb::new();

@@ -7,10 +7,7 @@
 
 use crate::state_backend::StateBackend;
 use error::ArconResult;
-use std::{
-    marker::PhantomData,
-    ops::{Deref, DerefMut},
-};
+use std::marker::PhantomData;
 
 struct WithDynamicBackend<SB, C>(C, PhantomData<SB>);
 

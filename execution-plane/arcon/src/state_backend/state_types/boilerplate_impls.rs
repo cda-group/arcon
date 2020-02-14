@@ -6,10 +6,7 @@
 
 use crate::state_backend::{state_types::*, StateBackend};
 use error::ArconResult;
-use std::{
-    marker::PhantomData,
-    ops::{Deref, DerefMut},
-};
+use std::ops::{Deref, DerefMut};
 
 impl<SB, IK, N, C> State<dyn StateBackend, IK, N> for WithDynamicBackend<SB, C>
 where
