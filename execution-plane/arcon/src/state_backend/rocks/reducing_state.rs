@@ -1,16 +1,16 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use super::rocksdb::{merge_operator::MergeFn, MergeOperands};
 use crate::{
     prelude::ArconResult,
     state_backend::{
-        rocksdb::{state_common::StateCommon, RocksDb},
+        rocks::{state_common::StateCommon, RocksDb},
         serialization::{DeserializableWith, SerializableFixedSizeWith, SerializableWith},
         state_types::{AppendingState, MergingState, ReducingState, State},
     },
 };
 use itertools::Itertools;
+use rocksdb::{merge_operator::MergeFn, MergeOperands};
 use std::marker::PhantomData;
 
 pub struct RocksDbReducingState<IK, N, T, F, KS, TS> {
@@ -133,9 +133,7 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::state_backend::{
-        rocksdb::test::TestDb, serialization::Bincode, ReducingStateBuilder,
-    };
+    use crate::state_backend::{rocks::test::TestDb, serialization::Bincode, ReducingStateBuilder};
 
     #[test]
     fn reducing_state_test() {

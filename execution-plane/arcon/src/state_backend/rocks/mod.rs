@@ -1,11 +1,8 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-extern crate rocksdb;
-
-use self::rocksdb::ColumnFamilyDescriptor;
 use crate::state_backend::{
-    rocksdb::{
+    rocks::{
         aggregating_state::RocksDbAggregatingState, map_state::RocksDbMapState,
         reducing_state::RocksDbReducingState, state_common::StateCommon,
         value_state::RocksDbValueState, vec_state::RocksDbVecState,
@@ -17,7 +14,8 @@ use crate::state_backend::{
 };
 use arcon_error::*;
 use rocksdb::{
-    checkpoint::Checkpoint, ColumnFamily, DBPinnableSlice, Options, SliceTransform, WriteBatch, DB,
+    checkpoint::Checkpoint, ColumnFamily, ColumnFamilyDescriptor, DBPinnableSlice, Options,
+    SliceTransform, WriteBatch, DB,
 };
 use std::{
     collections::{HashMap, HashSet},

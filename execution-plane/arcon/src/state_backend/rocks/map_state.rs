@@ -1,15 +1,15 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use super::rocksdb::WriteBatch;
 use crate::{
     prelude::ArconResult,
     state_backend::{
-        rocksdb::{state_common::StateCommon, RocksDb},
+        rocks::{state_common::StateCommon, RocksDb},
         serialization::{DeserializableWith, SerializableFixedSizeWith, SerializableWith},
         state_types::{MapState, State},
     },
 };
+use rocksdb::WriteBatch;
 
 use std::marker::PhantomData;
 
@@ -202,7 +202,7 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::state_backend::{rocksdb::test::TestDb, serialization::Bincode, MapStateBuilder};
+    use crate::state_backend::{rocks::test::TestDb, serialization::Bincode, MapStateBuilder};
 
     #[test]
     fn map_state_test() {

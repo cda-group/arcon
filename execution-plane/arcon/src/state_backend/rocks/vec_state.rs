@@ -1,17 +1,15 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use super::rocksdb::MergeOperands;
 use crate::{
     prelude::ArconResult,
     state_backend::{
-        rocksdb::{state_common::StateCommon, RocksDb},
+        rocks::{state_common::StateCommon, RocksDb},
         serialization::{DeserializableWith, SerializableFixedSizeWith, SerializableWith},
         state_types::{AppendingState, MergingState, State, VecState},
     },
 };
-//use error::ErrorKind;
-use rocksdb::WriteBatch;
+use rocksdb::{MergeOperands, WriteBatch};
 use std::marker::PhantomData;
 
 pub struct RocksDbVecState<IK, N, T, KS, TS> {
@@ -180,7 +178,7 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::state_backend::{rocksdb::test::TestDb, serialization::Bincode, VecStateBuilder};
+    use crate::state_backend::{rocks::test::TestDb, serialization::Bincode, VecStateBuilder};
 
     #[test]
     fn vec_state_test() {

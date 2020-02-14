@@ -1,15 +1,15 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use super::rocksdb::{merge_operator::MergeFn, MergeOperands};
 use crate::{
     prelude::ArconResult,
     state_backend::{
-        rocksdb::{state_common::StateCommon, RocksDb},
+        rocks::{state_common::StateCommon, RocksDb},
         serialization::{DeserializableWith, SerializableFixedSizeWith, SerializableWith},
         state_types::{AggregatingState, Aggregator, AppendingState, MergingState, State},
     },
 };
+use rocksdb::{merge_operator::MergeFn, MergeOperands};
 
 use std::marker::PhantomData;
 
@@ -164,7 +164,7 @@ where
 mod test {
     use super::*;
     use crate::state_backend::{
-        rocksdb::test::TestDb, serialization::Bincode, state_types::ClosuresAggregator,
+        rocks::test::TestDb, serialization::Bincode, state_types::ClosuresAggregator,
         AggregatingStateBuilder,
     };
 

@@ -4,7 +4,7 @@
 use crate::{
     prelude::ArconResult,
     state_backend::{
-        rocksdb::{state_common::StateCommon, RocksDb},
+        rocks::{state_common::StateCommon, RocksDb},
         serialization::{DeserializableWith, SerializableFixedSizeWith, SerializableWith},
         state_types::{State, ValueState},
     },
@@ -57,7 +57,7 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::state_backend::{rocksdb::test::TestDb, serialization::Bincode, ValueStateBuilder};
+    use crate::state_backend::{rocks::test::TestDb, serialization::Bincode, ValueStateBuilder};
 
     #[test]
     fn rocksdb_value_state_test() {
