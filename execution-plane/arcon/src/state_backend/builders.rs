@@ -28,34 +28,25 @@ macro_rules! impl_dynamic_builder {
                 key_serializer: KS,
                 value_serializer: TS,
             ) -> Self::Type {
-                {
-                    use crate::state_backend::in_memory::InMemory;
-                    if let Ok(in_memory) = self.downcast_mut::<InMemory>() {
-                        return $state_name::erase_backend_type(in_memory.$builder_fn(
-                            name,
-                            init_item_key,
-                            init_namespace,
-                            $($($arg_name,)*)?
-                            key_serializer,
-                            value_serializer,
-                        ));
-                    }
+
+                macro_rules! handle_backend {
+                    ($backend: ty) => {{
+                         if let Ok(b) = self.downcast_mut::<$backend>() {
+                            return $state_name::erase_backend_type(b.$builder_fn(
+                                name,
+                                init_item_key,
+                                init_namespace,
+                                $($($arg_name,)*)?
+                                key_serializer,
+                                value_serializer,
+                            ));
+                         }
+                    }};
                 }
 
+                handle_backend!(crate::state_backend::in_memory::InMemory);
                 #[cfg(feature = "arcon_rocksdb")]
-                {
-                    use crate::state_backend::rocks::RocksDb;
-                    if let Ok(rocks) = self.downcast_mut::<RocksDb>() {
-                        return $state_name::erase_backend_type(rocks.$builder_fn(
-                            name,
-                            init_item_key,
-                            init_namespace,
-                            $($($arg_name,)*)?
-                            key_serializer,
-                            value_serializer,
-                        ));
-                    }
-                }
+                handle_backend!(crate::state_backend::rocks::RocksDb);
 
                 // NOTE: every implemented state backend should be added here
                 // TODO: maybe figure out some sort of dynamic discovery using the inventory crate?
