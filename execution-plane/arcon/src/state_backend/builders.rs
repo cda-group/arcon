@@ -50,6 +50,7 @@ macro_rules! impl_dynamic_builder {
 
                 // NOTE: every implemented state backend should be added here
                 // TODO: maybe figure out some sort of dynamic discovery using the inventory crate?
+                //   I'd've done that already, but I'm kinda stumped with what to do with generics
 
                 unimplemented!(concat!(
                     "Unimplemented! Does `{}` implement `", stringify!($builder_name),
