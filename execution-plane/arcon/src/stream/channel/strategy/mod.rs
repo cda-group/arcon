@@ -9,21 +9,25 @@ use crate::stream::channel::{ArconSerde, Channel};
 pub mod broadcast;
 pub mod forward;
 pub mod key_by;
-pub mod mute;
 pub mod round_robin;
 
 /// A `ChannelStrategy` defines a strategy of how messages are sent downstream
 ///
-/// Common strategies include (one-to-one)[Forward] and (one-to-many)[Broadcast]
+/// Common strategies include (one-to-one)[forward::Forward] and (one-to-many)[broadcast::Broadcast]
 pub enum ChannelStrategy<A>
 where
     A: ArconType,
 {
+    /// Send messages to a single Component
     Forward(forward::Forward<A>),
+    /// Broadcasts the message to a Vec of `Channels`
     Broadcast(broadcast::Broadcast<A>),
+    /// Partition data to a set of `Channels` based on keyed hash
     KeyBy(key_by::KeyBy<A>),
+    /// Send messages to a Vec of `Channels` in a Round Robin fashion
     RoundRobin(round_robin::RoundRobin<A>),
-    Mute(mute::Mute<A>),
+    /// A strategy that simply does nothing
+    Mute,
 }
 
 impl<A> ChannelStrategy<A>
@@ -38,7 +42,7 @@ where
             ChannelStrategy::Broadcast(s) => s.add(event),
             ChannelStrategy::KeyBy(s) => s.add(event),
             ChannelStrategy::RoundRobin(s) => s.add(event),
-            ChannelStrategy::Mute(_) => (),
+            ChannelStrategy::Mute => (),
         }
     }
     /// Add event and flush directly
@@ -49,7 +53,7 @@ where
             ChannelStrategy::Broadcast(s) => s.add_and_flush(event, source),
             ChannelStrategy::KeyBy(s) => s.add_and_flush(event, source),
             ChannelStrategy::RoundRobin(s) => s.add_and_flush(event, source),
-            ChannelStrategy::Mute(_) => (),
+            ChannelStrategy::Mute => (),
         }
     }
     /// Flush batch of events out
@@ -60,7 +64,7 @@ where
             ChannelStrategy::Broadcast(s) => s.flush(source),
             ChannelStrategy::KeyBy(s) => s.flush(source),
             ChannelStrategy::RoundRobin(s) => s.flush(source),
-            ChannelStrategy::Mute(_) => (),
+            ChannelStrategy::Mute => (),
         }
     }
 }

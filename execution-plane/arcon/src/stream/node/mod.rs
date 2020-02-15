@@ -1,18 +1,19 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/// Debug version of [Node]
 pub mod debug;
 
 use crate::prelude::*;
-pub use debug::DebugNode;
 use std::collections::BTreeMap;
 use std::collections::HashSet; // Blocked-list
 use std::collections::LinkedList; // Message buffer
 use std::mem; // Watermark-list
 
-/*
-  Node: contains an Operator which executes actions
-*/
+/// A Node is a [kompact] component that drives the execution of streaming operators
+///
+/// Nodes receive [ArconMessage] and run some transform on the data
+/// before using a [ChannelStrategy] to send the result to another Node.
 #[derive(ComponentDefinition)]
 pub struct Node<IN, OUT>
 where

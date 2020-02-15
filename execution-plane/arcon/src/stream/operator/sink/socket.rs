@@ -104,7 +104,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::stream::util::mute_strategy;
+    use crate::prelude::ChannelStrategy;
 
     #[test]
     fn udp_sink_test() {
@@ -122,7 +122,7 @@ mod tests {
                     Node::new(
                         0.into(),
                         vec![1.into()],
-                        mute_strategy::<i64>(),
+                        ChannelStrategy::Mute,
                         Box::new(SocketSink::udp(addr)),
                     )
                 });

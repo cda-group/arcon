@@ -1,6 +1,7 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/// Serialisers and Deserialiser for in-flight data
 pub mod serde;
 
 use crate::error::ArconResult;
@@ -35,7 +36,7 @@ where
     }
 }
 
-/// Watermark
+/// Watermark message containing a [u64] timestamp
 #[derive(prost::Message, Clone, Copy, Abomonation)]
 pub struct Watermark {
     #[prost(uint64, tag = "1")]
@@ -48,7 +49,7 @@ impl Watermark {
     }
 }
 
-/// Epoch
+/// Epoch marker message
 #[derive(prost::Message, Clone, Copy, Abomonation)]
 pub struct Epoch {
     #[prost(uint64, tag = "1")]
@@ -61,14 +62,18 @@ impl Epoch {
     }
 }
 
-/// Wrapper for unifying passing of Elements and other stream messages (watermarks)
+/// An Enum containing all possible stream events that may occur in an execution
 #[derive(Clone, Debug, Abomonation)]
 pub enum ArconEvent<A: ArconType> {
+    /// A stream element containing some data of type [ArconType] and an optional timestamp [u64]
     Element(ArconElement<A>),
+    /// A [Watermark] message
     Watermark(Watermark),
+    /// An [Epoch] marker message
     Epoch(Epoch),
 }
 
+/// A NodeID is used to identify a message sender
 #[derive(prost::Message, PartialEq, Eq, PartialOrd, Ord, Hash, Copy, Clone, Abomonation)]
 pub struct NodeID {
     #[prost(uint32, tag = "1")]
@@ -87,6 +92,7 @@ impl From<u32> for NodeID {
     }
 }
 
+/// An ArconMessage contains a batch of [ArconEvent] and [NodeID]
 #[derive(Clone, Debug, Abomonation)]
 pub struct ArconMessage<A: ArconType> {
     /// Buffer of ArconEvents
@@ -95,20 +101,29 @@ pub struct ArconMessage<A: ArconType> {
     pub sender: NodeID,
 }
 
-// Convenience methods, "message factories"
+/// Convenience methods
 impl<A: ArconType> ArconMessage<A> {
+    /// Creates an ArconMessage with a single [ArconEvent::Watermark] event
+    ///
+    /// This function should only be used for development and test purposes.
     pub fn watermark(timestamp: u64, sender: NodeID) -> ArconMessage<A> {
         ArconMessage {
             events: vec![ArconEvent::<A>::Watermark(Watermark { timestamp })],
             sender,
         }
     }
+    /// Creates an ArconMessage with a single [ArconEvent::Epoch] event
+    ///
+    /// This function should only be used for development and test purposes.
     pub fn epoch(epoch: u64, sender: NodeID) -> ArconMessage<A> {
         ArconMessage {
             events: vec![ArconEvent::<A>::Epoch(Epoch { epoch })],
             sender,
         }
     }
+    /// Creates an ArconMessage with a single [ArconEvent::Element] event
+    ///
+    /// This function should only be used for development and test purposes.
     pub fn element(data: A, timestamp: Option<u64>, sender: NodeID) -> ArconMessage<A> {
         ArconMessage {
             events: vec![ArconEvent::Element(ArconElement { data, timestamp })],
@@ -117,7 +132,7 @@ impl<A: ArconType> ArconMessage<A> {
     }
 }
 
-/// A stream element that contains an `ArconType` and an optional timestamp
+/// A stream element that holds data of type [ArconType] and an optional timestamp
 #[derive(Clone, Debug, Abomonation)]
 pub struct ArconElement<A: ArconType> {
     pub data: A,
@@ -140,7 +155,7 @@ impl<A: ArconType> ArconElement<A> {
     }
 }
 
-/// Implements `ArconType` for all data types that are supported
+// Implement ArconType for all data types that are supported
 impl ArconType for u32 {}
 impl ArconType for u64 {}
 impl ArconType for i32 {}
@@ -150,10 +165,9 @@ impl ArconType for ArconF64 {}
 impl ArconType for bool {}
 impl ArconType for String {}
 
-/// Float wrappers for Arcon
+/// Float wrapper for f32 in order to impl Hash [std::hash::Hash]
 ///
-/// The `Hash` impl rounds the floats down to an integer
-/// and then hashes it.
+/// The `Hash` impl rounds the floats down to an integer and then hashes it.
 #[derive(Clone, prost::Message, Abomonation)]
 pub struct ArconF32 {
     #[prost(float, tag = "1")]
@@ -200,6 +214,9 @@ impl PartialEq for ArconF32 {
     }
 }
 
+/// Float wrapper for f64 in order to impl Hash [std::hash::Hash]
+///
+/// The `Hash` impl rounds the floats down to an integer and then hashes it.
 #[derive(Clone, prost::Message, Abomonation)]
 pub struct ArconF64 {
     #[prost(double, tag = "1")]

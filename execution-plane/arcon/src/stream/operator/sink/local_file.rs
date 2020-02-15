@@ -56,7 +56,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::stream::util::mute_strategy;
+    use crate::prelude::ChannelStrategy;
     use std::io::{BufRead, BufReader};
     use tempfile::NamedTempFile;
 
@@ -72,7 +72,7 @@ mod tests {
             Node::new(
                 0.into(),
                 vec![node_id],
-                mute_strategy::<i32>(),
+                ChannelStrategy::Mute,
                 Box::new(LocalFileSink::new(&file_path)),
             )
         });

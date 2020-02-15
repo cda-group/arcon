@@ -47,7 +47,7 @@ fn normalise_pipeline_test() {
         Node::new(
             4.into(),
             vec![3.into()],
-            mute_strategy::<i64>(),
+            ChannelStrategy::Mute,
             Box::new(LocalFileSink::new(&sink_path)),
         )
     });

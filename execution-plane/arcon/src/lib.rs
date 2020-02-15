@@ -1,6 +1,12 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
+//! Arcon is a Streaming-first Analytics Engine for the Arc language.
+//!
+//! This crate is not meant to be used directly, but rather relies on
+//! [Arc](https://github.com/cda-group/arc) to construct applications and 
+//! [arcon_codegen] to generate the Rust code.
+
 #![feature(unboxed_closures)]
 
 #[cfg_attr(test, macro_use)]
@@ -10,28 +16,31 @@ extern crate arcon_error as error;
 #[cfg_attr(test, macro_use)]
 extern crate abomonation_derive;
 
+/// Arcon data types and serialisers/deserialisers
 pub mod data;
+/// State backend implementations
 pub mod state_backend;
+/// Contains the core stream logic
 pub mod stream;
+/// Utilities for Arcon
 pub mod util;
 
+/// Helper module to fetch all macros related to arcon
 pub mod macros {
     pub use crate::data::ArconType;
     pub use abomonation_derive::*;
     pub use arcon_macros::*;
 }
 
+/// Helper module that imports everything related to arcon into scope
 pub mod prelude {
     pub use crate::stream::channel::strategy::{
-        broadcast::Broadcast, forward::Forward, key_by::KeyBy, mute::Mute, round_robin::RoundRobin,
+        broadcast::Broadcast, forward::Forward, key_by::KeyBy, round_robin::RoundRobin,
         ChannelStrategy,
     };
-
-    pub use crate::stream::util::mute_strategy;
-
     pub use crate::stream::channel::Channel;
     pub use crate::stream::{
-        node::DebugNode,
+        node::debug::DebugNode,
         node::Node,
         operator::function::{Filter, FlatMap, Map},
         operator::sink::local_file::LocalFileSink,

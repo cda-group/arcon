@@ -113,7 +113,6 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
     fn broadcast_local_and_remote() {
         let (system, remote) = {
             let system = || {
@@ -152,7 +151,7 @@ mod tests {
                 remote.system_path(),
                 vec![comp_id.into()],
             ));
-            channels.push(Channel::Remote((remote_path, ArconSerde::default())));
+            channels.push(Channel::Remote((remote_path, ArconSerde::Unsafe)));
             comps.push(comp);
         }
         std::thread::sleep(std::time::Duration::from_secs(1));

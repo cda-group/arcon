@@ -8,9 +8,10 @@ use proc_macro::TokenStream;
 use proc_macro2::{Ident, Span};
 use syn::{parse_macro_input, DeriveInput};
 
-/// `arcon` is a macro that constructs an Arcon supported struct
+/// arcon is a macro that helps define a Arcon supported struct 
 ///
-/// Use `arcon_keyed` if the struct needs to be hashed on specific fields
+/// By default, the macro will implement [std::hash::Hasher] that hashes on all fields of the
+/// struct. Use [arcon_keyed] instead if the struct needs to be hashed on specific fields.
 #[proc_macro_attribute]
 pub fn arcon(metadata: TokenStream, input: TokenStream) -> TokenStream {
     let item = parse_macro_input!(input as DeriveInput);
@@ -52,9 +53,9 @@ pub fn arcon(metadata: TokenStream, input: TokenStream) -> TokenStream {
     }
 }
 
-/// ´arcon_keyed` constructs an Arcon defined struct with custom hasher
+/// arcon_keyed constructs an Arcon defined struct with custom hasher
 ///
-/// `arcon_keyed(id)` will attempt to hash the struct based on the `id` field
+/// `#[arcon_keyed(id)]` will attempt to hash the struct using only the `id` field
 #[proc_macro_attribute]
 pub fn arcon_keyed(keys: TokenStream, input: TokenStream) -> TokenStream {
     let item = parse_macro_input!(input as DeriveInput);
@@ -93,10 +94,10 @@ pub fn arcon_keyed(keys: TokenStream, input: TokenStream) -> TokenStream {
     }
 }
 
-/// `arcon_decoder` generates a FromStr impl for its struct
+/// Implements [std::str::FromStr] for a struct using a delimiter
 ///
-///
-/// NOTE: the inner fields need to implement FromStr as well
+/// If no delimiter is specified, then `,` is chosen as default.
+/// Note: All inner fields of the struct need to implement [std::str::FromStr] for the macro to work.
 #[proc_macro_attribute]
 pub fn arcon_decoder(delimiter: TokenStream, input: TokenStream) -> TokenStream {
     let item = parse_macro_input!(input as DeriveInput);

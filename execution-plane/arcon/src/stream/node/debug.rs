@@ -3,14 +3,21 @@
 
 use crate::prelude::*;
 
+/// A DebugNode is a debug version of [Node]
+///
+/// DebugNode's act as sinks and are useful for tests and situations
+/// when one needs to verify dev pipelines.
 #[derive(ComponentDefinition)]
 pub struct DebugNode<IN>
 where
     IN: ArconType,
 {
     ctx: ComponentContext<DebugNode<IN>>,
+    /// Buffer holding all received [ArconElement]
     pub data: Vec<ArconElement<IN>>,
+    /// Buffer holding all received [Watermark]
     pub watermarks: Vec<Watermark>,
+    /// Buffer holding all received [Epoch]
     pub epochs: Vec<Epoch>,
 }
 
@@ -102,5 +109,4 @@ where
 }
 
 unsafe impl<IN> Send for DebugNode<IN> where IN: ArconType {}
-
 unsafe impl<IN> Sync for DebugNode<IN> where IN: ArconType {}

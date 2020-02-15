@@ -1,9 +1,18 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/// An Enum holding possible serialisation/deserialisation options for in-flight data
 #[derive(Clone)]
 pub enum ArconSerde {
+    /// Unsafe, but highly performant option
+    ///
+    /// For Unsafe to be a feasible choice, the remote machine
+    /// must have the same underlying architecture and data layout. An example of such an execution
+    /// is where two processes on the same machine transfer serialised data over loopback.
     Unsafe,
+    /// A rather slower option using Protobuf to serialise and deserialise.
+    ///
+    /// Reliable is the default serde option.
     Reliable,
 }
 
@@ -13,7 +22,8 @@ impl Default for ArconSerde {
     }
 }
 
-pub(crate) mod reliable_remote {
+/// Module containing the [kompact] serialiser/deserialiser implementation for [ArconSerde::Reliable]
+pub mod reliable_remote {
     use crate::data::{ArconEvent, ArconMessage, ArconType, Epoch, NodeID, Watermark};
     use kompact::prelude::*;
     use prost::*;
@@ -172,6 +182,7 @@ pub(crate) mod reliable_remote {
     }
 }
 
+/// Module containing the [kompact] serialiser/deserialiser implementation for [ArconSerde::Unsafe]
 pub mod unsafe_remote {
     use crate::data::{ArconMessage, ArconType};
     use kompact::prelude::*;
@@ -188,6 +199,7 @@ pub mod unsafe_remote {
 
         fn deserialise(buf: &mut dyn Buf) -> Result<ArconMessage<A>, SerError> {
             // TODO: improve
+            // But might need a BufMut rather than a Buf...
             let bytes = buf.bytes();
             let mut tmp_buf: Vec<u8> = Vec::with_capacity(bytes.len());
             tmp_buf.put_slice(&bytes);
