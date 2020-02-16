@@ -1,3 +1,5 @@
+//! The arcon_macros crate contains macros used by [arcon].
+
 #![recursion_limit = "128"]
 extern crate proc_macro;
 extern crate syn;

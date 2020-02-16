@@ -24,23 +24,30 @@ impl Default for ArconSerde {
 
 /// Module containing the [kompact] serialiser/deserialiser implementation for [ArconSerde::Reliable]
 pub mod reliable_remote {
-    use crate::data::{ArconEvent, ArconMessage, ArconType, Epoch, NodeID, Watermark};
+    use crate::data::{
+        ArconElement, ArconEvent, ArconMessage, ArconType, Epoch, NodeID, Watermark,
+    };
     use kompact::prelude::*;
     use prost::*;
 
     #[derive(prost::Message, Clone)]
-    pub struct ArconNetworkMessage {
+    pub struct NetworkMessage {
         #[prost(message, tag = "1")]
         pub sender: Option<NodeID>,
-        #[prost(bytes, tag = "2")]
-        pub data: Vec<u8>,
-        #[prost(message, tag = "3")]
-        pub timestamp: Option<u64>,
-        #[prost(enumeration = "Payload", tag = "4")]
-        pub payload: i32,
+        #[prost(message, repeated, tag = "2")]
+        pub events: Vec<RawEvent>,
     }
+
+    #[derive(prost::Message, Clone)]
+    pub struct RawEvent {
+        #[prost(bytes, tag = "1")]
+        pub bytes: Vec<u8>,
+        #[prost(enumeration = "EventType", tag = "2")]
+        pub event_type: i32,
+    }
+
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Enumeration)]
-    pub enum Payload {
+    pub enum EventType {
         Element = 0,
         Watermark = 1,
         Epoch = 2,
@@ -57,44 +64,42 @@ pub mod reliable_remote {
         const SER_ID: SerId = Self::SID;
 
         fn deserialise(buf: &mut dyn Buf) -> Result<ArconMessage<A>, SerError> {
-            let mut res = ArconNetworkMessage::decode(buf.bytes()).map_err(|_| {
-                SerError::InvalidData("Failed to decode ArconNetworkMessage".to_string())
+            let network_msg = NetworkMessage::decode(buf.bytes()).map_err(|_| {
+                SerError::InvalidData("Failed to decode NetworkMessage".to_string())
             })?;
-
-            match res.payload {
-                _ if res.payload == Payload::Element as i32 => {
-                    let element: A = A::decode_storage(&mut res.data).map_err(|_| {
-                        SerError::InvalidData("Failed to decode ArconType".to_string())
-                    })?;
-                    Ok(ArconMessage::<A>::element(
-                        element,
-                        res.timestamp,
-                        res.sender.unwrap(),
-                    ))
+            let mut events: Vec<ArconEvent<A>> = Vec::with_capacity(network_msg.events.len());
+            for raw_event in network_msg.events {
+                match raw_event.event_type {
+                    x if x == EventType::Element as i32 => {
+                        let elem: ArconElement<A> =
+                            ArconElement::decode(raw_event.bytes.into_buf()).map_err(|_| {
+                                SerError::InvalidData("Failed to decode Element".to_string())
+                            })?;
+                        events.push(ArconEvent::Element(elem));
+                    }
+                    x if x == EventType::Watermark as i32 => {
+                        let watermark: Watermark = Watermark::decode(raw_event.bytes.into_buf())
+                            .map_err(|_| {
+                                SerError::InvalidData("Failed to decode Watermark".to_string())
+                            })?;
+                        events.push(ArconEvent::Watermark(watermark));
+                    }
+                    x if x == EventType::Epoch as i32 => {
+                        let epoch: Epoch =
+                            Epoch::decode(raw_event.bytes.into_buf()).map_err(|_| {
+                                SerError::InvalidData("Failed to decode Epoch".to_string())
+                            })?;
+                        events.push(ArconEvent::Epoch(epoch));
+                    }
+                    _ => {
+                        panic!("Matched unknown EventType");
+                    }
                 }
-                _ if res.payload == Payload::Watermark as i32 => {
-                    let mut buf = res.data.into_buf();
-                    let wm = Watermark::decode(&mut buf).map_err(|_| {
-                        SerError::InvalidData("Failed to decode Watermark".to_string())
-                    })?;
-                    Ok(ArconMessage::<A> {
-                        // TODO: fix
-                        events: vec![ArconEvent::<A>::Watermark(wm)],
-                        sender: res.sender.unwrap(),
-                    })
-                }
-                _ if res.payload == Payload::Epoch as i32 => {
-                    let mut buf = res.data.into_buf();
-                    let epoch = Epoch::decode(&mut buf)
-                        .map_err(|_| SerError::InvalidData("Failed to decode Epoch".to_string()))?;
-                    Ok(ArconMessage::<A> {
-                        events: vec![ArconEvent::<A>::Epoch(epoch)],
-                        sender: res.sender.unwrap(),
-                    })
-                }
-                _ => {
-                    panic!("Something went wrong while deserialising payload");
-                }
+            }
+            if let Some(sender) = network_msg.sender {
+                Ok(ArconMessage { events, sender })
+            } else {
+                return Err(SerError::InvalidData("Failed to decode NodeID".to_string()));
             }
         }
     }
@@ -103,77 +108,71 @@ pub mod reliable_remote {
             Self::SID
         }
         fn size_hint(&self) -> Option<usize> {
-            /*
-            let event_len = match &self.0.event {
-                ArconEvent::Element(e) => e.data.encoded_len(),
-                ArconEvent::Watermark(w) => w.encoded_len(),
-                ArconEvent::Epoch(epoch) => epoch.encoded_len(),
-            };
-
-            let size = event_len + 2 + 2 + 2; //  sender + timestamp + payload type
-            Some(size)
-            */
-            // TODO: FIX
-            None
+            let mut total_len = 0;
+            for event in &self.0.events {
+                let event_len = match &event {
+                    ArconEvent::Element(e) => e.data.as_ref().unwrap().encoded_len(),
+                    ArconEvent::Watermark(w) => w.encoded_len(),
+                    ArconEvent::Epoch(epoch) => epoch.encoded_len(),
+                };
+                total_len += event_len;
+            }
+            // TODO: should probably double check this..
+            total_len += std::mem::size_of::<NetworkMessage>();
+            Some(total_len)
         }
 
-        fn serialise(&self, _: &mut dyn BufMut) -> Result<(), SerError> {
-            panic!("FIX");
-            /*
-            // TODO: Quite inefficient as of now. fix..
-            match &self.0.event {
-                ArconEvent::Element(elem) => {
-                    let remote_msg = ArconNetworkMessage {
-                        sender: Some(self.0.sender),
-                        data: elem.data.encode_storage().unwrap(),
-                        timestamp: elem.timestamp,
-                        payload: Payload::Element as i32,
-                    };
-                    let mut data_buf = Vec::with_capacity(remote_msg.encoded_len());
-                    remote_msg.encode(&mut data_buf).map_err(|_| {
-                        SerError::InvalidData("Failed to encode network message".to_string())
-                    })?;
-                    buf.put_slice(&data_buf);
-                }
-                ArconEvent::Watermark(wm) => {
-                    let mut wm_buf = Vec::with_capacity(wm.encoded_len());
-                    wm.encode(&mut wm_buf).map_err(|_| {
-                        SerError::InvalidData(
-                            "Failed to encode Watermark for remote msg".to_string(),
-                        )
-                    })?;
-                    let remote_msg = ArconNetworkMessage {
-                        sender: Some(self.0.sender),
-                        data: wm_buf,
-                        timestamp: Some(wm.timestamp),
-                        payload: Payload::Watermark as i32,
-                    };
-                    let mut data_buf = Vec::with_capacity(remote_msg.encoded_len());
-                    remote_msg.encode(&mut data_buf).map_err(|_| {
-                        SerError::InvalidData("Failed to encode network message".to_string())
-                    })?;
-                    buf.put_slice(&data_buf);
-                }
-                ArconEvent::Epoch(e) => {
-                    let mut epoch_buf = Vec::with_capacity(e.encoded_len());
-                    e.encode(&mut epoch_buf).map_err(|_| {
-                        SerError::InvalidData("Failed to encode Epoch for remote msg".to_string())
-                    })?;
-                    let remote_msg = ArconNetworkMessage {
-                        sender: Some(self.0.sender),
-                        data: epoch_buf,
-                        timestamp: None,
-                        payload: Payload::Epoch as i32,
-                    };
-                    let mut data_buf = Vec::with_capacity(remote_msg.encoded_len());
-                    remote_msg.encode(&mut data_buf).map_err(|_| {
-                        SerError::InvalidData("Failed to encode network message".to_string())
-                    })?;
-                    buf.put_slice(&data_buf);
+        fn serialise(&self, buf: &mut dyn BufMut) -> Result<(), SerError> {
+            let mut raw_events: Vec<RawEvent> = Vec::with_capacity(self.0.events.len());
+
+            for event in &self.0.events {
+                match event {
+                    ArconEvent::Element(elem) => {
+                        let mut bytes = Vec::with_capacity(elem.encoded_len());
+                        elem.encode(&mut bytes).map_err(|_| {
+                            SerError::InvalidData("Failed to encode element".to_string())
+                        })?;
+                        raw_events.push(RawEvent {
+                            bytes,
+                            event_type: EventType::Element as i32,
+                        });
+                    }
+                    ArconEvent::Watermark(watermark) => {
+                        let mut bytes = Vec::with_capacity(watermark.encoded_len());
+                        watermark.encode(&mut bytes).map_err(|_| {
+                            SerError::InvalidData("Failed to encode watermark".to_string())
+                        })?;
+                        raw_events.push(RawEvent {
+                            bytes,
+                            event_type: EventType::Watermark as i32,
+                        });
+                    }
+                    ArconEvent::Epoch(epoch) => {
+                        let mut bytes = Vec::with_capacity(epoch.encoded_len());
+                        epoch.encode(&mut bytes).map_err(|_| {
+                            SerError::InvalidData("Failed to encode epoch".to_string())
+                        })?;
+                        raw_events.push(RawEvent {
+                            bytes,
+                            event_type: EventType::Epoch as i32,
+                        });
+                    }
                 }
             }
-            */
-            //Ok(())
+
+            let network_msg = NetworkMessage {
+                sender: Some(self.0.sender),
+                events: raw_events,
+            };
+
+            unsafe {
+                network_msg.encode(&mut buf.bytes_mut()).map_err(|_| {
+                    SerError::InvalidData("Failed to encode network message".to_string())
+                })?;
+                buf.advance_mut(network_msg.encoded_len());
+            }
+
+            Ok(())
         }
 
         fn local(self: Box<Self>) -> Result<Box<dyn Any + Send>, Box<dyn Serialisable>> {

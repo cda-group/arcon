@@ -341,8 +341,8 @@ mod tests {
         let data_len = sink_inspect.data.len();
         let epoch_len = sink_inspect.epochs.len();
         assert_eq!(epoch_len, 0);
-        assert_eq!(sink_inspect.data[0].data, 1i32);
-        assert_eq!(sink_inspect.data[1].data, 3i32);
+        assert_eq!(sink_inspect.data[0].data, Some(1i32));
+        assert_eq!(sink_inspect.data[1].data, Some(3i32));
         assert_eq!(data_len, 2);
     }
 
@@ -365,9 +365,9 @@ mod tests {
         let data_len = sink_inspect.data.len();
         let epoch_len = sink_inspect.epochs.len();
         assert_eq!(epoch_len, 0); // no epochs should've completed
-        assert_eq!(sink_inspect.data[0].data, 11i32);
-        assert_eq!(sink_inspect.data[1].data, 21i32);
-        assert_eq!(sink_inspect.data[2].data, 31i32);
+        assert_eq!(sink_inspect.data[0].data, Some(11i32));
+        assert_eq!(sink_inspect.data[1].data, Some(21i32));
+        assert_eq!(sink_inspect.data[2].data, Some(31i32));
         assert_eq!(data_len, 3);
     }
 
@@ -395,12 +395,12 @@ mod tests {
         let data_len = sink_inspect.data.len();
         let epoch_len = sink_inspect.epochs.len();
         assert_eq!(epoch_len, 2); // 3 epochs should've completed
-        assert_eq!(sink_inspect.data[0].data, 11i32);
-        assert_eq!(sink_inspect.data[1].data, 21i32);
-        assert_eq!(sink_inspect.data[2].data, 31i32);
-        assert_eq!(sink_inspect.data[3].data, 12i32); // First message in epoch1
-        assert_eq!(sink_inspect.data[4].data, 13i32); // First message in epoch2
-        assert_eq!(sink_inspect.data[5].data, 22i32); // 2nd message in epoch2
+        assert_eq!(sink_inspect.data[0].data, Some(11i32));
+        assert_eq!(sink_inspect.data[1].data, Some(21i32));
+        assert_eq!(sink_inspect.data[2].data, Some(31i32));
+        assert_eq!(sink_inspect.data[3].data, Some(12i32)); // First message in epoch1
+        assert_eq!(sink_inspect.data[4].data, Some(13i32)); // First message in epoch2
+        assert_eq!(sink_inspect.data[5].data, Some(22i32)); // 2nd message in epoch2
         assert_eq!(data_len, 6);
     }
 }

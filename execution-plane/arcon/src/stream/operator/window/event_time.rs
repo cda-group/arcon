@@ -136,12 +136,16 @@ where
             match w_map.get_mut(&i) {
                 Some(window) => {
                     // Just insert the element
-                    let _ = window.on_element(element.clone().data);
+                    if let Some(data) = element.data.clone() {
+                        let _ = window.on_element(data);
+                    }
                 }
                 None => {
                     // Need to create new window,
                     let mut window = self.window.clone();
-                    let _ = window.on_element(element.clone().data);
+                    if let Some(data) = element.data.clone() {
+                        let _ = window.on_element(data);
+                    }
                     w_map.insert(i, window);
                     // Create the window trigger
                     self.new_window_trigger(key, i);
@@ -291,11 +295,11 @@ mod tests {
         let r1 = &sink_inspect.data.len();
         assert_eq!(r1, &3); // 3 windows received
         let r2 = &sink_inspect.data[0].data;
-        assert_eq!(r2, &2); // 1st window for key 1 has 2 elements
+        assert_eq!(r2, &Some(2)); // 1st window for key 1 has 2 elements
         let r3 = &sink_inspect.data[1].data;
-        assert_eq!(r3, &3); // 2nd window receieved, key 2, has 3 elements
+        assert_eq!(r3, &Some(3)); // 2nd window receieved, key 2, has 3 elements
         let r4 = &sink_inspect.data[2].data;
-        assert_eq!(r4, &1); // 3rd window receieved, for key 3, has 1 elements
+        assert_eq!(r4, &Some(1)); // 3rd window receieved, for key 3, has 1 elements
     }
 
     #[test]
@@ -315,7 +319,7 @@ mod tests {
         // Inspect and assert
         let sink_inspect = sink.definition().lock().unwrap();
         let r1 = &sink_inspect.data[0].data;
-        assert_eq!(r1, &2);
+        assert_eq!(r1, &Some(2));
         let r2 = &sink_inspect.data.len();
         assert_eq!(r2, &1);
     }
@@ -336,7 +340,7 @@ mod tests {
         let sink_inspect = sink.definition().lock().unwrap();
         let r0 = &sink_inspect.data[0].data;
         assert_eq!(&sink_inspect.data.len(), &(1 as usize));
-        assert_eq!(r0, &2);
+        assert_eq!(r0, &Some(2));
     }
     #[test]
     fn window_very_long_windows_1() {
@@ -356,7 +360,7 @@ mod tests {
         wait(1);
         let sink_inspect = sink.definition().lock().unwrap();
         let r0 = &sink_inspect.data[0].data;
-        assert_eq!(r0, &1);
+        assert_eq!(r0, &Some(1));
         assert_eq!(&sink_inspect.data.len(), &(1 as usize));
     }
     #[test]
@@ -377,10 +381,10 @@ mod tests {
         wait(1);
         let sink_inspect = sink.definition().lock().unwrap();
         let r0 = &sink_inspect.data[0].data;
-        assert_eq!(r0, &1);
+        assert_eq!(r0, &Some(1));
         assert_eq!(&sink_inspect.data.len(), &(2 as usize));
         let r1 = &sink_inspect.data[1].data;
-        assert_eq!(r1, &1);
+        assert_eq!(r1, &Some(1));
     }
     #[test]
     fn window_overlapping() {
@@ -400,9 +404,9 @@ mod tests {
         let r2 = &sink_inspect.data.len();
         assert_eq!(r2, &2);
         let r0 = &sink_inspect.data[0].data;
-        assert_eq!(r0, &3);
+        assert_eq!(r0, &Some(3));
         let r1 = &sink_inspect.data[1].data;
-        assert_eq!(r1, &2);
+        assert_eq!(r1, &Some(2));
     }
     #[test]
     fn window_empty() {

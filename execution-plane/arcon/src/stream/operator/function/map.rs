@@ -37,11 +37,15 @@ where
     OUT: 'static + ArconType,
 {
     fn handle_element(&mut self, element: ArconElement<IN>) -> Option<Vec<ArconEvent<OUT>>> {
-        let data = self.run_udf(element.data);
-        Some(vec![ArconEvent::Element(ArconElement {
-            data,
-            timestamp: element.timestamp,
-        })])
+        if let Some(data) = element.data {
+            let result = self.run_udf(data);
+            Some(vec![ArconEvent::Element(ArconElement {
+                data: Some(result),
+                timestamp: element.timestamp,
+            })])
+        } else {
+            None
+        }
     }
 
     fn handle_watermark(&mut self, _w: Watermark) -> Option<Vec<ArconEvent<OUT>>> {
@@ -73,7 +77,7 @@ mod tests {
         result_vec.push(r1);
         result_vec.push(r2);
 
-        let expected: Vec<i32> = vec![16, 17];
+        let expected: Vec<Option<i32>> = vec![Some(16), Some(17)];
         let mut results = Vec::new();
         for r in result_vec {
             if let Some(result) = r {

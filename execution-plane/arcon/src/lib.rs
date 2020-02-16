@@ -4,7 +4,7 @@
 //! Arcon is a Streaming-first Analytics Engine for the Arc language.
 //!
 //! This crate is not meant to be used directly, but rather relies on
-//! [Arc](https://github.com/cda-group/arc) to construct applications and 
+//! [Arc](https://github.com/cda-group/arc) to construct applications and
 //! [arcon_codegen] to generate the Rust code.
 
 #![feature(unboxed_closures)]
@@ -78,7 +78,6 @@ mod tests {
     use crate::macros::*;
     use std::collections::hash_map::DefaultHasher;
 
-    #[arcon_decoder(,)]
     #[arcon_keyed(id)]
     #[derive(prost::Message)]
     pub struct Item {
@@ -86,14 +85,6 @@ mod tests {
         id: u64,
         #[prost(uint32, tag = "2")]
         price: u32,
-    }
-
-    #[test]
-    fn arcon_decoder_test() {
-        use std::str::FromStr;
-        let item: Item = Item::from_str("100, 250").unwrap();
-        assert_eq!(item.id, 100);
-        assert_eq!(item.price, 250);
     }
 
     #[test]

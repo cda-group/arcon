@@ -36,6 +36,47 @@ where
     }
 }
 
+/// An Enum containing all possible stream events that may occur in an execution
+#[derive(prost::Oneof, Clone, Abomonation)]
+pub enum ArconEvent<A: ArconType> {
+    /// A stream element containing some data of type [ArconType] and an optional timestamp [u64]
+    #[prost(message, tag = "1")]
+    Element(ArconElement<A>),
+    /// A [Watermark] message
+    #[prost(message, tag = "2")]
+    Watermark(Watermark),
+    /// An [Epoch] marker message
+    #[prost(message, tag = "3")]
+    Epoch(Epoch),
+}
+
+/// A Stream element containing some data and timestamp
+#[derive(prost::Message, Clone, Abomonation)]
+pub struct ArconElement<A: ArconType> {
+    #[prost(message, tag = "1")]
+    pub data: Option<A>,
+    #[prost(message, tag = "2")]
+    pub timestamp: Option<u64>,
+}
+
+impl<A: ArconType> ArconElement<A> {
+    /// Creates an ArconElement without a timestamp
+    pub fn new(data: A) -> Self {
+        ArconElement {
+            data: Some(data),
+            timestamp: None,
+        }
+    }
+
+    /// Creates an ArconElement with a timestamp
+    pub fn with_timestamp(data: A, ts: u64) -> Self {
+        ArconElement {
+            data: Some(data),
+            timestamp: Some(ts),
+        }
+    }
+}
+
 /// Watermark message containing a [u64] timestamp
 #[derive(prost::Message, Clone, Copy, Abomonation)]
 pub struct Watermark {
@@ -62,38 +103,8 @@ impl Epoch {
     }
 }
 
-/// An Enum containing all possible stream events that may occur in an execution
-#[derive(Clone, Debug, Abomonation)]
-pub enum ArconEvent<A: ArconType> {
-    /// A stream element containing some data of type [ArconType] and an optional timestamp [u64]
-    Element(ArconElement<A>),
-    /// A [Watermark] message
-    Watermark(Watermark),
-    /// An [Epoch] marker message
-    Epoch(Epoch),
-}
-
-/// A NodeID is used to identify a message sender
-#[derive(prost::Message, PartialEq, Eq, PartialOrd, Ord, Hash, Copy, Clone, Abomonation)]
-pub struct NodeID {
-    #[prost(uint32, tag = "1")]
-    pub id: u32,
-}
-
-impl NodeID {
-    pub fn new(new_id: u32) -> NodeID {
-        NodeID { id: new_id }
-    }
-}
-
-impl From<u32> for NodeID {
-    fn from(id: u32) -> Self {
-        NodeID::new(id)
-    }
-}
-
-/// An ArconMessage contains a batch of [ArconEvent] and [NodeID]
-#[derive(Clone, Debug, Abomonation)]
+/// An ArconMessage contains a batch of [ArconEvent] and one [NodeID] identifier
+#[derive(Debug, Clone, Abomonation)]
 pub struct ArconMessage<A: ArconType> {
     /// Buffer of ArconEvents
     pub events: Vec<ArconEvent<A>>,
@@ -126,32 +137,31 @@ impl<A: ArconType> ArconMessage<A> {
     /// This function should only be used for development and test purposes.
     pub fn element(data: A, timestamp: Option<u64>, sender: NodeID) -> ArconMessage<A> {
         ArconMessage {
-            events: vec![ArconEvent::Element(ArconElement { data, timestamp })],
+            events: vec![ArconEvent::Element(ArconElement {
+                data: Some(data),
+                timestamp,
+            })],
             sender,
         }
     }
 }
 
-/// A stream element that holds data of type [ArconType] and an optional timestamp
-#[derive(Clone, Debug, Abomonation)]
-pub struct ArconElement<A: ArconType> {
-    pub data: A,
-    pub timestamp: Option<u64>,
+/// A NodeID is used to identify a message sender
+#[derive(prost::Message, PartialEq, Eq, PartialOrd, Ord, Hash, Copy, Clone, Abomonation)]
+pub struct NodeID {
+    #[prost(uint32, tag = "1")]
+    pub id: u32,
 }
 
-impl<A: ArconType> ArconElement<A> {
-    pub fn new(data: A) -> Self {
-        ArconElement {
-            data,
-            timestamp: None,
-        }
+impl NodeID {
+    pub fn new(new_id: u32) -> NodeID {
+        NodeID { id: new_id }
     }
+}
 
-    pub fn with_timestamp(data: A, ts: u64) -> Self {
-        ArconElement {
-            data,
-            timestamp: Some(ts),
-        }
+impl From<u32> for NodeID {
+    fn from(id: u32) -> Self {
+        NodeID::new(id)
     }
 }
 

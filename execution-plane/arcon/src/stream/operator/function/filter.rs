@@ -33,8 +33,12 @@ where
     IN: 'static + ArconType,
 {
     fn handle_element(&mut self, element: ArconElement<IN>) -> Option<Vec<ArconEvent<IN>>> {
-        if self.run_udf(&(element.data)) {
-            Some(vec![ArconEvent::Element(element)])
+        if let Some(data) = &element.data {
+            if self.run_udf(&(data)) {
+                Some(vec![ArconEvent::Element(element)])
+            } else {
+                None
+            }
         } else {
             None
         }
@@ -66,12 +70,12 @@ mod tests {
         let input_four = ArconElement::new(9 as i32);
 
         match filter.handle_element(input_one).unwrap().get(0).unwrap() {
-            ArconEvent::Element(elem) => assert_eq!(elem.data, 6),
+            ArconEvent::Element(elem) => assert_eq!(elem.data, Some(6)),
             _ => assert!(false),
         }
 
         match filter.handle_element(input_two).unwrap().get(0).unwrap() {
-            ArconEvent::Element(elem) => assert_eq!(elem.data, 7),
+            ArconEvent::Element(elem) => assert_eq!(elem.data, Some(7)),
             _ => assert!(false),
         }
 

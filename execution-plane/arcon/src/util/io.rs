@@ -3,31 +3,36 @@
 
 use kompact::prelude::*;
 
+use bytes::BytesMut;
 use futures::StreamExt;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tokio::net::TcpListener;
-use tokio::net::UdpSocket;
+use std::thread::{Builder, JoinHandle};
+use tokio::net::{TcpListener, UdpSocket};
 use tokio::runtime::Runtime;
 use tokio_util::codec::{BytesCodec, Decoder};
 use tokio_util::udp::UdpFramed;
 
-use std::thread::{Builder, JoinHandle};
-
-use bytes::BytesMut;
-
+/// Enum containing possible IO kinds
 pub enum IOKind {
     Tcp,
     Udp,
 }
 
+/// Events that an IO Component may send to its subscriber
 #[derive(Debug)]
 pub enum IOMessage {
+    /// Some raw bytes packed into a BytesMut
     Bytes(BytesMut),
+    /// Indicates that the socket connection closed
     SockClosed,
+    /// Indicates that an error occured
     SockErr,
 }
 
+/// A [kompact] Component listening to IO
+///
+/// Supports both TCP and UDP.
 #[derive(ComponentDefinition)]
 pub struct IO {
     ctx: ComponentContext<IO>,
@@ -35,6 +40,7 @@ pub struct IO {
 }
 
 impl IO {
+    /// Creates a UDP IO component
     pub fn udp(sock_addr: SocketAddr, subscriber: ActorRef<IOMessage>) -> IO {
         let th = Builder::new()
             .name(String::from("IOThread"))
@@ -60,6 +66,7 @@ impl IO {
         }
     }
 
+    /// Creates a TCP IO component
     pub fn tcp(sock_addr: SocketAddr, subscriber: ActorRef<IOMessage>) -> IO {
         let th = Builder::new()
             .name(String::from("IOThread"))

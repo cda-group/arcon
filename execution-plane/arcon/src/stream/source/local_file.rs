@@ -167,7 +167,7 @@ mod tests {
         assert_eq!(&sink_inspect.data.len(), &(50 as usize));
         for item in &sink_inspect.data {
             // all elements should have been mapped + 5
-            assert_eq!(item.data, 128 as u64);
+            assert_eq!(item.data, Some(128));
         }
     }
 
@@ -217,7 +217,7 @@ mod tests {
         assert_eq!(&sink_inspect.data.len(), &(source_elements as usize));
         for i in 0..source_elements {
             let expected: ArconF64 = ArconF64::new(i as f64 + 0.5);
-            assert_eq!(sink_inspect.data[i].data, expected);
+            assert_eq!(sink_inspect.data[i].data, Some(expected));
         }
     }
 }

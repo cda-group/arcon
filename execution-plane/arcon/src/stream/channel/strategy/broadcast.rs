@@ -151,7 +151,7 @@ mod tests {
                 remote.system_path(),
                 vec![comp_id.into()],
             ));
-            channels.push(Channel::Remote((remote_path, ArconSerde::Unsafe)));
+            channels.push(Channel::Remote((remote_path, ArconSerde::Reliable)));
             comps.push(comp);
         }
         std::thread::sleep(std::time::Duration::from_secs(1));

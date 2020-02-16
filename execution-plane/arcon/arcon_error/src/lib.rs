@@ -1,7 +1,9 @@
+//! The arcon_error crate provide error utilities for Arcon related crates.
+
 use std::error::Error as StdError;
 use std::fmt;
 
-/// Helper macro for generating an Arcon Error
+/// Helper macro for generating an Error
 #[macro_export]
 macro_rules! arcon_err {
     ( $($arg:tt)* ) => ({
@@ -59,4 +61,5 @@ impl Error {
     }
 }
 
+/// A Result type for Arcon related crates
 pub type ArconResult<T> = ::std::result::Result<T, crate::Error>;

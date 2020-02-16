@@ -40,8 +40,10 @@ where
     IN: ArconType,
 {
     fn handle_element(&mut self, element: ArconElement<IN>) -> Option<Vec<ArconEvent<IN>>> {
-        if let Err(err) = writeln!(self.file, "{:?}", element.data) {
-            eprintln!("Error while writing to file sink {}", err.to_string());
+        if let Some(data) = element.data {
+            if let Err(err) = writeln!(self.file, "{:?}", data) {
+                eprintln!("Error while writing to file sink {}", err.to_string());
+            }
         }
         None
     }
