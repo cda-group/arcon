@@ -24,8 +24,6 @@ where
     N: SerializableFixedSizeWith<KS>,
 {
     fn clear(&self, backend: &mut RocksDb) -> ArconResult<()> {
-        // () is not serialized, and the user key is the tail of the db key, so in effect we get
-        // the prefix with which to search the underlying db.
         let prefix = self.common.get_db_key_prefix()?;
         backend.remove_prefix(&self.common.cf_name, prefix)
     }
