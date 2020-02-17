@@ -5,17 +5,16 @@ use crate::data::{ArconEvent, ArconType};
 use crate::prelude::KompactSystem;
 use crate::prelude::*;
 use crate::stream::channel::strategy::send;
-use fnv::FnvHasher;
-use std::collections::HashMap;
+use std::collections::{hash_map::DefaultHasher, HashMap};
 use std::default::Default;
 use std::hash::{BuildHasher, BuildHasherDefault, Hasher};
 
-type DefaultHashBuilder = BuildHasherDefault<FnvHasher>;
+type DefaultHashBuilder = BuildHasherDefault<DefaultHasher>;
 
 /// A hash based partitioner
 ///
-/// `KeyBy` may be constructed with
-/// either a custom hasher or the default `FnvHasher`
+/// KeyBy may be constructed with
+/// either a custom hasher or the default [DefaultHasher]
 #[derive(Default)]
 pub struct KeyBy<A, H = DefaultHashBuilder>
 where
@@ -31,44 +30,8 @@ impl<A> KeyBy<A>
 where
     A: ArconType,
 {
-    pub fn new(parallelism: u32, channels: Vec<Channel<A>>, sender_id: NodeID) -> KeyBy<A> {
-        assert_eq!(channels.len(), parallelism as usize);
-        let mut buffer_map: HashMap<usize, (Channel<A>, Vec<ArconEvent<A>>)> = HashMap::new();
-
-        for (i, channel) in channels.into_iter().enumerate() {
-            buffer_map.insert(i, (channel, Vec::new()));
-        }
-
-        KeyBy {
-            builder: Default::default(),
-            parallelism,
-            sender_id,
-            buffer_map,
-        }
-    }
-
-    pub fn with_hasher<B>(
-        parallelism: u32,
-        channels: Vec<Channel<A>>,
-        sender_id: NodeID,
-    ) -> KeyBy<A, BuildHasherDefault<B>>
-    where
-        B: Hasher + Default,
-    {
-        assert_eq!(channels.len(), parallelism as usize);
-        let mut buffer_map: HashMap<usize, (Channel<A>, Vec<ArconEvent<A>>)> = HashMap::new();
-
-        for (i, channel) in channels.into_iter().enumerate() {
-            buffer_map.insert(i, (channel, Vec::new()));
-        }
-        KeyBy {
-            builder: BuildHasherDefault::<B>::default(),
-            sender_id,
-            parallelism,
-            buffer_map,
-        }
-    }
-    pub fn with_batch_size(
+    /// Creates a KeyBy strategy with Rust's default hasher
+    pub fn new(
         parallelism: u32,
         channels: Vec<Channel<A>>,
         sender_id: NodeID,
@@ -85,6 +48,30 @@ where
             builder: Default::default(),
             parallelism,
             sender_id,
+            buffer_map,
+        }
+    }
+
+    /// Creates a KeyBy strategy with a custom built [Hasher]
+    pub fn with_hasher<B>(
+        parallelism: u32,
+        channels: Vec<Channel<A>>,
+        batch_size: usize,
+        sender_id: NodeID,
+    ) -> KeyBy<A, BuildHasherDefault<B>>
+    where
+        B: Hasher + Default,
+    {
+        assert_eq!(channels.len(), parallelism as usize);
+        let mut buffer_map: HashMap<usize, (Channel<A>, Vec<ArconEvent<A>>)> = HashMap::new();
+
+        for (i, channel) in channels.into_iter().enumerate() {
+            buffer_map.insert(i, (channel, Vec::with_capacity(batch_size)));
+        }
+        KeyBy {
+            builder: BuildHasherDefault::<B>::default(),
+            sender_id,
+            parallelism,
             buffer_map,
         }
     }
@@ -131,8 +118,6 @@ where
     }
 }
 
-/*
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -161,8 +146,8 @@ mod tests {
             comps.push(comp);
         }
 
-        let mut channel_strategy: Box<dyn ChannelStrategy<Input>> =
-            Box::new(KeyBy::new(parallelism, channels, NodeID::new(1)));
+        let mut channel_strategy =
+            ChannelStrategy::KeyBy(KeyBy::new(parallelism, channels, NodeID::new(1), 248));
 
         let mut rng = rand::thread_rng();
 
@@ -190,4 +175,3 @@ mod tests {
         let _ = system.shutdown();
     }
 }
-*/
