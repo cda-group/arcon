@@ -8,14 +8,15 @@
 
 use arcon::prelude::*;
 use criterion::{criterion_group, Bencher, Criterion};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 const NODE_MSGS: usize = 100000;
-const BATCH_SIZE: usize = 10000;
+const BATCH_SIZE: usize = 1000;
+const KOMPACT_THROUGHPUT: usize = 25;
 
-fn arcon_node_latency(c: &mut Criterion) {
-    let mut group = c.benchmark_group("arcon_node_latency");
-    group.bench_function("Forward Test", node_latency_forward);
+fn arcon_node(c: &mut Criterion) {
+    let mut group = c.benchmark_group("arcon_node");
+    group.bench_function("Forward Test", node_forward);
 
     group.finish()
 }
@@ -28,8 +29,8 @@ fn setup_system(name: &'static str, throughput: usize) -> KompactSystem {
     cfg.build().expect("KompactSystem")
 }
 
-pub fn node_latency_forward(b: &mut Bencher) {
-    node_forward_bench(b, NODE_MSGS);
+pub fn node_forward(b: &mut Bencher) {
+    node_forward_bench(b, KOMPACT_THROUGHPUT);
 }
 
 pub fn node_forward_bench(b: &mut Bencher, messages: usize) {
@@ -37,7 +38,7 @@ pub fn node_forward_bench(b: &mut Bencher, messages: usize) {
 
     let timeout = Duration::from_millis(500);
 
-    let node_receiver = sys.create(move || NodeReceiver::new());
+    let node_receiver = sys.create(move || super::NodeReceiver::new());
 
     let actor_ref: ActorRefStrong<ArconMessage<i32>> = node_receiver
         .actor_ref()
@@ -76,19 +77,19 @@ pub fn node_forward_bench(b: &mut Bencher, messages: usize) {
         .wait_timeout(timeout)
         .expect("node never started!");
 
+    let mut buffer: Vec<ArconEvent<i32>> = Vec::with_capacity(BATCH_SIZE);
+    for i in 0..BATCH_SIZE {
+        buffer.push(ArconEvent::Element(ArconElement::new(i as i32)));
+    }
+
     b.iter(|| {
         let (promise, future) = kpromise();
-        sys.trigger_r(Run::new(NODE_MSGS as u64, promise), &experiment_port);
+        sys.trigger_r(super::Run::new(NODE_MSGS as u64, promise), &experiment_port);
 
         let batches = NODE_MSGS / BATCH_SIZE;
-
         for _batch in 0..batches {
-            let mut buffer: Vec<ArconEvent<i32>> = Vec::with_capacity(BATCH_SIZE);
-            for i in 0..BATCH_SIZE {
-                buffer.push(ArconEvent::Element(ArconElement::new(i as i32)));
-            }
             let msg = ArconMessage {
-                events: buffer,
+                events: buffer.clone(),
                 sender: NodeID::new(1),
             };
             node.actor_ref().tell(msg);
@@ -103,84 +104,12 @@ pub fn node_forward_bench(b: &mut Bencher, messages: usize) {
     sys.shutdown().expect("System did not shutdown!");
 }
 
-#[derive(Debug)]
-pub struct Run {
-    num_iterations: u64,
-    promise: KPromise<Duration>,
-}
-impl Run {
-    pub fn new(num_iterations: u64, promise: KPromise<Duration>) -> Run {
-        Run {
-            num_iterations,
-            promise,
-        }
-    }
-}
-impl Clone for Run {
-    fn clone(&self) -> Self {
-        unimplemented!("Shouldn't be invoked in this experiment!");
-    }
+fn custom_criterion() -> Criterion {
+    Criterion::default().sample_size(10)
 }
 
-pub struct ExperimentPort;
-impl Port for ExperimentPort {
-    type Indication = ();
-    type Request = Run;
+criterion_group! {
+    name = benches;
+    config = custom_criterion();
+    targets = arcon_node,
 }
-
-#[derive(ComponentDefinition)]
-pub struct NodeReceiver<A: ArconType> {
-    ctx: ComponentContext<Self>,
-    pub experiment_port: ProvidedPort<ExperimentPort, Self>,
-    done: Option<KPromise<Duration>>,
-    node: Option<ActorRefStrong<ArconMessage<i32>>>,
-    remaining_recv: u64,
-    start: Instant,
-}
-impl<A: ArconType> NodeReceiver<A> {
-    pub fn new() -> NodeReceiver<A> {
-        NodeReceiver {
-            ctx: ComponentContext::new(),
-            experiment_port: ProvidedPort::new(),
-            done: None,
-            node: None,
-            remaining_recv: 0,
-            start: Instant::now(),
-        }
-    }
-
-    pub fn set_node(&mut self, node: ActorRefStrong<ArconMessage<i32>>) {
-        self.node = Some(node);
-    }
-}
-
-impl<A: ArconType> Provide<ControlPort> for NodeReceiver<A> {
-    fn handle(&mut self, _event: ControlEvent) -> () {}
-}
-
-impl<A: ArconType> Actor for NodeReceiver<A> {
-    type Message = ArconMessage<A>;
-
-    fn receive_local(&mut self, msg: Self::Message) -> () {
-        self.remaining_recv -= msg.events.len() as u64;
-        if self.remaining_recv <= 0u64 {
-            let time = self.start.elapsed();
-            let promise = self.done.take().expect("No promise to reply to?");
-            promise.fulfill(time).expect("Promise was dropped");
-        }
-    }
-
-    fn receive_network(&mut self, _msg: NetMessage) -> () {
-        unimplemented!("Not being tested!");
-    }
-}
-
-impl<A: ArconType> Provide<ExperimentPort> for NodeReceiver<A> {
-    fn handle(&mut self, event: Run) -> () {
-        self.done = Some(event.promise);
-        self.start = Instant::now();
-        self.remaining_recv = event.num_iterations;
-    }
-}
-
-criterion_group!(benches, arcon_node_latency);

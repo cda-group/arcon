@@ -59,8 +59,8 @@ pub mod prelude {
     #[cfg(feature = "kafka")]
     pub use crate::stream::{operator::sink::kafka::KafkaSink, source::kafka::KafkaSource};
 
-    pub use crate::data::serde::{
-        reliable_remote::ReliableSerde, unsafe_remote::UnsafeSerde, ArconSerde,
+    pub use crate::data::flight_serde::{
+        reliable_remote::ReliableSerde, unsafe_remote::UnsafeSerde, FlightSerde,
     };
     pub use crate::data::Watermark;
     pub use crate::data::*;

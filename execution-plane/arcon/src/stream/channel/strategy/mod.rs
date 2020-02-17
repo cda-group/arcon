@@ -1,10 +1,12 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::data::serde::{reliable_remote::ReliableSerde, unsafe_remote::UnsafeSerde};
+use crate::data::flight_serde::{
+    reliable_remote::ReliableSerde, unsafe_remote::UnsafeSerde, FlightSerde,
+};
 use crate::data::{ArconEvent, ArconMessage, ArconType};
 use crate::prelude::KompactSystem;
-use crate::stream::channel::{ArconSerde, Channel};
+use crate::stream::channel::Channel;
 
 pub mod broadcast;
 pub mod forward;
@@ -81,12 +83,12 @@ where
         Channel::Local(actor_ref) => {
             actor_ref.tell(message);
         }
-        Channel::Remote((actor_path, arcon_serde)) => match &arcon_serde {
-            ArconSerde::Unsafe => {
+        Channel::Remote((actor_path, flight_serde)) => match &flight_serde {
+            FlightSerde::Unsafe => {
                 let unsafe_msg = UnsafeSerde(message);
                 actor_path.tell(unsafe_msg, source);
             }
-            ArconSerde::Reliable => {
+            FlightSerde::Reliable => {
                 let reliable_msg = ReliableSerde(message);
                 actor_path.tell(reliable_msg, source);
             }

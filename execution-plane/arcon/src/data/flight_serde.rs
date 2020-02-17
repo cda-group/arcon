@@ -3,7 +3,7 @@
 
 /// An Enum holding possible serialisation/deserialisation options for in-flight data
 #[derive(Clone)]
-pub enum ArconSerde {
+pub enum FlightSerde {
     /// Unsafe, but highly performant option
     ///
     /// For Unsafe to be a feasible choice, the remote machine
@@ -16,13 +16,13 @@ pub enum ArconSerde {
     Reliable,
 }
 
-impl Default for ArconSerde {
+impl Default for FlightSerde {
     fn default() -> Self {
-        ArconSerde::Reliable
+        FlightSerde::Reliable
     }
 }
 
-/// Module containing the [kompact] serialiser/deserialiser implementation for [ArconSerde::Reliable]
+/// Module containing the [kompact] serialiser/deserialiser implementation for [FlightSerde::Reliable]
 pub mod reliable_remote {
     use crate::data::{
         ArconElement, ArconEvent, ArconMessage, ArconType, Epoch, NodeID, Watermark,
@@ -115,10 +115,9 @@ pub mod reliable_remote {
                     ArconEvent::Watermark(w) => w.encoded_len(),
                     ArconEvent::Epoch(epoch) => epoch.encoded_len(),
                 };
-                total_len += event_len;
+                total_len += event_len + 6; // RawEvent
             }
-            // TODO: should probably double check this..
-            total_len += std::mem::size_of::<NetworkMessage>();
+            total_len += 4; // size of NetworkMessage
             Some(total_len)
         }
 
@@ -181,7 +180,7 @@ pub mod reliable_remote {
     }
 }
 
-/// Module containing the [kompact] serialiser/deserialiser implementation for [ArconSerde::Unsafe]
+/// Module containing the [kompact] serialiser/deserialiser implementation for [FlightSerde::Unsafe]
 pub mod unsafe_remote {
     use crate::data::{ArconMessage, ArconType};
     use kompact::prelude::*;
@@ -270,7 +269,7 @@ mod test {
             vec![comp_id.into()],
         ));
 
-        let channel = Channel::Remote((remote_path, ArconSerde::Unsafe));
+        let channel = Channel::Remote((remote_path, FlightSerde::Unsafe));
         let mut channel_strategy: ChannelStrategy<ArconDataTest> =
             ChannelStrategy::Forward(Forward::new(channel, 1.into()));
 

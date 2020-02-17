@@ -17,6 +17,7 @@ kafka = ["rdkafka", "futures", "serde_json", "serde"]
 thread_pinning = ["kompact/thread_pinning"]
 socket = ["tokio-util", "tokio", "futures", "bytes", "serde_json", "serde"]
 arcon_rocksdb = ["rocksdb"]
+quiet = ["slog"]
 
 [dependencies]
 arcon_macros = { version = "0.1", path = "arcon_macros" }
@@ -40,6 +41,7 @@ futures = { version = "0.3", optional = true }
 serde_json = { version = "1.0.44", optional = true }
 serde = { version = "1.0.104", features = ["derive"], optional = true }
 rocksdb = { git = "https://github.com/tikv/rust-rocksdb.git", optional = true }
+slog = { version = "2.2", features = ["release_max_level_off"], optional = true }
 
 [dev-dependencies]
 tempfile = "3"

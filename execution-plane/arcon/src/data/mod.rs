@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /// Serialisers and Deserialiser for in-flight data
-pub mod serde;
+pub mod flight_serde;
 
 use crate::error::ArconResult;
 use crate::macros::*;

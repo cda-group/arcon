@@ -70,7 +70,7 @@ mod tests {
     use crate::prelude::DebugNode;
     use crate::stream::channel::strategy::tests::*;
     use crate::stream::channel::strategy::ChannelStrategy;
-    use crate::stream::channel::ArconSerde;
+    use crate::stream::channel::FlightSerde;
     use kompact::prelude::*;
     use std::sync::Arc;
 
@@ -151,7 +151,7 @@ mod tests {
                 remote.system_path(),
                 vec![comp_id.into()],
             ));
-            channels.push(Channel::Remote((remote_path, ArconSerde::Reliable)));
+            channels.push(Channel::Remote((remote_path, FlightSerde::Reliable)));
             comps.push(comp);
         }
         std::thread::sleep(std::time::Duration::from_secs(1));
