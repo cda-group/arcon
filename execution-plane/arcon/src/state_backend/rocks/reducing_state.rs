@@ -26,10 +26,9 @@ impl<IK, N, T, F, KS, TS> State<RocksDb, IK, N> for RocksDbReducingState<IK, N, 
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    (): SerializableWith<KS>,
 {
     fn clear(&self, backend: &mut RocksDb) -> ArconResult<()> {
-        let key = self.common.get_db_key(&())?;
+        let key = self.common.get_db_key_prefix()?;
         backend.remove(&self.common.cf_name, &key)?;
         Ok(())
     }
@@ -81,12 +80,11 @@ impl<IK, N, T, F, KS, TS> AppendingState<RocksDb, IK, N, T, T>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    (): SerializableWith<KS>,
     T: SerializableWith<TS> + DeserializableWith<TS>,
     F: Fn(&T, &T) -> T,
 {
     fn get(&self, backend: &RocksDb) -> ArconResult<T> {
-        let key = self.common.get_db_key(&())?;
+        let key = self.common.get_db_key_prefix()?;
         let storage = backend.get(&self.common.cf_name, &key)?;
         let value = T::deserialize(&self.common.value_serializer, &*storage)?;
 
@@ -96,7 +94,7 @@ where
     fn append(&self, backend: &mut RocksDb, value: T) -> ArconResult<()> {
         let backend = backend.initialized_mut()?;
 
-        let key = self.common.get_db_key(&())?;
+        let key = self.common.get_db_key_prefix()?;
         let serialized = T::serialize(&self.common.value_serializer, &value)?;
 
         let cf = backend.get_cf_handle(&self.common.cf_name)?;
@@ -113,7 +111,6 @@ impl<IK, N, T, F, KS, TS> MergingState<RocksDb, IK, N, T, T>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    (): SerializableWith<KS>,
     T: SerializableWith<TS> + DeserializableWith<TS>,
     F: Fn(&T, &T) -> T,
 {
@@ -124,7 +121,6 @@ impl<IK, N, T, F, KS, TS> ReducingState<RocksDb, IK, N, T>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    (): SerializableWith<KS>,
     T: SerializableWith<TS> + DeserializableWith<TS>,
     F: Fn(&T, &T) -> T,
 {

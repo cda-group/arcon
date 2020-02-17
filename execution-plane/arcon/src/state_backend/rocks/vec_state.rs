@@ -21,10 +21,9 @@ impl<IK, N, T, KS, TS> State<RocksDb, IK, N> for RocksDbVecState<IK, N, T, KS, T
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    (): SerializableWith<KS>,
 {
     fn clear(&self, backend: &mut RocksDb) -> ArconResult<()> {
-        let key = self.common.get_db_key(&())?;
+        let key = self.common.get_db_key_prefix()?;
         backend.remove(&self.common.cf_name, &key)?;
         Ok(())
     }
@@ -48,11 +47,10 @@ impl<IK, N, T, KS, TS> AppendingState<RocksDb, IK, N, T, Vec<T>>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    (): SerializableWith<KS>,
     T: SerializableWith<TS> + DeserializableWith<TS>,
 {
     fn get(&self, backend: &RocksDb) -> ArconResult<Vec<T>> {
-        let key = self.common.get_db_key(&())?;
+        let key = self.common.get_db_key_prefix()?;
         let serialized = backend.get(&self.common.cf_name, &key)?;
 
         // reader is updated in the loop to point at the yet unconsumed part of the serialized data
@@ -69,7 +67,7 @@ where
     fn append(&self, backend: &mut RocksDb, value: T) -> ArconResult<()> {
         let backend = backend.initialized_mut()?;
 
-        let key = self.common.get_db_key(&())?;
+        let key = self.common.get_db_key_prefix()?;
         let serialized = T::serialize(&self.common.value_serializer, &value)?;
 
         let cf = backend.get_cf_handle(&self.common.cf_name)?;
@@ -85,7 +83,6 @@ impl<IK, N, T, KS, TS> MergingState<RocksDb, IK, N, T, Vec<T>> for RocksDbVecSta
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    (): SerializableWith<KS>,
     T: SerializableWith<TS> + DeserializableWith<TS>,
 {
 }
@@ -94,11 +91,10 @@ impl<IK, N, T, KS, TS> VecState<RocksDb, IK, N, T> for RocksDbVecState<IK, N, T,
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    (): SerializableWith<KS>,
     T: SerializableWith<TS> + DeserializableWith<TS>,
 {
     fn set(&self, backend: &mut RocksDb, value: Vec<T>) -> ArconResult<()> {
-        let key = self.common.get_db_key(&())?;
+        let key = self.common.get_db_key_prefix()?;
         let mut storage = vec![];
         for elem in value {
             T::serialize_into(&self.common.value_serializer, &mut storage, &elem)?;
@@ -112,7 +108,7 @@ where
     {
         let backend = backend.initialized_mut()?;
 
-        let key = self.common.get_db_key(&())?;
+        let key = self.common.get_db_key_prefix()?;
         let mut wb = WriteBatch::default();
         let cf = backend.get_cf_handle(&self.common.cf_name)?;
 

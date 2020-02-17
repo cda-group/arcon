@@ -79,7 +79,6 @@ impl_dynamic_builder! {
     ValueStateBuilder<IK, N, T, KS, TS> builds ValueState<_, IK, N, T> where {
         IK: SerializableFixedSizeWith<KS> + 'static,
         N: SerializableFixedSizeWith<KS> + 'static,
-        (): SerializableFixedSizeWith<KS>,
         T: SerializableWith<TS> + DeserializableWith<TS> + 'static,
         KS: 'static,
         TS: 'static,
@@ -102,7 +101,6 @@ impl_dynamic_builder! {
     MapStateBuilder<IK, N, K, V, KS, TS> builds MapState<_, IK, N, K, V> where {
         IK: SerializableFixedSizeWith<KS> + DeserializableWith<KS> + 'static,
         N: SerializableFixedSizeWith<KS> + DeserializableWith<KS> + 'static,
-        (): SerializableFixedSizeWith<KS>,
         K: SerializableWith<KS> + DeserializableWith<KS> + 'static,
         V: SerializableWith<TS> + DeserializableWith<TS> + 'static,
         KS: Clone + 'static,
@@ -126,7 +124,6 @@ impl_dynamic_builder! {
     VecStateBuilder<IK, N, T, KS, TS> builds VecState<_, IK, N, T> where {
         IK: SerializableFixedSizeWith<KS> + 'static,
         N: SerializableFixedSizeWith<KS> + 'static,
-        (): SerializableWith<KS>,
         T: SerializableWith<TS> + DeserializableWith<TS> + 'static,
         KS: 'static,
         TS: 'static,
@@ -150,7 +147,6 @@ impl_dynamic_builder! {
     ReducingStateBuilder<IK, N, T, F, KS, TS> builds ReducingState<_, IK, N, T> where {
         IK: SerializableFixedSizeWith<KS> + 'static,
         N: SerializableFixedSizeWith<KS> + 'static,
-        (): SerializableWith<KS>,
         T: SerializableWith<TS> + DeserializableWith<TS> + 'static,
         KS: Send + Sync + Clone + 'static,
         TS: Send + Sync + Clone + 'static,
@@ -176,7 +172,6 @@ impl_dynamic_builder! {
         AGG: Aggregator<T> + Send + Sync + Clone + 'static,
         IK: SerializableFixedSizeWith<KS> + 'static,
         N: SerializableFixedSizeWith<KS> + 'static,
-        (): SerializableWith<KS>,
         AGG::Accumulator: SerializableWith<TS> + DeserializableWith<TS>,
         T: SerializableWith<TS> + DeserializableWith<TS> + 'static,
         KS: Send + Sync + Clone + 'static,

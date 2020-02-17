@@ -21,10 +21,9 @@ impl<IK, N, T, KS, TS> State<InMemory, IK, N> for InMemoryVecState<IK, N, T, KS,
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    (): SerializableWith<KS>,
 {
     fn clear(&self, backend: &mut InMemory) -> ArconResult<()> {
-        let key = self.common.get_db_key(&())?;
+        let key = self.common.get_db_key_prefix()?;
         backend.remove(&key)?;
         Ok(())
     }
@@ -37,11 +36,10 @@ impl<IK, N, T, KS, TS> AppendingState<InMemory, IK, N, T, Vec<T>>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    (): SerializableWith<KS>,
     T: SerializableWith<TS> + DeserializableWith<TS>,
 {
     fn get(&self, backend: &InMemory) -> ArconResult<Vec<T>> {
-        let key = self.common.get_db_key(&())?;
+        let key = self.common.get_db_key_prefix()?;
         let serialized = backend.get(&key)?;
 
         // cursor is updated in the loop to point at the yet unconsumed part of the serialized data
@@ -56,7 +54,7 @@ where
     }
 
     fn append(&self, backend: &mut InMemory, value: T) -> ArconResult<()> {
-        let key = self.common.get_db_key(&())?;
+        let key = self.common.get_db_key_prefix()?;
         let storage = backend.get_mut_or_init_empty(&key)?;
 
         T::serialize_into(&self.common.value_serializer, storage, &value)
@@ -68,7 +66,6 @@ impl<IK, N, T, KS, TS> MergingState<InMemory, IK, N, T, Vec<T>>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    (): SerializableWith<KS>,
     T: SerializableWith<TS> + DeserializableWith<TS>,
 {
 }
@@ -77,11 +74,10 @@ impl<IK, N, T, KS, TS> VecState<InMemory, IK, N, T> for InMemoryVecState<IK, N, 
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    (): SerializableWith<KS>,
     T: SerializableWith<TS> + DeserializableWith<TS>,
 {
     fn set(&self, backend: &mut InMemory, value: Vec<T>) -> ArconResult<()> {
-        let key = self.common.get_db_key(&())?;
+        let key = self.common.get_db_key_prefix()?;
         let mut storage = vec![];
         for elem in value {
             T::serialize_into(&self.common.value_serializer, &mut storage, &elem)?;
@@ -97,7 +93,7 @@ where
     where
         Self: Sized,
     {
-        let key = self.common.get_db_key(&())?;
+        let key = self.common.get_db_key_prefix()?;
         let mut storage = backend.get_mut_or_init_empty(&key)?;
 
         for value in values {

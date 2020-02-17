@@ -22,12 +22,11 @@ impl<IK, N, K, V, KS, TS> State<RocksDb, IK, N> for RocksDbMapState<IK, N, K, V,
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    (): SerializableWith<KS>,
 {
     fn clear(&self, backend: &mut RocksDb) -> ArconResult<()> {
         // () is not serialized, and the user key is the tail of the db key, so in effect we get
         // the prefix with which to search the underlying db.
-        let prefix = self.common.get_db_key(&())?;
+        let prefix = self.common.get_db_key_prefix()?;
         backend.remove_prefix(&self.common.cf_name, prefix)
     }
 
@@ -39,13 +38,12 @@ where
     IK: SerializableFixedSizeWith<KS> + DeserializableWith<KS>,
     N: SerializableFixedSizeWith<KS> + DeserializableWith<KS>,
     K: SerializableWith<KS> + DeserializableWith<KS>,
-    (): SerializableWith<KS>,
     V: SerializableWith<TS> + DeserializableWith<TS>,
     KS: Clone + 'static,
     TS: Clone + 'static,
 {
     fn get(&self, backend: &RocksDb, key: &K) -> ArconResult<V> {
-        let key = self.common.get_db_key(key)?;
+        let key = self.common.get_db_key_with_user_key(key)?;
         let serialized = backend.get(&self.common.cf_name, &key)?;
         let value = V::deserialize(&self.common.value_serializer, &serialized)?;
 
@@ -53,7 +51,7 @@ where
     }
 
     fn put(&self, backend: &mut RocksDb, key: K, value: V) -> ArconResult<()> {
-        let key = self.common.get_db_key(&key)?;
+        let key = self.common.get_db_key_with_user_key(&key)?;
         let serialized = V::serialize(&self.common.value_serializer, &value)?;
         backend.put(&self.common.cf_name, key, serialized)?;
 
@@ -82,7 +80,7 @@ where
         let cf = backend.get_cf_handle(&self.common.cf_name)?;
 
         for (user_key, value) in key_value_pairs {
-            let key = self.common.get_db_key(&user_key)?;
+            let key = self.common.get_db_key_with_user_key(&user_key)?;
             let serialized = V::serialize(&self.common.value_serializer, &value)?;
             wb.put_cf(cf, key, serialized)
                 .map_err(|e| arcon_err_kind!("Could not create put operation: {}", e))?;
@@ -95,14 +93,14 @@ where
     }
 
     fn remove(&self, backend: &mut RocksDb, key: &K) -> ArconResult<()> {
-        let key = self.common.get_db_key(key)?;
+        let key = self.common.get_db_key_with_user_key(key)?;
         backend.remove(&self.common.cf_name, &key)?;
 
         Ok(())
     }
 
     fn contains(&self, backend: &RocksDb, key: &K) -> ArconResult<bool> {
-        let key = self.common.get_db_key(key)?;
+        let key = self.common.get_db_key_with_user_key(key)?;
         backend.contains(&self.common.cf_name, &key)
     }
 
@@ -110,7 +108,7 @@ where
     fn iter<'a>(&self, backend: &'a RocksDb) -> ArconResult<Box<dyn Iterator<Item = (K, V)> + 'a>> {
         let backend = backend.initialized()?;
 
-        let prefix = self.common.get_db_key(&())?;
+        let prefix = self.common.get_db_key_prefix()?;
         let cf = backend.get_cf_handle(&self.common.cf_name)?;
         let key_serializer = self.common.key_serializer.clone();
         let value_serializer = self.common.value_serializer.clone();
@@ -139,7 +137,7 @@ where
     fn keys<'a>(&self, backend: &'a RocksDb) -> ArconResult<Box<dyn Iterator<Item = K> + 'a>> {
         let backend = backend.initialized()?;
 
-        let prefix = self.common.get_db_key(&())?;
+        let prefix = self.common.get_db_key_prefix()?;
         let cf = backend.get_cf_handle(&self.common.cf_name)?;
         let key_serializer = self.common.key_serializer.clone();
 
@@ -165,7 +163,7 @@ where
     fn values<'a>(&self, backend: &'a RocksDb) -> ArconResult<Box<dyn Iterator<Item = V> + 'a>> {
         let backend = backend.initialized()?;
 
-        let prefix = self.common.get_db_key(&())?;
+        let prefix = self.common.get_db_key_prefix()?;
         let cf = backend.get_cf_handle(&self.common.cf_name)?;
         let value_serializer = self.common.value_serializer.clone();
 
@@ -188,7 +186,7 @@ where
     fn is_empty(&self, backend: &RocksDb) -> ArconResult<bool> {
         let backend = backend.initialized()?;
 
-        let prefix = self.common.get_db_key(&())?;
+        let prefix = self.common.get_db_key_prefix()?;
         let cf = backend.get_cf_handle(&self.common.cf_name)?;
         Ok(backend
             .db

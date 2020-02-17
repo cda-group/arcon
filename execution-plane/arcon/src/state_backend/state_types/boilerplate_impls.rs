@@ -98,7 +98,7 @@ where
 
 impl_state_for_boxed_with_dyn_backend!(ValueState<_, IK, N, T>);
 
-// TODO: these might be unnecessary if I change the bound on _Builder::Type to be a BorrowMut? maybe?
+// TODO: these might be unnecessary if I change the bound on _Builder::Type to be a BorrowMut or DerefMut? maybe?
 impl<IK, N, T> ValueState<dyn StateBackend, IK, N, T>
     for Box<dyn ValueState<dyn StateBackend, IK, N, T>>
 {

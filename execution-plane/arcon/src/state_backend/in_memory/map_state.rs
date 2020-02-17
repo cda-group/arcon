@@ -21,12 +21,11 @@ impl<IK, N, K, V, KS, TS> State<InMemory, IK, N> for InMemoryMapState<IK, N, K, 
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    (): SerializableWith<KS>,
 {
     fn clear(&self, backend: &mut InMemory) -> ArconResult<()> {
         // () is not serialized, and the user key is the tail of the db key, so in effect we get
         // the prefix with which to search the underlying db.
-        let prefix = self.common.get_db_key(&())?;
+        let prefix = self.common.get_db_key_prefix()?;
         backend.remove_matching(&prefix)?;
         Ok(())
     }
@@ -38,14 +37,13 @@ impl<IK, N, K, V, KS, TS> MapState<InMemory, IK, N, K, V> for InMemoryMapState<I
 where
     IK: SerializableFixedSizeWith<KS> + DeserializableWith<KS>,
     N: SerializableFixedSizeWith<KS> + DeserializableWith<KS>,
-    (): SerializableWith<KS>,
     K: SerializableWith<KS> + DeserializableWith<KS>,
     V: SerializableWith<TS> + DeserializableWith<TS>,
     KS: Clone + 'static,
     TS: Clone + 'static,
 {
     fn get(&self, backend: &InMemory, key: &K) -> ArconResult<V> {
-        let key = self.common.get_db_key(key)?;
+        let key = self.common.get_db_key_with_user_key(key)?;
         let serialized = backend.get(&key)?;
         let value = V::deserialize(&self.common.value_serializer, &serialized)?;
 
@@ -53,7 +51,7 @@ where
     }
 
     fn put(&self, backend: &mut InMemory, key: K, value: V) -> ArconResult<()> {
-        let key = self.common.get_db_key(&key)?;
+        let key = self.common.get_db_key_with_user_key(&key)?;
         let serialized = V::serialize(&self.common.value_serializer, &value)?;
         backend.put(key, serialized)?;
 
@@ -84,14 +82,14 @@ where
     }
 
     fn remove(&self, backend: &mut InMemory, key: &K) -> ArconResult<()> {
-        let key = self.common.get_db_key(key)?;
+        let key = self.common.get_db_key_with_user_key(key)?;
         backend.remove(&key)?;
 
         Ok(())
     }
 
     fn contains(&self, backend: &InMemory, key: &K) -> ArconResult<bool> {
-        let key = self.common.get_db_key(key)?;
+        let key = self.common.get_db_key_with_user_key(key)?;
         backend.contains(&key)
     }
 
@@ -100,7 +98,7 @@ where
         &self,
         backend: &'a InMemory,
     ) -> ArconResult<Box<dyn Iterator<Item = (K, V)> + 'a>> {
-        let prefix = self.common.get_db_key(&())?;
+        let prefix = self.common.get_db_key_prefix()?;
         let id_len = self.common.id.as_bytes().len();
         let key_serializer = self.common.key_serializer.clone();
         let value_serializer = self.common.value_serializer.clone();
@@ -122,7 +120,7 @@ where
     }
 
     fn keys<'a>(&self, backend: &'a InMemory) -> ArconResult<Box<dyn Iterator<Item = K> + 'a>> {
-        let prefix = self.common.get_db_key(&())?;
+        let prefix = self.common.get_db_key_prefix()?;
         let id_len = self.common.id.as_bytes().len();
         let key_serializer = self.common.key_serializer.clone();
         let iter = backend
@@ -142,7 +140,7 @@ where
     }
 
     fn values<'a>(&self, backend: &'a InMemory) -> ArconResult<Box<dyn Iterator<Item = V> + 'a>> {
-        let prefix = self.common.get_db_key(&())?;
+        let prefix = self.common.get_db_key_prefix()?;
         let value_serializer = self.common.value_serializer.clone();
         let iter = backend
             .iter_matching(prefix)
@@ -158,7 +156,7 @@ where
     }
 
     fn is_empty(&self, backend: &InMemory) -> ArconResult<bool> {
-        let prefix = self.common.get_db_key(&())?;
+        let prefix = self.common.get_db_key_prefix()?;
         Ok(backend.iter_matching(prefix).next().is_none())
     }
 }

@@ -20,11 +20,10 @@ impl<IK, N, T, KS, TS> State<InMemory, IK, N> for InMemoryValueState<IK, N, T, K
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    (): SerializableWith<KS>,
     T: SerializableWith<TS>,
 {
     fn clear(&self, backend: &mut InMemory) -> ArconResult<()> {
-        let key = self.common.get_db_key(&())?;
+        let key = self.common.get_db_key_prefix()?;
         backend.remove(&key)?;
         Ok(())
     }
@@ -36,18 +35,17 @@ impl<IK, N, T, KS, TS> ValueState<InMemory, IK, N, T> for InMemoryValueState<IK,
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    (): SerializableWith<KS>, // TODO: this is ridiculous
     T: SerializableWith<TS> + DeserializableWith<TS>,
 {
     fn get(&self, backend: &InMemory) -> ArconResult<T> {
-        let key = self.common.get_db_key(&())?;
+        let key = self.common.get_db_key_prefix()?;
         let serialized = backend.get(&key)?;
         let value = T::deserialize(&self.common.value_serializer, &serialized)?;
         Ok(value)
     }
 
     fn set(&self, backend: &mut InMemory, new_value: T) -> ArconResult<()> {
-        let key = self.common.get_db_key(&())?;
+        let key = self.common.get_db_key_prefix()?;
         let serialized = T::serialize(&self.common.value_serializer, &new_value)?;
         backend.put(key, serialized)?;
         Ok(())

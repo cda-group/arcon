@@ -21,10 +21,9 @@ impl<IK, N, T, F, KS, TS> State<InMemory, IK, N> for InMemoryReducingState<IK, N
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    (): SerializableWith<KS>,
 {
     fn clear(&self, backend: &mut InMemory) -> ArconResult<()> {
-        let key = self.common.get_db_key(&())?;
+        let key = self.common.get_db_key_prefix()?;
         backend.remove(&key)?;
         Ok(())
     }
@@ -34,16 +33,14 @@ where
 
 impl<IK, N, T, F, KS, TS> AppendingState<InMemory, IK, N, T, T>
     for InMemoryReducingState<IK, N, T, F, KS, TS>
-// TODO: if we made the (backend-)mutating methods take &mut self, F could be FnMut
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    (): SerializableWith<KS>,
     T: SerializableWith<TS> + DeserializableWith<TS>,
     F: Fn(&T, &T) -> T,
 {
     fn get(&self, backend: &InMemory) -> ArconResult<T> {
-        let key = self.common.get_db_key(&())?;
+        let key = self.common.get_db_key_prefix()?;
         let storage = backend.get(&key)?;
         let value = T::deserialize(&self.common.value_serializer, storage)?;
 
@@ -51,7 +48,7 @@ where
     }
 
     fn append(&self, backend: &mut InMemory, value: T) -> ArconResult<()> {
-        let key = self.common.get_db_key(&())?;
+        let key = self.common.get_db_key_prefix()?;
         let storage = backend.get_mut_or_init_empty(&key)?;
         if storage.is_empty() {
             T::serialize_into(&self.common.value_serializer, storage, &value)?;
@@ -73,11 +70,9 @@ where
 
 impl<IK, N, T, F, KS, TS> MergingState<InMemory, IK, N, T, T>
     for InMemoryReducingState<IK, N, T, F, KS, TS>
-// TODO: if we made the (backend-)mutating methods take &mut self, F could be FnMut
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    (): SerializableWith<KS>,
     T: SerializableWith<TS> + DeserializableWith<TS>,
     F: Fn(&T, &T) -> T,
 {
@@ -88,7 +83,6 @@ impl<IK, N, T, F, KS, TS> ReducingState<InMemory, IK, N, T>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    (): SerializableWith<KS>,
     T: SerializableWith<TS> + DeserializableWith<TS>,
     F: Fn(&T, &T) -> T,
 {

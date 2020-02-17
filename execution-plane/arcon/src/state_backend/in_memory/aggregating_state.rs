@@ -22,10 +22,9 @@ impl<IK, N, T, AGG, KS, TS> State<InMemory, IK, N>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    (): SerializableWith<KS>,
 {
     fn clear(&self, backend: &mut InMemory) -> ArconResult<()> {
-        let key = self.common.get_db_key(&())?;
+        let key = self.common.get_db_key_prefix()?;
         backend.remove(&key)?;
         Ok(())
     }
@@ -38,13 +37,12 @@ impl<IK, N, T, AGG, KS, TS> AppendingState<InMemory, IK, N, T, AGG::Result>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    (): SerializableWith<KS>,
     AGG: Aggregator<T>,
     AGG::Accumulator: SerializableWith<TS> + DeserializableWith<TS>,
 {
     fn get(&self, backend: &InMemory) -> ArconResult<AGG::Result> {
         // TODO: do we want to return R based on a new accumulator if not found?
-        let key = self.common.get_db_key(&())?;
+        let key = self.common.get_db_key_prefix()?;
         let serialized = backend.get(&key)?;
         let current_accumulator =
             AGG::Accumulator::deserialize(&self.common.value_serializer, serialized)?;
@@ -52,7 +50,7 @@ where
     }
 
     fn append(&self, backend: &mut InMemory, value: T) -> ArconResult<()> {
-        let key = self.common.get_db_key(&())?;
+        let key = self.common.get_db_key_prefix()?;
         let accumulator_buffer = backend.get_mut_or_init_empty(&key)?;
 
         let mut current_accumulator = if accumulator_buffer.is_empty() {
@@ -79,7 +77,6 @@ impl<IK, N, T, AGG, KS, TS> MergingState<InMemory, IK, N, T, AGG::Result>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    (): SerializableWith<KS>,
     AGG: Aggregator<T>,
     AGG::Accumulator: SerializableWith<TS> + DeserializableWith<TS>,
 {
@@ -90,7 +87,6 @@ impl<IK, N, T, AGG, KS, TS> AggregatingState<InMemory, IK, N, T, AGG::Result>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    (): SerializableWith<KS>,
     AGG: Aggregator<T>,
     AGG::Accumulator: SerializableWith<TS> + DeserializableWith<TS>,
 {

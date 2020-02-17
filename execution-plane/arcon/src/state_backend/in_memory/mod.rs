@@ -98,7 +98,6 @@ impl<IK, N, T, KS, TS> ValueStateBuilder<IK, N, T, KS, TS> for InMemory
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    (): SerializableWith<KS>,
     T: SerializableWith<TS> + DeserializableWith<TS>,
 {
     type Type = InMemoryValueState<IK, N, T, KS, TS>;
@@ -128,7 +127,6 @@ impl<IK, N, K, V, KS, TS> MapStateBuilder<IK, N, K, V, KS, TS> for InMemory
 where
     IK: SerializableFixedSizeWith<KS> + DeserializableWith<KS>,
     N: SerializableFixedSizeWith<KS> + DeserializableWith<KS>,
-    (): SerializableWith<KS>,
     K: SerializableWith<KS> + DeserializableWith<KS>,
     V: SerializableWith<TS> + DeserializableWith<TS>,
     KS: Clone + 'static,
@@ -161,7 +159,6 @@ impl<IK, N, T, KS, TS> VecStateBuilder<IK, N, T, KS, TS> for InMemory
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    (): SerializableWith<KS>,
     T: SerializableWith<TS> + DeserializableWith<TS>,
 {
     type Type = InMemoryVecState<IK, N, T, KS, TS>;
@@ -191,7 +188,6 @@ impl<IK, N, T, F, KS, TS> ReducingStateBuilder<IK, N, T, F, KS, TS> for InMemory
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    (): SerializableWith<KS>,
     T: SerializableWith<TS> + DeserializableWith<TS>,
     F: Fn(&T, &T) -> T,
 {
@@ -224,7 +220,6 @@ impl<IK, N, T, AGG, KS, TS> AggregatingStateBuilder<IK, N, T, AGG, KS, TS> for I
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    (): SerializableWith<KS>,
     AGG: Aggregator<T>,
     AGG::Accumulator: SerializableWith<TS> + DeserializableWith<TS>,
 {
@@ -283,7 +278,7 @@ where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
 {
-    fn get_db_key<UK>(&self, user_key: &UK) -> ArconResult<Vec<u8>>
+    fn get_db_key_with_user_key<UK>(&self, user_key: &UK) -> ArconResult<Vec<u8>>
     where
         UK: SerializableWith<KS>,
     {
@@ -292,6 +287,15 @@ where
         IK::serialize_into(&self.key_serializer, &mut res, &self.item_key)?;
         N::serialize_into(&self.key_serializer, &mut res, &self.namespace)?;
         UK::serialize_into(&self.key_serializer, &mut res, user_key)?;
+
+        Ok(res)
+    }
+
+    fn get_db_key_prefix(&self) -> ArconResult<Vec<u8>> {
+        // UUID is not always serializable, let's just dump the bytes
+        let mut res = self.id.as_bytes().to_vec();
+        IK::serialize_into(&self.key_serializer, &mut res, &self.item_key)?;
+        N::serialize_into(&self.key_serializer, &mut res, &self.namespace)?;
 
         Ok(res)
     }
@@ -335,8 +339,8 @@ mod test {
             value_serializer: Bincode,
         };
 
-        let v = state.get_db_key(&()).unwrap();
-        let v2 = state.get_db_key(&"hello").unwrap();
+        let v = state.get_db_key_prefix().unwrap();
+        let v2 = state.get_db_key_with_user_key(&"hello").unwrap();
 
         assert_eq!(&v2[..v.len()], &v[..]);
     }

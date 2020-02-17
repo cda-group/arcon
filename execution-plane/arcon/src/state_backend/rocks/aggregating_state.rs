@@ -26,10 +26,9 @@ impl<IK, N, T, AGG, KS, TS> State<RocksDb, IK, N> for RocksDbAggregatingState<IK
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    (): SerializableWith<KS>,
 {
     fn clear(&self, backend: &mut RocksDb) -> ArconResult<()> {
-        let key = self.common.get_db_key(&())?;
+        let key = self.common.get_db_key_prefix()?;
         backend.remove(&self.common.cf_name, &key)?;
         Ok(())
     }
@@ -102,14 +101,13 @@ impl<IK, N, T, AGG, KS, TS> AppendingState<RocksDb, IK, N, T, AGG::Result>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    (): SerializableWith<KS>,
     T: SerializableWith<TS>,
     AGG: Aggregator<T>,
     AGG::Accumulator: SerializableWith<TS> + DeserializableWith<TS>,
 {
     fn get(&self, backend: &RocksDb) -> ArconResult<AGG::Result> {
         // TODO: do we want to return R based on a new/empty accumulator if not found?
-        let key = self.common.get_db_key(&())?;
+        let key = self.common.get_db_key_prefix()?;
 
         let serialized = backend.get(&self.common.cf_name, &key)?;
         assert_eq!(serialized[0], ACCUMULATOR_MARKER);
@@ -123,7 +121,7 @@ where
     fn append(&self, backend: &mut RocksDb, value: T) -> ArconResult<()> {
         let backend = backend.initialized_mut()?;
 
-        let key = self.common.get_db_key(&())?;
+        let key = self.common.get_db_key_prefix()?;
         let mut serialized = vec![VALUE_MARKER];
         T::serialize_into(&self.common.value_serializer, &mut serialized, &value)?;
 
@@ -141,7 +139,6 @@ impl<IK, N, T, AGG, KS, TS> MergingState<RocksDb, IK, N, T, AGG::Result>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    (): SerializableWith<KS>,
     T: SerializableWith<TS>,
     AGG: Aggregator<T>,
     AGG::Accumulator: SerializableWith<TS> + DeserializableWith<TS>,
@@ -153,7 +150,6 @@ impl<IK, N, T, AGG, KS, TS> AggregatingState<RocksDb, IK, N, T, AGG::Result>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    (): SerializableWith<KS>,
     T: SerializableWith<TS>,
     AGG: Aggregator<T>,
     AGG::Accumulator: SerializableWith<TS> + DeserializableWith<TS>,

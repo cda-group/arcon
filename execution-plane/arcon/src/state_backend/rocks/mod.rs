@@ -84,9 +84,7 @@ impl InitializedRocksDb {
 
     fn remove_prefix(&mut self, cf: impl AsRef<str>, prefix: impl AsRef<[u8]>) -> ArconResult<()> {
         // We use DB::delete_range_cf here, which should be faster than what Flink does, because it
-        // doesn't require explicit iteration. BUT! it assumes that the prefixes have constant
-        // length, i.e. IK and N always serialize to the same number of bytes.
-        // TODO: fix that? or restrict possible item-key and namespace types
+        // doesn't require explicit iteration.
 
         let prefix = prefix.as_ref();
         let cf_name = cf.as_ref();
@@ -392,7 +390,6 @@ impl<IK, N, T, KS, TS> ValueStateBuilder<IK, N, T, KS, TS> for RocksDb
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    (): SerializableWith<KS>,
     T: SerializableWith<TS> + DeserializableWith<TS>,
 {
     type Type = RocksDbValueState<IK, N, T, KS, TS>;
@@ -425,7 +422,6 @@ where
     IK: SerializableFixedSizeWith<KS> + DeserializableWith<KS>,
     N: SerializableFixedSizeWith<KS> + DeserializableWith<KS>,
     K: SerializableWith<KS> + DeserializableWith<KS>,
-    (): SerializableWith<KS>,
     V: SerializableWith<TS> + DeserializableWith<TS>,
     KS: Clone + 'static,
     TS: Clone + 'static,
@@ -459,7 +455,6 @@ impl<IK, N, T, KS, TS> VecStateBuilder<IK, N, T, KS, TS> for RocksDb
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    (): SerializableWith<KS>,
     T: SerializableWith<TS> + DeserializableWith<TS>,
 {
     type Type = RocksDbVecState<IK, N, T, KS, TS>;
@@ -491,7 +486,6 @@ impl<IK, N, T, F, KS, TS> ReducingStateBuilder<IK, N, T, F, KS, TS> for RocksDb
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    (): SerializableWith<KS>,
     T: SerializableWith<TS> + DeserializableWith<TS>,
     F: Fn(&T, &T) -> T + Send + Sync + Clone + 'static,
     TS: Send + Sync + Clone + 'static,
@@ -528,7 +522,6 @@ impl<IK, N, T, AGG, KS, TS> AggregatingStateBuilder<IK, N, T, AGG, KS, TS> for R
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    (): SerializableWith<KS>,
     T: SerializableWith<TS> + DeserializableWith<TS>,
     AGG: Aggregator<T> + Send + Sync + Clone + 'static,
     AGG::Accumulator: SerializableWith<TS> + DeserializableWith<TS>,
@@ -593,7 +586,7 @@ mod state_common {
         IK: SerializableFixedSizeWith<KS>,
         N: SerializableFixedSizeWith<KS>,
     {
-        pub fn get_db_key<UK>(&self, user_key: &UK) -> ArconResult<Vec<u8>>
+        pub fn get_db_key_with_user_key<UK>(&self, user_key: &UK) -> ArconResult<Vec<u8>>
         where
             UK: SerializableWith<KS>,
         {
@@ -602,6 +595,15 @@ mod state_common {
             IK::serialize_into(&self.key_serializer, &mut res, &self.item_key)?;
             N::serialize_into(&self.key_serializer, &mut res, &self.namespace)?;
             UK::serialize_into(&self.key_serializer, &mut res, user_key)?;
+
+            Ok(res)
+        }
+
+        pub fn get_db_key_prefix(&self) -> ArconResult<Vec<u8>> {
+            // maybe try adding a size hint for stuff that impls SerializableWith?
+            let mut res = Vec::with_capacity(IK::SIZE + N::SIZE);
+            IK::serialize_into(&self.key_serializer, &mut res, &self.item_key)?;
+            N::serialize_into(&self.key_serializer, &mut res, &self.namespace)?;
 
             Ok(res)
         }
@@ -824,7 +826,7 @@ pub mod test {
             value_serializer: Bincode,
         };
 
-        let v = state.get_db_key(&()).unwrap();
+        let v = state.get_db_key_prefix().unwrap();
 
         assert!(v.is_empty());
     }
@@ -956,7 +958,9 @@ pub mod test {
         let mut db = TestDb::new();
         let state =
             StateCommon::new_for_map_state(&mut db, "test-name", 0u8, 0u8, Bincode, Bincode);
-        let key = state.get_db_key(&"foobar".to_string()).unwrap();
+        let key = state
+            .get_db_key_with_user_key(&"foobar".to_string())
+            .unwrap();
         assert_eq!(key.len(), 1 + 1 + std::mem::size_of::<usize>() + 6);
     }
 }
