@@ -30,9 +30,9 @@ where
     }
     pub fn process_collection(&mut self) {
         let mut counter: u64 = 0;
+        let system = &self.ctx().system();
         for record in self.collection.take().unwrap() {
             let elem = self.source_ctx.extract_element(record);
-            let system = &self.ctx().system();
             self.source_ctx.process(elem, system);
 
             counter += 1;
