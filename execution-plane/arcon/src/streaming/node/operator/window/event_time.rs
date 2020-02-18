@@ -191,13 +191,15 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::streaming::channel::{strategy::forward::*, Channel};
+    use crate::{
+        state_backend::in_memory::InMemory,
+        streaming::channel::{strategy::forward::*, Channel},
+    };
     use kompact::prelude::Component;
     use std::{sync::Arc, thread, time, time::UNIX_EPOCH};
 
     #[key_by(id)]
     #[arcon]
-    #[derive(prost::Message)]
     pub struct Item {
         #[prost(uint64, tag = "1")]
         id: u64,
@@ -239,6 +241,7 @@ mod tests {
                 vec![0.into()],
                 channel_strategy,
                 Box::new(window_assigner),
+                Box::new(InMemory::new("test").unwrap()),
             )
         });
         system.start(&window_node);

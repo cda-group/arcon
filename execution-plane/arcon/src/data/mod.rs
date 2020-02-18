@@ -4,6 +4,7 @@
 pub mod serde;
 
 use crate::{error::ArconResult, macros::*};
+use ::serde::{Deserialize, Serialize};
 use abomonation::Abomonation;
 use kompact::prelude::*;
 use prost::Message as PMessage;
@@ -11,7 +12,16 @@ use std::{fmt::Debug, hash::Hash};
 
 /// Type that can be passed through the Arcon runtime
 pub trait ArconType:
-    Clone + Debug + Sync + Send + PMessage + Default + Abomonation + 'static
+    Clone
+    + Debug
+    + Sync
+    + Send
+    + PMessage
+    + Default
+    + Abomonation
+    + Serialize
+    + for<'de> Deserialize<'de>
+    + 'static
 where
     Self: std::marker::Sized,
 {
@@ -34,7 +44,9 @@ where
 }
 
 /// Watermark
-#[derive(PMessage, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Abomonation)]
+#[derive(
+    PMessage, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Abomonation, Serialize, Deserialize,
+)]
 pub struct Watermark {
     #[prost(uint64, tag = "1")]
     pub timestamp: u64,
@@ -47,7 +59,7 @@ impl Watermark {
 }
 
 /// Epoch
-#[derive(PMessage, Clone, Copy, Abomonation)]
+#[derive(PMessage, Clone, Copy, Abomonation, Serialize, Deserialize)]
 pub struct Epoch {
     #[prost(uint64, tag = "1")]
     pub epoch: u64,
@@ -60,14 +72,17 @@ impl Epoch {
 }
 
 /// Wrapper for unifying passing of Elements and other stream messages (watermarks)
-#[derive(Clone, Debug, Abomonation)]
+#[derive(Clone, Debug, Abomonation, Serialize, Deserialize)]
+#[serde(bound = "A: ArconType")]
 pub enum ArconEvent<A: ArconType> {
     Element(ArconElement<A>),
     Watermark(Watermark),
     Epoch(Epoch),
 }
 
-#[derive(PMessage, PartialEq, Eq, PartialOrd, Ord, Hash, Copy, Clone, Abomonation)]
+#[derive(
+    PMessage, PartialEq, Eq, PartialOrd, Ord, Hash, Copy, Clone, Abomonation, Serialize, Deserialize,
+)]
 pub struct NodeID {
     #[prost(uint32, tag = "1")]
     pub id: u32,
@@ -85,7 +100,8 @@ impl From<u32> for NodeID {
     }
 }
 
-#[derive(Clone, Debug, Abomonation)]
+#[derive(Clone, Debug, Abomonation, Serialize, Deserialize)]
+#[serde(bound = "A: ArconType")]
 pub struct ArconMessage<A: ArconType> {
     pub event: ArconEvent<A>,
     pub sender: NodeID,
@@ -114,7 +130,8 @@ impl<A: ArconType> ArconMessage<A> {
 }
 
 /// A stream element that contains an `ArconType` and an optional timestamp
-#[derive(Clone, Debug, Abomonation)]
+#[derive(Clone, Debug, Abomonation, Serialize, Deserialize)]
+#[serde(bound = "A: ArconType")]
 pub struct ArconElement<A: ArconType> {
     pub data: A,
     pub timestamp: Option<u64>,
@@ -151,7 +168,6 @@ pub mod test {
     use super::*;
 
     #[arcon]
-    #[derive(PMessage)]
     pub struct ArconDataTest {
         #[prost(uint32, tag = "1")]
         pub id: u32,

@@ -48,7 +48,7 @@ where
         Ok(value)
     }
 
-    fn put(&self, backend: &mut RocksDb, key: K, value: V) -> ArconResult<()> {
+    fn fast_insert(&self, backend: &mut RocksDb, key: K, value: V) -> ArconResult<()> {
         let key = self.common.get_db_key_with_user_key(&key)?;
         let serialized = V::serialize(&self.common.value_serializer, &value)?;
         backend.put(&self.common.cf_name, key, serialized)?;
@@ -56,15 +56,31 @@ where
         Ok(())
     }
 
-    fn put_all_dyn(
+    fn insert(&self, backend: &mut RocksDb, key: K, value: V) -> ArconResult<Option<V>> {
+        let key = self.common.get_db_key_with_user_key(&key)?;
+
+        // couldn't find a `put` that would return the previous value from rocks
+        let old = if let Ok(slice) = backend.get(&self.common.cf_name, &key) {
+            Some(V::deserialize(&self.common.value_serializer, &*slice)?)
+        } else {
+            None
+        };
+
+        let serialized = V::serialize(&self.common.value_serializer, &value)?;
+        backend.put(&self.common.cf_name, key, serialized)?;
+
+        Ok(old)
+    }
+
+    fn insert_all_dyn(
         &self,
         backend: &mut RocksDb,
         key_value_pairs: &mut dyn Iterator<Item = (K, V)>,
     ) -> ArconResult<()> {
-        self.put_all(backend, key_value_pairs)
+        self.insert_all(backend, key_value_pairs)
     }
 
-    fn put_all(
+    fn insert_all(
         &self,
         backend: &mut RocksDb,
         key_value_pairs: impl IntoIterator<Item = (K, V)>,
@@ -181,6 +197,21 @@ where
         Ok(Box::new(iter))
     }
 
+    fn len(&self, backend: &RocksDb) -> ArconResult<usize> {
+        let backend = backend.initialized()?;
+
+        let prefix = self.common.get_db_key_prefix()?;
+        let cf = backend.get_cf_handle(&self.common.cf_name)?;
+
+        let count = backend
+            .db
+            .prefix_iterator_cf(cf, prefix)
+            .map_err(|e| arcon_err_kind!("Could not create prefix iterator: {}", e))?
+            .count();
+
+        Ok(count)
+    }
+
     fn is_empty(&self, backend: &RocksDb) -> ArconResult<bool> {
         let backend = backend.initialized()?;
 
@@ -208,9 +239,11 @@ mod test {
         // TODO: &String is weird, maybe look at how it's done with the keys in std hash-map
         assert!(!map_state.contains(&db, &"first key".to_string()).unwrap());
 
-        map_state.put(&mut db, "first key".to_string(), 42).unwrap();
         map_state
-            .put(&mut db, "second key".to_string(), 69)
+            .fast_insert(&mut db, "first key".to_string(), 42)
+            .unwrap();
+        map_state
+            .fast_insert(&mut db, "second key".to_string(), 69)
             .unwrap();
 
         assert!(map_state.contains(&db, &"first key".to_string()).unwrap());
@@ -219,11 +252,17 @@ mod test {
         assert_eq!(map_state.get(&db, &"first key".to_string()).unwrap(), 42);
         assert_eq!(map_state.get(&db, &"second key".to_string()).unwrap(), 69);
 
+        assert_eq!(map_state.len(&db).unwrap(), 2);
+
         let keys: Vec<_> = map_state.keys(&db).unwrap().collect();
 
         assert_eq!(keys.len(), 2);
         assert!(keys.contains(&"first key".to_string()));
         assert!(keys.contains(&"second key".to_string()));
+
+        map_state.clear(&mut db).unwrap();
+        assert_eq!(map_state.len(&db).unwrap(), 0);
+        assert!(map_state.is_empty(&db).unwrap());
     }
 
     #[test]
@@ -236,7 +275,7 @@ mod test {
             let key = i.to_string();
             let value = i;
             expected_for_key_zero.push((key.clone(), value));
-            map_state.put(&mut db, key, value).unwrap()
+            map_state.fast_insert(&mut db, key, value).unwrap()
         }
 
         map_state.set_current_key(1).unwrap();
@@ -246,7 +285,7 @@ mod test {
             let key = i.to_string();
             let value = i;
             expected_for_key_one.push((key.clone(), value));
-            map_state.put(&mut db, key, value).unwrap()
+            map_state.fast_insert(&mut db, key, value).unwrap()
         }
 
         let tuples_from_key_one: Vec<_> = map_state.iter(&db).unwrap().collect();

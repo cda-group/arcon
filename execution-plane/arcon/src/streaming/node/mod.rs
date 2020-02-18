@@ -4,14 +4,9 @@
 pub mod debug;
 pub mod operator;
 
-use crate::prelude::*;
+use crate::{prelude::*, state_backend::serialization::Bincode};
 pub use debug::DebugNode;
-use std::{
-    collections::{BTreeMap, HashSet, VecDeque},
-    mem,
-}; // Message buffer // Blocked-list // Watermark-list
-
-const MESSAGE_BUFFER_INIT_CAPACITY: usize = 32;
+use std::iter;
 
 /*
   Node: contains an Operator which executes actions
@@ -27,11 +22,12 @@ where
     out_channels: Box<dyn ChannelStrategy<OUT>>,
     in_channels: Vec<NodeID>,
     operator: Box<dyn Operator<IN, OUT> + Send>,
-    watermarks: BTreeMap<NodeID, Watermark>,
-    current_watermark: u64,
-    current_epoch: u64,
-    blocked_channels: HashSet<NodeID>,
-    message_buffer: VecDeque<ArconMessage<IN>>,
+    watermarks: BoxedMapState<NodeID, Watermark>,
+    current_watermark: BoxedValueState<Watermark>,
+    current_epoch: BoxedValueState<Epoch>,
+    blocked_channels: BoxedMapState<NodeID, ()>,
+    message_buffer: BoxedVecState<ArconMessage<IN>>,
+    state_backend: Box<dyn StateBackend>,
 }
 
 impl<IN, OUT> Node<IN, OUT>
@@ -44,11 +40,42 @@ where
         in_channels: Vec<NodeID>,
         out_channels: Box<dyn ChannelStrategy<OUT>>,
         operator: Box<dyn Operator<IN, OUT> + Send>,
+        mut state_backend: Box<dyn StateBackend>,
     ) -> Node<IN, OUT> {
+        // TODO: hardcoded Bincode ser/de
         // Initiate our watermarks
-        let mut watermarks = BTreeMap::new();
+        let watermarks: BoxedMapState<NodeID, Watermark> =
+            state_backend.new_map_state("__node_watermarks", (), (), Bincode, Bincode);
+
         for channel in &in_channels {
-            watermarks.insert(*channel, Watermark { timestamp: 0 });
+            if !watermarks
+                .contains(&*state_backend, channel)
+                .expect("Could not check watermarks")
+            {
+                watermarks
+                    .fast_insert(&mut *state_backend, *channel, Watermark { timestamp: 0 })
+                    .expect("Could not initialize watermarks");
+            }
+        }
+
+        let current_watermark =
+            state_backend.new_value_state("__node_current_watermark", (), (), Bincode, Bincode);
+        if let Err(e) = current_watermark.get(&*state_backend) {
+            if e.to_string().contains("Value not found") {
+                current_watermark
+                    .set(&mut *state_backend, Watermark { timestamp: 0 })
+                    .unwrap();
+            }
+        }
+
+        let current_epoch =
+            state_backend.new_value_state("__node_current_epoch", (), (), Bincode, Bincode);
+        if let Err(e) = current_epoch.get(&*state_backend) {
+            if e.to_string().contains("Value not found") {
+                current_epoch
+                    .set(&mut *state_backend, Epoch { epoch: 0 })
+                    .unwrap();
+            }
         }
 
         Node {
@@ -58,21 +85,39 @@ where
             in_channels,
             operator,
             watermarks,
-            current_watermark: 0,
-            current_epoch: 0,
-            blocked_channels: HashSet::new(),
-            message_buffer: VecDeque::with_capacity(MESSAGE_BUFFER_INIT_CAPACITY),
+            current_watermark,
+            current_epoch,
+            blocked_channels: state_backend.new_map_state(
+                "__node_blocked_channels",
+                (),
+                (),
+                Bincode,
+                Bincode,
+            ),
+            message_buffer: state_backend.new_vec_state(
+                "__node_message_buffer",
+                (),
+                (),
+                Bincode,
+                Bincode,
+            ),
+            state_backend,
         }
     }
+
     fn handle_message(&mut self, message: ArconMessage<IN>) -> ArconResult<()> {
         // Check valid sender
         if !self.in_channels.contains(&message.sender) {
             return arcon_err!("Message from invalid sender");
         }
         // Check if sender is blocked
-        if self.blocked_channels.contains(&message.sender) {
+        if self
+            .blocked_channels
+            .contains(&*self.state_backend, &message.sender)?
+        {
             // Add the message to the back of the queue
-            self.message_buffer.push_back(message);
+            self.message_buffer
+                .append(&mut *self.state_backend, message)?;
             return Ok(());
         }
 
@@ -84,29 +129,35 @@ where
                 }
             }
             ArconEvent::Watermark(w) => {
+                let current_watermark = self.current_watermark.get(&*self.state_backend)?;
+
                 // Insert the watermark and try early return
-                if let Some(old) = self.watermarks.insert(message.sender.clone(), w) {
-                    if old.timestamp > self.current_watermark {
+                if let Some(old) =
+                    self.watermarks
+                        .insert(&mut *self.state_backend, message.sender, w)?
+                {
+                    if old > current_watermark {
                         return Ok(());
                     }
                 }
                 // A different early return
-                if w.timestamp <= self.current_watermark {
+                if w <= current_watermark {
                     return Ok(());
                 }
 
                 // Let new_watermark take the value of the lowest watermark
-                let new_watermark = *self
+                let new_watermark = self
                     .watermarks
-                    .values()
-                    .chain(&[w])
+                    .values(&*self.state_backend)?
+                    .chain(iter::once(w))
                     .min()
                     .expect("this cannot fail, because the iterator contains at least `w`");
 
                 // Finally, handle the watermark:
-                if new_watermark.timestamp > self.current_watermark {
+                if new_watermark > current_watermark {
                     // Update the stored watermark
-                    self.current_watermark = new_watermark.timestamp;
+                    self.current_watermark
+                        .set(&mut *self.state_backend, new_watermark)?;
 
                     // Handle the watermark
                     for result in self.operator.handle_watermark(new_watermark)? {
@@ -119,12 +170,13 @@ where
             }
             ArconEvent::Epoch(e) => {
                 // Add the sender to the blocked set.
-                self.blocked_channels.insert(message.sender);
+                self.blocked_channels
+                    .fast_insert(&mut *self.state_backend, message.sender, ())?;
 
                 // If all senders blocked we can transition to new Epoch
-                if self.blocked_channels.len() == self.in_channels.len() {
+                if self.blocked_channels.len(&*self.state_backend)? == self.in_channels.len() {
                     // update current epoch
-                    self.current_epoch = e.epoch;
+                    self.current_epoch.set(&mut *self.state_backend, e)?;
 
                     // call handle_epoch on our operator
                     let _operator_state = self.operator.handle_epoch(e)?;
@@ -136,17 +188,15 @@ where
                     self.output_event(ArconEvent::Epoch(e))?;
 
                     // flush the blocked_channels list
-                    self.blocked_channels.clear();
+                    self.blocked_channels.clear(&mut *self.state_backend)?;
 
                     // Handle the message buffer.
-                    if !self.message_buffer.is_empty() {
-                        // Create a new message buffer
-                        let mut message_buffer =
-                            VecDeque::with_capacity(MESSAGE_BUFFER_INIT_CAPACITY);
-                        // Swap the current and the new message buffer
-                        mem::swap(&mut message_buffer, &mut self.message_buffer);
+                    if !self.message_buffer.is_empty(&*self.state_backend)? {
+                        // Get a local copy of the buffer
+                        let local_buffer = self.message_buffer.get(&*self.state_backend)?;
+                        self.message_buffer.clear(&mut *self.state_backend)?;
                         // Iterate over the message-buffer until empty
-                        while let Some(message) = message_buffer.pop_front() {
+                        for message in local_buffer {
                             self.handle_message(message)?;
                         }
                     }
@@ -165,7 +215,13 @@ where
     }
 
     fn save_state(&mut self) -> ArconResult<()> {
-        // todo
+        // TODO: for now we're saving to cwd, this should probably be configurable
+        let checkpoint_dir = format!(
+            "checkpoint_{id}_{epoch}",
+            id = self.id.id,
+            epoch = self.current_epoch.get(&*self.state_backend)?.epoch
+        );
+        self.state_backend.checkpoint(&checkpoint_dir)?;
         Ok(())
     }
 }
@@ -252,6 +308,7 @@ mod tests {
                 vec![1.into(), 2.into(), 3.into()],
                 channel_strategy,
                 Box::new(Filter::new(&node_fn)),
+                Box::new(InMemory::new("test").unwrap()),
             )
         });
         system.start(&filter_node);

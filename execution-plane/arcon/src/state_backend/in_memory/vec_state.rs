@@ -110,6 +110,16 @@ where
     ) -> ArconResult<()> {
         self.add_all(backend, values)
     }
+
+    fn is_empty(&self, backend: &InMemory) -> ArconResult<bool> {
+        let key = self.common.get_db_key_prefix()?;
+        if let Ok(storage) = backend.get(&key) {
+            Ok(storage.is_empty())
+        } else {
+            Ok(true)
+        }
+    }
+
     //
     //    fn len(&self, backend: &InMemory) -> ArconResult<usize>
     //    where
@@ -155,6 +165,7 @@ mod test {
     fn vec_state_test() {
         let mut db = InMemory::new("test").unwrap();
         let vec_state = db.new_vec_state("test_state", (), (), Bincode, Bincode);
+        assert!(vec_state.is_empty(&db).unwrap());
         //        assert_eq!(vec_state.len(&db).unwrap(), 0);
 
         vec_state.append(&mut db, 1).unwrap();

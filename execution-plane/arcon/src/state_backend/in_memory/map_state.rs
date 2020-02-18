@@ -48,7 +48,7 @@ where
         Ok(value)
     }
 
-    fn put(&self, backend: &mut InMemory, key: K, value: V) -> ArconResult<()> {
+    fn fast_insert(&self, backend: &mut InMemory, key: K, value: V) -> ArconResult<()> {
         let key = self.common.get_db_key_with_user_key(&key)?;
         let serialized = V::serialize(&self.common.value_serializer, &value)?;
         backend.put(key, serialized)?;
@@ -56,15 +56,34 @@ where
         Ok(())
     }
 
-    fn put_all_dyn(
+    fn insert(&self, backend: &mut InMemory, key: K, value: V) -> ArconResult<Option<V>> {
+        let key = self.common.get_db_key_with_user_key(&key)?;
+        let storage = backend.get_mut_or_init_empty(&key)?;
+
+        let old = if storage.is_empty() {
+            None
+        } else {
+            Some(V::deserialize_from(
+                &self.common.value_serializer,
+                storage.as_slice(),
+            )?)
+        };
+
+        storage.clear();
+        V::serialize_into(&self.common.value_serializer, storage, &value)?;
+
+        Ok(old)
+    }
+
+    fn insert_all_dyn(
         &self,
         backend: &mut InMemory,
         key_value_pairs: &mut dyn Iterator<Item = (K, V)>,
     ) -> ArconResult<()> {
-        self.put_all(backend, key_value_pairs)
+        self.insert_all(backend, key_value_pairs)
     }
 
-    fn put_all(
+    fn insert_all(
         &self,
         backend: &mut InMemory,
         key_value_pairs: impl IntoIterator<Item = (K, V)>,
@@ -73,7 +92,7 @@ where
         Self: Sized,
     {
         for (k, v) in key_value_pairs.into_iter() {
-            self.put(backend, k, v)?; // TODO: what if one fails? partial insert? should we roll back?
+            self.fast_insert(backend, k, v)?; // TODO: what if one fails? partial insert? should we roll back?
         }
 
         Ok(())
@@ -153,6 +172,12 @@ where
         Ok(Box::new(iter))
     }
 
+    fn len(&self, backend: &InMemory) -> ArconResult<usize> {
+        let prefix = self.common.get_db_key_prefix()?;
+        let count = backend.iter_matching(prefix).count();
+        Ok(count)
+    }
+
     fn is_empty(&self, backend: &InMemory) -> ArconResult<bool> {
         let prefix = self.common.get_db_key_prefix()?;
         Ok(backend.iter_matching(prefix).next().is_none())
@@ -172,9 +197,11 @@ mod test {
         // TODO: &String is weird, maybe look at how it's done with the keys in std hash-map
         assert!(!map_state.contains(&db, &"first key".to_string()).unwrap());
 
-        map_state.put(&mut db, "first key".to_string(), 42).unwrap();
         map_state
-            .put(&mut db, "second key".to_string(), 69)
+            .fast_insert(&mut db, "first key".to_string(), 42)
+            .unwrap();
+        map_state
+            .fast_insert(&mut db, "second key".to_string(), 69)
             .unwrap();
 
         assert!(map_state.contains(&db, &"first key".to_string()).unwrap());
@@ -183,10 +210,16 @@ mod test {
         assert_eq!(map_state.get(&db, &"first key".to_string()).unwrap(), 42);
         assert_eq!(map_state.get(&db, &"second key".to_string()).unwrap(), 69);
 
+        assert_eq!(map_state.len(&db).unwrap(), 2);
+
         let keys: Vec<_> = map_state.keys(&db).unwrap().collect();
 
         assert_eq!(keys.len(), 2);
         assert!(keys.contains(&"first key".to_string()));
         assert!(keys.contains(&"second key".to_string()));
+
+        map_state.clear(&mut db).unwrap();
+        assert_eq!(map_state.len(&db).unwrap(), 0);
+        assert!(map_state.is_empty(&db).unwrap());
     }
 }

@@ -9,7 +9,7 @@ use lz4_compression::prelude::{compress, decompress};
 use serde::*;
 
 #[arcon]
-#[derive(prost::Message, PartialEq, Serialize, Deserialize)]
+#[derive(PartialEq)]
 pub struct SmallStruct {
     #[prost(int64, tag = "1")]
     pub x1: i64,
@@ -30,7 +30,7 @@ impl SmallStruct {
 }
 
 #[arcon]
-#[derive(prost::Message, PartialEq, Serialize, Deserialize)]
+#[derive(PartialEq)]
 pub struct LargeStruct {
     #[prost(int64, tag = "1")]
     pub x1: i64,

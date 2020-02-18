@@ -4,9 +4,8 @@
 use arcon_error::ArconResult;
 use std::any::{type_name, Any, TypeId};
 
-// TODO: figure out if this needs to be Send + Sync
 /// Trait required for all state backend implementations in Arcon
-pub trait StateBackend: Any {
+pub trait StateBackend: Any + Send + Sync {
     fn new(path: &str) -> ArconResult<Self>
     where
         Self: Sized;
@@ -78,7 +77,9 @@ mod test {
                 sb.new_map_state("map", (), (), Bincode, Bincode);
 
             value_state.set(sb, 42).unwrap();
-            map_state.put(sb, 123, "foobar".to_string()).unwrap();
+            map_state
+                .fast_insert(sb, 123, "foobar".to_string())
+                .unwrap();
 
             assert_eq!(value_state.get(sb).unwrap(), 42);
             assert_eq!(map_state.get(sb, &123).unwrap(), "foobar".to_string());

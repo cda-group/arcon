@@ -37,11 +37,8 @@ impl InMemory {
         }
     }
 
-    /// returns how many entries were removed
     pub fn remove_matching(&mut self, prefix: &[u8]) -> ArconResult<()> {
-        let db = &mut self.db;
-        db.retain(|k, _| &k[..prefix.len()] != prefix);
-
+        self.db.retain(|k, _| &k[..prefix.len()] != prefix);
         Ok(())
     }
 
@@ -254,14 +251,18 @@ impl StateBackend for InMemory {
     }
 
     fn checkpoint(&self, _id: &str) -> ArconResult<()> {
-        arcon_err!("InMemory backend snapshotting is not implemented")
+        // TODO: proper logging
+        eprintln!("InMemory backend snapshotting is not implemented");
+        Ok(())
     }
 
-    fn restore(_restore_path: &str, _checkpoint_path: &str) -> ArconResult<Self>
+    fn restore(restore_path: &str, _checkpoint_path: &str) -> ArconResult<Self>
     where
         Self: Sized,
     {
-        arcon_err!("InMemory backend restoring is not implemented")
+        // TODO: proper logging
+        eprintln!("InMemory backend restoring is not implemented");
+        Self::new(restore_path)
     }
 }
 

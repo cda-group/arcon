@@ -7,7 +7,7 @@
 #![allow(bare_trait_objects)]
 extern crate arcon;
 
-use arcon::{macros::*, prelude::*};
+use arcon::{macros::*, prelude::*, state_backend::in_memory::InMemory};
 use std::{
     fs::File,
     io::{BufRead, BufReader, Write},
@@ -15,7 +15,6 @@ use std::{
 use tempfile::NamedTempFile;
 
 #[arcon]
-#[derive(prost::Message)]
 pub struct NormaliseElements {
     #[prost(int64, repeated, tag = "1")]
     pub data: Vec<i64>,
@@ -43,6 +42,7 @@ fn normalise_pipeline_test() {
             vec![4.into()],
             Box::new(Mute::new()),
             Box::new(LocalFileSink::new(&sink_path)),
+            Box::new(InMemory::new("test5").unwrap()),
         )
     });
     system.start(&node_5);
@@ -65,6 +65,7 @@ fn normalise_pipeline_test() {
             vec![3.into()],
             channel_strategy,
             Box::new(Map::<NormaliseElements, i64>::new(&map_fn)),
+            Box::new(InMemory::new("test4").unwrap()),
         )
     });
     system.start(&node_4);
@@ -93,6 +94,7 @@ fn normalise_pipeline_test() {
             Box::new(EventTimeWindowAssigner::<i64, NormaliseElements>::new(
                 window, 3, 3, 0, false,
             )),
+            Box::new(InMemory::new("test3").unwrap()),
         )
     });
     system.start(&node_3);
@@ -111,6 +113,7 @@ fn normalise_pipeline_test() {
             vec![1.into()],
             channel_strategy,
             Box::new(Filter::<i64>::new(&filter_fn)),
+            Box::new(InMemory::new("test2").unwrap()),
         )
     });
     system.start(&node_2);

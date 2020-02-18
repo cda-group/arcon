@@ -15,9 +15,9 @@ macro_rules! erase_backend_type {
     ($t: ident < _ $(, $rest: ident)* >) => {
         // `s` instead of self, because we don't want the method calling syntax for this,
         // because of ambiguities
-        fn erase_backend_type(s: Self) -> Box<dyn $t <dyn StateBackend $(, $rest)*>>
+        fn erase_backend_type(s: Self) -> Box<dyn $t <dyn StateBackend $(, $rest)*> + Send + Sync + 'static>
         where
-            Self: Sized + 'static,
+            Self: Sized + Send + Sync + 'static,
             SB: StateBackend + Sized,
         {
             Box::new(WithDynamicBackend(s, Default::default()))
@@ -92,16 +92,17 @@ pub trait ValueState<SB: ?Sized, IK, N, T>: State<SB, IK, N> {
 
 pub trait MapState<SB: ?Sized, IK, N, K, V>: State<SB, IK, N> {
     fn get(&self, backend: &SB, key: &K) -> ArconResult<V>;
-    fn put(&self, backend: &mut SB, key: K, value: V) -> ArconResult<()>;
+    fn fast_insert(&self, backend: &mut SB, key: K, value: V) -> ArconResult<()>;
+    fn insert(&self, backend: &mut SB, key: K, value: V) -> ArconResult<Option<V>>;
 
     /// key_value_pairs must be a finite iterator!
-    fn put_all_dyn(
+    fn insert_all_dyn(
         &self,
         backend: &mut SB,
         key_value_pairs: &mut dyn Iterator<Item = (K, V)>,
     ) -> ArconResult<()>;
     /// key_value_pairs must be a finite iterator!
-    fn put_all(
+    fn insert_all(
         &self,
         backend: &mut SB,
         key_value_pairs: impl IntoIterator<Item = (K, V)>,
@@ -119,6 +120,7 @@ pub trait MapState<SB: ?Sized, IK, N, K, V>: State<SB, IK, N> {
     fn keys<'a>(&self, backend: &'a SB) -> ArconResult<Box<dyn Iterator<Item = K> + 'a>>;
     fn values<'a>(&self, backend: &'a SB) -> ArconResult<Box<dyn Iterator<Item = V> + 'a>>;
 
+    fn len(&self, backend: &SB) -> ArconResult<usize>;
     fn is_empty(&self, backend: &SB) -> ArconResult<bool>;
 
     erase_backend_type!(MapState<_, IK, N, K, V>);
@@ -134,6 +136,7 @@ pub trait VecState<SB: ?Sized, IK, N, T>: MergingState<SB, IK, N, T, Vec<T>> {
         Self: Sized;
     fn add_all_dyn(&self, backend: &mut SB, values: &mut dyn Iterator<Item = T>)
         -> ArconResult<()>;
+    fn is_empty(&self, backend: &SB) -> ArconResult<bool>;
 
     //        fn len(&self, backend: &SB) -> ArconResult<usize>
     //        where
@@ -239,5 +242,16 @@ static_assertions::assert_obj_safe!(
     VecState<dyn StateBackend, i32, (), i32>,
     AggregatingState<dyn StateBackend, i32, (), i32, String>
 );
+
+pub type BoxedValueState<T, IK = (), N = ()> =
+    Box<dyn ValueState<dyn StateBackend, IK, N, T> + Send + Sync + 'static>;
+pub type BoxedMapState<K, V, IK = (), N = ()> =
+    Box<dyn MapState<dyn StateBackend, IK, N, K, V> + Send + Sync + 'static>;
+pub type BoxedVecState<T, IK = (), N = ()> =
+    Box<dyn VecState<dyn StateBackend, IK, N, T> + Send + Sync + 'static>;
+pub type BoxedReducingState<T, IK = (), N = ()> =
+    Box<dyn ReducingState<dyn StateBackend, IK, N, T> + Send + Sync + 'static>;
+pub type BoxedAggregatingState<IN, OUT, IK = (), N = ()> =
+    Box<dyn AggregatingState<dyn StateBackend, IK, N, IN, OUT> + Send + Sync + 'static>;
 
 mod boilerplate_impls;

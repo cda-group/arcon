@@ -700,7 +700,7 @@ mod state_common {
         ) -> StateCommon<IK, N, KS, TS>
         where
             T: SerializableWith<TS> + DeserializableWith<TS>,
-            F: Fn(&T, &T) -> T + Sync + Send + Clone + 'static,
+            F: Fn(&T, &T) -> T + Send + Sync + Clone + 'static,
             TS: Send + Sync + Clone + 'static,
         {
             let mut opts = common_options(&item_key, &namespace, &key_serializer);

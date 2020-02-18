@@ -135,6 +135,15 @@ where
         self.add_all(backend, values)
     }
 
+    fn is_empty(&self, backend: &RocksDb) -> ArconResult<bool> {
+        let key = self.common.get_db_key_prefix()?;
+        if let Ok(storage) = backend.get(&self.common.cf_name, key) {
+            Ok(storage.is_empty())
+        } else {
+            Ok(true)
+        }
+    }
+
     //    /// for types that don't satisfy the extra bounds, do .get().len()
     //    fn len(&self, backend: &RocksDb) -> ArconResult<usize>
     //    where
@@ -180,6 +189,7 @@ mod test {
     fn vec_state_test() {
         let mut db = TestDb::new();
         let vec_state = db.new_vec_state("test_state", (), (), Bincode, Bincode);
+        assert!(vec_state.is_empty(&db).unwrap());
         //        assert_eq!(vec_state.len(&db).unwrap(), 0);
 
         vec_state.append(&mut db, 1).unwrap();

@@ -19,7 +19,7 @@ pub fn arcon(metadata: TokenStream, input: TokenStream) -> TokenStream {
 
         let output: proc_macro2::TokenStream = {
             quote! {
-                #[derive(Clone, Abomonation)]
+                #[derive(Clone, ::abomonation_derive::Abomonation, ::serde::Serialize, ::serde::Deserialize, ::prost::Message)]
                 #item
                 impl #impl_generics ArconType for #name #ty_generics #where_clause {}
             }

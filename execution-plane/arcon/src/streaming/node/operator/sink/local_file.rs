@@ -74,13 +74,14 @@ mod tests {
                 vec![node_id],
                 mute_strategy::<i32>(),
                 Box::new(LocalFileSink::new(&file_path)),
+                Box::new(InMemory::new("test").unwrap()),
             )
         });
         system.start(&sink_comp);
-        let input_one = ArconMessage::element(6 as i32, None, node_id);
-        let input_two = ArconMessage::element(2 as i32, None, node_id);
-        let input_three = ArconMessage::element(15 as i32, None, node_id);
-        let input_four = ArconMessage::element(30 as i32, None, node_id);
+        let input_one = ArconMessage::element(6i32, None, node_id);
+        let input_two = ArconMessage::element(2i32, None, node_id);
+        let input_three = ArconMessage::element(15i32, None, node_id);
+        let input_four = ArconMessage::element(30i32, None, node_id);
 
         let target_ref: ActorRefStrong<ArconMessage<i32>> =
             sink_comp.actor_ref().hold().expect("Failed to fetch");

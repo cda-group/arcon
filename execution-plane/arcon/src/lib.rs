@@ -66,6 +66,12 @@ pub mod prelude {
     #[cfg(feature = "thread_pinning")]
     pub use kompact::{get_core_ids, CoreId};
     pub use slog::*;
+
+    #[cfg(feature = "arcon_rocksdb")]
+    pub use crate::state_backend::rocks::RocksDb;
+    pub use crate::state_backend::{
+        builders::*, in_memory::InMemory, state_types::*, StateBackend,
+    };
 }
 
 #[cfg(test)]
@@ -76,7 +82,6 @@ mod tests {
     #[key_by(id)]
     #[arcon_decoder(,)]
     #[arcon]
-    #[derive(prost::Message)]
     pub struct Item {
         #[prost(uint64, tag = "1")]
         id: u64,

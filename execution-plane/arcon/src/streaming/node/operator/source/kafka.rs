@@ -247,7 +247,6 @@ mod tests {
     use std::{thread, time};
 
     #[arcon]
-    #[derive(prost::Message, ::serde::Serialize, ::serde::Deserialize)]
     pub struct Thing {
         #[prost(uint32, tag = "1")]
         pub id: u32,
@@ -256,7 +255,6 @@ mod tests {
     }
 
     #[arcon]
-    #[derive(prost::Message, ::serde::Serialize, ::serde::Deserialize)]
     struct Point {
         #[prost(float, tag = "1")]
         x: f32,
@@ -312,6 +310,7 @@ mod tests {
                 vec![0.into()],
                 Box::new(Mute::new()),
                 Box::new(kafka_sink),
+                Box::new(InMemory::new("test").unwrap()),
             )
         });
 
