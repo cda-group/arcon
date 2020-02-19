@@ -4,7 +4,7 @@
 pub mod debug;
 pub mod operator;
 
-use crate::{prelude::*, state_backend::serialization::Bincode};
+use crate::prelude::*;
 pub use debug::DebugNode;
 use std::iter;
 
@@ -42,10 +42,9 @@ where
         operator: Box<dyn Operator<IN, OUT> + Send>,
         mut state_backend: Box<dyn StateBackend>,
     ) -> Node<IN, OUT> {
-        // TODO: hardcoded Bincode ser/de
+        // TODO: hardcoded Bincode serializers (via state_backend.build API)
         // Initiate our watermarks
-        let watermarks: BoxedMapState<NodeID, Watermark> =
-            state_backend.new_map_state("__node_watermarks", (), (), Bincode, Bincode);
+        let watermarks = state_backend.build("__node_watermarks").map();
 
         for channel in &in_channels {
             if !watermarks
@@ -58,8 +57,7 @@ where
             }
         }
 
-        let current_watermark =
-            state_backend.new_value_state("__node_current_watermark", (), (), Bincode, Bincode);
+        let current_watermark = state_backend.build("__node_current_watermark").value();
         if let Err(e) = current_watermark.get(&*state_backend) {
             if e.to_string().contains("Value not found") {
                 current_watermark
@@ -68,8 +66,7 @@ where
             }
         }
 
-        let current_epoch =
-            state_backend.new_value_state("__node_current_epoch", (), (), Bincode, Bincode);
+        let current_epoch = state_backend.build("__node_current_epoch").value();
         if let Err(e) = current_epoch.get(&*state_backend) {
             if e.to_string().contains("Value not found") {
                 current_epoch
@@ -87,20 +84,8 @@ where
             watermarks,
             current_watermark,
             current_epoch,
-            blocked_channels: state_backend.new_map_state(
-                "__node_blocked_channels",
-                (),
-                (),
-                Bincode,
-                Bincode,
-            ),
-            message_buffer: state_backend.new_vec_state(
-                "__node_message_buffer",
-                (),
-                (),
-                Bincode,
-                Bincode,
-            ),
+            blocked_channels: state_backend.build("__node_blocked_channels").map(),
+            message_buffer: state_backend.build("__node_message_buffer").vec(),
             state_backend,
         }
     }

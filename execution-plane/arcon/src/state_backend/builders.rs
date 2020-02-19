@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::state_backend::{
-    serialization::{DeserializableWith, SerializableFixedSizeWith, SerializableWith},
+    serialization::{Bincode, DeserializableWith, SerializableFixedSizeWith, SerializableWith},
     state_types::{AggregatingState, Aggregator, MapState, ReducingState, ValueState, VecState},
     StateBackend,
 };
@@ -176,4 +176,253 @@ impl_dynamic_builder! {
         KS: Send + Sync + Clone + 'static,
         TS: Send + Sync + Clone + 'static,
     }; new_aggregating_state extra: (aggregator: AGG)
+}
+
+/// Convenient high-level builder for States. Assumes no special item key nor namespace and Bincode
+/// for all the serializers by default.
+pub struct StateBuilder<'n, 'b, SB: ?Sized, IK, N, KS, TS> {
+    name: &'n str,
+    state_backend: &'b mut SB,
+    init_item_key: IK,
+    init_namespace: N,
+    key_serializer: KS,
+    value_serializer: TS,
+}
+
+// 200 lines of boilerplate ;_;
+impl<'n, 'b, SB: ?Sized, IK, N, KS, TS> StateBuilder<'n, 'b, SB, IK, N, KS, TS> {
+    pub fn with_init_item_key<NIK>(
+        self,
+        init_item_key: NIK,
+    ) -> StateBuilder<'n, 'b, SB, NIK, N, KS, TS> {
+        let StateBuilder {
+            name,
+            state_backend,
+            init_namespace,
+            key_serializer,
+            value_serializer,
+            ..
+        } = self;
+        StateBuilder {
+            name,
+            state_backend,
+            init_item_key,
+            init_namespace,
+            key_serializer,
+            value_serializer,
+        }
+    }
+
+    pub fn with_init_namespace<NN>(
+        self,
+        init_namespace: NN,
+    ) -> StateBuilder<'n, 'b, SB, IK, NN, KS, TS> {
+        let StateBuilder {
+            name,
+            state_backend,
+            init_item_key,
+            key_serializer,
+            value_serializer,
+            ..
+        } = self;
+        StateBuilder {
+            name,
+            state_backend,
+            init_item_key,
+            init_namespace,
+            key_serializer,
+            value_serializer,
+        }
+    }
+
+    pub fn with_key_serializer<NKS>(
+        self,
+        key_serializer: NKS,
+    ) -> StateBuilder<'n, 'b, SB, IK, N, NKS, TS> {
+        let StateBuilder {
+            name,
+            state_backend,
+            init_item_key,
+            init_namespace,
+            value_serializer,
+            ..
+        } = self;
+        StateBuilder {
+            name,
+            state_backend,
+            init_item_key,
+            init_namespace,
+            key_serializer,
+            value_serializer,
+        }
+    }
+
+    pub fn with_value_serializer<NTS>(
+        self,
+        value_serializer: NTS,
+    ) -> StateBuilder<'n, 'b, SB, IK, N, KS, NTS> {
+        let StateBuilder {
+            name,
+            state_backend,
+            init_item_key,
+            init_namespace,
+            key_serializer,
+            ..
+        } = self;
+        StateBuilder {
+            name,
+            state_backend,
+            init_item_key,
+            init_namespace,
+            key_serializer,
+            value_serializer,
+        }
+    }
+
+    pub fn value<T>(self) -> SB::Type
+    where
+        SB: ValueStateBuilder<IK, N, T, KS, TS>,
+    {
+        let StateBuilder {
+            name,
+            state_backend,
+            init_item_key,
+            init_namespace,
+            key_serializer,
+            value_serializer,
+        } = self;
+        state_backend.new_value_state(
+            name,
+            init_item_key,
+            init_namespace,
+            key_serializer,
+            value_serializer,
+        )
+    }
+
+    pub fn map<K, V>(self) -> SB::Type
+    where
+        SB: MapStateBuilder<IK, N, K, V, KS, TS>,
+    {
+        let StateBuilder {
+            name,
+            state_backend,
+            init_item_key,
+            init_namespace,
+            key_serializer,
+            value_serializer,
+        } = self;
+        state_backend.new_map_state(
+            name,
+            init_item_key,
+            init_namespace,
+            key_serializer,
+            value_serializer,
+        )
+    }
+
+    pub fn vec<T>(self) -> SB::Type
+    where
+        SB: VecStateBuilder<IK, N, T, KS, TS>,
+    {
+        let StateBuilder {
+            name,
+            state_backend,
+            init_item_key,
+            init_namespace,
+            key_serializer,
+            value_serializer,
+        } = self;
+        state_backend.new_vec_state(
+            name,
+            init_item_key,
+            init_namespace,
+            key_serializer,
+            value_serializer,
+        )
+    }
+
+    pub fn reducing<T, F>(self, reduce_fn: F) -> SB::Type
+    where
+        SB: ReducingStateBuilder<IK, N, T, F, KS, TS>,
+    {
+        let StateBuilder {
+            name,
+            state_backend,
+            init_item_key,
+            init_namespace,
+            key_serializer,
+            value_serializer,
+        } = self;
+        state_backend.new_reducing_state(
+            name,
+            init_item_key,
+            init_namespace,
+            reduce_fn,
+            key_serializer,
+            value_serializer,
+        )
+    }
+
+    pub fn aggregating<T, AGG>(self, aggregator: AGG) -> SB::Type
+    where
+        SB: AggregatingStateBuilder<IK, N, T, AGG, KS, TS>,
+        AGG: Aggregator<T>,
+    {
+        let StateBuilder {
+            name,
+            state_backend,
+            init_item_key,
+            init_namespace,
+            key_serializer,
+            value_serializer,
+        } = self;
+        state_backend.new_aggregating_state(
+            name,
+            init_item_key,
+            init_namespace,
+            aggregator,
+            key_serializer,
+            value_serializer,
+        )
+    }
+}
+
+pub trait StateBackendExt {
+    fn build<'b, 'n>(
+        &'b mut self,
+        name: &'n str,
+    ) -> StateBuilder<'n, 'b, Self, (), (), Bincode, Bincode> {
+        StateBuilder {
+            name,
+            state_backend: self,
+            init_item_key: (),
+            init_namespace: (),
+            key_serializer: Bincode,
+            value_serializer: Bincode,
+        }
+    }
+}
+
+impl<T: StateBackend> StateBackendExt for T {}
+impl StateBackendExt for dyn StateBackend {}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::state_backend::in_memory::InMemory;
+
+    #[test]
+    fn test_by_value_state_backend() {
+        let mut sb = InMemory::new("test").unwrap();
+        let value = sb.build("test_state").value();
+        value.set(&mut sb, 42).unwrap();
+    }
+
+    #[test]
+    fn test_dynamic_state_backend() {
+        let mut sb: Box<dyn StateBackend> = Box::new(InMemory::new("test").unwrap());
+        let value = sb.build("test_state").value();
+        value.set(&mut *sb, 42).unwrap();
+    }
 }
