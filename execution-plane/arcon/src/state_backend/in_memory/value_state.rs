@@ -5,22 +5,22 @@ use crate::{
     prelude::ArconResult,
     state_backend::{
         in_memory::{InMemory, StateCommon},
-        serialization::{DeserializableWith, SerializableFixedSizeWith, SerializableWith},
+        serialization::SerializableFixedSizeWith,
         state_types::{State, ValueState},
     },
 };
+use smallbox::SmallBox;
 use std::marker::PhantomData;
 
-pub struct InMemoryValueState<IK, N, T, KS, TS> {
-    pub(crate) common: StateCommon<IK, N, KS, TS>,
+pub struct InMemoryValueState<IK, N, T, KS> {
+    pub(crate) common: StateCommon<IK, N, KS>,
     pub(crate) _phantom: PhantomData<T>,
 }
 
-impl<IK, N, T, KS, TS> State<InMemory, IK, N> for InMemoryValueState<IK, N, T, KS, TS>
+impl<IK, N, T, KS> State<InMemory, IK, N> for InMemoryValueState<IK, N, T, KS>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    T: SerializableWith<TS>,
 {
     fn clear(&self, backend: &mut InMemory) -> ArconResult<()> {
         let key = self.common.get_db_key_prefix()?;
@@ -31,23 +31,26 @@ where
     delegate_key_and_namespace!(common);
 }
 
-impl<IK, N, T, KS, TS> ValueState<InMemory, IK, N, T> for InMemoryValueState<IK, N, T, KS, TS>
+impl<IK, N, T, KS> ValueState<InMemory, IK, N, T> for InMemoryValueState<IK, N, T, KS>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    T: SerializableWith<TS> + DeserializableWith<TS>,
+    T: Send + Sync + Clone + 'static,
 {
     fn get(&self, backend: &InMemory) -> ArconResult<T> {
         let key = self.common.get_db_key_prefix()?;
-        let serialized = backend.get(&key)?;
-        let value = T::deserialize(&self.common.value_serializer, &serialized)?;
+        let dynamic = backend.get(&key)?;
+        let value = dynamic
+            .downcast_ref::<T>()
+            .ok_or_else(|| arcon_err_kind!("Dynamic value has a wrong type!"))?
+            .clone();
         Ok(value)
     }
 
     fn set(&self, backend: &mut InMemory, new_value: T) -> ArconResult<()> {
         let key = self.common.get_db_key_prefix()?;
-        let serialized = T::serialize(&self.common.value_serializer, &new_value)?;
-        backend.put(key, serialized)?;
+        let dynamic = SmallBox::new(new_value);
+        backend.put(key, dynamic)?;
         Ok(())
     }
 }

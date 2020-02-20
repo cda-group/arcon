@@ -30,7 +30,7 @@ uuid = "0.8"
 static_assertions = "1.1.0"
 bincode = "1.2.1"
 itertools = "0.8.2"
-inventory = "0.1.5"
+smallbox = { version = "0.8", features = ["coerce"] }
 
 # Logging
 slog = "2.2"

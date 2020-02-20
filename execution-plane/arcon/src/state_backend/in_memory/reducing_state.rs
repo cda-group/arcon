@@ -5,19 +5,20 @@ use crate::{
     prelude::ArconResult,
     state_backend::{
         in_memory::{InMemory, StateCommon},
-        serialization::{DeserializableWith, SerializableFixedSizeWith, SerializableWith},
+        serialization::SerializableFixedSizeWith,
         state_types::{AppendingState, MergingState, ReducingState, State},
     },
 };
+use smallbox::SmallBox;
 use std::marker::PhantomData;
 
-pub struct InMemoryReducingState<IK, N, T, F, KS, TS> {
-    pub(crate) common: StateCommon<IK, N, KS, TS>,
+pub struct InMemoryReducingState<IK, N, T, F, KS> {
+    pub(crate) common: StateCommon<IK, N, KS>,
     pub(crate) reduce_fn: F,
     pub(crate) _phantom: PhantomData<T>,
 }
 
-impl<IK, N, T, F, KS, TS> State<InMemory, IK, N> for InMemoryReducingState<IK, N, T, F, KS, TS>
+impl<IK, N, T, F, KS> State<InMemory, IK, N> for InMemoryReducingState<IK, N, T, F, KS>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
@@ -31,59 +32,58 @@ where
     delegate_key_and_namespace!(common);
 }
 
-impl<IK, N, T, F, KS, TS> AppendingState<InMemory, IK, N, T, T>
-    for InMemoryReducingState<IK, N, T, F, KS, TS>
+impl<IK, N, T, F, KS> AppendingState<InMemory, IK, N, T, T>
+    for InMemoryReducingState<IK, N, T, F, KS>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    T: SerializableWith<TS> + DeserializableWith<TS>,
+    T: Send + Sync + Clone + 'static,
     F: Fn(&T, &T) -> T,
 {
     fn get(&self, backend: &InMemory) -> ArconResult<T> {
         let key = self.common.get_db_key_prefix()?;
-        let storage = backend.get(&key)?;
-        let value = T::deserialize(&self.common.value_serializer, storage)?;
+        let dynamic = backend.get(&key)?;
+        let value = dynamic
+            .downcast_ref::<T>()
+            .ok_or_else(|| arcon_err_kind!("Dynamic value has a wrong type!"))?
+            .clone();
 
         Ok(value)
     }
 
     fn append(&self, backend: &mut InMemory, value: T) -> ArconResult<()> {
         let key = self.common.get_db_key_prefix()?;
-        let storage = backend.get_mut_or_init_empty(&key)?;
-        if storage.is_empty() {
-            T::serialize_into(&self.common.value_serializer, storage, &value)?;
-            return Ok(());
+        match backend.get_mut(&key) {
+            // TODO: only handle value not found
+            Err(_) => {
+                backend.put(key, SmallBox::new(value))?;
+            }
+            Ok(dynamic) => {
+                let old = dynamic
+                    .downcast_mut::<T>()
+                    .ok_or_else(|| arcon_err_kind!("Dynamic value has a wrong type!"))?;
+                *old = (self.reduce_fn)(old, &value);
+            }
         }
-
-        let old_value = T::deserialize(&self.common.value_serializer, storage)?;
-
-        let new_value = (self.reduce_fn)(&old_value, &value);
-        T::serialize_into(
-            &self.common.value_serializer,
-            storage.as_mut_slice(),
-            &new_value,
-        )?;
 
         Ok(())
     }
 }
 
-impl<IK, N, T, F, KS, TS> MergingState<InMemory, IK, N, T, T>
-    for InMemoryReducingState<IK, N, T, F, KS, TS>
+impl<IK, N, T, F, KS> MergingState<InMemory, IK, N, T, T> for InMemoryReducingState<IK, N, T, F, KS>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    T: SerializableWith<TS> + DeserializableWith<TS>,
+    T: Send + Sync + Clone + 'static,
     F: Fn(&T, &T) -> T,
 {
 }
 
-impl<IK, N, T, F, KS, TS> ReducingState<InMemory, IK, N, T>
-    for InMemoryReducingState<IK, N, T, F, KS, TS>
+impl<IK, N, T, F, KS> ReducingState<InMemory, IK, N, T> for InMemoryReducingState<IK, N, T, F, KS>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    T: SerializableWith<TS> + DeserializableWith<TS>,
+    T: Send + Sync + Clone + 'static,
     F: Fn(&T, &T) -> T,
 {
 }

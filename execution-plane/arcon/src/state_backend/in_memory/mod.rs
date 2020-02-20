@@ -13,27 +13,29 @@ use crate::state_backend::{
     ValueStateBuilder, VecStateBuilder,
 };
 use arcon_error::*;
-use std::{collections::HashMap, fmt::Debug};
+use smallbox::{space, SmallBox};
+use std::{any::Any, collections::HashMap, fmt::Debug};
 use uuid::Uuid;
 
+// we'll store values of size up to 8 * size_of::<usize>() inline
+type Value = SmallBox<dyn Any + Send + Sync, space::S8>;
+
 pub struct InMemory {
-    db: HashMap<Vec<u8>, Vec<u8>>,
+    db: HashMap<Vec<u8>, Value>,
 }
 
 impl InMemory {
-    fn new_state_common<IK, N, KS, TS>(
+    fn new_state_common<IK, N, KS>(
         &self,
         item_key: IK,
         namespace: N,
         key_serializer: KS,
-        value_serializer: TS,
-    ) -> StateCommon<IK, N, KS, TS> {
+    ) -> StateCommon<IK, N, KS> {
         StateCommon {
             id: Uuid::new_v4(),
             item_key,
             namespace,
             key_serializer,
-            value_serializer,
         }
     }
 
@@ -45,12 +47,12 @@ impl InMemory {
     pub fn iter_matching(
         &self,
         prefix: impl AsRef<[u8]> + Debug,
-    ) -> impl Iterator<Item = (&[u8], &[u8])> {
+    ) -> impl Iterator<Item = (&[u8], &(dyn Any + Send + Sync))> {
         self.db.iter().filter_map(move |(k, v)| {
             if &k[..prefix.as_ref().len()] != prefix.as_ref() {
                 return None;
             }
-            Some((k.as_slice(), v.as_slice()))
+            Some((k.as_slice(), &**v))
         })
     }
 
@@ -58,15 +60,15 @@ impl InMemory {
         Ok(self.db.contains_key(key))
     }
 
-    pub fn get(&self, key: &[u8]) -> ArconResult<&[u8]> {
+    pub fn get(&self, key: &[u8]) -> ArconResult<&dyn Any> {
         if let Some(data) = self.db.get(key) {
-            Ok(&*data)
+            Ok(&**data)
         } else {
             return arcon_err!("Value not found");
         }
     }
 
-    pub fn get_mut(&mut self, key: &[u8]) -> ArconResult<&mut Vec<u8>> {
+    pub fn get_mut(&mut self, key: &[u8]) -> ArconResult<&mut Value> {
         if let Some(data) = self.db.get_mut(key) {
             Ok(data)
         } else {
@@ -74,11 +76,15 @@ impl InMemory {
         }
     }
 
-    pub fn get_mut_or_init_empty(&mut self, key: &[u8]) -> ArconResult<&mut Vec<u8>> {
-        Ok(self.db.entry(key.to_vec()).or_insert_with(|| vec![]))
+    pub fn get_mut_or_insert(
+        &mut self,
+        key: Vec<u8>,
+        new_value_factory: impl Fn() -> Value,
+    ) -> &mut Value {
+        self.db.entry(key).or_insert_with(new_value_factory)
     }
 
-    fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> ArconResult<()> {
+    fn put(&mut self, key: Vec<u8>, value: Value) -> ArconResult<()> {
         self.db.insert(key, value);
         Ok(())
     }
@@ -95,9 +101,9 @@ impl<IK, N, T, KS, TS> ValueStateBuilder<IK, N, T, KS, TS> for InMemory
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    T: SerializableWith<TS> + DeserializableWith<TS>,
+    T: Send + Sync + Clone + 'static,
 {
-    type Type = InMemoryValueState<IK, N, T, KS, TS>;
+    type Type = InMemoryValueState<IK, N, T, KS>;
 
     fn new_value_state(
         &mut self,
@@ -105,14 +111,9 @@ where
         init_item_key: IK,
         init_namespace: N,
         key_serializer: KS,
-        value_serializer: TS,
+        _value_serializer: TS,
     ) -> Self::Type {
-        let common = self.new_state_common(
-            init_item_key,
-            init_namespace,
-            key_serializer,
-            value_serializer,
-        );
+        let common = self.new_state_common(init_item_key, init_namespace, key_serializer);
         InMemoryValueState {
             common,
             _phantom: Default::default(),
@@ -125,11 +126,11 @@ where
     IK: SerializableFixedSizeWith<KS> + DeserializableWith<KS>,
     N: SerializableFixedSizeWith<KS> + DeserializableWith<KS>,
     K: SerializableWith<KS> + DeserializableWith<KS>,
-    V: SerializableWith<TS> + DeserializableWith<TS>,
+    V: Send + Sync + Clone + 'static,
     KS: Clone + 'static,
     TS: Clone + 'static,
 {
-    type Type = InMemoryMapState<IK, N, K, V, KS, TS>;
+    type Type = InMemoryMapState<IK, N, K, V, KS>;
 
     fn new_map_state(
         &mut self,
@@ -137,14 +138,9 @@ where
         init_item_key: IK,
         init_namespace: N,
         key_serializer: KS,
-        value_serializer: TS,
+        _value_serializer: TS,
     ) -> Self::Type {
-        let common = self.new_state_common(
-            init_item_key,
-            init_namespace,
-            key_serializer,
-            value_serializer,
-        );
+        let common = self.new_state_common(init_item_key, init_namespace, key_serializer);
         InMemoryMapState {
             common,
             _phantom: Default::default(),
@@ -156,9 +152,9 @@ impl<IK, N, T, KS, TS> VecStateBuilder<IK, N, T, KS, TS> for InMemory
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    T: SerializableWith<TS> + DeserializableWith<TS>,
+    T: Send + Sync + Clone + 'static,
 {
-    type Type = InMemoryVecState<IK, N, T, KS, TS>;
+    type Type = InMemoryVecState<IK, N, T, KS>;
 
     fn new_vec_state(
         &mut self,
@@ -166,14 +162,9 @@ where
         init_item_key: IK,
         init_namespace: N,
         key_serializer: KS,
-        value_serializer: TS,
+        _value_serializer: TS,
     ) -> Self::Type {
-        let common = self.new_state_common(
-            init_item_key,
-            init_namespace,
-            key_serializer,
-            value_serializer,
-        );
+        let common = self.new_state_common(init_item_key, init_namespace, key_serializer);
         InMemoryVecState {
             common,
             _phantom: Default::default(),
@@ -185,10 +176,10 @@ impl<IK, N, T, F, KS, TS> ReducingStateBuilder<IK, N, T, F, KS, TS> for InMemory
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    T: SerializableWith<TS> + DeserializableWith<TS>,
+    T: Send + Sync + Clone + 'static,
     F: Fn(&T, &T) -> T,
 {
-    type Type = InMemoryReducingState<IK, N, T, F, KS, TS>;
+    type Type = InMemoryReducingState<IK, N, T, F, KS>;
 
     fn new_reducing_state(
         &mut self,
@@ -197,14 +188,9 @@ where
         init_namespace: N,
         reduce_fn: F,
         key_serializer: KS,
-        value_serializer: TS,
+        _value_serializer: TS,
     ) -> Self::Type {
-        let common = self.new_state_common(
-            init_item_key,
-            init_namespace,
-            key_serializer,
-            value_serializer,
-        );
+        let common = self.new_state_common(init_item_key, init_namespace, key_serializer);
         InMemoryReducingState {
             common,
             reduce_fn,
@@ -218,9 +204,9 @@ where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
     AGG: Aggregator<T>,
-    AGG::Accumulator: SerializableWith<TS> + DeserializableWith<TS>,
+    AGG::Accumulator: Send + Sync + Clone + 'static,
 {
-    type Type = InMemoryAggregatingState<IK, N, T, AGG, KS, TS>;
+    type Type = InMemoryAggregatingState<IK, N, T, AGG, KS>;
 
     fn new_aggregating_state(
         &mut self,
@@ -229,14 +215,9 @@ where
         init_namespace: N,
         aggregator: AGG,
         key_serializer: KS,
-        value_serializer: TS,
+        _value_serializer: TS,
     ) -> Self::Type {
-        let common = self.new_state_common(
-            init_item_key,
-            init_namespace,
-            key_serializer,
-            value_serializer,
-        );
+        let common = self.new_state_common(init_item_key, init_namespace, key_serializer);
         InMemoryAggregatingState {
             common,
             aggregator,
@@ -266,15 +247,14 @@ impl StateBackend for InMemory {
     }
 }
 
-pub(crate) struct StateCommon<IK, N, KS, TS> {
+pub(crate) struct StateCommon<IK, N, KS> {
     id: Uuid,
     item_key: IK,
     namespace: N,
     key_serializer: KS,
-    value_serializer: TS,
 }
 
-impl<IK, N, KS, TS> StateCommon<IK, N, KS, TS>
+impl<IK, N, KS> StateCommon<IK, N, KS>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
@@ -317,11 +297,14 @@ mod test {
     fn in_mem_test() {
         let mut db = InMemory::new("test").unwrap();
         let key = "key";
-        let value = "hej";
-        db.put(key.to_string().into_bytes(), value.to_string().into_bytes())
+        let value = "hej".to_string();
+        db.put(key.to_string().into_bytes(), SmallBox::new(value.clone()))
             .unwrap();
         let fetched = db.get(key.as_bytes()).unwrap();
-        assert_eq!(value, String::from_utf8_lossy(fetched));
+        assert_eq!(
+            &value,
+            fetched.downcast_ref::<String>().expect("Wrong type")
+        );
         db.remove(key.as_bytes()).unwrap();
         let res = db.get(key.as_bytes());
         assert!(res.is_err());
@@ -337,7 +320,6 @@ mod test {
             item_key: 42,
             namespace: 255,
             key_serializer: Bincode,
-            value_serializer: Bincode,
         };
 
         let v = state.get_db_key_prefix().unwrap();

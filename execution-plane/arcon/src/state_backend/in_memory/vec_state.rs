@@ -5,19 +5,20 @@ use crate::{
     prelude::ArconResult,
     state_backend::{
         in_memory::{InMemory, StateCommon},
-        serialization::{DeserializableWith, SerializableFixedSizeWith, SerializableWith},
+        serialization::SerializableFixedSizeWith,
         state_types::{AppendingState, MergingState, State, VecState},
     },
 };
 //use error::ErrorKind;
+use smallbox::SmallBox;
 use std::marker::PhantomData;
 
-pub struct InMemoryVecState<IK, N, T, KS, TS> {
-    pub(crate) common: StateCommon<IK, N, KS, TS>,
+pub struct InMemoryVecState<IK, N, T, KS> {
+    pub(crate) common: StateCommon<IK, N, KS>,
     pub(crate) _phantom: PhantomData<T>,
 }
 
-impl<IK, N, T, KS, TS> State<InMemory, IK, N> for InMemoryVecState<IK, N, T, KS, TS>
+impl<IK, N, T, KS> State<InMemory, IK, N> for InMemoryVecState<IK, N, T, KS>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
@@ -31,58 +32,53 @@ where
     delegate_key_and_namespace!(common);
 }
 
-impl<IK, N, T, KS, TS> AppendingState<InMemory, IK, N, T, Vec<T>>
-    for InMemoryVecState<IK, N, T, KS, TS>
+impl<IK, N, T, KS> AppendingState<InMemory, IK, N, T, Vec<T>> for InMemoryVecState<IK, N, T, KS>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    T: SerializableWith<TS> + DeserializableWith<TS>,
+    T: Send + Sync + Clone + 'static,
 {
     fn get(&self, backend: &InMemory) -> ArconResult<Vec<T>> {
         let key = self.common.get_db_key_prefix()?;
-        let serialized = backend.get(&key)?;
+        let dynamic = backend.get(&key)?;
 
-        // cursor is updated in the loop to point at the yet unconsumed part of the serialized data
-        let mut cursor = &serialized[..];
-        let mut res = vec![];
-        while !cursor.is_empty() {
-            let val = T::deserialize_from(&self.common.value_serializer, &mut cursor)?;
-            res.push(val);
-        }
+        let vec = dynamic
+            .downcast_ref::<Vec<T>>()
+            .ok_or_else(|| arcon_err_kind!("Dynamic value has a wrong type!"))?
+            .clone();
 
-        Ok(res)
+        Ok(vec)
     }
 
     fn append(&self, backend: &mut InMemory, value: T) -> ArconResult<()> {
         let key = self.common.get_db_key_prefix()?;
-        let storage = backend.get_mut_or_init_empty(&key)?;
+        let storage = backend.get_mut_or_insert(key, || SmallBox::new(Vec::<T>::new()));
+        let vec = storage
+            .downcast_mut::<Vec<T>>()
+            .ok_or_else(|| arcon_err_kind!("Dynamic value has a wrong type!"))?;
 
-        T::serialize_into(&self.common.value_serializer, storage, &value)
+        vec.push(value);
+        Ok(())
     }
 }
 
-impl<IK, N, T, KS, TS> MergingState<InMemory, IK, N, T, Vec<T>>
-    for InMemoryVecState<IK, N, T, KS, TS>
+impl<IK, N, T, KS> MergingState<InMemory, IK, N, T, Vec<T>> for InMemoryVecState<IK, N, T, KS>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    T: SerializableWith<TS> + DeserializableWith<TS>,
+    T: Send + Sync + Clone + 'static,
 {
 }
 
-impl<IK, N, T, KS, TS> VecState<InMemory, IK, N, T> for InMemoryVecState<IK, N, T, KS, TS>
+impl<IK, N, T, KS> VecState<InMemory, IK, N, T> for InMemoryVecState<IK, N, T, KS>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    T: SerializableWith<TS> + DeserializableWith<TS>,
+    T: Send + Sync + Clone + 'static,
 {
     fn set(&self, backend: &mut InMemory, value: Vec<T>) -> ArconResult<()> {
         let key = self.common.get_db_key_prefix()?;
-        let mut storage = vec![];
-        for elem in value {
-            T::serialize_into(&self.common.value_serializer, &mut storage, &elem)?;
-        }
-        backend.put(key, storage)
+        backend.put(key, SmallBox::new(value))
     }
 
     fn add_all(
@@ -94,11 +90,12 @@ where
         Self: Sized,
     {
         let key = self.common.get_db_key_prefix()?;
-        let mut storage = backend.get_mut_or_init_empty(&key)?;
+        let dynamic = backend.get_mut_or_insert(key, || SmallBox::new(Vec::<T>::new()));
+        let vec = dynamic
+            .downcast_mut::<Vec<T>>()
+            .ok_or_else(|| arcon_err_kind!("Dynamic value has a wrong type!"))?;
 
-        for value in values {
-            T::serialize_into(&self.common.value_serializer, &mut storage, &value)?;
-        }
+        vec.extend(values);
 
         Ok(())
     }
@@ -113,8 +110,11 @@ where
 
     fn is_empty(&self, backend: &InMemory) -> ArconResult<bool> {
         let key = self.common.get_db_key_prefix()?;
-        if let Ok(storage) = backend.get(&key) {
-            Ok(storage.is_empty())
+        if let Ok(dynamic) = backend.get(&key) {
+            Ok(dynamic
+                .downcast_ref::<Vec<T>>()
+                .ok_or_else(|| arcon_err_kind!("Dynamic value has a wrong type!"))?
+                .is_empty())
         } else {
             Ok(true)
         }

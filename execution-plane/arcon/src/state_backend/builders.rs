@@ -78,7 +78,7 @@ impl_dynamic_builder! {
     ValueStateBuilder<IK, N, T, KS, TS> builds ValueState<_, IK, N, T> where {
         IK: SerializableFixedSizeWith<KS> + Send + Sync + 'static,
         N: SerializableFixedSizeWith<KS> + Send + Sync + 'static,
-        T: SerializableWith<TS> + DeserializableWith<TS> + Send + Sync + 'static,
+        T: SerializableWith<TS> + DeserializableWith<TS> + Send + Sync + Clone + 'static,
         KS: Send + Sync + 'static,
         TS: Send + Sync + 'static,
     }; new_value_state
@@ -101,7 +101,7 @@ impl_dynamic_builder! {
         IK: SerializableFixedSizeWith<KS> + DeserializableWith<KS> + Send + Sync + 'static,
         N: SerializableFixedSizeWith<KS> + DeserializableWith<KS> + Send + Sync + 'static,
         K: SerializableWith<KS> + DeserializableWith<KS> + Send + Sync + 'static,
-        V: SerializableWith<TS> + DeserializableWith<TS> + Send + Sync + 'static,
+        V: SerializableWith<TS> + DeserializableWith<TS> + Send + Sync + Clone +'static,
         KS: Clone + Send + Sync + 'static,
         TS: Clone + Send + Sync + 'static,
     }; new_map_state
@@ -123,7 +123,7 @@ impl_dynamic_builder! {
     VecStateBuilder<IK, N, T, KS, TS> builds VecState<_, IK, N, T> where {
         IK: SerializableFixedSizeWith<KS> + Send + Sync + 'static,
         N: SerializableFixedSizeWith<KS> + Send + Sync + 'static,
-        T: SerializableWith<TS> + DeserializableWith<TS> + Send + Sync + 'static,
+        T: SerializableWith<TS> + DeserializableWith<TS> + Send + Sync + Clone + 'static,
         KS: Send + Sync + 'static,
         TS: Send + Sync + 'static,
     }; new_vec_state
@@ -146,7 +146,7 @@ impl_dynamic_builder! {
     ReducingStateBuilder<IK, N, T, F, KS, TS> builds ReducingState<_, IK, N, T> where {
         IK: SerializableFixedSizeWith<KS> + Send + Sync + 'static,
         N: SerializableFixedSizeWith<KS> + Send + Sync + 'static,
-        T: SerializableWith<TS> + DeserializableWith<TS> + Send + Sync + 'static,
+        T: SerializableWith<TS> + DeserializableWith<TS> + Send + Sync + Clone + 'static,
         KS: Send + Sync + Clone + 'static,
         TS: Send + Sync + Clone + 'static,
         F: Fn(&T, &T) -> T + Send + Sync + Clone + 'static
@@ -171,7 +171,7 @@ impl_dynamic_builder! {
         AGG: Aggregator<T> + Send + Sync + Clone + 'static,
         IK: SerializableFixedSizeWith<KS> + Send + Sync + 'static,
         N: SerializableFixedSizeWith<KS> + Send + Sync + 'static,
-        AGG::Accumulator: SerializableWith<TS> + DeserializableWith<TS>,
+        AGG::Accumulator: SerializableWith<TS> + DeserializableWith<TS> + Send + Sync + Clone,
         T: SerializableWith<TS> + DeserializableWith<TS> + Send + Sync + 'static,
         KS: Send + Sync + Clone + 'static,
         TS: Send + Sync + Clone + 'static,

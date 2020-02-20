@@ -5,20 +5,20 @@ use crate::{
     prelude::ArconResult,
     state_backend::{
         in_memory::{InMemory, StateCommon},
-        serialization::{DeserializableWith, SerializableFixedSizeWith, SerializableWith},
+        serialization::SerializableFixedSizeWith,
         state_types::{AggregatingState, Aggregator, AppendingState, MergingState, State},
     },
 };
+use smallbox::SmallBox;
 use std::marker::PhantomData;
 
-pub struct InMemoryAggregatingState<IK, N, T, AGG, KS, TS> {
-    pub(crate) common: StateCommon<IK, N, KS, TS>,
+pub struct InMemoryAggregatingState<IK, N, T, AGG, KS> {
+    pub(crate) common: StateCommon<IK, N, KS>,
     pub(crate) aggregator: AGG,
     pub(crate) _phantom: PhantomData<T>,
 }
 
-impl<IK, N, T, AGG, KS, TS> State<InMemory, IK, N>
-    for InMemoryAggregatingState<IK, N, T, AGG, KS, TS>
+impl<IK, N, T, AGG, KS> State<InMemory, IK, N> for InMemoryAggregatingState<IK, N, T, AGG, KS>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
@@ -32,63 +32,55 @@ where
     delegate_key_and_namespace!(common);
 }
 
-impl<IK, N, T, AGG, KS, TS> AppendingState<InMemory, IK, N, T, AGG::Result>
-    for InMemoryAggregatingState<IK, N, T, AGG, KS, TS>
+impl<IK, N, T, AGG, KS> AppendingState<InMemory, IK, N, T, AGG::Result>
+    for InMemoryAggregatingState<IK, N, T, AGG, KS>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
     AGG: Aggregator<T>,
-    AGG::Accumulator: SerializableWith<TS> + DeserializableWith<TS>,
+    AGG::Accumulator: Send + Sync + Clone + 'static,
 {
     fn get(&self, backend: &InMemory) -> ArconResult<AGG::Result> {
         // TODO: do we want to return R based on a new accumulator if not found?
         let key = self.common.get_db_key_prefix()?;
-        let serialized = backend.get(&key)?;
-        let current_accumulator =
-            AGG::Accumulator::deserialize(&self.common.value_serializer, serialized)?;
+        let dynamic = backend.get(&key)?;
+        let current_accumulator = dynamic
+            .downcast_ref::<AGG::Accumulator>()
+            .ok_or_else(|| arcon_err_kind!("Dynamic value has a wrong type!"))?
+            .clone();
         Ok(self.aggregator.accumulator_into_result(current_accumulator))
     }
 
     fn append(&self, backend: &mut InMemory, value: T) -> ArconResult<()> {
         let key = self.common.get_db_key_prefix()?;
-        let accumulator_buffer = backend.get_mut_or_init_empty(&key)?;
+        let current_accumulator = backend
+            .get_mut_or_insert(key, || SmallBox::new(self.aggregator.create_accumulator()))
+            .downcast_mut::<AGG::Accumulator>()
+            .ok_or_else(|| arcon_err_kind!("Dynamic value has a wrong type!"))?;
 
-        let mut current_accumulator = if accumulator_buffer.is_empty() {
-            self.aggregator.create_accumulator()
-        } else {
-            AGG::Accumulator::deserialize(&self.common.value_serializer, &*accumulator_buffer)?
-        };
-
-        self.aggregator.add(&mut current_accumulator, value);
-        accumulator_buffer.clear();
-
-        AGG::Accumulator::serialize_into(
-            &self.common.value_serializer,
-            accumulator_buffer,
-            &current_accumulator,
-        )?;
+        self.aggregator.add(current_accumulator, value);
 
         Ok(())
     }
 }
 
-impl<IK, N, T, AGG, KS, TS> MergingState<InMemory, IK, N, T, AGG::Result>
-    for InMemoryAggregatingState<IK, N, T, AGG, KS, TS>
+impl<IK, N, T, AGG, KS> MergingState<InMemory, IK, N, T, AGG::Result>
+    for InMemoryAggregatingState<IK, N, T, AGG, KS>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
     AGG: Aggregator<T>,
-    AGG::Accumulator: SerializableWith<TS> + DeserializableWith<TS>,
+    AGG::Accumulator: Send + Sync + Clone + 'static,
 {
 }
 
-impl<IK, N, T, AGG, KS, TS> AggregatingState<InMemory, IK, N, T, AGG::Result>
-    for InMemoryAggregatingState<IK, N, T, AGG, KS, TS>
+impl<IK, N, T, AGG, KS> AggregatingState<InMemory, IK, N, T, AGG::Result>
+    for InMemoryAggregatingState<IK, N, T, AGG, KS>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
     AGG: Aggregator<T>,
-    AGG::Accumulator: SerializableWith<TS> + DeserializableWith<TS>,
+    AGG::Accumulator: Send + Sync + Clone + 'static,
 {
 }
 

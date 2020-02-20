@@ -9,15 +9,16 @@ use crate::{
         state_types::{MapState, State},
     },
 };
+use smallbox::SmallBox;
 use std::marker::PhantomData;
 
-pub struct InMemoryMapState<IK, N, K, V, KS, TS> {
-    pub(crate) common: StateCommon<IK, N, KS, TS>,
+pub struct InMemoryMapState<IK, N, K, V, KS> {
+    pub(crate) common: StateCommon<IK, N, KS>,
     // TODO: my phantom datas may be of wrong variance w.r.t. the lifetimes -- investigate
     pub(crate) _phantom: PhantomData<(K, V)>,
 }
 
-impl<IK, N, K, V, KS, TS> State<InMemory, IK, N> for InMemoryMapState<IK, N, K, V, KS, TS>
+impl<IK, N, K, V, KS> State<InMemory, IK, N> for InMemoryMapState<IK, N, K, V, KS>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
@@ -31,46 +32,49 @@ where
     delegate_key_and_namespace!(common);
 }
 
-impl<IK, N, K, V, KS, TS> MapState<InMemory, IK, N, K, V> for InMemoryMapState<IK, N, K, V, KS, TS>
+impl<IK, N, K, V, KS> MapState<InMemory, IK, N, K, V> for InMemoryMapState<IK, N, K, V, KS>
 where
     IK: SerializableFixedSizeWith<KS> + DeserializableWith<KS>,
     N: SerializableFixedSizeWith<KS> + DeserializableWith<KS>,
     K: SerializableWith<KS> + DeserializableWith<KS>,
-    V: SerializableWith<TS> + DeserializableWith<TS>,
+    V: Send + Sync + Clone + 'static,
     KS: Clone + 'static,
-    TS: Clone + 'static,
 {
     fn get(&self, backend: &InMemory, key: &K) -> ArconResult<V> {
         let key = self.common.get_db_key_with_user_key(key)?;
-        let serialized = backend.get(&key)?;
-        let value = V::deserialize(&self.common.value_serializer, &serialized)?;
+        let dynamic = backend.get(&key)?;
+        let value = dynamic
+            .downcast_ref::<V>()
+            .ok_or_else(|| arcon_err_kind!("Dynamic value has a wrong type!"))?
+            .clone();
 
         Ok(value)
     }
 
     fn fast_insert(&self, backend: &mut InMemory, key: K, value: V) -> ArconResult<()> {
         let key = self.common.get_db_key_with_user_key(&key)?;
-        let serialized = V::serialize(&self.common.value_serializer, &value)?;
-        backend.put(key, serialized)?;
+        let dynamic = SmallBox::new(value);
+        backend.put(key, dynamic)?;
 
         Ok(())
     }
 
     fn insert(&self, backend: &mut InMemory, key: K, value: V) -> ArconResult<Option<V>> {
         let key = self.common.get_db_key_with_user_key(&key)?;
-        let storage = backend.get_mut_or_init_empty(&key)?;
 
-        let old = if storage.is_empty() {
-            None
-        } else {
-            Some(V::deserialize_from(
-                &self.common.value_serializer,
-                storage.as_slice(),
-            )?)
+        let old = match backend.get_mut(&key) {
+            // TODO: only handle value not found
+            Err(_) => None,
+            Ok(dynamic) => Some(
+                dynamic
+                    .downcast_ref::<V>()
+                    .ok_or_else(|| arcon_err_kind!("Dynamic value has a wrong type!"))?
+                    .clone(),
+            ),
         };
 
-        storage.clear();
-        V::serialize_into(&self.common.value_serializer, storage, &value)?;
+        let dynamic = SmallBox::new(value);
+        backend.put(key, dynamic)?;
 
         Ok(old)
     }
@@ -118,7 +122,6 @@ where
         let prefix = self.common.get_db_key_prefix()?;
         let id_len = self.common.id.as_bytes().len();
         let key_serializer = self.common.key_serializer.clone();
-        let value_serializer = self.common.value_serializer.clone();
         let iter = backend
             .iter_matching(prefix)
             .map(move |(k, v)| {
@@ -126,7 +129,10 @@ where
                 let _ = IK::deserialize_from(&key_serializer, &mut cursor)?;
                 let _ = N::deserialize_from(&key_serializer, &mut cursor)?;
                 let key = K::deserialize_from(&key_serializer, &mut cursor)?;
-                let value = V::deserialize(&value_serializer, v)?;
+                let value = v
+                    .downcast_ref::<V>()
+                    .ok_or_else(|| arcon_err_kind!("Dynamic value has a wrong type!"))?
+                    .clone();
                 Ok((key, value))
             })
             .map(|res: ArconResult<(K, V)>| res.expect("deserialization error"));
@@ -158,11 +164,13 @@ where
 
     fn values<'a>(&self, backend: &'a InMemory) -> ArconResult<Box<dyn Iterator<Item = V> + 'a>> {
         let prefix = self.common.get_db_key_prefix()?;
-        let value_serializer = self.common.value_serializer.clone();
         let iter = backend
             .iter_matching(prefix)
             .map(move |(_, v)| {
-                let value = V::deserialize(&value_serializer, v)?;
+                let value = v
+                    .downcast_ref::<V>()
+                    .ok_or_else(|| arcon_err_kind!("Dynamic value has a wrong type!"))?
+                    .clone();
                 Ok(value)
             })
             .map(|res: ArconResult<V>| res.expect("deserialization error"));
