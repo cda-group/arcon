@@ -35,17 +35,17 @@ where
         if let Ok(f) = File::open(&self.file_path) {
             let reader = BufReader::new(f);
             let mut counter: u64 = 0;
+            let interval = self.source_ctx.watermark_interval;
             for line in reader.lines() {
                 match line {
                     Ok(l) => {
                         if let Ok(data) = l.parse::<IN>() {
                             let elem = self.source_ctx.extract_element(data);
-                            let system = &self.ctx().system();
-                            self.source_ctx.process(elem, system);
+                            self.source_ctx.process(elem);
                             counter += 1;
 
-                            if counter == self.source_ctx.watermark_interval {
-                                self.source_ctx.generate_watermark(system);
+                            if counter == interval {
+                                self.source_ctx.generate_watermark();
                                 counter = 0;
                             }
                         } else {
@@ -62,7 +62,7 @@ where
                 }
             }
             // We are done, generate a watermark...
-            self.source_ctx.generate_watermark(&self.ctx().system());
+            self.source_ctx.generate_watermark();
         } else {
             error!(self.ctx.log(), "Unable to open file {}", self.file_path);
         }
@@ -146,11 +146,9 @@ mod tests {
         let operator = Box::new(Map::<u64, u64>::new(&map_fn));
 
         // Set up SourceContext
-        let buffer_limit = 200;
         let watermark_interval = 25;
 
         let source_context = SourceContext::new(
-            buffer_limit,
             watermark_interval,
             None, // no timestamp extractor
             channel_strategy,
@@ -196,11 +194,9 @@ mod tests {
         let operator = Box::new(Map::<ArconF64, ArconF64>::new(&map_fn));
 
         // Set up SourceContext
-        let buffer_limit = 200;
         let watermark_interval = 25;
 
         let source_context = SourceContext::new(
-            buffer_limit,
             watermark_interval,
             None, // no timestamp extractor
             channel_strategy,

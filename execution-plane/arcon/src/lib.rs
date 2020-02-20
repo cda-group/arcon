@@ -38,7 +38,7 @@ pub mod prelude {
         broadcast::Broadcast, forward::Forward, key_by::KeyBy, round_robin::RoundRobin,
         ChannelStrategy,
     };
-    pub use crate::stream::channel::Channel;
+    pub use crate::stream::channel::{Channel, DispatcherSource};
     pub use crate::stream::{
         node::debug::DebugNode,
         node::Node,

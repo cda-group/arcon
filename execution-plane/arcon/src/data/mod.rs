@@ -48,6 +48,9 @@ pub enum ArconEvent<A: ArconType> {
     /// An [Epoch] marker message
     #[prost(message, tag = "3")]
     Epoch(Epoch),
+    /// A death message
+    #[prost(message, tag = "4")]
+    Death(String),
 }
 
 /// A Stream element containing some data and timestamp
@@ -129,6 +132,15 @@ impl<A: ArconType> ArconMessage<A> {
     pub fn epoch(epoch: u64, sender: NodeID) -> ArconMessage<A> {
         ArconMessage {
             events: vec![ArconEvent::<A>::Epoch(Epoch { epoch })],
+            sender,
+        }
+    }
+    /// Creates an ArconMessage with a single [ArconEvent::Death] event
+    ///
+    /// This function should only be used for development and test purposes.
+    pub fn death(msg: String, sender: NodeID) -> ArconMessage<A> {
+        ArconMessage {
+            events: vec![ArconEvent::<A>::Death(msg)],
             sender,
         }
     }

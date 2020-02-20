@@ -71,7 +71,7 @@ impl<IN> Operator<IN, IN> for SocketSink<IN>
 where
     IN: ArconType + Serialize,
 {
-    fn handle_element(&mut self, e: ArconElement<IN>) -> Option<Vec<ArconEvent<IN>>> {
+    fn handle_element(&mut self, e: ArconElement<IN>, _: &mut ChannelStrategy<IN>) {
         let mut tx = self.tx_channel.clone();
         let fmt_data = {
             if let Ok(mut json) = serde_json::to_string(&e.data) {
@@ -91,7 +91,6 @@ where
             }
         };
         self.runtime_handle.spawn(req_dispatch);
-        None
     }
     fn handle_watermark(&mut self, _w: Watermark) -> Option<Vec<ArconEvent<IN>>> {
         None

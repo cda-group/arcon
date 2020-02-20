@@ -30,18 +30,18 @@ where
     }
     pub fn process_collection(&mut self) {
         let mut counter: u64 = 0;
-        let system = &self.ctx().system();
         for record in self.collection.take().unwrap() {
             let elem = self.source_ctx.extract_element(record);
-            self.source_ctx.process(elem, system);
+            self.source_ctx.process(elem);
 
             counter += 1;
 
             if counter == self.source_ctx.watermark_interval {
-                self.source_ctx.generate_watermark(system);
+                self.source_ctx.generate_watermark();
                 counter = 0;
             }
         }
+        self.source_ctx.generate_watermark();
     }
 }
 
@@ -108,12 +108,10 @@ mod tests {
         let operator = Box::new(Filter::<u64>::new(&filter_fn));
 
         // Set up SourceContext
-        let buffer_limit = 200;
         let watermark_interval = 50;
         let collection_elements = 2000;
 
         let source_context = SourceContext::new(
-            buffer_limit,
             watermark_interval,
             None, // no timestamp extractor
             channel_strategy,
@@ -138,7 +136,7 @@ mod tests {
 
         assert_eq!(
             watermark_len as u64,
-            collection_elements / watermark_interval
+            (collection_elements / watermark_interval) + 1 // One more is generated after the loop
         );
         assert_eq!(data_len, 1000);
     }

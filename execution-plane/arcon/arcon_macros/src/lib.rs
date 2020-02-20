@@ -10,7 +10,7 @@ use proc_macro::TokenStream;
 use proc_macro2::{Ident, Span};
 use syn::{parse_macro_input, DeriveInput};
 
-/// arcon is a macro that helps define a Arcon supported struct 
+/// arcon is a macro that helps define a Arcon supported struct
 ///
 /// By default, the macro will implement [std::hash::Hasher] that hashes on all fields of the
 /// struct. Use [arcon_keyed] instead if the struct needs to be hashed on specific fields.

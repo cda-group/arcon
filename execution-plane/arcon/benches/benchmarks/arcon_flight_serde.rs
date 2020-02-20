@@ -47,7 +47,7 @@ pub fn arcon_flight_bench(b: &mut Bencher, serde: FlightSerde) {
         vec![comp_id.into()],
     ));
 
-    let channel = Channel::Remote((remote_path, serde));
+    let channel = Channel::Remote(remote_path, serde, local.dispatcher_ref().into());
     let mut channel_strategy: ChannelStrategy<i32> =
         ChannelStrategy::Forward(Forward::with_batch_size(channel, 1.into(), BATCH_SIZE));
 
@@ -73,8 +73,8 @@ pub fn arcon_flight_bench(b: &mut Bencher, serde: FlightSerde) {
             for event in batch {
                 channel_strategy.add(event);
             }
-            channel_strategy.flush(&remote);
         }
+        channel_strategy.flush();
         let res = future.wait();
         res
     });

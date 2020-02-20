@@ -98,7 +98,7 @@ where
     IN: ArconType + Hash,
     OUT: ArconType,
 {
-    fn handle_element(&mut self, element: ArconElement<IN>) -> Option<Vec<ArconEvent<OUT>>> {
+    fn handle_element(&mut self, element: ArconElement<IN>, _: &mut ChannelStrategy<OUT>) {
         let ts = element.timestamp.unwrap_or(0);
         if self.window_start.is_empty() {
             // First element received, set the internal timer
@@ -106,7 +106,7 @@ where
         }
         if ts < self.timer.get_time() - self.late_arrival_time {
             // Late arrival: early return
-            return None;
+            return ();
         }
 
         let key = self.get_key(&element);
@@ -153,7 +153,6 @@ where
             }
         }
         self.window_maps.insert(key, w_map);
-        return None;
     }
     fn handle_watermark(&mut self, w: Watermark) -> Option<Vec<ArconEvent<OUT>>> {
         if self.window_start.is_empty() {

@@ -99,10 +99,8 @@ where
     }
     pub fn output_watermark(&mut self) -> () {
         let ts = self.max_timestamp;
-        self.channel_strategy.add_and_flush(
-            ArconEvent::Watermark(Watermark::new(ts)),
-            &self.ctx().system(),
-        );
+        self.channel_strategy
+            .add(ArconEvent::Watermark(Watermark::new(ts)));
     }
     pub fn commit_epoch(&mut self, epoch: &u64) -> () {
         if let Some(commit_offset) = self.epoch_offset.get(epoch) {
@@ -128,10 +126,8 @@ where
     }
     pub fn new_epoch(&mut self) -> () {
         self.epoch_offset.insert(self.epoch, self.offset);
-        self.channel_strategy.add_and_flush(
-            ArconEvent::Epoch(Epoch::new(self.epoch)),
-            &self.ctx().system(),
-        );
+        self.channel_strategy
+            .add(ArconEvent::Epoch(Epoch::new(self.epoch)));
         self.epoch = self.epoch + 1;
     }
 

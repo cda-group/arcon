@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::data::{ArconElement, ArconEvent, ArconType, Epoch, Watermark};
+use crate::stream::channel::strategy::ChannelStrategy;
 use crate::stream::operator::Operator;
 use crate::util::SafelySendableFn;
 use arcon_error::ArconResult;
@@ -10,16 +11,16 @@ use arcon_error::ArconResult;
 /// OUT: Output Event
 pub struct FlatMap<IN, OUT>
 where
-    IN: 'static + ArconType,
-    OUT: 'static + ArconType,
+    IN: ArconType,
+    OUT: ArconType,
 {
     udf: &'static dyn for<'r> SafelySendableFn<(&'r IN,), Vec<OUT>>,
 }
 
 impl<IN, OUT> FlatMap<IN, OUT>
 where
-    IN: 'static + ArconType,
-    OUT: 'static + ArconType,
+    IN: ArconType,
+    OUT: ArconType,
 {
     pub fn new(udf: &'static dyn for<'r> SafelySendableFn<(&'r IN,), Vec<OUT>>) -> Self {
         FlatMap { udf }
@@ -36,19 +37,15 @@ where
     IN: 'static + ArconType,
     OUT: 'static + ArconType,
 {
-    fn handle_element(&mut self, element: ArconElement<IN>) -> Option<Vec<ArconEvent<OUT>>> {
+    fn handle_element(&mut self, element: ArconElement<IN>, strategy: &mut ChannelStrategy<OUT>) {
         if let Some(data) = element.data {
             let result = self.run_udf(&(data));
-            let mut elements = Vec::with_capacity(result.len());
             for item in result {
-                elements.push(ArconEvent::Element(ArconElement {
+                strategy.add(ArconEvent::Element(ArconElement {
                     data: Some(item),
                     timestamp: element.timestamp,
                 }));
             }
-            Some(elements)
-        } else {
-            None
         }
     }
 
@@ -63,27 +60,47 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::prelude::*;
 
     #[test]
     fn flatmap_test() {
+        let system = KompactConfig::default().build().expect("KompactSystem");
+        let comp = system.create(move || DebugNode::<i32>::new());
+        system.start(&comp);
+
+        let actor_ref: ActorRefStrong<ArconMessage<i32>> =
+            comp.actor_ref().hold().expect("failed to fetch");
+        let channel_strategy =
+            ChannelStrategy::Forward(Forward::new(Channel::Local(actor_ref), 1.into()));
+
         fn flatmap_fn(x: &i32) -> Vec<i32> {
             (0..*x).map(|x| x + 5).collect()
         }
+        let flatmap_node = system.create(move || {
+            Node::<i32, i32>::new(
+                0.into(),
+                vec![1.into()],
+                channel_strategy,
+                Box::new(FlatMap::new(&flatmap_fn)),
+            )
+        });
+        system.start(&flatmap_node);
 
-        let mut flatmap = FlatMap::new(&flatmap_fn);
+        let input_one = ArconEvent::Element(ArconElement::new(6 as i32));
+        let msg = ArconMessage {
+            events: vec![input_one, ArconEvent::Death("die".into())],
+            sender: NodeID::new(1),
+        };
+        let flatmap_ref: ActorRefStrong<ArconMessage<i32>> =
+            flatmap_node.actor_ref().hold().expect("failed to fetch");
 
-        let input = ArconElement::new(6 as i32);
-        let result = flatmap.handle_element(input).unwrap();
-        let expected: Vec<Option<i32>> =
-            vec![Some(5), Some(6), Some(7), Some(8), Some(9), Some(10)];
+        flatmap_ref.tell(msg);
 
-        let mut result_vec = Vec::new();
-        for event in result {
-            if let ArconEvent::Element(element) = event {
-                result_vec.push(element.data)
-            }
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        {
+            let comp_inspect = &comp.definition().lock().unwrap();
+            assert_eq!(comp_inspect.data.len(), 6);
         }
-
-        assert_eq!(result_vec, expected);
+        let _ = system.shutdown();
     }
 }

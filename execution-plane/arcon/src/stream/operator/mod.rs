@@ -6,6 +6,7 @@ pub mod sink;
 pub mod window;
 
 use crate::data::{ArconElement, ArconEvent, ArconType, Epoch, Watermark};
+use crate::stream::channel::strategy::ChannelStrategy;
 use arcon_error::ArconResult;
 
 /// Defines the methods an `Operator` must implement
@@ -19,7 +20,8 @@ where
     /// The function either returns None or a Vec of ArconEvents.
     /// In order to support FlatMap, the function returns a Vec
     /// rather than a single ArconEvent
-    fn handle_element(&mut self, element: ArconElement<IN>) -> Option<Vec<ArconEvent<OUT>>>;
+    //fn handle_element(&mut self, element: ArconElement<IN>) -> Option<Vec<ArconEvent<OUT>>>;
+    fn handle_element(&mut self, element: ArconElement<IN>, strategy: &mut ChannelStrategy<OUT>);
     /// Determines how the `Operator` processes Watermarks
     ///
     /// The function either returns None or a Vec of ArconEvents (e.g., Window Computation)

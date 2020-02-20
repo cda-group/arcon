@@ -76,9 +76,8 @@ impl<IN> Operator<IN, IN> for KafkaSink<IN>
 where
     IN: ArconType + ::serde::Serialize + ::serde::de::DeserializeOwned,
 {
-    fn handle_element(&mut self, element: ArconElement<IN>) -> Option<Vec<ArconEvent<IN>>> {
+    fn handle_element(&mut self, element: ArconElement<IN>, _: &mut ChannelStrategy<IN>) {
         self.buffer.push(element);
-        None
     }
     fn handle_watermark(&mut self, _w: Watermark) -> Option<Vec<ArconEvent<IN>>> {
         None

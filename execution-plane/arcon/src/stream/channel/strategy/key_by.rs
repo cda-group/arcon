@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::data::{ArconEvent, ArconType};
-use crate::prelude::KompactSystem;
 use crate::prelude::*;
 use crate::stream::channel::strategy::send;
 use std::collections::{hash_map::DefaultHasher, HashMap};
@@ -24,6 +23,10 @@ where
     parallelism: u32,
     sender_id: NodeID,
     buffer_map: HashMap<usize, (Channel<A>, Vec<ArconEvent<A>>)>,
+    /// A batch size indicating when the channel should flush data
+    batch_size: usize,
+    /// A counter keeping track of how many events there are in the buffer
+    buffer_counter: usize,
 }
 
 impl<A> KeyBy<A>
@@ -49,6 +52,8 @@ where
             parallelism,
             sender_id,
             buffer_map,
+            batch_size,
+            buffer_counter: 0,
         }
     }
 
@@ -73,6 +78,8 @@ where
             sender_id,
             parallelism,
             buffer_map,
+            batch_size,
+            buffer_counter: 0,
         }
     }
 
@@ -86,8 +93,12 @@ where
                     let index = (hash % self.parallelism) as usize;
                     if let Some((_, buffer)) = self.buffer_map.get_mut(&index) {
                         buffer.push(event);
+                        self.buffer_counter += 1;
                     } else {
                         panic!("Bad KeyBy setup");
+                    }
+                    if self.buffer_counter == self.batch_size {
+                        self.flush();
                     }
                 }
             }
@@ -96,25 +107,28 @@ where
                 for (_, (_, buffer)) in self.buffer_map.iter_mut() {
                     buffer.push(event.clone());
                 }
+                self.flush();
             }
         }
     }
 
-    pub fn flush(&mut self, source: &KompactSystem) {
-        let sender_id = self.sender_id;
+    pub fn flush(&mut self) {
         for (_, (ref channel, buffer)) in self.buffer_map.iter_mut() {
+            let mut new_vec = Vec::with_capacity(self.batch_size);
+            std::mem::swap(&mut new_vec, &mut *buffer);
             let msg = ArconMessage {
-                events: buffer.clone(),
-                sender: sender_id,
+                events: new_vec,
+                sender: self.sender_id,
             };
-            send(channel, msg, source);
-            buffer.clear();
+            send(channel, msg);
         }
+
+        self.buffer_counter = 0;
     }
 
-    pub fn add_and_flush(&mut self, event: ArconEvent<A>, source: &KompactSystem) {
+    pub fn add_and_flush(&mut self, event: ArconEvent<A>) {
         self.add(event);
-        self.flush(source);
+        self.flush();
     }
 }
 
@@ -163,7 +177,7 @@ mod tests {
         for input in inputs {
             let _ = channel_strategy.add(input);
         }
-        let _ = channel_strategy.flush(&system);
+        let _ = channel_strategy.flush();
 
         std::thread::sleep(std::time::Duration::from_secs(1));
 

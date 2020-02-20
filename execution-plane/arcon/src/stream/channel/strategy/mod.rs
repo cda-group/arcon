@@ -5,7 +5,6 @@ use crate::data::flight_serde::{
     reliable_remote::ReliableSerde, unsafe_remote::UnsafeSerde, FlightSerde,
 };
 use crate::data::{ArconEvent, ArconMessage, ArconType};
-use crate::prelude::KompactSystem;
 use crate::stream::channel::Channel;
 
 pub mod broadcast;
@@ -47,25 +46,14 @@ where
             ChannelStrategy::Mute => (),
         }
     }
-    /// Add event and flush directly
-    #[inline]
-    pub fn add_and_flush(&mut self, event: ArconEvent<A>, source: &KompactSystem) {
-        match self {
-            ChannelStrategy::Forward(s) => s.add_and_flush(event, source),
-            ChannelStrategy::Broadcast(s) => s.add_and_flush(event, source),
-            ChannelStrategy::KeyBy(s) => s.add_and_flush(event, source),
-            ChannelStrategy::RoundRobin(s) => s.add_and_flush(event, source),
-            ChannelStrategy::Mute => (),
-        }
-    }
     /// Flush batch of events out
     #[inline]
-    pub fn flush(&mut self, source: &KompactSystem) {
+    pub fn flush(&mut self) {
         match self {
-            ChannelStrategy::Forward(s) => s.flush(source),
-            ChannelStrategy::Broadcast(s) => s.flush(source),
-            ChannelStrategy::KeyBy(s) => s.flush(source),
-            ChannelStrategy::RoundRobin(s) => s.flush(source),
+            ChannelStrategy::Forward(s) => s.flush(),
+            ChannelStrategy::Broadcast(s) => s.flush(),
+            ChannelStrategy::KeyBy(s) => s.flush(),
+            ChannelStrategy::RoundRobin(s) => s.flush(),
             ChannelStrategy::Mute => (),
         }
     }
@@ -75,7 +63,7 @@ where
 ///
 /// The message may be sent to a local or remote component
 #[inline]
-fn send<A>(channel: &Channel<A>, message: ArconMessage<A>, source: &KompactSystem)
+fn send<A>(channel: &Channel<A>, message: ArconMessage<A>)
 where
     A: ArconType,
 {
@@ -83,14 +71,14 @@ where
         Channel::Local(actor_ref) => {
             actor_ref.tell(message);
         }
-        Channel::Remote((actor_path, flight_serde)) => match &flight_serde {
+        Channel::Remote(actor_path, flight_serde, dispatcher_source) => match &flight_serde {
             FlightSerde::Unsafe => {
                 let unsafe_msg = UnsafeSerde(message);
-                actor_path.tell(unsafe_msg, source);
+                actor_path.tell(unsafe_msg, dispatcher_source);
             }
             FlightSerde::Reliable => {
                 let reliable_msg = ReliableSerde(message);
-                actor_path.tell(reliable_msg, source);
+                actor_path.tell(reliable_msg, dispatcher_source);
             }
         },
     }

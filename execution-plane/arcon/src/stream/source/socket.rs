@@ -61,7 +61,7 @@ where
                 Duration::from_secs(0),
                 Duration::from_secs(self.source_ctx.watermark_interval),
                 move |self_c, _| {
-                    self_c.source_ctx.generate_watermark(&self_c.ctx().system());
+                    self_c.source_ctx.generate_watermark();
                 },
             );
 
@@ -93,8 +93,7 @@ where
                 if let Ok(byte_string) = from_utf8(&bytes) {
                     if let Ok(in_data) = byte_string.trim().parse::<IN>() {
                         let elem = self.source_ctx.extract_element(in_data);
-                        let system = &self.ctx().system();
-                        self.source_ctx.process(elem, system);
+                        self.source_ctx.process(elem);
                     } else {
                         error!(self.ctx.log(), "Unable to parse string {}", byte_string);
                     }
@@ -146,11 +145,9 @@ mod tests {
         let operator = Box::new(Map::<u32, u32>::new(&map_fn));
 
         // Set up SourceContext
-        let buffer_limit = 200;
         let watermark_interval = 1; // in seconds currently for SocketSource
 
         let source_context = SourceContext::new(
-            buffer_limit,
             watermark_interval,
             None, // no timestamp extractor
             channel_strategy,
@@ -214,7 +211,6 @@ mod tests {
         let operator = Box::new(Map::<ExtractorStruct, ExtractorStruct>::new(&map_fn));
 
         // Set up SourceContext
-        let buffer_limit = 200;
         let watermark_interval = 1; // in seconds currently for SocketSource
 
         fn timestamp_extractor(x: &ExtractorStruct) -> u64 {
@@ -222,7 +218,6 @@ mod tests {
         }
 
         let source_context = SourceContext::new(
-            buffer_limit,
             watermark_interval,
             Some(&timestamp_extractor),
             channel_strategy,

@@ -77,11 +77,7 @@ where
         for event in message.events.into_iter() {
             match event {
                 ArconEvent::Element(e) => {
-                    if let Some(events) = self.operator.handle_element(e) {
-                        for new_event in events {
-                            self.channel_strategy.add(new_event);
-                        }
-                    }
+                    self.operator.handle_element(e, &mut self.channel_strategy);
                 }
                 ArconEvent::Watermark(w) => {
                     // Insert the watermark and try early return
@@ -116,11 +112,8 @@ where
                         }
 
                         // Forward the watermark
-                        // NOTE: Flush channel buffer directly as not to slow down event-time triggers
-                        self.channel_strategy.add_and_flush(
-                            ArconEvent::Watermark(new_watermark),
-                            &self.ctx().system(),
-                        );
+                        self.channel_strategy
+                            .add(ArconEvent::Watermark(new_watermark));
                     }
                 }
                 ArconEvent::Epoch(e) => {
@@ -157,8 +150,12 @@ where
                         }
                     }
                 }
+                ArconEvent::Death(s) => {
+                    // We are instructed to shutdown....
+                    self.channel_strategy.add(ArconEvent::Death(s));
+                    // TODO: invoke shutdown operations..
+                }
             }
-            self.channel_strategy.flush(&self.ctx().system());
         }
 
         Ok(())
@@ -273,6 +270,9 @@ mod tests {
     fn epoch(epoch: u64, sender: u32) -> ArconMessage<i32> {
         ArconMessage::epoch(epoch, sender.into())
     }
+    fn death(sender: u32) -> ArconMessage<i32> {
+        ArconMessage::death(String::from("die"), sender.into())
+    }
 
     fn wait(time: u64) {
         thread::sleep(time::Duration::from_secs(time));
@@ -335,6 +335,8 @@ mod tests {
         // should not be blocked
         node_ref.tell(element(3, 1, 2));
 
+        node_ref.tell(death(2)); // send death marker on unblocked channel to flush
+
         wait(1);
         let sink_inspect = sink.definition().lock().unwrap();
 
@@ -359,6 +361,7 @@ mod tests {
         node_ref.tell(element(23, 1, 2)); // blocked
         node_ref.tell(element(31, 1, 3)); // not blocked
 
+        node_ref.tell(death(3)); // send death marker on unblocked channel to flush
         wait(1);
         let sink_inspect = sink.definition().lock().unwrap();
 
@@ -389,6 +392,7 @@ mod tests {
         node_ref.tell(epoch(2, 3));
         // All the elements should now have been delivered in specific order
 
+        node_ref.tell(death(3)); // send death marker on unblocked channel to flush
         wait(1);
         let sink_inspect = sink.definition().lock().unwrap();
 

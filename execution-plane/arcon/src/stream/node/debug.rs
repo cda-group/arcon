@@ -46,6 +46,7 @@ where
                 ArconEvent::Epoch(e) => {
                     self.epochs.push(e);
                 }
+                ArconEvent::Death(_) => {}
             }
         }
     }

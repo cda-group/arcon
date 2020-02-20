@@ -128,7 +128,6 @@ fn normalise_pipeline_test() {
     let channel = Channel::Local(actor_ref);
     let channel_strategy = ChannelStrategy::Forward(Forward::new(channel, NodeID::new(1)));
 
-    let buffer_limit = 200;
     let watermark_interval = 2;
 
     fn timestamp_extractor(x: &SourceData) -> u64 {
@@ -136,7 +135,6 @@ fn normalise_pipeline_test() {
     }
 
     let source_context = SourceContext::new(
-        buffer_limit,
         watermark_interval,
         Some(&timestamp_extractor),
         channel_strategy,

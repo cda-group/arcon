@@ -51,6 +51,7 @@ pub mod reliable_remote {
         Element = 0,
         Watermark = 1,
         Epoch = 2,
+        Death = 3,
     }
 
     #[derive(Clone, Debug)]
@@ -91,6 +92,13 @@ pub mod reliable_remote {
                             })?;
                         events.push(ArconEvent::Epoch(epoch));
                     }
+                    x if x == EventType::Death as i32 => {
+                        let death: String =
+                            String::decode(raw_event.bytes.into_buf()).map_err(|_| {
+                                SerError::InvalidData("Failed to decode Death".to_string())
+                            })?;
+                        events.push(ArconEvent::Death(death));
+                    }
                     _ => {
                         panic!("Matched unknown EventType");
                     }
@@ -114,6 +122,7 @@ pub mod reliable_remote {
                     ArconEvent::Element(e) => e.data.as_ref().unwrap().encoded_len(),
                     ArconEvent::Watermark(w) => w.encoded_len(),
                     ArconEvent::Epoch(epoch) => epoch.encoded_len(),
+                    ArconEvent::Death(death) => death.encoded_len(),
                 };
                 total_len += event_len + 6; // RawEvent
             }
@@ -154,6 +163,16 @@ pub mod reliable_remote {
                         raw_events.push(RawEvent {
                             bytes,
                             event_type: EventType::Epoch as i32,
+                        });
+                    }
+                    ArconEvent::Death(death) => {
+                        let mut bytes = Vec::with_capacity(death.encoded_len());
+                        death.encode(&mut bytes).map_err(|_| {
+                            SerError::InvalidData("Failed to encode death".to_string())
+                        })?;
+                        raw_events.push(RawEvent {
+                            bytes,
+                            event_type: EventType::Death as i32,
                         });
                     }
                 }
@@ -269,7 +288,8 @@ mod test {
             vec![comp_id.into()],
         ));
 
-        let channel = Channel::Remote((remote_path, FlightSerde::Unsafe));
+        let dispatcher_ref = local.dispatcher_ref();
+        let channel = Channel::Remote(remote_path, FlightSerde::Unsafe, dispatcher_ref.into());
         let mut channel_strategy: ChannelStrategy<ArconDataTest> =
             ChannelStrategy::Forward(Forward::new(channel, 1.into()));
 
@@ -279,7 +299,8 @@ mod test {
             items: items.clone(),
         };
         let element = ArconElement::new(data);
-        channel_strategy.add_and_flush(ArconEvent::Element(element), &local);
+        channel_strategy.add(ArconEvent::Element(element));
+        channel_strategy.flush();
         std::thread::sleep(timeout);
         {
             let comp_inspect = &comp.definition().lock().unwrap();

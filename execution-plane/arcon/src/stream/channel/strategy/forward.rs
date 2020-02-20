@@ -15,6 +15,10 @@ where
     sender_id: NodeID,
     /// A buffer holding outgoing events
     buffer: Vec<ArconEvent<A>>,
+    /// A batch size indicating when the channel should flush data
+    batch_size: usize,
+    /// A counter keeping track of how many events there are in the buffer
+    buffer_counter: usize,
 }
 
 impl<A> Forward<A>
@@ -29,6 +33,8 @@ where
             channel,
             sender_id,
             buffer: Vec::new(),
+            batch_size: 1024,
+            buffer_counter: 0,
         }
     }
 
@@ -44,25 +50,39 @@ where
             channel,
             sender_id,
             buffer: Vec::with_capacity(batch_size),
+            batch_size,
+            buffer_counter: 0,
         }
     }
+
+    #[inline]
     pub fn add(&mut self, event: ArconEvent<A>) {
-        self.buffer.push(event);
+        if let ArconEvent::Element(_) = &event {
+            self.buffer.push(event);
+            self.buffer_counter += 1;
+
+            if self.buffer_counter == self.batch_size {
+                self.flush();
+            }
+        } else {
+            // Watermark/Epoch.
+            // Send downstream as soon as possible
+            self.buffer.push(event);
+            self.flush();
+        }
     }
 
-    pub fn flush(&mut self, source: &KompactSystem) {
+    #[inline]
+    pub fn flush(&mut self) {
+        let mut new_vec = Vec::with_capacity(self.batch_size);
+        std::mem::swap(&mut new_vec, &mut self.buffer);
         let msg = ArconMessage {
-            events: self.buffer.clone(),
+            events: new_vec,
             sender: self.sender_id,
         };
 
-        send(&self.channel, msg, source);
-        self.buffer.clear();
-    }
-
-    pub fn add_and_flush(&mut self, event: ArconEvent<A>, source: &KompactSystem) {
-        self.add(event);
-        self.flush(source);
+        send(&self.channel, msg);
+        self.buffer_counter = 0;
     }
 }
 
@@ -87,8 +107,9 @@ mod tests {
 
         for _i in 0..total_msgs {
             let elem = ArconElement::new(Input { id: 1 });
-            let _ = channel_strategy.add_and_flush(ArconEvent::Element(elem), &system);
+            let _ = channel_strategy.add(ArconEvent::Element(elem));
         }
+        channel_strategy.flush();
 
         std::thread::sleep(std::time::Duration::from_secs(1));
         {
