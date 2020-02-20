@@ -3,6 +3,7 @@
 
 use crate::data::{ArconEvent, ArconMessage, ArconType, NodeID};
 use crate::stream::channel::{strategy::send, Channel};
+use super::DEFAULT_BATCH_SIZE;
 
 /// A Broadcast strategy for one-to-many message sending
 pub struct Broadcast<A>
@@ -29,8 +30,8 @@ where
         Broadcast {
             channels,
             sender_id,
-            buffer: Vec::new(),
-            batch_size: 1024,
+            buffer: Vec::with_capacity(DEFAULT_BATCH_SIZE),
+            batch_size: DEFAULT_BATCH_SIZE,
             buffer_counter: 0,
         }
     }

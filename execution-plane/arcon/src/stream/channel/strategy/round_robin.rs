@@ -3,14 +3,20 @@
 
 use crate::data::{ArconEvent, ArconMessage, ArconType, NodeID};
 use crate::stream::channel::{strategy::send, Channel};
+use super::DEFAULT_BATCH_SIZE;
 
+/// A strategy that sends message downstream in a Round-Robin fashion
 pub struct RoundRobin<A>
 where
     A: ArconType,
 {
+    /// Vec of Channels used by the Strategy
     channels: Vec<Channel<A>>,
+    /// An Identifier that is embedded with outgoing messages
     sender_id: NodeID,
+    /// Which channel is currently the target
     curr_index: usize,
+    /// A buffer holding outgoing events
     buffer: Vec<ArconEvent<A>>,
     /// A batch size indicating when the channel should flush data
     batch_size: usize,
@@ -27,8 +33,8 @@ where
             channels,
             sender_id,
             curr_index: 0,
-            buffer: Vec::new(),
-            batch_size: 1024,
+            buffer: Vec::with_capacity(DEFAULT_BATCH_SIZE),
+            batch_size: DEFAULT_BATCH_SIZE,
             buffer_counter: 0,
         }
     }

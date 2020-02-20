@@ -1,3 +1,6 @@
+// Copyright (c) 2020, KTH Royal Institute of Technology.
+// SPDX-License-Identifier: AGPL-3.0-only
+
 extern crate arcon;
 
 pub mod throughput_sink;

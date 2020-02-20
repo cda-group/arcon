@@ -19,9 +19,13 @@ pub struct KeyBy<A, H = DefaultHashBuilder>
 where
     A: ArconType,
 {
+    /// The HashBuilder
     builder: H,
+    /// Used to hash % modulo
     parallelism: u32,
+    /// An identifier that is embedded with outgoing messages
     sender_id: NodeID,
+    /// A map with hashed indexes and their respective Channel/Buffer
     buffer_map: HashMap<usize, (Channel<A>, Vec<ArconEvent<A>>)>,
     /// A batch size indicating when the channel should flush data
     batch_size: usize,
@@ -83,6 +87,7 @@ where
         }
     }
 
+    #[inline]
     pub fn add(&mut self, event: ArconEvent<A>) {
         match &event {
             ArconEvent::Element(element) => {
@@ -112,6 +117,7 @@ where
         }
     }
 
+    #[inline]
     pub fn flush(&mut self) {
         for (_, (ref channel, buffer)) in self.buffer_map.iter_mut() {
             let mut new_vec = Vec::with_capacity(self.batch_size);
@@ -124,11 +130,6 @@ where
         }
 
         self.buffer_counter = 0;
-    }
-
-    pub fn add_and_flush(&mut self, event: ArconEvent<A>) {
-        self.add(event);
-        self.flush();
     }
 }
 

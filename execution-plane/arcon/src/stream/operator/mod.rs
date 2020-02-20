@@ -17,10 +17,7 @@ where
 {
     /// Determines how the `Operator` processes Elements
     ///
-    /// The function either returns None or a Vec of ArconEvents.
-    /// In order to support FlatMap, the function returns a Vec
-    /// rather than a single ArconEvent
-    //fn handle_element(&mut self, element: ArconElement<IN>) -> Option<Vec<ArconEvent<OUT>>>;
+    /// The function takes an Element and a [ChannelStrategy] in order to pass on it
     fn handle_element(&mut self, element: ArconElement<IN>, strategy: &mut ChannelStrategy<OUT>);
     /// Determines how the `Operator` processes Watermarks
     ///

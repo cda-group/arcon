@@ -1,6 +1,7 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
+use super::DEFAULT_BATCH_SIZE;
 use crate::prelude::*;
 use crate::stream::channel::{strategy::send, Channel};
 
@@ -27,20 +28,20 @@ where
 {
     /// Creates a Forward strategy
     ///
-    /// `Forward::new` will allocate on demand. Should be used for testing and development only.
+    /// `Forward::new` will utilise [DEFAULT_BATCH_SIZE] as batch size
     pub fn new(channel: Channel<A>, sender_id: NodeID) -> Forward<A> {
         Forward {
             channel,
             sender_id,
-            buffer: Vec::new(),
-            batch_size: 1024,
+            buffer: Vec::with_capacity(DEFAULT_BATCH_SIZE),
+            batch_size: DEFAULT_BATCH_SIZE,
             buffer_counter: 0,
         }
     }
 
     /// Creates a Forward strategy
     ///
-    /// `Forward::with_batch_size` will preallocate its buffer according to `batch_size`
+    /// `Forward::with_batch_size` will preallocate its buffer according to a custom batch size
     pub fn with_batch_size(
         channel: Channel<A>,
         sender_id: NodeID,

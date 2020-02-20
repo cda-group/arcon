@@ -12,6 +12,9 @@ pub mod forward;
 pub mod key_by;
 pub mod round_robin;
 
+/// Default batch size if none is explicitly defined
+const DEFAULT_BATCH_SIZE: usize = 1024;
+
 /// A `ChannelStrategy` defines a strategy of how messages are sent downstream
 ///
 /// Common strategies include (one-to-one)[forward::Forward] and (one-to-many)[broadcast::Broadcast]
