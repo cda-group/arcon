@@ -74,16 +74,14 @@ where
         Channel::Local(actor_ref) => {
             actor_ref.tell(message);
         }
-        Channel::Remote(actor_path, flight_serde, dispatcher_source) => match &flight_serde {
-            FlightSerde::Unsafe => {
-                let unsafe_msg = UnsafeSerde(message);
-                actor_path.tell(unsafe_msg, dispatcher_source);
-            }
-            FlightSerde::Reliable => {
-                let reliable_msg = ReliableSerde(message);
-                actor_path.tell(reliable_msg, dispatcher_source);
-            }
-        },
+        Channel::Remote(actor_path, FlightSerde::Unsafe, dispatcher_source) => {
+            let unsafe_msg = UnsafeSerde(message);
+            actor_path.tell(unsafe_msg, dispatcher_source);
+        }
+        Channel::Remote(actor_path, FlightSerde::Reliable, dispatcher_source) => {
+            let reliable_msg = ReliableSerde(message);
+            actor_path.tell(reliable_msg, dispatcher_source);
+        }
     }
 }
 

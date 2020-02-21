@@ -1,9 +1,9 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
+use super::DEFAULT_BATCH_SIZE;
 use crate::data::{ArconEvent, ArconMessage, ArconType, NodeID};
 use crate::stream::channel::{strategy::send, Channel};
-use super::DEFAULT_BATCH_SIZE;
 
 /// A strategy that sends message downstream in a Round-Robin fashion
 pub struct RoundRobin<A>
@@ -20,8 +20,6 @@ where
     buffer: Vec<ArconEvent<A>>,
     /// A batch size indicating when the channel should flush data
     batch_size: usize,
-    /// A counter keeping track of how many events there are in the buffer
-    buffer_counter: usize,
 }
 
 impl<A> RoundRobin<A>
@@ -35,7 +33,6 @@ where
             curr_index: 0,
             buffer: Vec::with_capacity(DEFAULT_BATCH_SIZE),
             batch_size: DEFAULT_BATCH_SIZE,
-            buffer_counter: 0,
         }
     }
 
@@ -43,9 +40,8 @@ where
     pub fn add(&mut self, event: ArconEvent<A>) {
         if let ArconEvent::Element(_) = &event {
             self.buffer.push(event);
-            self.buffer_counter += 1;
 
-            if self.buffer_counter == self.batch_size {
+            if self.buffer.len() == self.batch_size {
                 self.flush();
             }
         } else {
@@ -67,7 +63,6 @@ where
             };
 
             send(&channel, msg);
-            self.buffer_counter = 0;
 
             self.curr_index += 1;
 

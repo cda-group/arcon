@@ -18,8 +18,6 @@ where
     buffer: Vec<ArconEvent<A>>,
     /// A batch size indicating when the channel should flush data
     batch_size: usize,
-    /// A counter keeping track of how many events there are in the buffer
-    buffer_counter: usize,
 }
 
 impl<A> Forward<A>
@@ -35,7 +33,6 @@ where
             sender_id,
             buffer: Vec::with_capacity(DEFAULT_BATCH_SIZE),
             batch_size: DEFAULT_BATCH_SIZE,
-            buffer_counter: 0,
         }
     }
 
@@ -52,7 +49,6 @@ where
             sender_id,
             buffer: Vec::with_capacity(batch_size),
             batch_size,
-            buffer_counter: 0,
         }
     }
 
@@ -60,9 +56,8 @@ where
     pub fn add(&mut self, event: ArconEvent<A>) {
         if let ArconEvent::Element(_) = &event {
             self.buffer.push(event);
-            self.buffer_counter += 1;
 
-            if self.buffer_counter == self.batch_size {
+            if self.buffer.len() == self.batch_size {
                 self.flush();
             }
         } else {
@@ -83,7 +78,6 @@ where
         };
 
         send(&self.channel, msg);
-        self.buffer_counter = 0;
     }
 }
 

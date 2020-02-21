@@ -20,19 +20,19 @@ fn codegen_test() {
     // Fresh start of run-pass tests
     fs::create_dir_all(RUN_PASS_PATH).unwrap();
 
-    let t = trybuild::TestCases::new();
-
-    // NOTE: Uncomment these once codegen is a bit more stable...
     /*
+    // NOTE: Uncomment these once codegen is a bit more stable...
+    //let t = trybuild::TestCases::new();
+
     add_test_spec("basic_dataflow");
     add_test_spec("tumbling_window_dataflow");
     add_test_spec("normalise");
     add_test_spec("pipeline_with_structs");
-    */
 
     // test all generated .rs files
     let specs = format!("{}/{}", RUN_PASS_PATH, "*.rs");
     t.pass(&specs);
+    */
 }
 
 fn _add_test_spec(name: &str) {

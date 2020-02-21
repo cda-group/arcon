@@ -29,7 +29,7 @@ where
     buffer_map: HashMap<usize, (Channel<A>, Vec<ArconEvent<A>>)>,
     /// A batch size indicating when the channel should flush data
     batch_size: usize,
-    /// A counter keeping track of how many events there are in the buffer
+    /// A counter keeping track of buffered elements across all channels
     buffer_counter: usize,
 }
 
@@ -120,7 +120,7 @@ where
     #[inline]
     pub fn flush(&mut self) {
         for (_, (ref channel, buffer)) in self.buffer_map.iter_mut() {
-            let mut new_vec = Vec::with_capacity(self.batch_size);
+            let mut new_vec = Vec::with_capacity(buffer.len());
             std::mem::swap(&mut new_vec, &mut *buffer);
             let msg = ArconMessage {
                 events: new_vec,

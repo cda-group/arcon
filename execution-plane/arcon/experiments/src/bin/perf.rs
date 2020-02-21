@@ -175,7 +175,8 @@ fn exec(
     log_throughput: bool,
 ) {
     let core_ids = arcon::prelude::get_core_ids().unwrap();
-    let mut core_counter: usize = 0;
+    // So we don't pin on cores that the Kompact workers also pinned to.
+    let mut core_counter: usize = kompact_threads;
     let timeout = std::time::Duration::from_millis(500);
 
     let mut cfg = KompactConfig::default();
