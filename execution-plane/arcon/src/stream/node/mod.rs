@@ -253,6 +253,7 @@ mod tests {
                 Box::new(Filter::new(&node_fn)),
             )
         });
+        system.start(&filter_node);
 
         system.start(&filter_node);
 

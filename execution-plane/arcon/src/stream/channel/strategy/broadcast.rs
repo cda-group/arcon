@@ -157,6 +157,7 @@ mod tests {
         // Create remote components
         for i in 0..remote_components {
             let comp = remote.create(move || DebugNode::<Input>::new());
+            system.start(&comp);
             let comp_id = format!("comp_{}", i);
             let _ = remote.register_by_alias(&comp, comp_id.clone());
             remote.start(&comp);

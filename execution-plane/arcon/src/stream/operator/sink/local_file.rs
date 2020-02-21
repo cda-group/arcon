@@ -77,7 +77,6 @@ mod tests {
                 Box::new(LocalFileSink::new(&file_path)),
             )
         });
-
         system.start(&sink_comp);
 
         let input_one = ArconMessage::element(6 as i32, None, node_id);

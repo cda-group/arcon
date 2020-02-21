@@ -243,6 +243,7 @@ mod tests {
                 Box::new(window_assigner),
             )
         });
+        system.start(&window_node);
 
         system.start(&window_node);
 
