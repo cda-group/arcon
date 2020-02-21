@@ -11,6 +11,9 @@ use std::marker::PhantomData;
 
 struct WithDynamicBackend<SB, C>(C, PhantomData<SB>);
 
+// Adds a function that boxes the state and erases the concrete backend type. This is needed for
+// building states from dynamic state backends (i.e. we only have StateBackend trait object, not a
+// concrete state backend).
 macro_rules! erase_backend_type {
     ($t: ident < _ $(, $rest: ident)* >) => {
         // `s` instead of self, because we don't want the method calling syntax for this,
@@ -137,10 +140,7 @@ pub trait VecState<SB: ?Sized, IK, N, T>: MergingState<SB, IK, N, T, Vec<T>> {
     fn add_all_dyn(&self, backend: &mut SB, values: &mut dyn Iterator<Item = T>)
         -> ArconResult<()>;
     fn is_empty(&self, backend: &SB) -> ArconResult<bool>;
-
-    //        fn len(&self, backend: &SB) -> ArconResult<usize>
-    //        where
-    //            T: SerializableFixedSizeWith<TS>; // can be problematic
+    fn len(&self, backend: &SB) -> ArconResult<usize>;
 
     erase_backend_type!(VecState<_, IK, N, T>);
 }
@@ -243,6 +243,8 @@ static_assertions::assert_obj_safe!(
     AggregatingState<dyn StateBackend, i32, (), i32, String>
 );
 
+// TODO: inconsistent type parameter order - maybe move `SB, IK, N` to the end of the list in every
+//  trait?
 pub type BoxedValueState<T, IK = (), N = ()> =
     Box<dyn ValueState<dyn StateBackend, IK, N, T> + Send + Sync + 'static>;
 pub type BoxedMapState<K, V, IK = (), N = ()> =

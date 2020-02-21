@@ -14,6 +14,8 @@ use std::{
 pub trait SerializableWith<S>: Sized {
     fn serialize(serializer: &S, payload: &Self) -> ArconResult<Vec<u8>>;
     fn serialize_into(serializer: &S, target: impl BufMut, payload: &Self) -> ArconResult<()>;
+
+    fn size_hint(serializer: &S, payload: &Self) -> Option<usize>;
 }
 
 pub trait DeserializableWith<S>: Sized {
@@ -67,6 +69,10 @@ where
                 e
             )
         })
+    }
+
+    fn size_hint(_serializer: &Bincode, payload: &Self) -> Option<usize> {
+        bincode::serialized_size(payload).map(|x| x as usize).ok()
     }
 }
 
@@ -134,6 +140,10 @@ where
             )
         })
     }
+
+    fn size_hint(_serializer: &Prost, payload: &Self) -> Option<usize> {
+        Some(payload.encoded_len())
+    }
 }
 
 impl<T> DeserializableWith<Prost> for T
@@ -188,6 +198,10 @@ macro_rules! impl_byte_dump {
                 let bytes = payload.$to_bytes();
                 target.put_slice(&bytes);
                 Ok(())
+            }
+
+            fn size_hint(_serializer: &$serializer, _payload: &Self) -> Option<usize> {
+                Some(std::mem::size_of::<Self>())
             }
         }
 
@@ -258,6 +272,10 @@ where
         let hashed = hasher.finish();
 
         <u64 as SerializableWith<S>>::serialize_into(&serializer.0, target, &hashed)
+    }
+
+    fn size_hint(serializer: &HashAndThen<S, H>, _payload: &Self) -> Option<usize> {
+        u64::size_hint(&serializer.0, &0)
     }
 }
 

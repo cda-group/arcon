@@ -5,12 +5,14 @@ use crate::{
     prelude::ArconResult,
     state_backend::{
         rocks::{state_common::StateCommon, RocksDb},
-        serialization::{DeserializableWith, SerializableFixedSizeWith, SerializableWith},
+        serialization::{
+            DeserializableWith, LittleEndianBytesDump, SerializableFixedSizeWith, SerializableWith,
+        },
         state_types::{AppendingState, MergingState, State, VecState},
     },
 };
 use rocksdb::{MergeOperands, WriteBatch};
-use std::marker::PhantomData;
+use std::{marker::PhantomData, mem};
 
 pub struct RocksDbVecState<IK, N, T, KS, TS> {
     pub(crate) common: StateCommon<IK, N, KS, TS>,
@@ -31,14 +33,54 @@ where
     delegate_key_and_namespace!(common);
 }
 
+// the fastest one possible on most architectures - we choose this instead of the native endian for
+// portability
+const VEC_LEN_SERIALIZER: &LittleEndianBytesDump = &LittleEndianBytesDump;
+
+// NOTE: this requires all of the operands to begin with an LE-encoded usize length
 pub fn vec_merge(_key: &[u8], first: Option<&[u8]>, rest: &mut MergeOperands) -> Option<Vec<u8>> {
-    let mut result: Vec<u8> = Vec::with_capacity(rest.size_hint().0);
-    first.map(|v| {
-        result.extend_from_slice(v);
-    });
-    for op in rest {
+    let mut result: Vec<u8> = Vec::with_capacity(
+        mem::size_of::<usize>() + first.map(|x| x.len()).unwrap_or(0) + rest.size_hint().0,
+    );
+
+    // reserve space for the length
+    usize::serialize_into(VEC_LEN_SERIALIZER, &mut result, &0)
+        .or_else(|e| {
+            // TODO: proper logging
+            eprintln!("length serialization error: {}", e);
+            Err(())
+        })
+        .ok()?;
+    let mut len = 0usize;
+
+    // Utility to consume the first few bytes from the slice and interpret that as length. The
+    // passed slice will get shifted so it points right after the length bytes.
+    fn get_len(slice_ref: &mut &[u8]) -> Option<usize> {
+        usize::deserialize_from(VEC_LEN_SERIALIZER, slice_ref)
+            .or_else(|e| {
+                // TODO: proper logging
+                eprintln!("length deserialization error: {}", e);
+                Err(())
+            })
+            .ok()
+    }
+
+    for mut op in first.into_iter().chain(rest) {
+        len += get_len(&mut op)?;
         result.extend_from_slice(op);
     }
+
+    // The second argument may seem weird, but look at the impl of BufMut for &mut [u8].
+    // Just passing the result would actually _extend_ the vec, whereas we want to overwrite it
+    // (the space was reserved at the beginning)
+    usize::serialize_into(VEC_LEN_SERIALIZER, result.as_mut_slice(), &len)
+        .or_else(|e| {
+            // TODO: proper logging
+            eprintln!("length serialization error: {}", e);
+            Err(())
+        })
+        .ok()?;
+
     Some(result)
 }
 
@@ -53,22 +95,30 @@ where
         let key = self.common.get_db_key_prefix()?;
         let serialized = backend.get(&self.common.cf_name, &key)?;
 
-        // reader is updated in the loop to point at the yet unconsumed part of the serialized data
+        // reader is updated to point at the yet unconsumed part of the serialized data
         let mut reader = &serialized[..];
-        let mut res = vec![];
+        let len = usize::deserialize_from(VEC_LEN_SERIALIZER, &mut reader)?;
+        let mut res = Vec::with_capacity(len);
         while !reader.is_empty() {
             let val = T::deserialize_from(&self.common.value_serializer, &mut reader)?;
             res.push(val);
         }
+        // sanity check
+        assert_eq!(res.len(), len);
 
         Ok(res)
     }
 
     fn append(&self, backend: &mut RocksDb, value: T) -> ArconResult<()> {
         let backend = backend.initialized_mut()?;
-
         let key = self.common.get_db_key_prefix()?;
-        let serialized = T::serialize(&self.common.value_serializer, &value)?;
+
+        let mut serialized = Vec::with_capacity(
+            mem::size_of::<usize>()
+                + T::size_hint(&self.common.value_serializer, &value).unwrap_or(0),
+        );
+        usize::serialize_into(VEC_LEN_SERIALIZER, &mut serialized, &1)?;
+        T::serialize_into(&self.common.value_serializer, &mut serialized, &value)?;
 
         let cf = backend.get_cf_handle(&self.common.cf_name)?;
         // See the vec_merge function in this module. It is set as the merge operator for every vec state.
@@ -95,7 +145,14 @@ where
 {
     fn set(&self, backend: &mut RocksDb, value: Vec<T>) -> ArconResult<()> {
         let key = self.common.get_db_key_prefix()?;
-        let mut storage = vec![];
+        let raw_serialized_len: usize = value
+            .iter()
+            .flat_map(|x| T::size_hint(&self.common.value_serializer, x).into_iter())
+            .sum();
+        let cap = mem::size_of::<usize>() + raw_serialized_len;
+
+        let mut storage = Vec::with_capacity(cap);
+        usize::serialize_into(VEC_LEN_SERIALIZER, &mut storage, &value.len())?;
         for elem in value {
             T::serialize_into(&self.common.value_serializer, &mut storage, &elem)?;
         }
@@ -107,21 +164,30 @@ where
         Self: Sized,
     {
         let backend = backend.initialized_mut()?;
-
         let key = self.common.get_db_key_prefix()?;
-        let mut wb = WriteBatch::default();
-        let cf = backend.get_cf_handle(&self.common.cf_name)?;
 
-        for value in values {
-            let serialized = T::serialize(&self.common.value_serializer, &value)?;
+        // figuring out the correct capacity would require iterating through `values`, but
+        // we cannot really consume the `values` iterator twice, so just preallocate a bunch of bytes
+        let mut serialized = Vec::with_capacity(256);
 
-            wb.merge_cf(cf, &key, serialized)
-                .map_err(|e| arcon_err_kind!("Could not create merge operation: {}", e))?;
+        // reserve space for the length
+        usize::serialize_into(VEC_LEN_SERIALIZER, &mut serialized, &0)?;
+        let mut len = 0usize;
+
+        for elem in values {
+            len += 1;
+            T::serialize_into(&self.common.value_serializer, &mut serialized, &elem)?;
         }
 
+        // fill in the length
+        // BufMut impl for mutable slices starts at the beginning and shifts the slice, whereas the
+        // impl for Vec starts at the end and extends it, so we want the first one
+        usize::serialize_into(VEC_LEN_SERIALIZER, serialized.as_mut_slice(), &len)?;
+
+        let cf = backend.get_cf_handle(&self.common.cf_name)?;
         backend
             .db
-            .write(wb)
+            .merge_cf(cf, key, serialized)
             .map_err(|e| arcon_err_kind!("Could not execute merge operation: {}", e))?;
 
         Ok(())
@@ -138,46 +204,36 @@ where
     fn is_empty(&self, backend: &RocksDb) -> ArconResult<bool> {
         let key = self.common.get_db_key_prefix()?;
         if let Ok(storage) = backend.get(&self.common.cf_name, key) {
-            Ok(storage.is_empty())
+            if storage.is_empty() {
+                return Ok(true);
+            }
+            if storage.len() < mem::size_of::<usize>() {
+                return arcon_err!("stored vec with partial size?");
+            }
+
+            let len = usize::deserialize_from(VEC_LEN_SERIALIZER, &mut storage.as_ref())?;
+            Ok(len == 0)
         } else {
             Ok(true)
         }
     }
 
-    //    /// for types that don't satisfy the extra bounds, do .get().len()
-    //    fn len(&self, backend: &RocksDb) -> ArconResult<usize>
-    //    where
-    //        T: SerializableFixedSizeWith<TS>,
-    //    {
-    //        let key = self.common.get_db_key(&())?;
-    //        let storage = backend.get(&self.common.cf_name, &key);
-    //
-    //        match storage {
-    //            Err(e) => match e.kind() {
-    //                ErrorKind::ArconError(message) if &*message == "Value not found" => Ok(0),
-    //                _ => Err(e),
-    //            },
-    //            Ok(buf) => {
-    //                if buf.is_empty() {
-    //                    return Ok(0);
-    //                }
-    //
-    //                debug_assert_ne!(T::SIZE, 0);
-    //
-    //                let len = buf.len() / T::SIZE;
-    //                let rem = buf.len() % T::SIZE;
-    //
-    //                // sanity check
-    //                if rem != 0 {
-    //                    return arcon_err!(
-    //                        "vec state storage length is not a multiple of element size"
-    //                    );
-    //                }
-    //
-    //                Ok(len)
-    //            }
-    //        }
-    //    }
+    fn len(&self, backend: &RocksDb) -> ArconResult<usize> {
+        let key = self.common.get_db_key_prefix()?;
+        if let Ok(storage) = backend.get(&self.common.cf_name, key) {
+            if storage.is_empty() {
+                return Ok(0);
+            }
+            if storage.len() < mem::size_of::<usize>() {
+                return arcon_err!("stored vec with partial size?");
+            }
+
+            let len = usize::deserialize_from(VEC_LEN_SERIALIZER, &mut storage.as_ref())?;
+            Ok(len)
+        } else {
+            Ok(0)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -190,7 +246,7 @@ mod test {
         let mut db = TestDb::new();
         let vec_state = db.new_vec_state("test_state", (), (), Bincode, Bincode);
         assert!(vec_state.is_empty(&db).unwrap());
-        //        assert_eq!(vec_state.len(&db).unwrap(), 0);
+        assert_eq!(vec_state.len(&db).unwrap(), 0);
 
         vec_state.append(&mut db, 1).unwrap();
         vec_state.append(&mut db, 2).unwrap();
@@ -198,6 +254,6 @@ mod test {
         vec_state.add_all(&mut db, vec![4, 5, 6]).unwrap();
 
         assert_eq!(vec_state.get(&db).unwrap(), vec![1, 2, 3, 4, 5, 6]);
-        //        assert_eq!(vec_state.len(&db).unwrap(), 6);
+        assert_eq!(vec_state.len(&db).unwrap(), 6);
     }
 }

@@ -46,8 +46,8 @@ impl dyn StateBackend {
     }
 }
 
-pub use self::builders::*;
 pub mod builders;
+pub use self::builders::*;
 
 pub mod serialization;
 

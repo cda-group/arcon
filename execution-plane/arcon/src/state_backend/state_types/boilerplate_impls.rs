@@ -324,6 +324,10 @@ where
     fn is_empty(&self, backend: &dyn StateBackend) -> ArconResult<bool> {
         self.0.is_empty(backend.downcast_ref()?)
     }
+
+    fn len(&self, backend: &dyn StateBackend) -> ArconResult<usize> {
+        self.0.len(backend.downcast_ref()?)
+    }
 }
 
 impl_state_for_boxed_with_dyn_backend!(VecState<_, IK, N, T>);
@@ -375,6 +379,10 @@ impl<IK, N, T> VecState<dyn StateBackend, IK, N, T> for BoxedVecState<T, IK, N> 
     #[inline]
     fn is_empty(&self, backend: &dyn StateBackend) -> ArconResult<bool> {
         (*self).deref().is_empty(backend)
+    }
+
+    fn len(&self, backend: &dyn StateBackend) -> ArconResult<usize> {
+        (*self).deref().len(backend)
     }
 }
 

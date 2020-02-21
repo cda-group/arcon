@@ -120,40 +120,17 @@ where
         }
     }
 
-    //
-    //    fn len(&self, backend: &InMemory) -> ArconResult<usize>
-    //    where
-    //        T: SerializableFixedSizeWith<TS>,
-    //    {
-    //        let key = self.common.get_db_key(&())?;
-    //        let storage = backend.get(&key);
-    //
-    //        match storage {
-    //            Err(e) => match e.kind() {
-    //                ErrorKind::ArconError(message) if &*message == "Value not found" => Ok(0),
-    //                _ => Err(e),
-    //            },
-    //            Ok(buf) => {
-    //                if buf.is_empty() {
-    //                    return Ok(0);
-    //                }
-    //
-    //                debug_assert_ne!(T::SIZE, 0);
-    //
-    //                let len = buf.len() / T::SIZE;
-    //                let rem = buf.len() % T::SIZE;
-    //
-    //                // sanity check
-    //                if rem != 0 {
-    //                    return arcon_err!(
-    //                        "vec state storage length is not a multiple of element size"
-    //                    );
-    //                }
-    //
-    //                Ok(len)
-    //            }
-    //        }
-    //    }
+    fn len(&self, backend: &InMemory) -> ArconResult<usize> {
+        let key = self.common.get_db_key_prefix()?;
+        if let Ok(dynamic) = backend.get(&key) {
+            Ok(dynamic
+                .downcast_ref::<Vec<T>>()
+                .ok_or_else(|| arcon_err_kind!("Dynamic value has a wrong type!"))?
+                .len())
+        } else {
+            Ok(0)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -166,7 +143,7 @@ mod test {
         let mut db = InMemory::new("test").unwrap();
         let vec_state = db.new_vec_state("test_state", (), (), Bincode, Bincode);
         assert!(vec_state.is_empty(&db).unwrap());
-        //        assert_eq!(vec_state.len(&db).unwrap(), 0);
+        assert_eq!(vec_state.len(&db).unwrap(), 0);
 
         vec_state.append(&mut db, 1).unwrap();
         vec_state.append(&mut db, 2).unwrap();
@@ -174,6 +151,6 @@ mod test {
         vec_state.add_all(&mut db, vec![4, 5, 6]).unwrap();
 
         assert_eq!(vec_state.get(&db).unwrap(), vec![1, 2, 3, 4, 5, 6]);
-        //        assert_eq!(vec_state.len(&db).unwrap(), 6);
+        assert_eq!(vec_state.len(&db).unwrap(), 6);
     }
 }

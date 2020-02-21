@@ -272,6 +272,7 @@ where
         Ok(res)
     }
 
+    // TODO: return a smallvec to (potentially) avoid allocation?
     fn get_db_key_prefix(&self) -> ArconResult<Vec<u8>> {
         // UUID is not always serializable, let's just dump the bytes
         let mut res = self.id.as_bytes().to_vec();
