@@ -4,6 +4,7 @@ cargo-features = ["profile-overrides"]
 
 members = [
   "arcon",
+  "arcon/experiments",
   "arcon_codegen",
   "arcon_compiler",
 ]

@@ -5,8 +5,7 @@ use core::time::Duration;
 use kompact::timer::*;
 use std::collections::HashMap;
 use std::convert::TryInto;
-use std::fmt;
-use std::fmt::Debug;
+use std::{fmt, fmt::Debug};
 use uuid::Uuid;
 /*
     EventTimer: Abstraction of timer with underlying QuadWheel scheduling
@@ -153,37 +152,3 @@ impl<E: Clone> Debug for EventTimer<E> {
 
 // Allows the EventTimer to be scheduled on different threads, but should never be used concurrently
 unsafe impl<E: Clone> Send for EventTimer<E> {}
-//unsafe impl<E: Clone> Sync for EventTimer<E> {} // Q: do we need this timer to be sync?
-/*
-pub(crate) enum TimerHandle<C: ComponentDefinition> {
-    OneShot {
-        _id: Uuid, // not used atm
-        action: Box<dyn FnOnce(&mut C, Uuid) + Send + 'static>,
-    },
-    Periodic {
-        _id: Uuid, // not used atm
-        action: Rc<Fn(&mut C, Uuid) + Send + 'static>,
-    },
-}
-
-pub enum ExecuteAction<C: ComponentDefinition> {
-    None,
-    Periodic(Uuid, Rc<Fn(&mut C, Uuid)>),
-    Once(Uuid, Box<dyn FnOnce(&mut C, Uuid)>),
-}
-*/
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[allow(dead_code)]
-    fn assert_event_timer_send_and_sync<E: Clone>(event_timer: &EventTimer<E>) {
-        fn assert_send<T: Send>(_t: &T) {}
-        fn assert_sync<T: Sync>(_t: &T) {}
-
-        assert_send(event_timer);
-        // TODO: Q: do we need event_timer to be Sync?
-        //        assert_sync(event_timer);
-    }
-}

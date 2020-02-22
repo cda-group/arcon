@@ -13,47 +13,39 @@ Arcon's execution plane
 
 [features]
 default = []
-kafka = ["rdkafka", "serde_json", "serde"]
+kafka = ["rdkafka", "futures", "serde_json", "serde"]
 thread_pinning = ["kompact/thread_pinning"]
-socket = ["tokio-util", "tokio", "futures", "serde_json", "serde"]
+socket = ["tokio-util", "tokio", "futures", "bytes", "serde_json", "serde"]
 arcon_rocksdb = ["rocksdb"]
+quiet = ["slog"]
 
 [dependencies]
 arcon_macros = { version = "0.1", path = "arcon_macros" }
 arcon_error = { version = "0.1", path = "arcon_error" }
 arcon_extra = { version = "0.1", path = "arcon_extra" }
-kompact = { git = "https://github.com/kompics/kompact.git", branch = "master" }
-keyby = "0.2.0"
-rand = "0.6.5"
-fnv = "1.0.3"
+kompact = { git = "https://github.com/kompics/kompact.git", branch = "master"}
 uuid = "0.8"
-
-# Logging
-slog = "2.2"
-slog-async = "2.3"
-slog-term = "2.4"
 
 # Serialisation
 abomonation = "0.7.3"
 abomonation_derive = "0.5.0"
-prost = "0.6"
+prost = { git = "https://github.com/Max-Meldrum/prost.git", branch = "derive_generics" }
 prost-types = "0.6"
-bytes = "0.5"
 
 # Optional
 rdkafka = { version = "0.23", optional = true }
 tokio = { version = "0.2", optional = true, features = ["full"] } # TODO: figure out which are truly needed
 tokio-util = { version = "0.2", optional = true, features = ["full"] }
+bytes = { version = "0.5", optional = true }
 futures = { version = "0.3", optional = true }
 serde_json = { version = "1.0.44", optional = true }
 serde = { version = "1.0.104", features = ["derive"], optional = true }
 rocksdb = { git = "https://github.com/tikv/rust-rocksdb.git", optional = true }
-
-[build-dependencies]
-prost-build = "0.6"
+slog = { version = "2.2", features = ["release_max_level_off"], optional = true }
 
 [dev-dependencies]
 tempfile = "3"
+rand = "0.6.5"
 slog = { version = "2.2", features = ["max_level_off"] }
 criterion = { version = "0.3", features=['real_blackbox'] }
 bincode = "1.1.4"
