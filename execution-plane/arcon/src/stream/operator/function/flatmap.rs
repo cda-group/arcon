@@ -15,7 +15,7 @@ where
     IN: ArconType,
     OUT: ArconType,
 {
-    udf: &'static dyn for<'r> SafelySendableFn<(&'r IN,), Vec<OUT>>,
+    udf: &'static dyn SafelySendableFn(&IN) -> Vec<OUT>,
 }
 
 impl<IN, OUT> FlatMap<IN, OUT>
@@ -23,7 +23,7 @@ where
     IN: ArconType,
     OUT: ArconType,
 {
-    pub fn new(udf: &'static dyn for<'r> SafelySendableFn<(&'r IN,), Vec<OUT>>) -> Self {
+    pub fn new(udf: &'static dyn SafelySendableFn(&IN) -> Vec<OUT>) -> Self {
         FlatMap { udf }
     }
 

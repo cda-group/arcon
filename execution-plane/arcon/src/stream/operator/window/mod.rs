@@ -57,7 +57,7 @@ where
     OUT: ArconType,
 {
     buffer: Vec<IN>,
-    materializer: &'static dyn for<'r> SafelySendableFn<(&'r [IN],), OUT>,
+    materializer: &'static dyn SafelySendableFn(&[IN]) -> OUT,
 }
 
 impl<IN, OUT> AppenderWindow<IN, OUT>
@@ -66,7 +66,7 @@ where
     OUT: ArconType,
 {
     pub fn new(
-        materializer: &'static dyn for<'r> SafelySendableFn<(&'r [IN],), OUT>,
+        materializer: &'static dyn SafelySendableFn(&[IN]) -> OUT,
     ) -> AppenderWindow<IN, OUT> {
         AppenderWindow {
             buffer: Vec::new(),
@@ -97,8 +97,8 @@ where
     OUT: ArconType,
 {
     curr_agg: Option<OUT>,
-    init: &'static dyn SafelySendableFn<(IN,), OUT>,
-    agg: &'static dyn for<'r> SafelySendableFn<(IN, &'r OUT), OUT>,
+    init: &'static dyn SafelySendableFn(IN) -> OUT,
+    agg: &'static dyn SafelySendableFn(IN, &OUT) -> OUT,
 }
 
 impl<IN, OUT> IncrementalWindow<IN, OUT>
@@ -107,8 +107,8 @@ where
     OUT: ArconType,
 {
     pub fn new(
-        init: &'static dyn SafelySendableFn<(IN,), OUT>,
-        agg: &'static dyn for<'r> SafelySendableFn<(IN, &'r OUT), OUT>,
+        init: &'static dyn SafelySendableFn(IN) -> OUT,
+        agg: &'static dyn SafelySendableFn(IN, &OUT) -> OUT,
     ) -> IncrementalWindow<IN, OUT> {
         IncrementalWindow {
             curr_agg: None,

@@ -15,7 +15,7 @@ where
     IN: ArconType,
     OUT: ArconType,
 {
-    udf: &'static dyn SafelySendableFn<(IN,), OUT>,
+    udf: &'static dyn SafelySendableFn(IN) -> OUT,
 }
 
 impl<IN, OUT> Map<IN, OUT>
@@ -23,7 +23,7 @@ where
     IN: ArconType,
     OUT: ArconType,
 {
-    pub fn new(udf: &'static dyn SafelySendableFn<(IN,), OUT>) -> Self {
+    pub fn new(udf: &'static dyn SafelySendableFn(IN) -> OUT) -> Self {
         Map { udf }
     }
 

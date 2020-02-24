@@ -13,14 +13,14 @@ pub struct Filter<IN>
 where
     IN: 'static + ArconType,
 {
-    udf: &'static dyn for<'r> SafelySendableFn<(&'r IN,), bool>,
+    udf: &'static dyn SafelySendableFn(&IN) -> bool,
 }
 
 impl<IN> Filter<IN>
 where
     IN: 'static + ArconType,
 {
-    pub fn new(udf: &'static dyn for<'r> SafelySendableFn<(&'r IN,), bool>) -> Self {
+    pub fn new(udf: &'static dyn SafelySendableFn(&IN) -> bool) -> Self {
         Filter { udf }
     }
 
@@ -36,7 +36,7 @@ where
 {
     fn handle_element(&mut self, element: ArconElement<IN>, strategy: &mut ChannelStrategy<IN>) {
         if let Some(data) = &element.data {
-            if self.run_udf(&(data)) {
+            if self.run_udf(&data) {
                 strategy.add(ArconEvent::Element(element));
             }
         }

@@ -23,7 +23,7 @@ where
     /// Timestamp extractor function
     ///
     /// If set to None, timestamps of ArconElement's will also be None.
-    ts_extractor: Option<&'static dyn for<'r> SafelySendableFn<(&'r IN,), u64>>,
+    ts_extractor: Option<&'static dyn SafelySendableFn(&IN) -> u64>,
     /// Current Watermark
     current_watermark: u64,
     /// Watermark interval
@@ -45,7 +45,7 @@ where
 {
     pub fn new(
         watermark_interval: u64,
-        ts_extractor: Option<&'static dyn for<'r> SafelySendableFn<(&'r IN,), u64>>,
+        ts_extractor: Option<&'static dyn SafelySendableFn(&IN) -> u64>,
         channel_strategy: ChannelStrategy<OUT>,
         operator: Box<dyn Operator<IN, OUT> + Send>,
     ) -> Self {
