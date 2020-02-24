@@ -5,8 +5,10 @@ pub mod function;
 pub mod sink;
 pub mod window;
 
-use crate::data::{ArconElement, ArconEvent, ArconType, Epoch, Watermark};
-use crate::stream::channel::strategy::ChannelStrategy;
+use crate::{
+    data::{ArconElement, ArconEvent, ArconType, Epoch, Watermark},
+    stream::channel::strategy::ChannelStrategy,
+};
 use arcon_error::ArconResult;
 
 /// Defines the methods an `Operator` must implement

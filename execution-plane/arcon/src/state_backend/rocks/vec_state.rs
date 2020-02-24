@@ -11,7 +11,7 @@ use crate::{
         state_types::{AppendingState, MergingState, State, VecState},
     },
 };
-use rocksdb::{MergeOperands, WriteBatch};
+use rocksdb::MergeOperands;
 use std::{marker::PhantomData, mem};
 
 pub struct RocksDbVecState<IK, N, T, KS, TS> {

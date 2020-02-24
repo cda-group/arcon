@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use super::DEFAULT_BATCH_SIZE;
-use crate::data::{ArconEvent, ArconMessage, ArconType, NodeID};
-use crate::stream::channel::{strategy::send, Channel};
+use crate::{
+    data::{ArconEvent, ArconMessage, ArconType, NodeID},
+    stream::channel::{strategy::send, Channel},
+};
 
 /// A strategy that sends message downstream in a Round-Robin fashion
 pub struct RoundRobin<A>
@@ -78,9 +80,11 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::data::ArconElement;
-    use crate::prelude::{ChannelStrategy, DebugNode};
-    use crate::stream::channel::strategy::tests::*;
+    use crate::{
+        data::ArconElement,
+        prelude::{ChannelStrategy, DebugNode},
+        stream::channel::strategy::tests::*,
+    };
     use kompact::prelude::*;
     use std::sync::Arc;
 

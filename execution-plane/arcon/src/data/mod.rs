@@ -9,9 +9,11 @@ use ::serde::{Deserialize, Serialize};
 use abomonation::Abomonation;
 use kompact::prelude::*;
 use prost::{Message as PMessage, Oneof as POneof};
-use std::fmt::Debug;
-use std::hash::{Hash, Hasher};
-use std::ops::Deref;
+use std::{
+    fmt::Debug,
+    hash::{Hash, Hasher},
+    ops::Deref,
+};
 
 /// Type that can be passed through the Arcon runtime
 pub trait ArconType:
@@ -48,7 +50,8 @@ where
 }
 
 /// An Enum containing all possible stream events that may occur in an execution
-#[derive(POneof, Clone, Abomonation)]
+#[derive(POneof, Clone, Abomonation, Serialize, Deserialize)]
+#[serde(bound = "A: ArconType")]
 pub enum ArconEvent<A: ArconType> {
     /// A stream element containing some data of type [ArconType] and an optional timestamp [u64]
     #[prost(message, tag = "1")]
@@ -65,7 +68,8 @@ pub enum ArconEvent<A: ArconType> {
 }
 
 /// A Stream element containing some data and timestamp
-#[derive(PMessage, Clone, Abomonation)]
+#[derive(PMessage, Clone, Abomonation, Serialize, Deserialize)]
+#[serde(bound = "A: ArconType")]
 pub struct ArconElement<A: ArconType> {
     #[prost(message, tag = "1")]
     pub data: Option<A>,
@@ -174,7 +178,7 @@ impl<A: ArconType> ArconMessage<A> {
 
 /// A NodeID is used to identify a message sender
 #[derive(
-PMessage, PartialEq, Eq, PartialOrd, Ord, Hash, Copy, Clone, Abomonation, Serialize, Deserialize,
+    PMessage, PartialEq, Eq, PartialOrd, Ord, Hash, Copy, Clone, Abomonation, Serialize, Deserialize,
 )]
 pub struct NodeID {
     #[prost(uint32, tag = "1")]
@@ -206,7 +210,8 @@ impl ArconType for String {}
 /// Float wrapper for f32 in order to impl Hash [std::hash::Hash]
 ///
 /// The `Hash` impl rounds the floats down to an integer and then hashes it.
-#[derive(Clone, PMessage, Abomonation)]
+#[derive(Clone, PMessage, Abomonation, Serialize, Deserialize)]
+#[repr(transparent)]
 pub struct ArconF32 {
     #[prost(float, tag = "1")]
     pub value: f32,
@@ -255,7 +260,8 @@ impl PartialEq for ArconF32 {
 /// Float wrapper for f64 in order to impl Hash [std::hash::Hash]
 ///
 /// The `Hash` impl rounds the floats down to an integer and then hashes it.
-#[derive(Clone, PMessage, Abomonation)]
+#[derive(Clone, PMessage, Abomonation, Serialize, Deserialize)]
+#[repr(transparent)]
 pub struct ArconF64 {
     #[prost(double, tag = "1")]
     pub value: f64,
@@ -306,7 +312,6 @@ pub mod test {
     use super::*;
 
     #[arcon]
-    #[derive(PMessage)]
     pub struct ArconDataTest {
         #[prost(uint32, tag = "1")]
         pub id: u32,

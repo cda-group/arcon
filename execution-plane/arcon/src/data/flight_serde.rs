@@ -258,8 +258,7 @@ pub mod unsafe_remote {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::data::test::ArconDataTest;
-    use crate::prelude::*;
+    use crate::{data::test::ArconDataTest, prelude::*};
     use kompact::prelude::*;
 
     fn get_systems() -> (KompactSystem, KompactSystem) {
@@ -283,10 +282,9 @@ mod test {
 
         let comp_id = format!("comp");
         let _ = remote.register_by_alias(&comp, comp_id.clone());
-        let remote_path = ActorPath::Named(NamedPath::with_system(
-            remote.system_path(),
-            vec![comp_id.into()],
-        ));
+        let remote_path = ActorPath::Named(NamedPath::with_system(remote.system_path(), vec![
+            comp_id.into(),
+        ]));
 
         let dispatcher_ref = local.dispatcher_ref();
         let channel = Channel::Remote(remote_path, FlightSerde::Unsafe, dispatcher_ref.into());

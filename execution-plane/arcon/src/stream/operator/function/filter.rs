@@ -1,10 +1,11 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::data::{ArconElement, ArconEvent, ArconType, Epoch, Watermark};
-use crate::stream::channel::strategy::ChannelStrategy;
-use crate::stream::operator::Operator;
-use crate::util::SafelySendableFn;
+use crate::{
+    data::{ArconElement, ArconEvent, ArconType, Epoch, Watermark},
+    stream::{channel::strategy::ChannelStrategy, operator::Operator},
+    util::SafelySendableFn,
+};
 use arcon_error::ArconResult;
 
 /// IN: Input Event
@@ -75,6 +76,7 @@ mod tests {
                 vec![1.into()],
                 channel_strategy,
                 Box::new(Filter::new(&filter_fn)),
+                Box::new(InMemory::new("test").unwrap()),
             )
         });
         system.start(&filter_node);

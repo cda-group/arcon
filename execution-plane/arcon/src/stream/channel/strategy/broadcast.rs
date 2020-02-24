@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use super::DEFAULT_BATCH_SIZE;
-use crate::data::{ArconEvent, ArconMessage, ArconType, NodeID};
-use crate::stream::channel::{strategy::send, Channel};
+use crate::{
+    data::{ArconEvent, ArconMessage, ArconType, NodeID},
+    stream::channel::{strategy::send, Channel},
+};
 
 /// A Broadcast strategy for one-to-many message sending
 pub struct Broadcast<A>
@@ -79,11 +81,14 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::data::ArconElement;
-    use crate::prelude::DebugNode;
-    use crate::stream::channel::strategy::tests::*;
-    use crate::stream::channel::strategy::ChannelStrategy;
-    use crate::stream::channel::FlightSerde;
+    use crate::{
+        data::ArconElement,
+        prelude::DebugNode,
+        stream::channel::{
+            strategy::{tests::*, ChannelStrategy},
+            FlightSerde,
+        },
+    };
     use kompact::prelude::*;
     use std::sync::Arc;
 
@@ -161,10 +166,9 @@ mod tests {
             let _ = remote.register_by_alias(&comp, comp_id.clone());
             remote.start(&comp);
 
-            let remote_path = ActorPath::Named(NamedPath::with_system(
-                remote.system_path(),
-                vec![comp_id.into()],
-            ));
+            let remote_path = ActorPath::Named(NamedPath::with_system(remote.system_path(), vec![
+                comp_id.into(),
+            ]));
             channels.push(Channel::Remote(
                 remote_path,
                 FlightSerde::Reliable,

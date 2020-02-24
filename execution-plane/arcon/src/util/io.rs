@@ -14,8 +14,8 @@ use tokio_util::{
     udp::UdpFramed,
 };
 
-use std::thread::{Builder, JoinHandle};
 use bytes::BytesMut;
+use std::thread::{Builder, JoinHandle};
 
 /// Enum containing possible IO kinds
 pub enum IOKind {
@@ -146,8 +146,7 @@ impl Actor for IO {
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use tokio::io::AsyncWriteExt;
-    use tokio::net::TcpStream;
+    use tokio::{io::AsyncWriteExt, net::TcpStream};
 
     #[derive(ComponentDefinition)]
     pub struct IOSource {

@@ -7,21 +7,20 @@
 #![allow(bare_trait_objects)]
 extern crate arcon;
 
-use arcon::macros::*;
-use arcon::prelude::*;
-use std::fs::File;
-use std::io::{BufRead, BufReader};
+use arcon::{macros::*, prelude::*};
+use std::{
+    fs::File,
+    io::{BufRead, BufReader},
+};
 use tempfile::NamedTempFile;
 
 #[arcon]
-#[derive(prost::Message)]
 pub struct NormaliseElements {
     #[prost(int64, repeated, tag = "1")]
     pub data: Vec<i64>,
 }
 
 #[arcon]
-#[derive(prost::Message)]
 pub struct SourceData {
     #[prost(int64, tag = "1")]
     pub data: i64,

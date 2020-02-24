@@ -1,11 +1,11 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::prelude::*;
-use crate::util::event_timer::EventTimer;
-use std::collections::hash_map::DefaultHasher;
-use std::collections::HashMap;
-use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
+use crate::{prelude::*, util::event_timer::EventTimer};
+use std::{
+    collections::{hash_map::DefaultHasher, HashMap},
+    hash::{BuildHasher, BuildHasherDefault, Hash, Hasher},
+};
 
 /*
     EventTimeWindowAssigner
@@ -189,13 +189,11 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::stream::channel::strategy::forward::*;
-    use crate::stream::channel::Channel;
+    use crate::stream::channel::{strategy::forward::*, Channel};
     use kompact::prelude::Component;
     use std::{sync::Arc, thread, time, time::UNIX_EPOCH};
 
     #[arcon_keyed(id)]
-    #[derive(prost::Message)]
     pub struct Item {
         #[prost(uint64, tag = "1")]
         id: u64,

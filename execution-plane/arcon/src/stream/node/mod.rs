@@ -77,7 +77,7 @@ where
 
         Node {
             ctx: ComponentContext::new(),
-            id: id,
+            id,
             channel_strategy,
             in_channels,
             operator,
@@ -156,8 +156,11 @@ where
                 }
                 ArconEvent::Epoch(e) => {
                     // Add the sender to the blocked set.
-                    self.blocked_channels
-                        .fast_insert(&mut *self.state_backend, message.sender, ())?;
+                    self.blocked_channels.fast_insert(
+                        &mut *self.state_backend,
+                        message.sender,
+                        (),
+                    )?;
 
                     // If all senders blocked we can transition to new Epoch
                     if self.blocked_channels.len(&*self.state_backend)? == self.in_channels.len() {

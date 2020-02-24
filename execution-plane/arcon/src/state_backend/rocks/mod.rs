@@ -19,7 +19,6 @@ use rocksdb::{
 };
 use std::{
     collections::{HashMap, HashSet},
-    error::Error,
     fs,
     iter::FromIterator,
     mem,
@@ -288,7 +287,7 @@ impl StateBackend for RocksDb {
         let column_families: HashSet<String> = match DB::list_cf(&opts, &path) {
             Ok(cfs) => cfs.into_iter().filter(|n| n != "default").collect(),
             // TODO: possibly platform-dependant error message check
-            Err(e) if e.description().contains("No such file or directory") => HashSet::new(),
+            Err(e) if e.to_string().contains("No such file or directory") => HashSet::new(),
             Err(e) => {
                 return arcon_err!("Could not list column families: {}", e);
             }

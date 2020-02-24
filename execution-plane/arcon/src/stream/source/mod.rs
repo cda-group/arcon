@@ -1,10 +1,11 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::data::{ArconElement, ArconEvent, ArconType, Watermark};
-use crate::stream::channel::strategy::ChannelStrategy;
-use crate::stream::operator::Operator;
-use crate::util::SafelySendableFn;
+use crate::{
+    data::{ArconElement, ArconEvent, ArconType, Watermark},
+    stream::{channel::strategy::ChannelStrategy, operator::Operator},
+    util::SafelySendableFn,
+};
 
 pub mod collection;
 #[cfg(feature = "kafka")]

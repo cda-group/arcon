@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use super::DEFAULT_BATCH_SIZE;
-use crate::prelude::*;
-use crate::stream::channel::{strategy::send, Channel};
+use crate::{
+    prelude::*,
+    stream::channel::{strategy::send, Channel},
+};
 
 /// `Forward` is a one-to-one channel strategy between two components
 pub struct Forward<A>
@@ -84,8 +86,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::stream::channel::strategy::tests::*;
-    use crate::stream::channel::strategy::ChannelStrategy;
+    use crate::stream::channel::strategy::{tests::*, ChannelStrategy};
     use kompact::prelude::*;
 
     #[test]

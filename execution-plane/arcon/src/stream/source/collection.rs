@@ -71,8 +71,7 @@ where
 mod tests {
     use super::*;
     use crate::prelude::{Channel, ChannelStrategy, DebugNode, Filter, Forward, NodeID};
-    use kompact::default_components::DeadletterBox;
-    use kompact::prelude::KompactSystem;
+    use kompact::{default_components::DeadletterBox, prelude::KompactSystem};
     use std::sync::Arc;
 
     // Perhaps move this to some common place?

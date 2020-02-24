@@ -11,4 +11,6 @@ num_cpus = "1.10.1"
 # Should not need to do this..
 # But for now..
 abomonation = "0.7.3"
+abomonation_derive = "0.5.0"
+serde = { version = "1.0.104", features = ["derive"] }
 prost = { git = "https://github.com/Max-Meldrum/prost.git", branch = "derive_generics" }

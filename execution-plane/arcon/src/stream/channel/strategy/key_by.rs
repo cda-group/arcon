@@ -1,12 +1,16 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::data::{ArconEvent, ArconType};
-use crate::prelude::*;
-use crate::stream::channel::strategy::send;
-use std::collections::{hash_map::DefaultHasher, HashMap};
-use std::default::Default;
-use std::hash::{BuildHasher, BuildHasherDefault, Hasher};
+use crate::{
+    data::{ArconEvent, ArconType},
+    prelude::*,
+    stream::channel::strategy::send,
+};
+use std::{
+    collections::{hash_map::DefaultHasher, HashMap},
+    default::Default,
+    hash::{BuildHasher, BuildHasherDefault, Hasher},
+};
 
 type DefaultHashBuilder = BuildHasherDefault<DefaultHasher>;
 
@@ -136,8 +140,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::data::ArconEvent;
-    use crate::stream::channel::strategy::tests::*;
+    use crate::{data::ArconEvent, stream::channel::strategy::tests::*};
     use kompact::prelude::*;
     use rand::Rng;
     use std::sync::Arc;

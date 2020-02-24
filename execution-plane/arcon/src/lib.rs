@@ -9,7 +9,6 @@
 
 #![feature(unboxed_closures)]
 #![feature(fn_traits)]
-#![feature(slice_patterns)]
 
 #[cfg_attr(test, macro_use)]
 extern crate arcon_macros;
@@ -36,21 +35,22 @@ pub mod macros {
 
 /// Helper module that imports everything related to arcon into scope
 pub mod prelude {
-    pub use crate::stream::channel::strategy::{
-        broadcast::Broadcast, forward::Forward, key_by::KeyBy, round_robin::RoundRobin,
-        ChannelStrategy,
-    };
-    pub use crate::stream::channel::{Channel, DispatcherSource};
     pub use crate::stream::{
-        node::debug::DebugNode,
-        node::Node,
-        operator::function::{Filter, FlatMap, Map},
-        operator::sink::local_file::LocalFileSink,
-        operator::window::{AppenderWindow, EventTimeWindowAssigner, IncrementalWindow, Window},
-        operator::Operator,
-        source::collection::CollectionSource,
-        source::local_file::LocalFileSource,
-        source::SourceContext,
+        channel::{
+            strategy::{
+                broadcast::Broadcast, forward::Forward, key_by::KeyBy, round_robin::RoundRobin,
+                ChannelStrategy,
+            },
+            Channel, DispatcherSource,
+        },
+        node::{debug::DebugNode, Node},
+        operator::{
+            function::{Filter, FlatMap, Map},
+            sink::local_file::LocalFileSink,
+            window::{AppenderWindow, EventTimeWindowAssigner, IncrementalWindow, Window},
+            Operator,
+        },
+        source::{collection::CollectionSource, local_file::LocalFileSource, SourceContext},
     };
     #[cfg(feature = "socket")]
     pub use crate::stream::{
@@ -61,10 +61,10 @@ pub mod prelude {
     #[cfg(feature = "kafka")]
     pub use crate::stream::{operator::sink::kafka::KafkaSink, source::kafka::KafkaSource};
 
-    pub use crate::data::flight_serde::{
-        reliable_remote::ReliableSerde, unsafe_remote::UnsafeSerde, FlightSerde,
+    pub use crate::data::{
+        flight_serde::{reliable_remote::ReliableSerde, unsafe_remote::UnsafeSerde, FlightSerde},
+        *,
     };
-    pub use crate::data::*;
     pub use error::ArconResult;
 
     pub use kompact::{default_components::*, prelude::*};
@@ -84,7 +84,6 @@ mod tests {
     use std::collections::hash_map::DefaultHasher;
 
     #[arcon_keyed(id)]
-    #[derive(prost::Message)]
     pub struct Item {
         #[prost(uint64, tag = "1")]
         id: u64,

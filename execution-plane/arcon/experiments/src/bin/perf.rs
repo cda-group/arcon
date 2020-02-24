@@ -10,7 +10,8 @@ extern crate clap;
 use arcon::prelude::*;
 use clap::{App, AppSettings, Arg, SubCommand};
 use experiments::{
-    get_items, square_root_newton, throughput_sink::Run, throughput_sink::ThroughputSink,
+    get_items, square_root_newton,
+    throughput_sink::{Run, ThroughputSink},
     EnrichedItem, Item,
 };
 use std::usize;
@@ -230,6 +231,7 @@ fn exec(
         vec![2.into()],
         channel_strategy,
         Box::new(Map::new(&map_fn)),
+        Box::new(InMemory::new("perf").unwrap()),
     );
 
     let map_node = if dedicated {
