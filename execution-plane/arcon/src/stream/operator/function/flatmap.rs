@@ -3,7 +3,10 @@
 
 use crate::{
     data::{ArconElement, ArconEvent, ArconType, Epoch, Watermark},
-    stream::{channel::strategy::ChannelStrategy, operator::Operator},
+    stream::{
+        channel::strategy::ChannelStrategy,
+        operator::{Operator, OperatorContext},
+    },
     util::SafelySendableFn,
 };
 use arcon_error::ArconResult;
@@ -38,11 +41,11 @@ where
     IN: 'static + ArconType,
     OUT: 'static + ArconType,
 {
-    fn handle_element(&mut self, element: ArconElement<IN>, strategy: &mut ChannelStrategy<OUT>) {
+    fn handle_element(&mut self, element: ArconElement<IN>, mut ctx: OperatorContext<OUT>) {
         if let Some(data) = element.data {
             let result = self.run_udf(&(data));
             for item in result {
-                strategy.add(ArconEvent::Element(ArconElement {
+                ctx.output(ArconEvent::Element(ArconElement {
                     data: Some(item),
                     timestamp: element.timestamp,
                 }));
@@ -50,10 +53,18 @@ where
         }
     }
 
-    fn handle_watermark(&mut self, _w: Watermark) -> Option<Vec<ArconEvent<OUT>>> {
+    fn handle_watermark(
+        &mut self,
+        _w: Watermark,
+        _ctx: OperatorContext<OUT>,
+    ) -> Option<Vec<ArconEvent<OUT>>> {
         None
     }
-    fn handle_epoch(&mut self, _epoch: Epoch) -> Option<ArconResult<Vec<u8>>> {
+    fn handle_epoch(
+        &mut self,
+        _epoch: Epoch,
+        _ctx: OperatorContext<OUT>,
+    ) -> Option<ArconResult<Vec<u8>>> {
         None
     }
 }

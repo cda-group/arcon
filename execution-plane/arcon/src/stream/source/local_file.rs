@@ -98,6 +98,7 @@ mod tests {
     use crate::{
         data::ArconF64,
         prelude::{Channel, ChannelStrategy, DebugNode, Forward, Map, NodeID},
+        state_backend::{in_memory::InMemory, StateBackend},
     };
     use kompact::{default_components::DeadletterBox, prelude::KompactSystem};
     use std::{io::prelude::*, sync::Arc, thread, time};
@@ -153,6 +154,7 @@ mod tests {
             None, // no timestamp extractor
             channel_strategy,
             operator,
+            Box::new(InMemory::new("test").unwrap()),
         );
 
         let file_source: LocalFileSource<u64, u64> =
@@ -201,6 +203,7 @@ mod tests {
             None, // no timestamp extractor
             channel_strategy,
             operator,
+            Box::new(InMemory::new("test").unwrap()),
         );
 
         let file_source: LocalFileSource<ArconF64, ArconF64> =

@@ -4,7 +4,7 @@
 /// Debug version of [Node]
 pub mod debug;
 
-use crate::prelude::*;
+use crate::{prelude::*, stream::operator::OperatorContext};
 use std::iter;
 
 /// A Node is a [kompact] component that drives the execution of streaming operators
@@ -109,7 +109,10 @@ where
         for event in message.events {
             match event {
                 ArconEvent::Element(e) => {
-                    self.operator.handle_element(e, &mut self.channel_strategy);
+                    self.operator.handle_element(
+                        e,
+                        OperatorContext::new(&mut self.channel_strategy, &mut *self.state_backend),
+                    );
                 }
                 ArconEvent::Watermark(w) => {
                     let current_watermark = self.current_watermark.get(&*self.state_backend)?;
@@ -143,7 +146,13 @@ where
                             .set(&mut *self.state_backend, new_watermark)?;
 
                         // Handle the watermark
-                        if let Some(wm_output) = self.operator.handle_watermark(new_watermark) {
+                        if let Some(wm_output) = self.operator.handle_watermark(
+                            new_watermark,
+                            OperatorContext::new(
+                                &mut self.channel_strategy,
+                                &mut *self.state_backend,
+                            ),
+                        ) {
                             for event in wm_output {
                                 self.channel_strategy.add(event);
                             }
@@ -168,7 +177,13 @@ where
                         self.current_epoch.set(&mut *self.state_backend, e)?;
 
                         // call handle_epoch on our operator
-                        let _operator_state = self.operator.handle_epoch(e);
+                        let _operator_state = self.operator.handle_epoch(
+                            e,
+                            OperatorContext::new(
+                                &mut self.channel_strategy,
+                                &mut *self.state_backend,
+                            ),
+                        );
 
                         // store the state
                         self.save_state()?;

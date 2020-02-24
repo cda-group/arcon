@@ -141,6 +141,7 @@ fn normalise_pipeline_test() {
         Some(&timestamp_extractor),
         channel_strategy,
         operator,
+        Box::new(InMemory::new("test").unwrap()),
     );
 
     let mut collection: Vec<SourceData> = Vec::new();

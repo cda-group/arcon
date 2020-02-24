@@ -1,7 +1,7 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::prelude::*;
+use crate::{prelude::*, stream::operator::OperatorContext};
 use ::serde::Serialize;
 use bytes::Bytes;
 use futures::{channel, executor::block_on, SinkExt, StreamExt};
@@ -75,7 +75,7 @@ impl<IN> Operator<IN, IN> for SocketSink<IN>
 where
     IN: ArconType + Serialize,
 {
-    fn handle_element(&mut self, e: ArconElement<IN>, _: &mut ChannelStrategy<IN>) {
+    fn handle_element(&mut self, e: ArconElement<IN>, _ctx: OperatorContext<IN>) {
         let mut tx = self.tx_channel.clone();
         let fmt_data = {
             if let Ok(mut json) = serde_json::to_string(&e.data) {
@@ -96,10 +96,18 @@ where
         };
         self.runtime_handle.spawn(req_dispatch);
     }
-    fn handle_watermark(&mut self, _w: Watermark) -> Option<Vec<ArconEvent<IN>>> {
+    fn handle_watermark(
+        &mut self,
+        _w: Watermark,
+        _ctx: OperatorContext<IN>,
+    ) -> Option<Vec<ArconEvent<IN>>> {
         None
     }
-    fn handle_epoch(&mut self, _epoch: Epoch) -> Option<ArconResult<Vec<u8>>> {
+    fn handle_epoch(
+        &mut self,
+        _epoch: Epoch,
+        _ctx: OperatorContext<IN>,
+    ) -> Option<ArconResult<Vec<u8>>> {
         None
     }
 }

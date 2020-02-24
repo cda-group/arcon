@@ -278,6 +278,7 @@ fn exec(
         None, // no timestamp extractor
         channel_strategy,
         source_op,
+        Box::new(InMemory::new("test").unwrap()),
     );
 
     // Collection for source

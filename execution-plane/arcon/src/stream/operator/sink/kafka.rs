@@ -1,7 +1,7 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::prelude::*;
+use crate::{prelude::*, stream::operator::OperatorContext};
 use futures::executor::block_on;
 use rdkafka::{
     config::ClientConfig,
@@ -78,13 +78,21 @@ impl<IN> Operator<IN, IN> for KafkaSink<IN>
 where
     IN: ArconType + ::serde::Serialize + ::serde::de::DeserializeOwned,
 {
-    fn handle_element(&mut self, element: ArconElement<IN>, _: &mut ChannelStrategy<IN>) {
+    fn handle_element(&mut self, element: ArconElement<IN>, _ctx: OperatorContext<IN>) {
         self.buffer.push(element);
     }
-    fn handle_watermark(&mut self, _w: Watermark) -> Option<Vec<ArconEvent<IN>>> {
+    fn handle_watermark(
+        &mut self,
+        _w: Watermark,
+        _ctx: OperatorContext<IN>,
+    ) -> Option<Vec<ArconEvent<IN>>> {
         None
     }
-    fn handle_epoch(&mut self, _epoch: Epoch) -> Option<ArconResult<Vec<u8>>> {
+    fn handle_epoch(
+        &mut self,
+        _epoch: Epoch,
+        _ctx: OperatorContext<IN>,
+    ) -> Option<ArconResult<Vec<u8>>> {
         self.commit_buffer();
         None
     }

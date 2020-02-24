@@ -111,7 +111,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::prelude::{Channel, ChannelStrategy, DebugNode, Forward, Map, NodeID};
+    use crate::{
+        prelude::{Channel, ChannelStrategy, DebugNode, Forward, Map, NodeID},
+        state_backend::{in_memory::InMemory, StateBackend},
+    };
     use std::{thread, time};
     use tokio::{net::TcpStream, prelude::*, runtime::Runtime};
 
@@ -149,6 +152,7 @@ mod tests {
             None, // no timestamp extractor
             channel_strategy,
             operator,
+            Box::new(InMemory::new("test").unwrap()),
         );
 
         let socket_source: SocketSource<u32, u32> =
@@ -218,6 +222,7 @@ mod tests {
             Some(&timestamp_extractor),
             channel_strategy,
             operator,
+            Box::new(InMemory::new("test").unwrap()),
         );
 
         let socket_source: SocketSource<ExtractorStruct, ExtractorStruct> =

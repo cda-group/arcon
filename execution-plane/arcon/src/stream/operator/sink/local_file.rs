@@ -1,7 +1,7 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::{data::ArconEvent, prelude::*};
+use crate::{data::ArconEvent, prelude::*, stream::operator::OperatorContext};
 use std::{
     fs::{File, OpenOptions},
     io::Write,
@@ -39,17 +39,25 @@ impl<IN> Operator<IN, IN> for LocalFileSink<IN>
 where
     IN: ArconType,
 {
-    fn handle_element(&mut self, element: ArconElement<IN>, _: &mut ChannelStrategy<IN>) {
+    fn handle_element(&mut self, element: ArconElement<IN>, _ctx: OperatorContext<IN>) {
         if let Some(data) = element.data {
             if let Err(err) = writeln!(self.file, "{:?}", data) {
                 eprintln!("Error while writing to file sink {}", err.to_string());
             }
         }
     }
-    fn handle_watermark(&mut self, _w: Watermark) -> Option<Vec<ArconEvent<IN>>> {
+    fn handle_watermark(
+        &mut self,
+        _w: Watermark,
+        _ctx: OperatorContext<IN>,
+    ) -> Option<Vec<ArconEvent<IN>>> {
         None
     }
-    fn handle_epoch(&mut self, _epoch: Epoch) -> Option<ArconResult<Vec<u8>>> {
+    fn handle_epoch(
+        &mut self,
+        _epoch: Epoch,
+        _ctx: OperatorContext<IN>,
+    ) -> Option<ArconResult<Vec<u8>>> {
         None
     }
 }

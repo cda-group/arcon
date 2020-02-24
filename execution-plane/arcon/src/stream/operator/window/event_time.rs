@@ -1,7 +1,7 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::{prelude::*, util::event_timer::EventTimer};
+use crate::{prelude::*, stream::operator::OperatorContext, util::event_timer::EventTimer};
 use std::{
     collections::{hash_map::DefaultHasher, HashMap},
     hash::{BuildHasher, BuildHasherDefault, Hash, Hasher},
@@ -98,7 +98,7 @@ where
     IN: ArconType + Hash,
     OUT: ArconType,
 {
-    fn handle_element(&mut self, element: ArconElement<IN>, _: &mut ChannelStrategy<OUT>) {
+    fn handle_element(&mut self, element: ArconElement<IN>, _ctx: OperatorContext<OUT>) {
         let ts = element.timestamp.unwrap_or(0);
         if self.window_start.is_empty() {
             // First element received, set the internal timer
@@ -131,7 +131,7 @@ where
             None => HashMap::new(),
         };
 
-        // Insert the element into all windows and create new where necassery
+        // Insert the element into all windows and create new where necessary
         for i in floor..=ceil {
             match w_map.get_mut(&i) {
                 Some(window) => {
@@ -154,7 +154,11 @@ where
         }
         self.window_maps.insert(key, w_map);
     }
-    fn handle_watermark(&mut self, w: Watermark) -> Option<Vec<ArconEvent<OUT>>> {
+    fn handle_watermark(
+        &mut self,
+        w: Watermark,
+        _ctx: OperatorContext<OUT>,
+    ) -> Option<Vec<ArconEvent<OUT>>> {
         if self.window_start.is_empty() {
             // Early return
             return None;
@@ -181,7 +185,11 @@ where
         }
         Some(result)
     }
-    fn handle_epoch(&mut self, _epoch: Epoch) -> Option<ArconResult<Vec<u8>>> {
+    fn handle_epoch(
+        &mut self,
+        _epoch: Epoch,
+        _ctx: OperatorContext<OUT>,
+    ) -> Option<ArconResult<Vec<u8>>> {
         None
     }
 }

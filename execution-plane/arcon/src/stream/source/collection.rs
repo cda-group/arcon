@@ -70,7 +70,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::prelude::{Channel, ChannelStrategy, DebugNode, Filter, Forward, NodeID};
+    use crate::{
+        prelude::{Channel, ChannelStrategy, DebugNode, Filter, Forward, NodeID},
+        state_backend::{in_memory::InMemory, StateBackend},
+    };
     use kompact::{default_components::DeadletterBox, prelude::KompactSystem};
     use std::sync::Arc;
 
@@ -115,6 +118,7 @@ mod tests {
             None, // no timestamp extractor
             channel_strategy,
             operator,
+            Box::new(InMemory::new("test").unwrap()),
         );
 
         // Generate collection

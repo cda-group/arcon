@@ -3,7 +3,11 @@
 
 use crate::{
     data::{ArconElement, ArconEvent, ArconType, Watermark},
-    stream::{channel::strategy::ChannelStrategy, operator::Operator},
+    state_backend::StateBackend,
+    stream::{
+        channel::strategy::ChannelStrategy,
+        operator::{Operator, OperatorContext},
+    },
     util::SafelySendableFn,
 };
 
@@ -36,6 +40,8 @@ where
     operator: Box<dyn Operator<IN, OUT> + Send>,
     /// Strategy for outputting events
     channel_strategy: ChannelStrategy<OUT>,
+    /// State backend that a source can keep persistent data in
+    state_backend: Box<dyn StateBackend>,
 }
 
 impl<IN, OUT> SourceContext<IN, OUT>
@@ -48,6 +54,7 @@ where
         ts_extractor: Option<&'static dyn SafelySendableFn(&IN) -> u64>,
         channel_strategy: ChannelStrategy<OUT>,
         operator: Box<dyn Operator<IN, OUT> + Send>,
+        state_backend: Box<dyn StateBackend>,
     ) -> Self {
         SourceContext {
             ts_extractor,
@@ -55,6 +62,7 @@ where
             watermark_interval,
             operator,
             channel_strategy,
+            state_backend,
         }
     }
 
@@ -91,8 +99,10 @@ where
     /// Calls a transformation function on the source data to generate outgoing ArconEvent<OUT>
     #[inline]
     pub fn process(&mut self, data: ArconElement<IN>) {
-        self.operator
-            .handle_element(data, &mut self.channel_strategy);
+        self.operator.handle_element(
+            data,
+            OperatorContext::new(&mut self.channel_strategy, &mut *self.state_backend),
+        );
     }
 
     /// Build ArconElement

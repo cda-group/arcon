@@ -3,7 +3,10 @@
 
 use crate::{
     data::{ArconElement, ArconEvent, ArconType, Epoch, Watermark},
-    stream::{channel::strategy::ChannelStrategy, operator::Operator},
+    stream::{
+        channel::strategy::ChannelStrategy,
+        operator::{Operator, OperatorContext},
+    },
     util::SafelySendableFn,
 };
 use arcon_error::ArconResult;
@@ -34,18 +37,26 @@ impl<IN> Operator<IN, IN> for Filter<IN>
 where
     IN: 'static + ArconType,
 {
-    fn handle_element(&mut self, element: ArconElement<IN>, strategy: &mut ChannelStrategy<IN>) {
+    fn handle_element(&mut self, element: ArconElement<IN>, mut ctx: OperatorContext<IN>) {
         if let Some(data) = &element.data {
             if self.run_udf(&data) {
-                strategy.add(ArconEvent::Element(element));
+                ctx.output(ArconEvent::Element(element));
             }
         }
     }
 
-    fn handle_watermark(&mut self, _w: Watermark) -> Option<Vec<ArconEvent<IN>>> {
+    fn handle_watermark(
+        &mut self,
+        _w: Watermark,
+        _ctx: OperatorContext<IN>,
+    ) -> Option<Vec<ArconEvent<IN>>> {
         None
     }
-    fn handle_epoch(&mut self, _epoch: Epoch) -> Option<ArconResult<Vec<u8>>> {
+    fn handle_epoch(
+        &mut self,
+        _epoch: Epoch,
+        _ctx: OperatorContext<IN>,
+    ) -> Option<ArconResult<Vec<u8>>> {
         None
     }
 }
