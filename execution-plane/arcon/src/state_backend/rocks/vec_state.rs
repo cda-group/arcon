@@ -35,7 +35,8 @@ where
 
 // the fastest one possible on most architectures - we choose this instead of the native endian for
 // portability
-const VEC_LEN_SERIALIZER: &LittleEndianBytesDump = &LittleEndianBytesDump;
+type VecLenSerializer = LittleEndianBytesDump;
+const VEC_LEN_SERIALIZER: &VecLenSerializer = &LittleEndianBytesDump;
 
 // NOTE: this requires all of the operands to begin with an LE-encoded usize length
 pub fn vec_merge(_key: &[u8], first: Option<&[u8]>, rest: &mut MergeOperands) -> Option<Vec<u8>> {
