@@ -196,7 +196,7 @@ fn compile(
         if md.is_file() {
             spec_path.to_string()
         } else {
-            (spec_path.to_owned() + "/" + DEFAULT_SPEC)
+            spec_path.to_owned() + "/" + DEFAULT_SPEC
         }
     };
 

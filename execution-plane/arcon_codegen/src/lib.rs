@@ -1,6 +1,10 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
+//! arcon_codegen is a crate used to generate [arcon] from an Arcon specification.
+//!
+//! The Arcon specification is defined using Protobuf and may be found in the [arcon_proto] crate.
+
 #![allow(bare_trait_objects)]
 #![recursion_limit = "256"]
 #[macro_use]
