@@ -3,6 +3,7 @@
 
 use core::time::Duration;
 use kompact::timer::*;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::{collections::HashMap, convert::TryInto, fmt, fmt::Debug};
 use uuid::Uuid;
 /*
@@ -27,30 +28,40 @@ use uuid::Uuid;
         advance_to to return ordered set of actions to perform.
 */
 
-pub struct EventTimer<E: Clone> {
-    timer: QuadWheelWithOverflow,
+/// The serializable part of EventTimer<E>
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SerializableEventTimer<E> {
     time: u64,
-    handles: HashMap<Uuid, E>,
+    handles: HashMap<Uuid, (Duration, E)>,
 }
 
-impl<E: Clone> Default for EventTimer<E> {
+// when serializing this we treat the timer field as transient and recreate it from the serializable
+// part when deserializing
+pub struct EventTimer<E> {
+    timer: QuadWheelWithOverflow,
+    pub inner: SerializableEventTimer<E>,
+}
+
+impl<E> Default for EventTimer<E> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<E: Clone> EventTimer<E> {
+impl<E> EventTimer<E> {
     pub fn new() -> EventTimer<E> {
         EventTimer {
             timer: QuadWheelWithOverflow::new(),
-            time: 0u64,
-            handles: HashMap::new(),
+            inner: SerializableEventTimer {
+                time: 0u64,
+                handles: HashMap::new(),
+            },
         }
     }
     // Basic scheduling function
     fn schedule_once(&mut self, timeout: Duration, entry: E) {
         let id = Uuid::new_v4();
-        self.handles.insert(id, entry);
+        self.inner.handles.insert(id, (timeout, entry));
 
         let e = TimerEntry::OneShot {
             id,
@@ -68,43 +79,43 @@ impl<E: Clone> EventTimer<E> {
     // Schedule at a specific time in the future
     pub fn schedule_at(&mut self, time: u64, entry: E) {
         // Check for bad target time
-        if time < self.time {
+        if time < self.inner.time {
             eprintln!("tried to schedule event which has already happened");
         } else {
-            self.schedule_once(Duration::from_millis(time - self.time), entry);
+            self.schedule_once(Duration::from_millis(time - self.inner.time), entry);
         }
     }
     // Should be called before scheduling anything
     #[inline(always)]
     pub fn set_time(&mut self, ts: u64) {
-        self.time = ts;
+        self.inner.time = ts;
     }
     pub fn get_time(&mut self) -> u64 {
-        self.time
+        self.inner.time
     }
     //
     #[inline(always)]
     pub fn advance_to(&mut self, ts: u64) -> Vec<E> {
         let mut vec = Vec::new();
-        if ts < self.time {
+        if ts < self.inner.time {
             eprintln!("advance_to called with lower timestamp than current time");
             return vec;
         }
 
         // TODO: type conversion mess
-        let mut time_left = ts - self.time;
+        let mut time_left = ts - self.inner.time;
         while time_left > 0 {
             if let Skip::Millis(skip_ms) = self.timer.can_skip() {
                 // Skip forward
                 if skip_ms >= time_left.try_into().unwrap() {
                     // No more ops to gather, skip the remaining time_left and return
                     self.timer.skip((time_left).try_into().unwrap());
-                    self.time += time_left;
+                    self.inner.time += time_left;
                     return vec;
                 } else {
                     // Skip lower than time-left:
                     self.timer.skip(skip_ms);
-                    self.time += skip_ms as u64;
+                    self.inner.time += skip_ms as u64;
                     time_left -= skip_ms as u64;
                 }
             } else {
@@ -115,7 +126,7 @@ impl<E: Clone> EventTimer<E> {
                         vec.push(entry)
                     }
                 }
-                self.time += 1;
+                self.inner.time += 1;
                 time_left -= 1;
             }
         }
@@ -125,7 +136,7 @@ impl<E: Clone> EventTimer<E> {
     #[inline(always)]
     fn execute(&mut self, e: TimerEntry) -> Option<E> {
         let id = e.id();
-        let res = self.handles.remove(&id);
+        let res = self.inner.handles.remove(&id).map(|x| x.1);
 
         // Reschedule the event
         if let Some(re_e) = e.execute() {
@@ -142,14 +153,55 @@ impl<E: Clone> EventTimer<E> {
     }
 }
 
-impl<E: Clone> Debug for EventTimer<E> {
+impl<E> Debug for EventTimer<E> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "<EventTimer>")
     }
 }
 
 // Allows the EventTimer to be scheduled on different threads, but should never be used concurrently
-unsafe impl<E: Clone> Send for EventTimer<E> {}
+unsafe impl<E> Send for EventTimer<E> {}
+
+impl<E> From<SerializableEventTimer<E>> for EventTimer<E> {
+    fn from(SerializableEventTimer { time, handles }: SerializableEventTimer<E>) -> Self {
+        let mut res = EventTimer::new();
+
+        // the internal ids WILL change
+        for (_id, (at, event)) in handles {
+            res.schedule_once(at, event)
+        }
+        let events = res.advance_to(time);
+        // the only non-executing way to set time is `set_time`, which should only be called right
+        // at the start, so running `advance_to` in the deserializer should not execute any events
+        assert!(events.is_empty());
+
+        res
+    }
+}
+
+impl<E> Serialize for EventTimer<E>
+where
+    E: Serialize,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<<S as Serializer>::Ok, <S as Serializer>::Error>
+    where
+        S: Serializer,
+    {
+        self.inner.serialize(serializer)
+    }
+}
+
+impl<'de, E> Deserialize<'de> for EventTimer<E>
+where
+    E: Deserialize<'de>,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, <D as Deserializer<'de>>::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        SerializableEventTimer::<E>::deserialize(deserializer).map(|et| et.into())
+    }
+}
 
 #[cfg(test)]
 mod tests {

@@ -3,10 +3,7 @@
 
 use crate::{
     data::{ArconElement, ArconEvent, ArconType, Epoch, Watermark},
-    stream::{
-        channel::strategy::ChannelStrategy,
-        operator::{Operator, OperatorContext},
-    },
+    stream::operator::{Operator, OperatorContext},
     util::SafelySendableFn,
 };
 use arcon_error::ArconResult;

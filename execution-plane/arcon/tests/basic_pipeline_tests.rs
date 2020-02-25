@@ -93,7 +93,10 @@ fn normalise_pipeline_test() {
         NormaliseElements { data }
     }
 
-    let window: Box<dyn Window<i64, NormaliseElements>> = Box::new(AppenderWindow::new(&window_fn));
+    let mut state_backend_2 = Box::new(InMemory::new("test2").unwrap());
+
+    let window: Box<dyn Window<i64, NormaliseElements>> =
+        Box::new(AppenderWindow::new(&window_fn, &mut *state_backend_2));
 
     let node_3_actor_ref = node_3.actor_ref().hold().expect("Failed to fetch ref");
     let channel_strategy = ChannelStrategy::Forward(Forward::new(
@@ -107,9 +110,14 @@ fn normalise_pipeline_test() {
             vec![1.into()],
             channel_strategy,
             Box::new(EventTimeWindowAssigner::<i64, NormaliseElements>::new(
-                window, 2, 2, 0, false,
+                window,
+                2,
+                2,
+                0,
+                false,
+                &mut *state_backend_2,
             )),
-            Box::new(InMemory::new("test2").unwrap()),
+            state_backend_2,
         )
     });
     system
