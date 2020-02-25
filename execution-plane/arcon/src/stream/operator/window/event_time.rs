@@ -39,11 +39,14 @@ where
     hasher: BuildHasherDefault<DefaultHasher>,
     keyed: bool,
 
-    // window keeps its own state per key and index
+    // window keeps its own state per key and index (via state backend api)
     window: Box<dyn Window<IN, OUT>>,
 
     // simply persisted state
+    // window start has one value per key (via state backend api)
     window_start: BoxedValueState<Timestamp, /*IK=*/ Key, ()>,
+    // active windows technically could also use the state backend integration and
+    // set IK=Key, N=Index, but I find it clearer this way
     active_windows: BoxedMapState<(Key, Index), ()>,
 
     // timer is held twice, to avoid serialization overhead - it's a big value
@@ -74,6 +77,7 @@ where
 
         let persistent_timer: BoxedValueState<SerializableEventTimer<(u64, u64, u64)>> =
             state_backend.build("timer").value();
+
         let transient_timer = match persistent_timer.get(state_backend) {
             Ok(v) => v.into(),
             Err(e) if e.to_string().contains("Value not found") => EventTimer::new(),
