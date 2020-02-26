@@ -1,14 +1,30 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use arcon_error::*;
 use fxhash::FxHashMap;
 use std::alloc::{GlobalAlloc, Layout, System};
 
 /// Type alias for a unique Alloc identifier
-pub type AllocId = u64;
+pub type AllocId = (u32, u64);
 /// Type alias for alloc pointers
 pub type AllocPtr = *mut u8;
+
+/// An Enum containing all possible results from an alloc call
+#[derive(Debug)]
+pub enum AllocResult {
+    /// A Successful allocation
+    Alloc(AllocId, AllocPtr),
+    /// The ArconAllocator is Out-of-memory
+    ///
+    /// Returns how many bytes are currently available for allocation
+    ArconOOM(usize),
+    /// System Allocator failed to allocate memory
+    ///
+    /// This is most likely an Out-of-memory issue
+    SystemOOM,
+    /// A Capacity error
+    CapacityErr(String),
+}
 
 /// An Allocator for [arcon]
 ///
@@ -22,7 +38,9 @@ pub struct ArconAllocator {
     allocations: FxHashMap<AllocId, (AllocPtr, Layout)>,
     /// Memory limit
     limit: usize,
-    /// Total allocations made so far
+    /// Current alloc epoch
+    alloc_epoch: u32,
+    /// Total allocations in the current epoch
     alloc_counter: u64,
     /// Bytes allocated currently
     curr_alloc: usize,
@@ -34,38 +52,47 @@ impl ArconAllocator {
         ArconAllocator {
             allocations: FxHashMap::default(),
             limit,
+            alloc_epoch: 1,
             alloc_counter: 0,
             curr_alloc: 0,
         }
     }
     /// Allocate memory block of type T with given capacity
-    pub unsafe fn alloc<T>(&mut self, capacity: usize) -> ArconResult<(AllocId, AllocPtr)> {
+    pub unsafe fn alloc<T>(&mut self, capacity: usize) -> AllocResult {
         if capacity == 0 {
-            return arcon_err!("{}", "Cannot alloc for 0 sized pointer");
+            return AllocResult::CapacityErr("Cannot alloc for 0 sized pointer".into());
         }
         let (size, align) = (std::mem::size_of::<T>(), std::mem::align_of::<T>());
 
-        let required_bytes = capacity
-            .checked_mul(size)
-            .ok_or(arcon_err_kind!("{}", "Capacity overflow"))?;
+        let required_bytes = match capacity.checked_mul(size) {
+            Some(v) => v,
+            None => return AllocResult::CapacityErr("Capacity overflow".into()),
+        };
 
         if self.curr_alloc + required_bytes > self.limit {
-            return arcon_err!("{}", "ArconAllocator is OOM");
+            return AllocResult::ArconOOM(self.bytes_remaining());
         }
 
         let layout = Layout::from_size_align_unchecked(required_bytes, align);
         let mem = System.alloc(layout);
 
         if mem.is_null() {
-            return arcon_err!("{}", "SystemAllocator is OOM");
+            return AllocResult::SystemOOM;
         }
 
         self.curr_alloc += layout.size();
+
+        if self.alloc_counter == u64::max_value() {
+            self.alloc_epoch += 1;
+            self.alloc_counter = 0;
+        }
+
         let id = self.alloc_counter;
         self.alloc_counter += 1;
-        self.allocations.insert(id, (mem, layout));
+        self.allocations
+            .insert((self.alloc_epoch, id), (mem, layout));
 
-        Ok((id, mem))
+        AllocResult::Alloc((self.alloc_epoch, id), mem)
     }
     /// Deallocate memory through the given AllocId
     pub unsafe fn dealloc(&mut self, id: AllocId) {
@@ -79,8 +106,15 @@ impl ArconAllocator {
         self.curr_alloc
     }
     /// Returns total allocations made so far
-    pub fn total_allocations(&self) -> u64 {
-        self.alloc_counter
+    pub fn total_allocations(&self) -> u128 {
+        if self.alloc_epoch == 1 {
+            self.alloc_counter.into()
+        } else {
+            // sum up previous epoch sums
+            let epoch_sum: u128 = ((self.alloc_epoch - 1) as u64 * u64::max_value()).into();
+            // add current epoch allocs to sum
+            epoch_sum + self.alloc_counter as u128
+        }
     }
     /// Returns how much bytes are available to allocate
     pub fn bytes_remaining(&self) -> usize {
@@ -116,16 +150,25 @@ mod tests {
 
         assert_eq!(a.allocated_bytes(), 0);
 
-        let (id_one, _) = unsafe { a.alloc::<u64>(100).unwrap() };
+        let id_one: AllocId = match unsafe { a.alloc::<u64>(100) } {
+            AllocResult::Alloc(id, _) => id,
+            _ => panic!("not supposed to happen"),
+        };
         // 100 * 8
         assert_eq!(a.allocated_bytes(), 800);
 
-        let (id_two, _) = unsafe { a.alloc::<i32>(50).unwrap() };
+        let id_two: AllocId = match unsafe { a.alloc::<i32>(50) } {
+            AllocResult::Alloc(id, _) => id,
+            _ => panic!("not supposed to happen"),
+        };
         // 50 * 4
         assert_eq!(a.allocated_bytes(), 1000);
 
         // At this point, we will receive an out-of-memory error..
-        assert_eq!(unsafe { a.alloc::<f32>(500).is_err() }, true);
+        match unsafe { a.alloc::<f32>(500) } {
+            AllocResult::ArconOOM(remaining_bytes) => assert_eq!(remaining_bytes, 24),
+            _ => panic!("not supposed to happen"),
+        };
 
         // dealloc
         unsafe { a.dealloc(id_one) };
