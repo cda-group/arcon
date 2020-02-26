@@ -10,4 +10,5 @@ criterion_main! {
     benchmarks::arcon_window::benches,
     benchmarks::arcon_serde::benches,
     benchmarks::arcon_flight_serde::benches,
+    benchmarks::arcon_allocator::benches,
 }
