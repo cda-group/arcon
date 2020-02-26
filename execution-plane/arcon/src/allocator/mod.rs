@@ -2,12 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use arcon_error::*;
+use fxhash::FxHashMap;
 use std::alloc::{GlobalAlloc, Layout, System};
-use std::collections::HashMap;
-use uuid::Uuid;
 
 /// Type alias for a unique Alloc identifier
-pub type AllocId = Uuid;
+pub type AllocId = u64;
 /// Type alias for alloc pointers
 pub type AllocPtr = *mut u8;
 
@@ -20,7 +19,7 @@ pub type AllocPtr = *mut u8;
 #[derive(Debug)]
 pub struct ArconAllocator {
     /// HashMap keeping track of allocations
-    allocations: HashMap<AllocId, (AllocPtr, Layout)>,
+    allocations: FxHashMap<AllocId, (AllocPtr, Layout)>,
     /// Memory limit
     limit: usize,
     /// Total allocations made so far
@@ -33,7 +32,7 @@ impl ArconAllocator {
     /// Creates a new ArconAllocator with the given memory limit size
     pub fn new(limit: usize) -> ArconAllocator {
         ArconAllocator {
-            allocations: HashMap::new(),
+            allocations: FxHashMap::default(),
             limit,
             alloc_counter: 0,
             curr_alloc: 0,
@@ -45,17 +44,25 @@ impl ArconAllocator {
             return arcon_err!("{}", "Cannot alloc for 0 sized pointer");
         }
         let (size, align) = (std::mem::size_of::<T>(), std::mem::align_of::<T>());
-        let required_bytes = size * capacity;
+
+        let required_bytes = capacity
+            .checked_mul(size)
+            .ok_or(arcon_err_kind!("{}", "Capacity overflow"))?;
 
         if self.curr_alloc + required_bytes > self.limit {
-            return arcon_err!("{}", "OutOfMemory");
+            return arcon_err!("{}", "ArconAllocator is OOM");
         }
 
         let layout = Layout::from_size_align_unchecked(required_bytes, align);
         let mem = System.alloc(layout);
+
+        if mem.is_null() {
+            return arcon_err!("{}", "SystemAllocator is OOM");
+        }
+
         self.curr_alloc += layout.size();
+        let id = self.alloc_counter;
         self.alloc_counter += 1;
-        let id = AllocId::new_v4();
         self.allocations.insert(id, (mem, layout));
 
         Ok((id, mem))
