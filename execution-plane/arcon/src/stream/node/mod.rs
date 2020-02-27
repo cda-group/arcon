@@ -58,21 +58,25 @@ where
         }
 
         let current_watermark = state_backend.build("__node_current_watermark").value();
-        if let Err(e) = current_watermark.get(&*state_backend) {
-            if e.to_string().contains("Value not found") {
-                current_watermark
-                    .set(&mut *state_backend, Watermark { timestamp: 0 })
-                    .unwrap();
-            }
+        if current_watermark
+            .get(&*state_backend)
+            .expect("watermark get error")
+            .is_none()
+        {
+            current_watermark
+                .set(&mut *state_backend, Watermark { timestamp: 0 })
+                .unwrap();
         }
 
         let current_epoch = state_backend.build("__node_current_epoch").value();
-        if let Err(e) = current_epoch.get(&*state_backend) {
-            if e.to_string().contains("Value not found") {
-                current_epoch
-                    .set(&mut *state_backend, Epoch { epoch: 0 })
-                    .unwrap();
-            }
+        if current_epoch
+            .get(&*state_backend)
+            .expect("current epoch get error")
+            .is_none()
+        {
+            current_epoch
+                .set(&mut *state_backend, Epoch { epoch: 0 })
+                .unwrap();
         }
 
         Node {
@@ -115,7 +119,10 @@ where
                     );
                 }
                 ArconEvent::Watermark(w) => {
-                    let current_watermark = self.current_watermark.get(&*self.state_backend)?;
+                    let current_watermark = self
+                        .current_watermark
+                        .get(&*self.state_backend)?
+                        .ok_or_else(|| arcon_err_kind!("current watermark uninitialized"))?;
 
                     // Insert the watermark and try early return
                     if let Some(old) =
@@ -135,9 +142,15 @@ where
                     let new_watermark = self
                         .watermarks
                         .values(&*self.state_backend)?
-                        .chain(iter::once(w))
-                        .min()
-                        .expect("this cannot fail, because the iterator contains at least `w`");
+                        .chain(iter::once(Ok(w)))
+                        .min_by(|res_x, res_y| match (res_x, res_y) {
+                            (Ok(x), Ok(y)) => x.cmp(y),
+                            (Err(_), _) => std::cmp::Ordering::Less,
+                            (_, Err(_)) => std::cmp::Ordering::Greater,
+                        })
+                        .expect(
+                            "this cannot fail, because the iterator contains at least `Ok(w)`",
+                        )?;
 
                     // Finally, handle the watermark:
                     if new_watermark > current_watermark {
@@ -222,7 +235,11 @@ where
         let checkpoint_dir = format!(
             "checkpoint_{id}_{epoch}",
             id = self.id.id,
-            epoch = self.current_epoch.get(&*self.state_backend)?.epoch
+            epoch = self
+                .current_epoch
+                .get(&*self.state_backend)?
+                .ok_or_else(|| arcon_err_kind!("current epoch uninitialized"))?
+                .epoch
         );
         self.state_backend.checkpoint(&checkpoint_dir)?;
         Ok(())

@@ -79,8 +79,8 @@ where
             state_backend.build("timer").value();
 
         let transient_timer = match persistent_timer.get(state_backend) {
-            Ok(v) => v.into(),
-            Err(e) if e.to_string().contains("Value not found") => EventTimer::new(),
+            Ok(Some(v)) => v.into(),
+            Ok(None) => EventTimer::new(),
             Err(e) => panic!("state error: {}", e),
         };
 
@@ -112,6 +112,7 @@ where
         let w_start = self
             .window_start
             .get(state_backend)
+            .expect("window start state get error")
             .expect("tried to schedule window_trigger for key which hasn't started");
 
         let ts = w_start + (index * self.window_slide) + self.window_length;
@@ -162,7 +163,11 @@ where
         // Will store the index of the highest and lowest window it should go into
         let mut floor = 0;
         let mut ceil = 0;
-        if let Some(start) = self.window_start.get(ctx.state_backend).ok() {
+        if let Some(start) = self
+            .window_start
+            .get(ctx.state_backend)
+            .expect("window start state get error")
+        {
             // Get the highest window the element goes into
             ceil = (ts - start) / self.window_slide;
             if ceil >= (self.window_length / self.window_slide) {

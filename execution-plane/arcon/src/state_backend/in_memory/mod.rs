@@ -25,23 +25,8 @@ pub struct InMemory {
 }
 
 impl InMemory {
-    fn new_state_common<IK, N, KS>(
-        &self,
-        item_key: IK,
-        namespace: N,
-        key_serializer: KS,
-    ) -> StateCommon<IK, N, KS> {
-        StateCommon {
-            id: Uuid::new_v4(),
-            item_key,
-            namespace,
-            key_serializer,
-        }
-    }
-
-    pub fn remove_matching(&mut self, prefix: &[u8]) -> ArconResult<()> {
-        self.db.retain(|k, _| &k[..prefix.len()] != prefix);
-        Ok(())
+    pub fn remove_matching(&mut self, prefix: &[u8]) {
+        self.db.retain(|k, _| &k[..prefix.len()] != prefix)
     }
 
     pub fn iter_matching(
@@ -56,24 +41,16 @@ impl InMemory {
         })
     }
 
-    pub fn contains(&self, key: &[u8]) -> ArconResult<bool> {
-        Ok(self.db.contains_key(key))
+    pub fn contains(&self, key: &[u8]) -> bool {
+        self.db.contains_key(key)
     }
 
-    pub fn get(&self, key: &[u8]) -> ArconResult<&dyn Any> {
-        if let Some(data) = self.db.get(key) {
-            Ok(&**data)
-        } else {
-            return arcon_err!("Value not found");
-        }
+    pub fn get(&self, key: &[u8]) -> Option<&(dyn Any + Send + Sync)> {
+        self.db.get(key).map(|x| &**x)
     }
 
-    pub fn get_mut(&mut self, key: &[u8]) -> ArconResult<&mut Value> {
-        if let Some(data) = self.db.get_mut(key) {
-            Ok(data)
-        } else {
-            return arcon_err!("Value not found");
-        }
+    pub fn get_mut(&mut self, key: &[u8]) -> Option<&mut Value> {
+        self.db.get_mut(key)
     }
 
     pub fn get_mut_or_insert(
@@ -84,14 +61,12 @@ impl InMemory {
         self.db.entry(key).or_insert_with(new_value_factory)
     }
 
-    fn put(&mut self, key: Vec<u8>, value: Value) -> ArconResult<()> {
-        self.db.insert(key, value);
-        Ok(())
+    fn insert(&mut self, key: Vec<u8>, value: Value) -> Option<Value> {
+        self.db.insert(key, value)
     }
 
-    fn remove(&mut self, key: &[u8]) -> ArconResult<()> {
-        let _ = self.db.remove(key);
-        Ok(())
+    fn remove(&mut self, key: &[u8]) -> Option<Value> {
+        self.db.remove(key)
     }
 }
 
@@ -113,7 +88,7 @@ where
         key_serializer: KS,
         _value_serializer: TS,
     ) -> Self::Type {
-        let common = self.new_state_common(init_item_key, init_namespace, key_serializer);
+        let common = StateCommon::new(init_item_key, init_namespace, key_serializer);
         InMemoryValueState {
             common,
             _phantom: Default::default(),
@@ -140,7 +115,7 @@ where
         key_serializer: KS,
         _value_serializer: TS,
     ) -> Self::Type {
-        let common = self.new_state_common(init_item_key, init_namespace, key_serializer);
+        let common = StateCommon::new(init_item_key, init_namespace, key_serializer);
         InMemoryMapState {
             common,
             _phantom: Default::default(),
@@ -164,7 +139,7 @@ where
         key_serializer: KS,
         _value_serializer: TS,
     ) -> Self::Type {
-        let common = self.new_state_common(init_item_key, init_namespace, key_serializer);
+        let common = StateCommon::new(init_item_key, init_namespace, key_serializer);
         InMemoryVecState {
             common,
             _phantom: Default::default(),
@@ -190,7 +165,7 @@ where
         key_serializer: KS,
         _value_serializer: TS,
     ) -> Self::Type {
-        let common = self.new_state_common(init_item_key, init_namespace, key_serializer);
+        let common = StateCommon::new(init_item_key, init_namespace, key_serializer);
         InMemoryReducingState {
             common,
             reduce_fn,
@@ -217,7 +192,7 @@ where
         key_serializer: KS,
         _value_serializer: TS,
     ) -> Self::Type {
-        let common = self.new_state_common(init_item_key, init_namespace, key_serializer);
+        let common = StateCommon::new(init_item_key, init_namespace, key_serializer);
         InMemoryAggregatingState {
             common,
             aggregator,
@@ -259,6 +234,15 @@ where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
 {
+    fn new(item_key: IK, namespace: N, key_serializer: KS) -> StateCommon<IK, N, KS> {
+        StateCommon {
+            id: Uuid::new_v4(),
+            item_key,
+            namespace,
+            key_serializer,
+        }
+    }
+
     fn get_db_key_with_user_key<UK>(&self, user_key: &UK) -> ArconResult<Vec<u8>>
     where
         UK: SerializableWith<KS>,
@@ -299,8 +283,9 @@ mod test {
         let mut db = InMemory::new("test").unwrap();
         let key = "key";
         let value = "hej".to_string();
-        db.put(key.to_string().into_bytes(), SmallBox::new(value.clone()))
-            .unwrap();
+        assert!(db
+            .insert(key.to_string().into_bytes(), SmallBox::new(value.clone()))
+            .is_none());
         let fetched = db.get(key.as_bytes()).unwrap();
         assert_eq!(
             &value,
@@ -308,7 +293,7 @@ mod test {
         );
         db.remove(key.as_bytes()).unwrap();
         let res = db.get(key.as_bytes());
-        assert!(res.is_err());
+        assert!(res.is_none());
     }
 
     #[test]

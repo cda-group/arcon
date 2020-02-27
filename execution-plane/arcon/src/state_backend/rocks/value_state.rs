@@ -37,11 +37,14 @@ where
     N: SerializableFixedSizeWith<KS>,
     T: SerializableWith<TS> + DeserializableWith<TS>,
 {
-    fn get(&self, backend: &RocksDb) -> ArconResult<T> {
+    fn get(&self, backend: &RocksDb) -> ArconResult<Option<T>> {
         let key = self.common.get_db_key_prefix()?;
-        let serialized = backend.get(&self.common.cf_name, &key)?;
-        let value = T::deserialize(&self.common.value_serializer, &serialized)?;
-        Ok(value)
+        if let Some(serialized) = backend.get(&self.common.cf_name, &key)? {
+            let value = T::deserialize(&self.common.value_serializer, &serialized)?;
+            Ok(Some(value))
+        } else {
+            Ok(None)
+        }
     }
 
     fn set(&self, backend: &mut RocksDb, new_value: T) -> ArconResult<()> {
@@ -62,16 +65,16 @@ mod test {
         let mut db = TestDb::new();
         let value_state = db.new_value_state("test_state", (), (), Bincode, Bincode);
 
-        let unset = value_state.get(&db);
-        assert!(unset.is_err());
+        let unset = value_state.get(&db).unwrap();
+        assert!(unset.is_none());
 
         value_state.set(&mut db, 123).unwrap();
-        let set = value_state.get(&db).unwrap();
+        let set = value_state.get(&db).unwrap().unwrap();
         assert_eq!(set, 123);
 
         value_state.clear(&mut db).unwrap();
-        let cleared = value_state.get(&db);
-        assert!(cleared.is_err());
+        let cleared = value_state.get(&db).unwrap();
+        assert!(cleared.is_none());
     }
 
     #[test]
@@ -83,15 +86,15 @@ mod test {
         v1.set(&mut db, 123).unwrap();
         v2.set(&mut db, 456).unwrap();
 
-        let v1v = v1.get(&db).unwrap();
-        let v2v = v2.get(&db).unwrap();
+        let v1v = v1.get(&db).unwrap().unwrap();
+        let v2v = v2.get(&db).unwrap().unwrap();
         assert_eq!(v1v, 123);
         assert_eq!(v2v, 456);
 
         v1.clear(&mut db).unwrap();
-        let v1res = v1.get(&db);
-        let v2v = v2.get(&db).unwrap();
-        assert!(v1res.is_err());
+        let v1opt = v1.get(&db).unwrap();
+        let v2v = v2.get(&db).unwrap().unwrap();
+        assert!(v1opt.is_none());
         assert_eq!(v2v, 456);
     }
 
@@ -102,27 +105,27 @@ mod test {
 
         value_state.set(&mut db, 0).unwrap();
         value_state.set_current_key(1).unwrap();
-        let should_be_err = value_state.get(&db);
-        assert!(should_be_err.is_err());
+        let should_be_none = value_state.get(&db).unwrap();
+        assert!(should_be_none.is_none());
 
         value_state.set(&mut db, 1).unwrap();
-        let should_be_one = value_state.get(&db).unwrap();
+        let should_be_one = value_state.get(&db).unwrap().unwrap();
         assert_eq!(should_be_one, 1);
 
         value_state.set_current_key(0).unwrap();
-        let should_be_zero = value_state.get(&db).unwrap();
+        let should_be_zero = value_state.get(&db).unwrap().unwrap();
         assert_eq!(should_be_zero, 0);
 
         value_state.set_current_namespace(1).unwrap();
-        let should_be_err = value_state.get(&db);
-        assert!(should_be_err.is_err());
+        let should_be_none = value_state.get(&db).unwrap();
+        assert!(should_be_none.is_none());
 
         value_state.set(&mut db, 2).unwrap();
-        let should_be_two = value_state.get(&db).unwrap();
+        let should_be_two = value_state.get(&db).unwrap().unwrap();
         assert_eq!(should_be_two, 2);
 
         value_state.set_current_namespace(0).unwrap();
-        let should_be_zero = value_state.get(&db).unwrap();
+        let should_be_zero = value_state.get(&db).unwrap().unwrap();
         assert_eq!(should_be_zero, 0);
     }
 }

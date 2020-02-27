@@ -25,14 +25,14 @@ where
 {
     fn clear(&self, backend: &mut InMemory) -> ArconResult<()> {
         let key = self.common.get_db_key_prefix()?;
-        backend.remove(&key)?;
+        let _old_value = backend.remove(&key);
         Ok(())
     }
 
     delegate_key_and_namespace!(common);
 }
 
-impl<IK, N, T, F, KS> AppendingState<InMemory, IK, N, T, T>
+impl<IK, N, T, F, KS> AppendingState<InMemory, IK, N, T, Option<T>>
     for InMemoryReducingState<IK, N, T, F, KS>
 where
     IK: SerializableFixedSizeWith<KS>,
@@ -40,25 +40,27 @@ where
     T: Send + Sync + Clone + 'static,
     F: Fn(&T, &T) -> T,
 {
-    fn get(&self, backend: &InMemory) -> ArconResult<T> {
+    fn get(&self, backend: &InMemory) -> ArconResult<Option<T>> {
         let key = self.common.get_db_key_prefix()?;
-        let dynamic = backend.get(&key)?;
-        let value = dynamic
-            .downcast_ref::<T>()
-            .ok_or_else(|| arcon_err_kind!("Dynamic value has a wrong type!"))?
-            .clone();
+        if let Some(dynamic) = backend.get(&key) {
+            let value = dynamic
+                .downcast_ref::<T>()
+                .ok_or_else(|| arcon_err_kind!("Dynamic value has a wrong type!"))?
+                .clone();
 
-        Ok(value)
+            Ok(Some(value))
+        } else {
+            Ok(None)
+        }
     }
 
     fn append(&self, backend: &mut InMemory, value: T) -> ArconResult<()> {
         let key = self.common.get_db_key_prefix()?;
         match backend.get_mut(&key) {
-            // TODO: only handle value not found
-            Err(_) => {
-                backend.put(key, SmallBox::new(value))?;
+            None => {
+                let _old_value_which_obviously_is_none = backend.insert(key, SmallBox::new(value));
             }
-            Ok(dynamic) => {
+            Some(dynamic) => {
                 let old = dynamic
                     .downcast_mut::<T>()
                     .ok_or_else(|| arcon_err_kind!("Dynamic value has a wrong type!"))?;
@@ -70,7 +72,8 @@ where
     }
 }
 
-impl<IK, N, T, F, KS> MergingState<InMemory, IK, N, T, T> for InMemoryReducingState<IK, N, T, F, KS>
+impl<IK, N, T, F, KS> MergingState<InMemory, IK, N, T, Option<T>>
+    for InMemoryReducingState<IK, N, T, F, KS>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
@@ -109,6 +112,6 @@ mod test {
         reducing_state.append(&mut db, 42).unwrap();
         reducing_state.append(&mut db, 10).unwrap();
 
-        assert_eq!(reducing_state.get(&db).unwrap(), 42);
+        assert_eq!(reducing_state.get(&db).unwrap().unwrap(), 42);
     }
 }

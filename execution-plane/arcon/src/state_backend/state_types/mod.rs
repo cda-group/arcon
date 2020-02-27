@@ -85,7 +85,7 @@ pub trait MergingState<SB: ?Sized, IK, N, IN, OUT>: AppendingState<SB, IK, N, IN
 
 pub trait ValueState<SB: ?Sized, IK, N, T>: State<SB, IK, N> {
     // bikeshed: get / value (Flink)
-    fn get(&self, backend: &SB) -> ArconResult<T>;
+    fn get(&self, backend: &SB) -> ArconResult<Option<T>>;
 
     // bikeshed: set / update (Flink)
     fn set(&self, backend: &mut SB, new_value: T) -> ArconResult<()>;
@@ -94,7 +94,7 @@ pub trait ValueState<SB: ?Sized, IK, N, T>: State<SB, IK, N> {
 }
 
 pub trait MapState<SB: ?Sized, IK, N, K, V>: State<SB, IK, N> {
-    fn get(&self, backend: &SB, key: &K) -> ArconResult<V>;
+    fn get(&self, backend: &SB, key: &K) -> ArconResult<Option<V>>;
     fn fast_insert(&self, backend: &mut SB, key: K, value: V) -> ArconResult<()>;
     fn insert(&self, backend: &mut SB, key: K, value: V) -> ArconResult<Option<V>>;
 
@@ -119,9 +119,18 @@ pub trait MapState<SB: ?Sized, IK, N, K, V>: State<SB, IK, N> {
     // unboxed iterators would require associated types generic over backend's lifetime
     // TODO: impl this when GATs land on nightly
 
-    fn iter<'a>(&self, backend: &'a SB) -> ArconResult<Box<dyn Iterator<Item = (K, V)> + 'a>>;
-    fn keys<'a>(&self, backend: &'a SB) -> ArconResult<Box<dyn Iterator<Item = K> + 'a>>;
-    fn values<'a>(&self, backend: &'a SB) -> ArconResult<Box<dyn Iterator<Item = V> + 'a>>;
+    fn iter<'a>(
+        &self,
+        backend: &'a SB,
+    ) -> ArconResult<Box<dyn Iterator<Item = ArconResult<(K, V)>> + 'a>>;
+    fn keys<'a>(
+        &self,
+        backend: &'a SB,
+    ) -> ArconResult<Box<dyn Iterator<Item = ArconResult<K>> + 'a>>;
+    fn values<'a>(
+        &self,
+        backend: &'a SB,
+    ) -> ArconResult<Box<dyn Iterator<Item = ArconResult<V>> + 'a>>;
 
     fn len(&self, backend: &SB) -> ArconResult<usize>;
     fn is_empty(&self, backend: &SB) -> ArconResult<bool>;
@@ -145,7 +154,7 @@ pub trait VecState<SB: ?Sized, IK, N, T>: MergingState<SB, IK, N, T, Vec<T>> {
     erase_backend_type!(VecState<_, IK, N, T>);
 }
 
-pub trait ReducingState<SB: ?Sized, IK, N, T>: MergingState<SB, IK, N, T, T> {
+pub trait ReducingState<SB: ?Sized, IK, N, T>: MergingState<SB, IK, N, T, Option<T>> {
     erase_backend_type!(ReducingState<_, IK, N, T>);
 }
 

@@ -81,8 +81,11 @@ mod test {
                 .fast_insert(sb, 123, "foobar".to_string())
                 .unwrap();
 
-            assert_eq!(value_state.get(sb).unwrap(), 42);
-            assert_eq!(map_state.get(sb, &123).unwrap(), "foobar".to_string());
+            assert_eq!(value_state.get(sb).unwrap().unwrap(), 42);
+            assert_eq!(
+                map_state.get(sb, &123).unwrap().unwrap(),
+                "foobar".to_string()
+            );
         }
 
         let mut test_rocks = rocks::test::TestDb::new();

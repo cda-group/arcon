@@ -9,7 +9,6 @@ use crate::{
         state_types::{AppendingState, MergingState, State, VecState},
     },
 };
-//use error::ErrorKind;
 use smallbox::SmallBox;
 use std::marker::PhantomData;
 
@@ -25,7 +24,7 @@ where
 {
     fn clear(&self, backend: &mut InMemory) -> ArconResult<()> {
         let key = self.common.get_db_key_prefix()?;
-        backend.remove(&key)?;
+        let _old_value = backend.remove(&key);
         Ok(())
     }
 
@@ -40,14 +39,16 @@ where
 {
     fn get(&self, backend: &InMemory) -> ArconResult<Vec<T>> {
         let key = self.common.get_db_key_prefix()?;
-        let dynamic = backend.get(&key)?;
+        if let Some(dynamic) = backend.get(&key) {
+            let vec = dynamic
+                .downcast_ref::<Vec<T>>()
+                .ok_or_else(|| arcon_err_kind!("Dynamic value has a wrong type!"))?
+                .clone();
 
-        let vec = dynamic
-            .downcast_ref::<Vec<T>>()
-            .ok_or_else(|| arcon_err_kind!("Dynamic value has a wrong type!"))?
-            .clone();
-
-        Ok(vec)
+            Ok(vec)
+        } else {
+            Ok(vec![])
+        }
     }
 
     fn append(&self, backend: &mut InMemory, value: T) -> ArconResult<()> {
@@ -78,7 +79,8 @@ where
 {
     fn set(&self, backend: &mut InMemory, value: Vec<T>) -> ArconResult<()> {
         let key = self.common.get_db_key_prefix()?;
-        backend.put(key, SmallBox::new(value))
+        let _old_value = backend.insert(key, SmallBox::new(value));
+        Ok(())
     }
 
     fn add_all(
@@ -110,7 +112,7 @@ where
 
     fn is_empty(&self, backend: &InMemory) -> ArconResult<bool> {
         let key = self.common.get_db_key_prefix()?;
-        if let Ok(dynamic) = backend.get(&key) {
+        if let Some(dynamic) = backend.get(&key) {
             Ok(dynamic
                 .downcast_ref::<Vec<T>>()
                 .ok_or_else(|| arcon_err_kind!("Dynamic value has a wrong type!"))?
@@ -122,7 +124,7 @@ where
 
     fn len(&self, backend: &InMemory) -> ArconResult<usize> {
         let key = self.common.get_db_key_prefix()?;
-        if let Ok(dynamic) = backend.get(&key) {
+        if let Some(dynamic) = backend.get(&key) {
             Ok(dynamic
                 .downcast_ref::<Vec<T>>()
                 .ok_or_else(|| arcon_err_kind!("Dynamic value has a wrong type!"))?

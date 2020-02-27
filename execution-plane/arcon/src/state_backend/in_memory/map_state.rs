@@ -25,7 +25,7 @@ where
 {
     fn clear(&self, backend: &mut InMemory) -> ArconResult<()> {
         let prefix = self.common.get_db_key_prefix()?;
-        backend.remove_matching(&prefix)?;
+        backend.remove_matching(&prefix);
         Ok(())
     }
 
@@ -40,21 +40,24 @@ where
     V: Send + Sync + Clone + 'static,
     KS: Clone + 'static,
 {
-    fn get(&self, backend: &InMemory, key: &K) -> ArconResult<V> {
+    fn get(&self, backend: &InMemory, key: &K) -> ArconResult<Option<V>> {
         let key = self.common.get_db_key_with_user_key(key)?;
-        let dynamic = backend.get(&key)?;
-        let value = dynamic
-            .downcast_ref::<V>()
-            .ok_or_else(|| arcon_err_kind!("Dynamic value has a wrong type!"))?
-            .clone();
+        if let Some(dynamic) = backend.get(&key) {
+            let value: V = dynamic
+                .downcast_ref::<V>()
+                .ok_or_else(|| arcon_err_kind!("Dynamic value has a wrong type!"))?
+                .clone();
 
-        Ok(value)
+            Ok(Some(value))
+        } else {
+            Ok(None)
+        }
     }
 
     fn fast_insert(&self, backend: &mut InMemory, key: K, value: V) -> ArconResult<()> {
         let key = self.common.get_db_key_with_user_key(&key)?;
         let dynamic = SmallBox::new(value);
-        backend.put(key, dynamic)?;
+        let _old_value = backend.insert(key, dynamic);
 
         Ok(())
     }
@@ -62,19 +65,16 @@ where
     fn insert(&self, backend: &mut InMemory, key: K, value: V) -> ArconResult<Option<V>> {
         let key = self.common.get_db_key_with_user_key(&key)?;
 
-        let old = match backend.get_mut(&key) {
-            // TODO: only handle value not found
-            Err(_) => None,
-            Ok(dynamic) => Some(
-                dynamic
+        let new_dynamic = SmallBox::new(value);
+        let old = match backend.insert(key, new_dynamic) {
+            None => None,
+            Some(old_dynamic) => Some(
+                old_dynamic
                     .downcast_ref::<V>()
                     .ok_or_else(|| arcon_err_kind!("Dynamic value has a wrong type!"))?
                     .clone(),
             ),
         };
-
-        let dynamic = SmallBox::new(value);
-        backend.put(key, dynamic)?;
 
         Ok(old)
     }
@@ -104,78 +104,69 @@ where
 
     fn remove(&self, backend: &mut InMemory, key: &K) -> ArconResult<()> {
         let key = self.common.get_db_key_with_user_key(key)?;
-        backend.remove(&key)?;
+        let _old_value = backend.remove(&key);
 
         Ok(())
     }
 
     fn contains(&self, backend: &InMemory, key: &K) -> ArconResult<bool> {
         let key = self.common.get_db_key_with_user_key(key)?;
-        backend.contains(&key)
+        Ok(backend.contains(&key))
     }
 
     // TODO: unboxed versions of below
     fn iter<'a>(
         &self,
         backend: &'a InMemory,
-    ) -> ArconResult<Box<dyn Iterator<Item = (K, V)> + 'a>> {
+    ) -> ArconResult<Box<dyn Iterator<Item = ArconResult<(K, V)>> + 'a>> {
         let prefix = self.common.get_db_key_prefix()?;
         let id_len = self.common.id.as_bytes().len();
         let key_serializer = self.common.key_serializer.clone();
-        let iter = backend
-            .iter_matching(prefix)
-            .map(move |(k, v)| {
-                let mut cursor = &k[id_len..];
-                let _ = IK::deserialize_from(&key_serializer, &mut cursor)?;
-                let _ = N::deserialize_from(&key_serializer, &mut cursor)?;
-                let key = K::deserialize_from(&key_serializer, &mut cursor)?;
-                let value = v
-                    .downcast_ref::<V>()
-                    .ok_or_else(|| arcon_err_kind!("Dynamic value has a wrong type!"))?
-                    .clone();
-                Ok((key, value))
-            })
-            .map(|res: ArconResult<(K, V)>| res.expect("deserialization error"));
-        // TODO: we panic above if deserialization fails. Perhaps the function signature should
-        //  change to accommodate for that
+        let iter = backend.iter_matching(prefix).map(move |(k, v)| {
+            let mut cursor = &k[id_len..];
+            let _item_key = IK::deserialize_from(&key_serializer, &mut cursor)?;
+            let _namespace = N::deserialize_from(&key_serializer, &mut cursor)?;
+            let key = K::deserialize_from(&key_serializer, &mut cursor)?;
+            let value = v
+                .downcast_ref::<V>()
+                .ok_or_else(|| arcon_err_kind!("Dynamic value has a wrong type!"))?
+                .clone();
+            Ok((key, value))
+        });
 
         Ok(Box::new(iter))
     }
 
-    fn keys<'a>(&self, backend: &'a InMemory) -> ArconResult<Box<dyn Iterator<Item = K> + 'a>> {
+    fn keys<'a>(
+        &self,
+        backend: &'a InMemory,
+    ) -> ArconResult<Box<dyn Iterator<Item = ArconResult<K>> + 'a>> {
         let prefix = self.common.get_db_key_prefix()?;
         let id_len = self.common.id.as_bytes().len();
         let key_serializer = self.common.key_serializer.clone();
-        let iter = backend
-            .iter_matching(prefix)
-            .map(move |(k, _)| {
-                let mut cursor = &k[id_len..];
-                let _ = IK::deserialize_from(&key_serializer, &mut cursor)?;
-                let _ = N::deserialize_from(&key_serializer, &mut cursor)?;
-                let key = K::deserialize_from(&key_serializer, &mut cursor)?;
-                Ok(key)
-            })
-            .map(|res: ArconResult<K>| res.expect("deserialization error"));
-        // TODO: we panic above if deserialization fails. Perhaps the function signature should
-        //  change to accommodate for that
+        let iter = backend.iter_matching(prefix).map(move |(k, _)| {
+            let mut cursor = &k[id_len..];
+            let _ = IK::deserialize_from(&key_serializer, &mut cursor)?;
+            let _ = N::deserialize_from(&key_serializer, &mut cursor)?;
+            let key = K::deserialize_from(&key_serializer, &mut cursor)?;
+            Ok(key)
+        });
 
         Ok(Box::new(iter))
     }
 
-    fn values<'a>(&self, backend: &'a InMemory) -> ArconResult<Box<dyn Iterator<Item = V> + 'a>> {
+    fn values<'a>(
+        &self,
+        backend: &'a InMemory,
+    ) -> ArconResult<Box<dyn Iterator<Item = ArconResult<V>> + 'a>> {
         let prefix = self.common.get_db_key_prefix()?;
-        let iter = backend
-            .iter_matching(prefix)
-            .map(move |(_, v)| {
-                let value = v
-                    .downcast_ref::<V>()
-                    .ok_or_else(|| arcon_err_kind!("Dynamic value has a wrong type!"))?
-                    .clone();
-                Ok(value)
-            })
-            .map(|res: ArconResult<V>| res.expect("deserialization error"));
-        // TODO: we panic above if deserialization fails. Perhaps the function signature should
-        //  change to accommodate for that
+        let iter = backend.iter_matching(prefix).map(move |(_, v)| {
+            let value = v
+                .downcast_ref::<V>()
+                .ok_or_else(|| arcon_err_kind!("Dynamic value has a wrong type!"))?
+                .clone();
+            Ok(value)
+        });
 
         Ok(Box::new(iter))
     }
@@ -215,12 +206,24 @@ mod test {
         assert!(map_state.contains(&db, &"first key".to_string()).unwrap());
         assert!(map_state.contains(&db, &"second key".to_string()).unwrap());
 
-        assert_eq!(map_state.get(&db, &"first key".to_string()).unwrap(), 42);
-        assert_eq!(map_state.get(&db, &"second key".to_string()).unwrap(), 69);
+        assert_eq!(
+            map_state
+                .get(&db, &"first key".to_string())
+                .unwrap()
+                .unwrap(),
+            42
+        );
+        assert_eq!(
+            map_state
+                .get(&db, &"second key".to_string())
+                .unwrap()
+                .unwrap(),
+            69
+        );
 
         assert_eq!(map_state.len(&db).unwrap(), 2);
 
-        let keys: Vec<_> = map_state.keys(&db).unwrap().collect();
+        let keys: Vec<_> = map_state.keys(&db).unwrap().map(Result::unwrap).collect();
 
         assert_eq!(keys.len(), 2);
         assert!(keys.contains(&"first key".to_string()));

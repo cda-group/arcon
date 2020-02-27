@@ -51,14 +51,16 @@ impl InitializedRocksDb {
             .ok_or_else(|| arcon_err_kind!("Could not get column family '{}'", cf_name.as_ref()))
     }
 
-    fn get(&self, cf_name: impl AsRef<str>, key: impl AsRef<[u8]>) -> ArconResult<DBPinnableSlice> {
+    fn get(
+        &self,
+        cf_name: impl AsRef<str>,
+        key: impl AsRef<[u8]>,
+    ) -> ArconResult<Option<DBPinnableSlice>> {
         let cf = self.get_cf_handle(cf_name)?;
 
-        match self.db.get_pinned_cf(cf, key) {
-            Ok(Some(data)) => Ok(data),
-            Ok(None) => arcon_err!("Value not found"),
-            Err(e) => arcon_err!("Could not get map state value: {}", e),
-        }
+        self.db
+            .get_pinned_cf(cf, key)
+            .map_err(|e| arcon_err_kind!("Could not get map state value: {}", e))
     }
 
     fn put(
@@ -76,6 +78,7 @@ impl InitializedRocksDb {
 
     fn remove(&mut self, cf: impl AsRef<str>, key: impl AsRef<[u8]>) -> ArconResult<()> {
         let cf = self.get_cf_handle(cf)?;
+
         self.db
             .delete_cf(cf, key)
             .map_err(|e| arcon_err_kind!("RocksDB delete err: {}", e))
@@ -92,7 +95,9 @@ impl InitializedRocksDb {
             // prefix is empty, so we use the fast path of dropping and re-creating the whole
             // column family
 
-            let cf_opts = &self.options[cf_name];
+            let cf_opts = &self.options.get(cf_name).ok_or_else(|| {
+                arcon_err_kind!("Missing options for column family '{}'", cf_name)
+            })?;
 
             self.db.drop_cf(cf_name).map_err(|e| {
                 arcon_err_kind!("Could not drop column family '{}': {}", cf_name, e)
@@ -136,13 +141,19 @@ impl InitializedRocksDb {
             .is_some())
     }
 
-    fn create_column_family_if_doesnt_exist(&mut self, cf_name: &str, opts: Options) {
+    fn create_column_family_if_doesnt_exist(
+        &mut self,
+        cf_name: &str,
+        opts: Options,
+    ) -> ArconResult<()> {
         if self.db.cf_handle(cf_name).is_none() {
             self.db
                 .create_cf(cf_name, &opts)
-                .expect("Could not create column family"); // TODO: propagate
+                .map_err(|e| arcon_err_kind!("Could not create column family: {}", e))?;
             self.options.insert(cf_name.into(), opts);
         }
+
+        Ok(())
     }
 }
 
@@ -170,7 +181,11 @@ impl RocksDb {
     }
 
     #[inline]
-    fn get(&self, cf_name: impl AsRef<str>, key: impl AsRef<[u8]>) -> ArconResult<DBPinnableSlice> {
+    fn get(
+        &self,
+        cf_name: impl AsRef<str>,
+        key: impl AsRef<[u8]>,
+    ) -> ArconResult<Option<DBPinnableSlice>> {
         self.initialized()?.get(cf_name, key)
     }
 
@@ -199,33 +214,27 @@ impl RocksDb {
         self.initialized()?.contains(cf, key)
     }
 
-    fn get_or_create_column_family(&mut self, cf_name: &str, opts: Options) -> String {
+    fn get_or_create_column_family(&mut self, cf_name: &str, opts: Options) -> ArconResult<String> {
         match &mut self.inner {
-            Inner::Initialized(i) => i.create_column_family_if_doesnt_exist(cf_name, opts),
+            Inner::Initialized(i) => i.create_column_family_if_doesnt_exist(cf_name, opts)?,
             Inner::Uninitialized {
                 unknown_cfs,
                 known_cfs,
             } => {
                 if known_cfs.contains_key(cf_name) {
-                    return cf_name.to_string();
+                    return Ok(cf_name.to_string());
                 }
 
                 unknown_cfs.remove(cf_name);
                 known_cfs.insert(cf_name.to_string(), opts);
 
-                let all_cfs_known = if let Inner::Uninitialized { unknown_cfs, .. } = &self.inner {
-                    unknown_cfs.is_empty()
-                } else {
-                    false
-                };
-
-                if all_cfs_known {
-                    self.initialize().expect("Could not initialize"); // TODO: propagate
+                if unknown_cfs.is_empty() {
+                    self.initialize()?;
                 }
             }
         }
 
-        cf_name.to_string()
+        Ok(cf_name.to_string())
     }
 
     fn initialize(&mut self) -> ArconResult<()> {
@@ -348,7 +357,7 @@ impl StateBackend for RocksDb {
         }
 
         let mut target_path: PathBuf = restore_path.into();
-        target_path.push("__DUMMY");
+        target_path.push("__DUMMY"); // the file name is replaced inside the loop below
         for entry in fs::read_dir(checkpoint_path).map_err(|e| {
             arcon_err_kind!(
                 "Could not read checkpoint directory '{}': {}",
@@ -366,6 +375,7 @@ impl StateBackend for RocksDb {
                 .is_file());
 
             let source_path = entry.path();
+            // replaces the __DUMMY from above the loop
             target_path.set_file_name(
                 source_path
                     .file_name()
@@ -589,8 +599,9 @@ mod state_common {
         where
             UK: SerializableWith<KS>,
         {
-            // maybe try adding a size hint for stuff that impls SerializableWith?
-            let mut res = Vec::with_capacity(IK::SIZE + N::SIZE);
+            let mut res = Vec::with_capacity(
+                IK::SIZE + N::SIZE + UK::size_hint(&self.key_serializer, user_key).unwrap_or(0),
+            );
             IK::serialize_into(&self.key_serializer, &mut res, &self.item_key)?;
             N::serialize_into(&self.key_serializer, &mut res, &self.namespace)?;
             UK::serialize_into(&self.key_serializer, &mut res, user_key)?;
@@ -599,7 +610,6 @@ mod state_common {
         }
 
         pub fn get_db_key_prefix(&self) -> ArconResult<Vec<u8>> {
-            // maybe try adding a size hint for stuff that impls SerializableWith?
             let mut res = Vec::with_capacity(IK::SIZE + N::SIZE);
             IK::serialize_into(&self.key_serializer, &mut res, &self.item_key)?;
             N::serialize_into(&self.key_serializer, &mut res, &self.namespace)?;
@@ -616,7 +626,9 @@ mod state_common {
             value_serializer: TS,
         ) -> StateCommon<IK, N, KS, TS> {
             let opts = common_options(&item_key, &namespace, &key_serializer);
-            let cf_name = backend.get_or_create_column_family(name, opts);
+            let cf_name = backend
+                .get_or_create_column_family(name, opts)
+                .expect("Could not create column family");
 
             StateCommon {
                 cf_name,
@@ -678,7 +690,9 @@ mod state_common {
             opts.set_merge_operator_associative("vec_merge", vec_state::vec_merge);
 
             let full_name = format!("vec_{}", name);
-            let cf_name = backend.get_or_create_column_family(&full_name, opts);
+            let cf_name = backend
+                .get_or_create_column_family(&full_name, opts)
+                .expect("Could not create column family");
             StateCommon {
                 cf_name,
                 item_key,
@@ -709,7 +723,9 @@ mod state_common {
             opts.set_merge_operator_associative("reducing_merge", reducing_merge);
 
             let full_name = format!("reducing_{}", name);
-            let cf_name = backend.get_or_create_column_family(&full_name, opts);
+            let cf_name = backend
+                .get_or_create_column_family(&full_name, opts)
+                .expect("Could not create column family");
             StateCommon {
                 cf_name,
                 item_key,
@@ -741,7 +757,9 @@ mod state_common {
             opts.set_merge_operator_associative("aggregate_merge", aggregate_merge);
 
             let full_name = format!("aggregating_{}", name);
-            let cf_name = backend.get_or_create_column_family(&full_name, opts);
+            let cf_name = backend
+                .get_or_create_column_family(&full_name, opts)
+                .expect("Could not create column family");
             StateCommon {
                 cf_name,
                 item_key,
@@ -842,13 +860,13 @@ pub mod test {
             .expect("put");
 
         {
-            let v = db.get(column_family, key.as_bytes()).unwrap();
+            let v = db.get(column_family, key.as_bytes()).unwrap().unwrap();
             assert_eq!(value, String::from_utf8_lossy(&v));
         }
 
         db.remove(column_family, key.as_bytes()).expect("remove");
-        let v = db.get(column_family, key.as_bytes());
-        assert!(v.is_err());
+        let v = db.get(column_family, key.as_bytes()).unwrap();
+        assert!(v.is_none());
     }
 
     #[test]
@@ -890,6 +908,7 @@ pub mod test {
             new_value,
             db.get(column_family, key)
                 .expect("Could not get from the original db")
+                .unwrap()
                 .as_ref()
         );
         assert_eq!(
@@ -897,6 +916,7 @@ pub mod test {
             db_from_checkpoint
                 .get(column_family, key)
                 .expect("Could not get from the checkpoint")
+                .unwrap()
                 .as_ref()
         );
     }
@@ -909,20 +929,20 @@ pub mod test {
 
         let checkpoint_dir = original.checkpoint();
 
-        assert_eq!(a_value.get(&original).unwrap(), 420);
+        assert_eq!(a_value.get(&original).unwrap().unwrap(), 420);
         a_value.set(&mut original, 69).unwrap();
-        assert_eq!(a_value.get(&original).unwrap(), 69);
+        assert_eq!(a_value.get(&original).unwrap().unwrap(), 69);
 
         let mut restored = TestDb::from_checkpoint(&checkpoint_dir.to_string_lossy());
         // TODO: serialize value state metadata (type names, serialization, etc.) into rocksdb, so
         //   that type mismatches are caught early. Right now it would be possible to, let's say,
         //   store an integer, and then read a float from the restored state backend
         let a_value_restored = restored.new_value_state("a", (), (), Bincode, Bincode);
-        assert_eq!(a_value_restored.get(&restored).unwrap(), 420);
+        assert_eq!(a_value_restored.get(&restored).unwrap().unwrap(), 420);
 
         a_value_restored.set(&mut restored, 1337).unwrap();
-        assert_eq!(a_value_restored.get(&restored).unwrap(), 1337);
-        assert_eq!(a_value.get(&original).unwrap(), 69);
+        assert_eq!(a_value_restored.get(&restored).unwrap().unwrap(), 1337);
+        assert_eq!(a_value.get(&original).unwrap().unwrap(), 69);
     }
 
     #[allow(irrefutable_let_patterns)]

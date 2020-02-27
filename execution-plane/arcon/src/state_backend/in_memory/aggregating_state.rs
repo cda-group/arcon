@@ -25,7 +25,7 @@ where
 {
     fn clear(&self, backend: &mut InMemory) -> ArconResult<()> {
         let key = self.common.get_db_key_prefix()?;
-        backend.remove(&key)?;
+        let _old_value = backend.remove(&key);
         Ok(())
     }
 
@@ -41,14 +41,18 @@ where
     AGG::Accumulator: Send + Sync + Clone + 'static,
 {
     fn get(&self, backend: &InMemory) -> ArconResult<AGG::Result> {
-        // TODO: do we want to return R based on a new accumulator if not found?
         let key = self.common.get_db_key_prefix()?;
-        let dynamic = backend.get(&key)?;
-        let current_accumulator = dynamic
-            .downcast_ref::<AGG::Accumulator>()
-            .ok_or_else(|| arcon_err_kind!("Dynamic value has a wrong type!"))?
-            .clone();
-        Ok(self.aggregator.accumulator_into_result(current_accumulator))
+        if let Some(dynamic) = backend.get(&key) {
+            let current_accumulator = dynamic
+                .downcast_ref::<AGG::Accumulator>()
+                .ok_or_else(|| arcon_err_kind!("Dynamic value has a wrong type!"))?
+                .clone();
+            Ok(self.aggregator.accumulator_into_result(current_accumulator))
+        } else {
+            Ok(self
+                .aggregator
+                .accumulator_into_result(self.aggregator.create_accumulator()))
+        }
     }
 
     fn append(&self, backend: &mut InMemory, value: T) -> ArconResult<()> {

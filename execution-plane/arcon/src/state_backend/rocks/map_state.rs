@@ -40,12 +40,14 @@ where
     KS: Clone + 'static,
     TS: Clone + 'static,
 {
-    fn get(&self, backend: &RocksDb, key: &K) -> ArconResult<V> {
+    fn get(&self, backend: &RocksDb, key: &K) -> ArconResult<Option<V>> {
         let key = self.common.get_db_key_with_user_key(key)?;
-        let serialized = backend.get(&self.common.cf_name, &key)?;
-        let value = V::deserialize(&self.common.value_serializer, &serialized)?;
-
-        Ok(value)
+        if let Some(serialized) = backend.get(&self.common.cf_name, &key)? {
+            let value = V::deserialize(&self.common.value_serializer, &serialized)?;
+            Ok(Some(value))
+        } else {
+            Ok(None)
+        }
     }
 
     fn fast_insert(&self, backend: &mut RocksDb, key: K, value: V) -> ArconResult<()> {
@@ -56,11 +58,12 @@ where
         Ok(())
     }
 
+    // NOTE: not atomic!
     fn insert(&self, backend: &mut RocksDb, key: K, value: V) -> ArconResult<Option<V>> {
         let key = self.common.get_db_key_with_user_key(&key)?;
 
         // couldn't find a `put` that would return the previous value from rocks
-        let old = if let Ok(slice) = backend.get(&self.common.cf_name, &key) {
+        let old = if let Some(slice) = backend.get(&self.common.cf_name, &key)? {
             Some(V::deserialize(&self.common.value_serializer, &*slice)?)
         } else {
             None
@@ -119,7 +122,10 @@ where
     }
 
     // TODO: unboxed versions of below
-    fn iter<'a>(&self, backend: &'a RocksDb) -> ArconResult<Box<dyn Iterator<Item = (K, V)> + 'a>> {
+    fn iter<'a>(
+        &self,
+        backend: &'a RocksDb,
+    ) -> ArconResult<Box<dyn Iterator<Item = ArconResult<(K, V)>> + 'a>> {
         let backend = backend.initialized()?;
 
         let prefix = self.common.get_db_key_prefix()?;
@@ -137,18 +143,18 @@ where
                 let _item_key = IK::deserialize_from(&key_serializer, &mut key_cursor)?;
                 let _namespace = N::deserialize_from(&key_serializer, &mut key_cursor)?;
                 let key = K::deserialize_from(&key_serializer, &mut key_cursor)?;
-                let value: V = V::deserialize(&value_serializer, &serialized_value)?;
+                let value = V::deserialize(&value_serializer, &serialized_value)?;
 
                 Ok((key, value))
-            })
-            .map(|res: ArconResult<(K, V)>| res.expect("deserialization error"));
-        // TODO: we panic above if deserialization fails. Perhaps the function signature should
-        //  change to accommodate for that
+            });
 
         Ok(Box::new(iter))
     }
 
-    fn keys<'a>(&self, backend: &'a RocksDb) -> ArconResult<Box<dyn Iterator<Item = K> + 'a>> {
+    fn keys<'a>(
+        &self,
+        backend: &'a RocksDb,
+    ) -> ArconResult<Box<dyn Iterator<Item = ArconResult<K>> + 'a>> {
         let backend = backend.initialized()?;
 
         let prefix = self.common.get_db_key_prefix()?;
@@ -166,15 +172,15 @@ where
                 let key = K::deserialize_from(&key_serializer, &mut key_cursor)?;
 
                 Ok(key)
-            })
-            .map(|res: ArconResult<K>| res.expect("deserialization error"));
-        // TODO: we panic above if deserialization fails. Perhaps the function signature should
-        //  change to accommodate for that
+            });
 
         Ok(Box::new(iter))
     }
 
-    fn values<'a>(&self, backend: &'a RocksDb) -> ArconResult<Box<dyn Iterator<Item = V> + 'a>> {
+    fn values<'a>(
+        &self,
+        backend: &'a RocksDb,
+    ) -> ArconResult<Box<dyn Iterator<Item = ArconResult<V>> + 'a>> {
         let backend = backend.initialized()?;
 
         let prefix = self.common.get_db_key_prefix()?;
@@ -189,10 +195,7 @@ where
                 let value: V = V::deserialize(&value_serializer, &serialized_value)?;
 
                 Ok(value)
-            })
-            .map(|res: ArconResult<V>| res.expect("deserialization error"));
-        // TODO: we panic above if deserialization fails. Perhaps the function signature should
-        //  change to accommodate for that
+            });
 
         Ok(Box::new(iter))
     }
@@ -249,12 +252,24 @@ mod test {
         assert!(map_state.contains(&db, &"first key".to_string()).unwrap());
         assert!(map_state.contains(&db, &"second key".to_string()).unwrap());
 
-        assert_eq!(map_state.get(&db, &"first key".to_string()).unwrap(), 42);
-        assert_eq!(map_state.get(&db, &"second key".to_string()).unwrap(), 69);
+        assert_eq!(
+            map_state
+                .get(&db, &"first key".to_string())
+                .unwrap()
+                .unwrap(),
+            42
+        );
+        assert_eq!(
+            map_state
+                .get(&db, &"second key".to_string())
+                .unwrap()
+                .unwrap(),
+            69
+        );
 
         assert_eq!(map_state.len(&db).unwrap(), 2);
 
-        let keys: Vec<_> = map_state.keys(&db).unwrap().collect();
+        let keys: Vec<_> = map_state.keys(&db).unwrap().map(Result::unwrap).collect();
 
         assert_eq!(keys.len(), 2);
         assert!(keys.contains(&"first key".to_string()));
@@ -288,18 +303,21 @@ mod test {
             map_state.fast_insert(&mut db, key, value).unwrap()
         }
 
-        let tuples_from_key_one: Vec<_> = map_state.iter(&db).unwrap().collect();
+        let tuples_from_key_one: Vec<_> =
+            map_state.iter(&db).unwrap().map(Result::unwrap).collect();
         assert_eq!(tuples_from_key_one, expected_for_key_one);
 
         map_state.set_current_key(0).unwrap();
-        let tuples_from_key_zero: Vec<_> = map_state.iter(&db).unwrap().collect();
+        let tuples_from_key_zero: Vec<_> =
+            map_state.iter(&db).unwrap().map(Result::unwrap).collect();
         assert_eq!(tuples_from_key_zero, expected_for_key_zero);
 
         map_state.clear(&mut db).unwrap();
         assert!(map_state.is_empty(&db).unwrap());
 
         map_state.set_current_key(1).unwrap();
-        let tuples_from_key_one_after_clear_zero: Vec<_> = map_state.iter(&db).unwrap().collect();
+        let tuples_from_key_one_after_clear_zero: Vec<_> =
+            map_state.iter(&db).unwrap().map(Result::unwrap).collect();
         assert_eq!(tuples_from_key_one_after_clear_zero, expected_for_key_one);
     }
 }

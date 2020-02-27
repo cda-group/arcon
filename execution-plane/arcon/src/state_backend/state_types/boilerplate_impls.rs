@@ -100,7 +100,7 @@ where
     SB: StateBackend + Sized,
 {
     #[inline]
-    fn get(&self, backend: &dyn StateBackend) -> ArconResult<T> {
+    fn get(&self, backend: &dyn StateBackend) -> ArconResult<Option<T>> {
         self.0.get(backend.downcast_ref()?)
     }
 
@@ -115,7 +115,7 @@ impl_state_for_boxed_with_dyn_backend!(ValueState<_, IK, N, T>);
 // TODO: these might be unnecessary if I change the bound on _Builder::Type to be a BorrowMut or DerefMut? maybe?
 impl<IK, N, T> ValueState<dyn StateBackend, IK, N, T> for BoxedValueState<T, IK, N> {
     #[inline]
-    fn get(&self, backend: &dyn StateBackend) -> ArconResult<T> {
+    fn get(&self, backend: &dyn StateBackend) -> ArconResult<Option<T>> {
         (*self).deref().get(backend)
     }
 
@@ -131,7 +131,7 @@ where
     SB: StateBackend + Sized,
 {
     #[inline]
-    fn get(&self, backend: &dyn StateBackend, key: &K) -> ArconResult<V> {
+    fn get(&self, backend: &dyn StateBackend, key: &K) -> ArconResult<Option<V>> {
         self.0.get(backend.downcast_ref()?, key)
     }
     #[inline]
@@ -178,21 +178,21 @@ where
     fn iter<'a>(
         &self,
         backend: &'a dyn StateBackend,
-    ) -> ArconResult<Box<dyn Iterator<Item = (K, V)> + 'a>> {
+    ) -> ArconResult<Box<dyn Iterator<Item = ArconResult<(K, V)>> + 'a>> {
         self.0.iter(backend.downcast_ref()?)
     }
     #[inline]
     fn keys<'a>(
         &self,
         backend: &'a dyn StateBackend,
-    ) -> ArconResult<Box<dyn Iterator<Item = K> + 'a>> {
+    ) -> ArconResult<Box<dyn Iterator<Item = ArconResult<K>> + 'a>> {
         self.0.keys(backend.downcast_ref()?)
     }
     #[inline]
     fn values<'a>(
         &self,
         backend: &'a dyn StateBackend,
-    ) -> ArconResult<Box<dyn Iterator<Item = V> + 'a>> {
+    ) -> ArconResult<Box<dyn Iterator<Item = ArconResult<V>> + 'a>> {
         self.0.values(backend.downcast_ref()?)
     }
 
@@ -211,7 +211,7 @@ impl_state_for_boxed_with_dyn_backend!(MapState<_, IK, N, K, V>);
 
 impl<IK, N, K, V> MapState<dyn StateBackend, IK, N, K, V> for BoxedMapState<K, V, IK, N> {
     #[inline]
-    fn get(&self, backend: &dyn StateBackend, key: &K) -> ArconResult<V> {
+    fn get(&self, backend: &dyn StateBackend, key: &K) -> ArconResult<Option<V>> {
         (*self).deref().get(backend, key)
     }
     #[inline]
@@ -260,21 +260,21 @@ impl<IK, N, K, V> MapState<dyn StateBackend, IK, N, K, V> for BoxedMapState<K, V
     fn iter<'a>(
         &self,
         backend: &'a dyn StateBackend,
-    ) -> ArconResult<Box<dyn Iterator<Item = (K, V)> + 'a>> {
+    ) -> ArconResult<Box<dyn Iterator<Item = ArconResult<(K, V)>> + 'a>> {
         (*self).deref().iter(backend)
     }
     #[inline]
     fn keys<'a>(
         &self,
         backend: &'a dyn StateBackend,
-    ) -> ArconResult<Box<dyn Iterator<Item = K> + 'a>> {
+    ) -> ArconResult<Box<dyn Iterator<Item = ArconResult<K>> + 'a>> {
         (*self).deref().keys(backend)
     }
     #[inline]
     fn values<'a>(
         &self,
         backend: &'a dyn StateBackend,
-    ) -> ArconResult<Box<dyn Iterator<Item = V> + 'a>> {
+    ) -> ArconResult<Box<dyn Iterator<Item = ArconResult<V>> + 'a>> {
         (*self).deref().values(backend)
     }
 
@@ -395,9 +395,11 @@ where
 
 impl_state_for_boxed_with_dyn_backend!(ReducingState<_, IK, N, T>);
 
-impl<IK, N, T> AppendingState<dyn StateBackend, IK, N, T, T> for BoxedReducingState<T, IK, N> {
+impl<IK, N, T> AppendingState<dyn StateBackend, IK, N, T, Option<T>>
+    for BoxedReducingState<T, IK, N>
+{
     #[inline]
-    fn get(&self, backend: &dyn StateBackend) -> ArconResult<T> {
+    fn get(&self, backend: &dyn StateBackend) -> ArconResult<Option<T>> {
         (*self).deref().get(backend)
     }
 
@@ -407,7 +409,10 @@ impl<IK, N, T> AppendingState<dyn StateBackend, IK, N, T, T> for BoxedReducingSt
     }
 }
 
-impl<IK, N, T> MergingState<dyn StateBackend, IK, N, T, T> for BoxedReducingState<T, IK, N> {}
+impl<IK, N, T> MergingState<dyn StateBackend, IK, N, T, Option<T>>
+    for BoxedReducingState<T, IK, N>
+{
+}
 
 impl<IK, N, T> ReducingState<dyn StateBackend, IK, N, T> for BoxedReducingState<T, IK, N> {}
 

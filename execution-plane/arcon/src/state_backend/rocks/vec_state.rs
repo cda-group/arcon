@@ -94,20 +94,22 @@ where
 {
     fn get(&self, backend: &RocksDb) -> ArconResult<Vec<T>> {
         let key = self.common.get_db_key_prefix()?;
-        let serialized = backend.get(&self.common.cf_name, &key)?;
+        if let Some(serialized) = backend.get(&self.common.cf_name, &key)? {
+            // reader is updated to point at the yet unconsumed part of the serialized data
+            let mut reader = &serialized[..];
+            let len = usize::deserialize_from(VEC_LEN_SERIALIZER, &mut reader)?;
+            let mut res = Vec::with_capacity(len);
+            while !reader.is_empty() {
+                let val = T::deserialize_from(&self.common.value_serializer, &mut reader)?;
+                res.push(val);
+            }
+            // sanity check
+            assert_eq!(res.len(), len);
 
-        // reader is updated to point at the yet unconsumed part of the serialized data
-        let mut reader = &serialized[..];
-        let len = usize::deserialize_from(VEC_LEN_SERIALIZER, &mut reader)?;
-        let mut res = Vec::with_capacity(len);
-        while !reader.is_empty() {
-            let val = T::deserialize_from(&self.common.value_serializer, &mut reader)?;
-            res.push(val);
+            Ok(res)
+        } else {
+            Ok(vec![])
         }
-        // sanity check
-        assert_eq!(res.len(), len);
-
-        Ok(res)
     }
 
     fn append(&self, backend: &mut RocksDb, value: T) -> ArconResult<()> {
@@ -157,6 +159,7 @@ where
         for elem in value {
             T::serialize_into(&self.common.value_serializer, &mut storage, &elem)?;
         }
+
         backend.put(&self.common.cf_name, key, storage)
     }
 
@@ -204,7 +207,7 @@ where
 
     fn is_empty(&self, backend: &RocksDb) -> ArconResult<bool> {
         let key = self.common.get_db_key_prefix()?;
-        if let Ok(storage) = backend.get(&self.common.cf_name, key) {
+        if let Some(storage) = backend.get(&self.common.cf_name, key)? {
             if storage.is_empty() {
                 return Ok(true);
             }
@@ -221,7 +224,7 @@ where
 
     fn len(&self, backend: &RocksDb) -> ArconResult<usize> {
         let key = self.common.get_db_key_prefix()?;
-        if let Ok(storage) = backend.get(&self.common.cf_name, key) {
+        if let Some(storage) = backend.get(&self.common.cf_name, key)? {
             if storage.is_empty() {
                 return Ok(0);
             }

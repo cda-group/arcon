@@ -106,16 +106,20 @@ where
     AGG::Accumulator: SerializableWith<TS> + DeserializableWith<TS>,
 {
     fn get(&self, backend: &RocksDb) -> ArconResult<AGG::Result> {
-        // TODO: do we want to return R based on a new/empty accumulator if not found?
         let key = self.common.get_db_key_prefix()?;
 
-        let serialized = backend.get(&self.common.cf_name, &key)?;
-        assert_eq!(serialized[0], ACCUMULATOR_MARKER);
-        let serialized = &serialized[1..];
+        if let Some(serialized) = backend.get(&self.common.cf_name, &key)? {
+            assert_eq!(serialized[0], ACCUMULATOR_MARKER);
+            let serialized = &serialized[1..];
 
-        let current_accumulator =
-            AGG::Accumulator::deserialize(&self.common.value_serializer, serialized)?;
-        Ok(self.aggregator.accumulator_into_result(current_accumulator))
+            let current_accumulator =
+                AGG::Accumulator::deserialize(&self.common.value_serializer, serialized)?;
+            Ok(self.aggregator.accumulator_into_result(current_accumulator))
+        } else {
+            Ok(self
+                .aggregator
+                .accumulator_into_result(self.aggregator.create_accumulator()))
+        }
     }
 
     fn append(&self, backend: &mut RocksDb, value: T) -> ArconResult<()> {

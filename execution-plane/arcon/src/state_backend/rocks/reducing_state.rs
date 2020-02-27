@@ -74,21 +74,22 @@ where
     }
 }
 
-impl<IK, N, T, F, KS, TS> AppendingState<RocksDb, IK, N, T, T>
+impl<IK, N, T, F, KS, TS> AppendingState<RocksDb, IK, N, T, Option<T>>
     for RocksDbReducingState<IK, N, T, F, KS, TS>
-// TODO: if we made the (backend-)mutating methods take &mut self, F could be FnMut
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
     T: SerializableWith<TS> + DeserializableWith<TS>,
     F: Fn(&T, &T) -> T,
 {
-    fn get(&self, backend: &RocksDb) -> ArconResult<T> {
+    fn get(&self, backend: &RocksDb) -> ArconResult<Option<T>> {
         let key = self.common.get_db_key_prefix()?;
-        let storage = backend.get(&self.common.cf_name, &key)?;
-        let value = T::deserialize(&self.common.value_serializer, &*storage)?;
-
-        Ok(value)
+        if let Some(storage) = backend.get(&self.common.cf_name, &key)? {
+            let value = T::deserialize(&self.common.value_serializer, &*storage)?;
+            Ok(Some(value))
+        } else {
+            Ok(None)
+        }
     }
 
     fn append(&self, backend: &mut RocksDb, value: T) -> ArconResult<()> {
@@ -106,7 +107,7 @@ where
     }
 }
 
-impl<IK, N, T, F, KS, TS> MergingState<RocksDb, IK, N, T, T>
+impl<IK, N, T, F, KS, TS> MergingState<RocksDb, IK, N, T, Option<T>>
     for RocksDbReducingState<IK, N, T, F, KS, TS>
 where
     IK: SerializableFixedSizeWith<KS>,
@@ -147,7 +148,7 @@ mod test {
         reducing_state.append(&mut db, 42).unwrap();
         reducing_state.append(&mut db, 10).unwrap();
 
-        assert_eq!(reducing_state.get(&db).unwrap(), 42);
+        assert_eq!(reducing_state.get(&db).unwrap().unwrap(), 42);
     }
 
     #[test]
@@ -177,7 +178,7 @@ mod test {
         rs1.append(&mut db, 10).unwrap();
         rs2.append(&mut db, 10).unwrap();
 
-        assert_eq!(rs1.get(&db).unwrap(), 42);
-        assert_eq!(rs2.get(&db).unwrap(), 7);
+        assert_eq!(rs1.get(&db).unwrap().unwrap(), 42);
+        assert_eq!(rs2.get(&db).unwrap().unwrap(), 7);
     }
 }
