@@ -81,18 +81,12 @@ impl<T> EventBuffer<T> {
         self.free.store(true, Ordering::Relaxed);
     }
 
-    /// Reserve the EventBuffer
+    /// Attempt to reserve the EventBuffer
     ///
     /// Should only be called from the writer
     #[inline]
-    pub fn reserve(&self) {
-        self.free.store(false, Ordering::Relaxed);
-    }
-
-    /// Check buffer availibility
-    #[inline]
-    pub fn is_free(&self) -> bool {
-        self.free.load(Ordering::Relaxed)
+    pub fn try_reserve(&self) -> bool {
+        self.free.compare_and_swap(true, false, Ordering::Relaxed)
     }
 }
 

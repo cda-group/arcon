@@ -99,6 +99,7 @@ fn buffer_pool_multi_threaded(buffer_size: usize) {
     let receiver = std::thread::spawn(move || {
         for _ in 0..THREAD_ITERATIONS {
             let reader = rx.recv().unwrap();
+            black_box(reader);
             // For multi-threaded case, skip reading
         }
     });
@@ -150,6 +151,7 @@ fn rust_vec_multi_threaded(buffer_size: usize) {
     let receiver = std::thread::spawn(move || {
         for _ in 0..THREAD_ITERATIONS {
             let vec = rx.recv().unwrap();
+            black_box(vec);
             // For multi-threaded case, skip reading
         }
     });

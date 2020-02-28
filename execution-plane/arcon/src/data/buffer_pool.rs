@@ -48,9 +48,7 @@ impl<T> BufferPool<T> {
     pub fn try_get(&mut self) -> Option<BufferWriter<T>> {
         let buf = &self.buffers[self.curr_buffer];
         let mut opt = None;
-        if buf.is_free() {
-            // We take it....
-            buf.reserve();
+        if buf.try_reserve() {
             opt = Some(BufferWriter::new(buf.clone(), 0, buf.capacity()))
         }
 
