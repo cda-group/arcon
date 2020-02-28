@@ -5,6 +5,7 @@ pub mod arcon_allocator;
 pub mod arcon_flight_serde;
 pub mod arcon_node;
 pub mod arcon_serde;
+pub mod arcon_buffer_pool;
 pub mod arcon_window;
 
 use arcon::prelude::*;

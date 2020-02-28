@@ -3,6 +3,10 @@
 
 /// Serialisers and Deserialiser for in-flight data
 pub mod flight_serde;
+/// Message buffers for events
+pub mod buffer;
+/// Buffer pool of reusable EventBuffers 
+pub mod buffer_pool;
 
 use crate::error::ArconResult;
 use crate::macros::*;

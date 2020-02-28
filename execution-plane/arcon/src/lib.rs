@@ -21,7 +21,7 @@ extern crate lazy_static;
 
 /// Allocator for message buffers, network buffers, state backends
 pub mod allocator;
-/// Arcon data types and serialisers/deserialisers
+/// Arcon data types, message buffers, serialisers/deserialisers
 pub mod data;
 /// State backend implementations
 pub mod state_backend;
