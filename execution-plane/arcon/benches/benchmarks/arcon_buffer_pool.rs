@@ -139,7 +139,7 @@ fn rust_vec_single_thread(b: &mut Bencher, buffer_size: usize) {
 }
 
 fn rust_multi_threaded_small(b: &mut Bencher) {
-    b.iter(|| rust_vec_multi_threaded(LARGE_BUFFER));
+    b.iter(|| rust_vec_multi_threaded(SMALL_BUFFER));
 }
 
 fn rust_multi_threaded_large(b: &mut Bencher) {
