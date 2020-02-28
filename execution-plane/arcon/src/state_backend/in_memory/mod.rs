@@ -220,6 +220,10 @@ impl StateBackend for InMemory {
         eprintln!("InMemory backend restoring is not implemented");
         Self::new(restore_path)
     }
+
+    fn just_restored(&mut self) -> bool {
+        false
+    }
 }
 
 pub(crate) struct StateCommon<IK, N, KS> {

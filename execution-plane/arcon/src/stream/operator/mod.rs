@@ -18,6 +18,9 @@ where
     IN: ArconType,
     OUT: ArconType,
 {
+    /// Called by parent node to finish the initialization of the operator
+    fn init(&mut self, _state_backend: &mut dyn StateBackend) {}
+
     /// Determines how the `Operator` processes Elements
     ///
     /// The function takes an Element and a [NodeContext] in order to pass on it

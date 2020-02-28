@@ -111,7 +111,9 @@ impl Watermark {
 }
 
 /// Epoch marker message
-#[derive(PMessage, Clone, Copy, Abomonation, Serialize, Deserialize)]
+#[derive(
+    PMessage, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Abomonation, Serialize, Deserialize,
+)]
 pub struct Epoch {
     #[prost(uint64, tag = "1")]
     pub epoch: u64,

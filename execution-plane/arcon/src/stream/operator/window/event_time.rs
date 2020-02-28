@@ -78,11 +78,11 @@ where
         let persistent_timer: BoxedValueState<SerializableEventTimer<(u64, u64, u64)>> =
             state_backend.build("timer").value();
 
-        let transient_timer = match persistent_timer.get(state_backend) {
-            Ok(Some(v)) => v.into(),
-            Ok(None) => EventTimer::new(),
-            Err(e) => panic!("state error: {}", e),
-        };
+        // this will be overwritten in init if state backend contains previous data
+        // we cannot check it now, because the node most likely hasn't registered all the state yet,
+        // and some of the state backends (rocks) are picky about doing stuff without being fully
+        // initialized
+        let transient_timer = EventTimer::new();
 
         EventTimeWindowAssigner {
             window_length: length,
@@ -138,6 +138,16 @@ where
     IN: ArconType + Hash,
     OUT: ArconType,
 {
+    fn init(&mut self, state_backend: &mut dyn StateBackend) {
+        let mut transient_timer = match self.persistent_timer.get(state_backend) {
+            Ok(Some(v)) => v.into(),
+            Ok(None) => EventTimer::new(),
+            Err(e) => panic!("state error: {}", e),
+        };
+
+        std::mem::swap(&mut self.transient_timer, &mut transient_timer)
+    }
+
     fn handle_element(&mut self, element: ArconElement<IN>, ctx: OperatorContext<OUT>) {
         let ts = element.timestamp.unwrap_or(1);
         if self.transient_timer.get_time() == 0 {

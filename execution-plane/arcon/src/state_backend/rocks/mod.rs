@@ -28,6 +28,7 @@ use std::{
 pub struct RocksDb {
     inner: Inner,
     path: PathBuf,
+    restored: bool,
 }
 
 enum Inner {
@@ -323,7 +324,11 @@ impl StateBackend for RocksDb {
             })
         };
 
-        Ok(RocksDb { inner, path })
+        Ok(RocksDb {
+            inner,
+            path,
+            restored: false,
+        })
     }
 
     fn checkpoint(&self, checkpoint_path: &str) -> ArconResult<()> {
@@ -391,7 +396,16 @@ impl StateBackend for RocksDb {
             })?;
         }
 
-        RocksDb::new(restore_path)
+        RocksDb::new(restore_path).map(|mut r| {
+            r.restored = true;
+            r
+        })
+    }
+
+    fn just_restored(&mut self) -> bool {
+        let res = self.restored;
+        self.restored = false;
+        res
     }
 }
 

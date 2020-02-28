@@ -18,6 +18,8 @@ pub trait StateBackend: Any + Send + Sync {
     fn type_name(&self) -> &'static str {
         type_name::<Self>()
     }
+
+    fn just_restored(&mut self) -> bool;
 }
 
 // This is copied from std::any, because rust trait inheritance kinda sucks. Even std::any has

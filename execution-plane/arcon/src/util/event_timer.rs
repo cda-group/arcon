@@ -32,7 +32,7 @@ use uuid::Uuid;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SerializableEventTimer<E> {
     time: u64,
-    handles: HashMap<Uuid, (Duration, E)>,
+    handles: HashMap<Uuid, (u64, Duration, E)>,
 }
 
 // when serializing this we treat the timer field as transient and recreate it from the serializable
@@ -61,7 +61,9 @@ impl<E> EventTimer<E> {
     // Basic scheduling function
     fn schedule_once(&mut self, timeout: Duration, entry: E) {
         let id = Uuid::new_v4();
-        self.inner.handles.insert(id, (timeout, entry));
+        self.inner
+            .handles
+            .insert(id, (self.inner.time, timeout, entry));
 
         let e = TimerEntry::OneShot {
             id,
@@ -136,7 +138,7 @@ impl<E> EventTimer<E> {
     #[inline(always)]
     fn execute(&mut self, e: TimerEntry) -> Option<E> {
         let id = e.id();
-        let res = self.inner.handles.remove(&id).map(|x| x.1);
+        let res = self.inner.handles.remove(&id).map(|x| x.2);
 
         // Reschedule the event
         if let Some(re_e) = e.execute() {
@@ -165,15 +167,13 @@ unsafe impl<E> Send for EventTimer<E> {}
 impl<E> From<SerializableEventTimer<E>> for EventTimer<E> {
     fn from(SerializableEventTimer { time, handles }: SerializableEventTimer<E>) -> Self {
         let mut res = EventTimer::new();
+        res.set_time(time);
 
         // the internal ids WILL change
-        for (_id, (at, event)) in handles {
-            res.schedule_once(at, event)
+        for (_id, (insertion_time, timeout, event)) in handles {
+            let new_timeout = insertion_time + timeout.as_millis() as u64 - time;
+            res.schedule_once(Duration::from_millis(new_timeout), event)
         }
-        let events = res.advance_to(time);
-        // the only non-executing way to set time is `set_time`, which should only be called right
-        // at the start, so running `advance_to` in the deserializer should not execute any events
-        assert!(events.is_empty());
 
         res
     }
