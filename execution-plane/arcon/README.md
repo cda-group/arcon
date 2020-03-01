@@ -13,3 +13,15 @@ This crate is not intended to be used directly. It is a part of the [Arcon proje
 [`arcon_error`]: arcon_error
 [`arcon_extra`]: arcon_extra
 [`arcon_macros`]: arcon_macros
+
+## Criterion Benchmarks
+
+Run All
+```
+$ cargo bench
+```
+
+Run specific benchmark
+```
+$ cargo bench --bench <bench-name>
+```
