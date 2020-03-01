@@ -67,9 +67,6 @@ pub fn node_forward_bench(b: &mut Bencher, messages: usize) {
 
     let node = sys.create(|| node_comp);
 
-    // Bit hacky, but since we depend on the receiver to create the node itself.
-    let _ = node_receiver.on_definition(|cd| cd.set_node(node.actor_ref().hold().expect("fail")));
-
     let experiment_port = node_receiver.on_definition(|cd| cd.experiment_port.share());
 
     sys.start_notify(&node_receiver)
