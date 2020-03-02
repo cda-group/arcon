@@ -7,8 +7,11 @@
 // https://github.com/kompics/kompact/blob/master/experiments/dynamic-benches/src/network_latency.rs
 
 use arcon::prelude::*;
-use criterion::{criterion_group, Bencher, Criterion};
+use criterion::{criterion_group, criterion_main, Bencher, Criterion};
 use std::time::Duration;
+
+mod common;
+use common::*;
 
 const NODE_MSGS: usize = 100000;
 const BATCH_SIZE: usize = 1000;
@@ -38,7 +41,7 @@ pub fn node_forward_bench(b: &mut Bencher, messages: usize) {
 
     let timeout = Duration::from_millis(500);
 
-    let node_receiver = sys.create(move || super::NodeReceiver::new());
+    let node_receiver = sys.create(move || NodeReceiver::new());
 
     let actor_ref: ActorRefStrong<ArconMessage<i32>> = node_receiver
         .actor_ref()
@@ -65,9 +68,6 @@ pub fn node_forward_bench(b: &mut Bencher, messages: usize) {
 
     let node = sys.create(|| node_comp);
 
-    // Bit hacky, but since we depend on the receiver to create the node itself.
-    let _ = node_receiver.on_definition(|cd| cd.set_node(node.actor_ref().hold().expect("fail")));
-
     let experiment_port = node_receiver.on_definition(|cd| cd.experiment_port.share());
 
     sys.start_notify(&node_receiver)
@@ -85,7 +85,7 @@ pub fn node_forward_bench(b: &mut Bencher, messages: usize) {
 
     b.iter(|| {
         let (promise, future) = kpromise();
-        sys.trigger_r(super::Run::new(NODE_MSGS as u64, promise), &experiment_port);
+        sys.trigger_r(Run::new(NODE_MSGS as u64, promise), &experiment_port);
 
         let batches = NODE_MSGS / BATCH_SIZE;
         for _batch in 0..batches {
@@ -114,3 +114,5 @@ criterion_group! {
     config = custom_criterion();
     targets = arcon_node,
 }
+
+criterion_main!(benches);

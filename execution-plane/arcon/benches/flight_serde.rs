@@ -2,7 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use arcon::prelude::*;
-use criterion::{criterion_group, Bencher, Criterion};
+use criterion::{criterion_group, criterion_main, Bencher, Criterion};
+
+mod common;
+use common::*;
 
 const TOTAL_MSGS: usize = 1024000;
 const BATCH_SIZE: usize = 1024;
@@ -34,7 +37,7 @@ pub fn unsafe_serde(b: &mut Bencher) {
 pub fn arcon_flight_bench(b: &mut Bencher, serde: FlightSerde) {
     let (local, remote) = setup_system();
     let timeout = std::time::Duration::from_millis(150);
-    let comp = remote.create(move || super::NodeReceiver::<i32>::new());
+    let comp = remote.create(move || NodeReceiver::<i32>::new());
     remote
         .start_notify(&comp)
         .wait_timeout(timeout)
@@ -64,7 +67,7 @@ pub fn arcon_flight_bench(b: &mut Bencher, serde: FlightSerde) {
     b.iter(|| {
         let (promise, future) = kpromise();
         remote.trigger_r(
-            super::Run::new(TOTAL_MSGS as u64, promise),
+            crate::Run::new(TOTAL_MSGS as u64, promise),
             &experiment_port,
         );
 
@@ -92,3 +95,4 @@ criterion_group! {
     config = custom_criterion();
     targets = arcon_flight_serde,
 }
+criterion_main!(benches);
