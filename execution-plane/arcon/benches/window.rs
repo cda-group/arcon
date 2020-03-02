@@ -4,7 +4,7 @@
 // Benchmarks for different Window types
 
 use arcon::prelude::*;
-use criterion::{black_box, criterion_group, Bencher, Criterion};
+use criterion::{black_box, criterion_group, criterion_main, Bencher, Criterion};
 
 const WINDOW_MSGS: usize = 100000;
 
@@ -59,3 +59,4 @@ pub fn window_incremental_sum(messages: usize) {
 }
 
 criterion_group!(benches, arcon_window_latency);
+criterion_main!(benches);

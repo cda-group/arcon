@@ -1,12 +1,6 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-pub mod arcon_allocator;
-pub mod arcon_flight_serde;
-pub mod arcon_node;
-pub mod arcon_serde;
-pub mod arcon_window;
-
 use arcon::prelude::*;
 use arcon_error::*;
 use std::time::{Duration, Instant};
@@ -41,7 +35,6 @@ pub struct NodeReceiver<A: ArconType> {
     ctx: ComponentContext<Self>,
     pub experiment_port: ProvidedPort<ExperimentPort, Self>,
     done: Option<KPromise<Duration>>,
-    node: Option<ActorRefStrong<ArconMessage<A>>>,
     remaining_recv: u64,
     start: Instant,
 }
@@ -51,7 +44,6 @@ impl<A: ArconType> NodeReceiver<A> {
             ctx: ComponentContext::new(),
             experiment_port: ProvidedPort::new(),
             done: None,
-            node: None,
             remaining_recv: 0,
             start: Instant::now(),
         }
@@ -64,10 +56,6 @@ impl<A: ArconType> NodeReceiver<A> {
             let promise = self.done.take().expect("No promise to reply to?");
             promise.fulfill(time).expect("Promise was dropped");
         }
-    }
-
-    pub fn set_node(&mut self, node: ActorRefStrong<ArconMessage<A>>) {
-        self.node = Some(node);
     }
 }
 

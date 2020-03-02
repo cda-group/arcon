@@ -4,7 +4,7 @@
 // Benchmarks for serialisation/deserialisation
 
 use arcon::macros::*;
-use criterion::{black_box, criterion_group, Bencher, Criterion};
+use criterion::{black_box, criterion_group, criterion_main, Bencher, Criterion};
 use kompact::prelude::IntoBuf;
 use lz4_compression::prelude::{compress, decompress};
 use prost::Message;
@@ -250,3 +250,4 @@ pub fn abomonation_full_serde_lz4(b: &mut Bencher) {
 }
 
 criterion_group!(benches, arcon_serde_bench);
+criterion_main!(benches);

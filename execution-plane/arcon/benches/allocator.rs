@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use arcon::allocator::*;
-use criterion::{black_box, criterion_group, Bencher, Criterion};
+use criterion::{black_box, criterion_group, criterion_main, Bencher, Criterion};
 
 const ALLOC_SIZE: usize = 1024;
 
@@ -32,3 +32,4 @@ fn rust_vec_alloc(b: &mut Bencher) {
 }
 
 criterion_group!(benches, arcon_allocator);
+criterion_main!(benches);
