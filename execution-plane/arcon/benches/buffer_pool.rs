@@ -4,7 +4,7 @@
 use arcon::allocator::*;
 use arcon::data::buffer::*;
 use arcon::data::buffer_pool::*;
-use criterion::{black_box, criterion_group, Bencher, Criterion};
+use criterion::{black_box, criterion_group, criterion_main, Bencher, Criterion};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 
@@ -168,3 +168,4 @@ fn rust_vec_multi_threaded(buffer_size: usize) {
 }
 
 criterion_group!(benches, arcon_buffer_pool);
+criterion_main!(benches);

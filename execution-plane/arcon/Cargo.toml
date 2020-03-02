@@ -56,6 +56,25 @@ serde = { version = "1.0.63", features = ["derive"]}
 lz4-compression = "0.6.1"
 
 [[bench]]
-name = "arcon_benches"
-path = "benches/main.rs"
+name = "allocator"
+harness = false
+
+[[bench]]
+name = "buffer_pool"
+harness = false
+
+[[bench]]
+name = "window"
+harness = false
+
+[[bench]]
+name = "serde"
+harness = false
+
+[[bench]]
+name = "flight_serde"
+harness = false
+
+[[bench]]
+name = "node"
 harness = false
