@@ -3,6 +3,8 @@
 
 use core::time::Duration;
 use kompact::timer::*;
+use prost::Message;
+#[cfg(feature = "arcon_serde")]
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::{collections::HashMap, convert::TryInto, fmt, fmt::Debug};
 use uuid::Uuid;
@@ -29,26 +31,42 @@ use uuid::Uuid;
 */
 
 /// The serializable part of EventTimer<E>
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct SerializableEventTimer<E> {
+#[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
+#[derive(Clone, Message)]
+pub struct SerializableEventTimer<E>
+where
+    E: Send + Sync + Debug + Default + PartialEq,
+{
+    #[prost(uint64, tag = "1")]
     time: u64,
-    handles: HashMap<Uuid, (u64, Duration, E)>,
+    // this was HashMap<Uuid, (u64, Duration, E)>, but then prost happened
+    #[prost(map(string, message), tag = "2")]
+    handles: HashMap<String, (u64, Duration, E)>,
 }
 
 // when serializing this we treat the timer field as transient and recreate it from the serializable
 // part when deserializing
-pub struct EventTimer<E> {
+pub struct EventTimer<E>
+where
+    E: Send + Sync + Debug + Default + PartialEq,
+{
     timer: QuadWheelWithOverflow,
     pub inner: SerializableEventTimer<E>,
 }
 
-impl<E> Default for EventTimer<E> {
+impl<E> Default for EventTimer<E>
+where
+    E: Send + Sync + Debug + Default + PartialEq,
+{
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<E> EventTimer<E> {
+impl<E> EventTimer<E>
+where
+    E: Send + Sync + Debug + Default + PartialEq,
+{
     pub fn new() -> EventTimer<E> {
         EventTimer {
             timer: QuadWheelWithOverflow::new(),
@@ -63,7 +81,7 @@ impl<E> EventTimer<E> {
         let id = Uuid::new_v4();
         self.inner
             .handles
-            .insert(id, (self.inner.time, timeout, entry));
+            .insert(id.to_string(), (self.inner.time, timeout, entry));
 
         let e = TimerEntry::OneShot {
             id,
@@ -138,7 +156,7 @@ impl<E> EventTimer<E> {
     #[inline(always)]
     fn execute(&mut self, e: TimerEntry) -> Option<E> {
         let id = e.id();
-        let res = self.inner.handles.remove(&id).map(|x| x.2);
+        let res = self.inner.handles.remove(&id.to_string()).map(|x| x.2);
 
         // Reschedule the event
         if let Some(re_e) = e.execute() {
@@ -155,16 +173,22 @@ impl<E> EventTimer<E> {
     }
 }
 
-impl<E> Debug for EventTimer<E> {
+impl<E> Debug for EventTimer<E>
+where
+    E: Send + Sync + Debug + Default + PartialEq,
+{
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "<EventTimer>")
     }
 }
 
 // Allows the EventTimer to be scheduled on different threads, but should never be used concurrently
-unsafe impl<E> Send for EventTimer<E> {}
+unsafe impl<E> Send for EventTimer<E> where E: Send + Sync + Debug + Default + PartialEq {}
 
-impl<E> From<SerializableEventTimer<E>> for EventTimer<E> {
+impl<E> From<SerializableEventTimer<E>> for EventTimer<E>
+where
+    E: Send + Sync + Debug + Default + PartialEq,
+{
     fn from(SerializableEventTimer { time, handles }: SerializableEventTimer<E>) -> Self {
         let mut res = EventTimer::new();
         res.set_time(time);
@@ -179,6 +203,7 @@ impl<E> From<SerializableEventTimer<E>> for EventTimer<E> {
     }
 }
 
+#[cfg(feature = "arcon_serde")]
 impl<E> Serialize for EventTimer<E>
 where
     E: Serialize,
@@ -191,6 +216,7 @@ where
     }
 }
 
+#[cfg(feature = "arcon_serde")]
 impl<'de, E> Deserialize<'de> for EventTimer<E>
 where
     E: Deserialize<'de>,
@@ -200,20 +226,5 @@ where
         D: Deserializer<'de>,
     {
         SerializableEventTimer::<E>::deserialize(deserializer).map(|et| et.into())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[allow(dead_code)]
-    fn assert_event_timer_send_and_sync<E: Clone>(event_timer: &EventTimer<E>) {
-        fn assert_send<T: Send>(_t: &T) {}
-        fn assert_sync<T: Sync>(_t: &T) {}
-
-        assert_send(event_timer);
-        // TODO: Q: do we need event_timer to be Sync?
-        //        assert_sync(event_timer);
     }
 }

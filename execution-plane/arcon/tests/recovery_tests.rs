@@ -35,7 +35,7 @@ fn rocks_backend(node_id: u32) -> Box<dyn StateBackend> {
         .map(|d| d.unwrap().file_name().to_string_lossy().into_owned())
         .collect();
 
-    let latest_complete_checkpoint: Option<u32> = dirs
+    let latest_complete_checkpoint = dirs
         .into_iter()
         .filter(|x| x.starts_with("checkpoint_"))
         .map(|x| (x.chars().last().unwrap().to_digit(10).unwrap(), x))

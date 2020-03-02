@@ -13,6 +13,7 @@ Arcon's execution plane
 
 [features]
 default = []
+arcon_serde = ["serde_json", "bincode", "serde", "uuid/serde"]
 kafka = ["rdkafka", "futures", "serde_json", "serde"]
 thread_pinning = ["kompact/thread_pinning"]
 socket = ["tokio-util", "tokio", "futures", "bytes", "serde_json", "serde"]

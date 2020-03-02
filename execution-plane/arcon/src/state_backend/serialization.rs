@@ -2,9 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::prelude::ArconResult;
-use bytes::{buf::ext::*, Buf, BufMut};
+use bytes::{Buf, BufMut};
 use prost::Message;
-use serde::{Deserialize, Serialize};
 use std::{
     any::type_name,
     collections::hash_map::DefaultHasher,
@@ -33,80 +32,90 @@ pub unsafe trait SerializableFixedSizeWith<S>: SerializableWith<S> {
     }
 }
 
-macro_rules! impl_serializable_fixed_size {
-    ($serialization_strategy: ty; $($t: ty : $size: expr),+) => {
-        $(unsafe impl SerializableFixedSizeWith<$serialization_strategy> for $t {
-            const SIZE: usize = $size;
-        })+
-    };
+#[cfg(feature = "arcon_serde")]
+mod bincode {
+    use super::*;
+    use bytes::buf::ext::*;
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Debug, Default, Copy, Clone)]
+    pub struct Bincode;
+
+    impl<T> SerializableWith<Bincode> for T
+    where
+        T: Serialize,
+    {
+        fn serialize(_serializer: &Bincode, payload: &Self) -> ArconResult<Vec<u8>> {
+            bincode::serialize(payload).map_err(|e| {
+                arcon_err_kind!(
+                    "Could not serialize payload of type `{}`: {}",
+                    type_name::<Self>(),
+                    e
+                )
+            })
+        }
+
+        fn serialize_into(
+            _serializer: &Bincode,
+            target: impl BufMut,
+            payload: &Self,
+        ) -> ArconResult<()> {
+            bincode::serialize_into(target.writer(), payload).map_err(|e| {
+                arcon_err_kind!(
+                    "Could not serialize payload of type `{}`: {}",
+                    type_name::<Self>(),
+                    e
+                )
+            })
+        }
+
+        fn size_hint(_serializer: &Bincode, payload: &Self) -> Option<usize> {
+            bincode::serialized_size(payload).map(|x| x as usize).ok()
+        }
+    }
+
+    impl<T> DeserializableWith<Bincode> for T
+    where
+        T: for<'de> Deserialize<'de>,
+    {
+        fn deserialize(_serializer: &Bincode, bytes: &[u8]) -> ArconResult<Self> {
+            bincode::deserialize(bytes).map_err(|e| {
+                arcon_err_kind!(
+                    "Could not deserialize payload of type `{}`: {}",
+                    type_name::<Self>(),
+                    e
+                )
+            })
+        }
+
+        fn deserialize_from(_serializer: &Bincode, source: impl Buf) -> ArconResult<Self> {
+            bincode::deserialize_from(source.reader()).map_err(|e| {
+                arcon_err_kind!(
+                    "Could not deserialize payload of type `{}`: {}",
+                    type_name::<Self>(),
+                    e
+                )
+            })
+        }
+    }
+
+    macro_rules! impl_serializable_fixed_size {
+        ($serialization_strategy: ty; $($t: ty : $size: expr),+) => {
+            $(unsafe impl SerializableFixedSizeWith<$serialization_strategy> for $t {
+                const SIZE: usize = $size;
+            })+
+        };
+    }
+
+    impl_serializable_fixed_size!(Bincode;
+        u8: 1, u16: 2, u32: 4, u64: 8, usize: std::mem::size_of::<usize>(), u128: 16,
+        i8: 1, i16: 2, i32: 4, i64: 8, isize: std::mem::size_of::<isize>(), i128: 16,
+        f32: 4, f64: 8,
+        char: 1, bool: 1, (): 0
+    );
 }
-
-#[derive(Debug, Default, Copy, Clone)]
-pub struct Bincode;
-impl<T> SerializableWith<Bincode> for T
-where
-    T: Serialize,
-{
-    fn serialize(_serializer: &Bincode, payload: &Self) -> ArconResult<Vec<u8>> {
-        bincode::serialize(payload).map_err(|e| {
-            arcon_err_kind!(
-                "Could not serialize payload of type `{}`: {}",
-                type_name::<Self>(),
-                e
-            )
-        })
-    }
-
-    fn serialize_into(
-        _serializer: &Bincode,
-        target: impl BufMut,
-        payload: &Self,
-    ) -> ArconResult<()> {
-        bincode::serialize_into(target.writer(), payload).map_err(|e| {
-            arcon_err_kind!(
-                "Could not serialize payload of type `{}`: {}",
-                type_name::<Self>(),
-                e
-            )
-        })
-    }
-
-    fn size_hint(_serializer: &Bincode, payload: &Self) -> Option<usize> {
-        bincode::serialized_size(payload).map(|x| x as usize).ok()
-    }
-}
-
-impl<T> DeserializableWith<Bincode> for T
-where
-    T: for<'de> Deserialize<'de>,
-{
-    fn deserialize(_serializer: &Bincode, bytes: &[u8]) -> ArconResult<Self> {
-        bincode::deserialize(bytes).map_err(|e| {
-            arcon_err_kind!(
-                "Could not deserialize payload of type `{}`: {}",
-                type_name::<Self>(),
-                e
-            )
-        })
-    }
-
-    fn deserialize_from(_serializer: &Bincode, source: impl Buf) -> ArconResult<Self> {
-        bincode::deserialize_from(source.reader()).map_err(|e| {
-            arcon_err_kind!(
-                "Could not deserialize payload of type `{}`: {}",
-                type_name::<Self>(),
-                e
-            )
-        })
-    }
-}
-
-impl_serializable_fixed_size!(Bincode;
-    u8: 1, u16: 2, u32: 4, u64: 8, usize: std::mem::size_of::<usize>(), u128: 16,
-    i8: 1, i16: 2, i32: 4, i64: 8, isize: std::mem::size_of::<isize>(), i128: 16,
-    f32: 4, f64: 8,
-    char: 1, bool: 1, (): 0
-);
+#[cfg(target = "arcon_serde")]
+pub use self::bincode::Bincode;
 
 #[derive(Debug, Default, Copy, Clone)]
 pub struct Prost;
@@ -225,6 +234,42 @@ macro_rules! impl_byte_dump {
     )+};
 }
 
+macro_rules! impl_byte_dump_for_unit {
+    ($serializer: ident) => {
+        impl SerializableWith<$serializer> for () {
+            fn serialize(_serializer: &$serializer, _payload: &Self) -> ArconResult<Vec<u8>> {
+                Ok(vec![])
+            }
+
+            fn serialize_into(
+                _serializer: &$serializer,
+                _target: impl BufMut,
+                _payload: &Self,
+            ) -> ArconResult<()> {
+                Ok(())
+            }
+
+            fn size_hint(_serializer: &$serializer, _payload: &Self) -> Option<usize> {
+                Some(0)
+            }
+        }
+
+        unsafe impl SerializableFixedSizeWith<$serializer> for () {
+            const SIZE: usize = 0;
+        }
+
+        impl DeserializableWith<$serializer> for () {
+            fn deserialize(_serializer: &$serializer, _bytes: &[u8]) -> ArconResult<Self> {
+                Ok(())
+            }
+
+            fn deserialize_from(_serializer: &$serializer, _source: impl Buf) -> ArconResult<Self> {
+                Ok(())
+            }
+        }
+    };
+}
+
 // floats depend on unstable library features and don't make much sense as keys anyway
 // (this is mostly for serializing keys btw)
 
@@ -233,18 +278,21 @@ impl_byte_dump!(NativeEndianBytesDump, to_ne_bytes, from_ne_bytes;
     i8, i16, i32, i64, isize, i128
 //    ,f32, f64
 );
+impl_byte_dump_for_unit!(NativeEndianBytesDump);
 
 impl_byte_dump!(BigEndianBytesDump, to_be_bytes, from_be_bytes;
     u8, u16, u32, u64, usize, u128,
     i8, i16, i32, i64, isize, i128
 //    ,f32, f64
 );
+impl_byte_dump_for_unit!(BigEndianBytesDump);
 
 impl_byte_dump!(LittleEndianBytesDump, to_le_bytes, from_le_bytes;
     u8, u16, u32, u64, usize, u128,
     i8, i16, i32, i64, isize, i128
 //    ,f32, f64
 );
+impl_byte_dump_for_unit!(LittleEndianBytesDump);
 
 #[derive(Debug, Default, Copy, Clone)]
 pub struct HashAndThen<S, H = BuildHasherDefault<DefaultHasher>>(S, H);
@@ -292,6 +340,7 @@ where
 mod test {
     use super::*;
 
+    #[cfg(feature = "arcon_serde")]
     #[test]
     fn test_primitives_fixed() {
         SerializableFixedSizeWith::serialize_check(&Bincode, &0u8).unwrap();
@@ -316,6 +365,7 @@ mod test {
         SerializableFixedSizeWith::serialize_check(&Bincode, &()).unwrap();
     }
 
+    #[cfg(feature = "arcon_serde")]
     #[test]
     fn test_with_hashing() {
         SerializableFixedSizeWith::<HashAndThen<Bincode>>::serialize_check(
@@ -341,6 +391,7 @@ mod test {
         );
     }
 
+    #[cfg(feature = "arcon_serde")]
     #[test]
     fn test_bincode_strings() {
         let s = "foo".to_string();

@@ -2,7 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::state_backend::{
-    serialization::{Bincode, DeserializableWith, SerializableFixedSizeWith, SerializableWith},
+    serialization::{
+        DeserializableWith, LittleEndianBytesDump, Prost, SerializableFixedSizeWith,
+        SerializableWith,
+    },
     state_types::{AggregatingState, Aggregator, MapState, ReducingState, ValueState, VecState},
     StateBackend,
 };
@@ -392,14 +395,14 @@ pub trait StateBackendExt {
     fn build<'b, 'n>(
         &'b mut self,
         name: &'n str,
-    ) -> StateBuilder<'n, 'b, Self, (), (), Bincode, Bincode> {
+    ) -> StateBuilder<'n, 'b, Self, (), (), LittleEndianBytesDump, Prost> {
         StateBuilder {
             name,
             state_backend: self,
             init_item_key: (),
             init_namespace: (),
-            key_serializer: Bincode,
-            value_serializer: Bincode,
+            key_serializer: LittleEndianBytesDump,
+            value_serializer: Prost,
         }
     }
 }

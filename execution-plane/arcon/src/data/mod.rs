@@ -5,29 +5,42 @@
 pub mod flight_serde;
 
 use crate::{error::ArconResult, macros::*};
-use ::serde::{Deserialize, Serialize};
 use abomonation::Abomonation;
 use kompact::prelude::*;
 use prost::{Message as PMessage, Oneof as POneof};
+#[cfg(feature = "arcon_serde")]
+use serde::{Deserialize, Serialize};
 use std::{
     fmt::Debug,
     hash::{Hash, Hasher},
     ops::Deref,
 };
 
+trait ArconTypeBoundsNoSerde:
+    Clone + Debug + Hash + Sync + Send + PMessage + Default + Abomonation + 'static
+{
+}
+
+impl<T> ArconTypeBoundsNoSerde for T where
+    T: Clone + Debug + Hash + Sync + Send + PMessage + Default + Abomonation + 'static
+{
+}
+
+#[cfg(feature = "arcon_serde")]
+trait ArconTypeBounds: ArconTypeBoundsNoSerde + Serialize + for<'de> Deserialize<'de> {}
+
+#[cfg(feature = "arcon_serde")]
+impl<T> ArconTypeBounds for T where T: ArconTypeBoundsNoSerde + Serialize + for<'de> Deserialize<'de>
+{}
+
+#[cfg(not(feature = "arcon_serde"))]
+trait ArconTypeBounds: ArconTypeBoundsNoSerde {}
+
+#[cfg(not(feature = "arcon_serde"))]
+impl<T> ArconTypeBounds for T where T: ArconTypeBoundsNoSerde {}
+
 /// Type that can be passed through the Arcon runtime
-pub trait ArconType:
-    Clone
-    + Debug
-    + Hash
-    + Sync
-    + Send
-    + PMessage
-    + Default
-    + Abomonation
-    + Serialize
-    + for<'de> Deserialize<'de>
-    + 'static
+pub trait ArconType: ArconTypeBounds
 where
     Self: std::marker::Sized,
 {
@@ -50,8 +63,9 @@ where
 }
 
 /// An Enum containing all possible stream events that may occur in an execution
-#[derive(POneof, Clone, Abomonation, Serialize, Deserialize)]
-#[serde(bound = "A: ArconType")]
+#[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
+#[derive(POneof, Clone, Abomonation)]
+#[cfg_attr(feature = "arcon_serde", serde(bound = "A: ArconType"))]
 pub enum ArconEvent<A: ArconType> {
     /// A stream element containing some data of type [ArconType] and an optional timestamp [u64]
     #[prost(message, tag = "1")]
@@ -68,8 +82,9 @@ pub enum ArconEvent<A: ArconType> {
 }
 
 /// A Stream element containing some data and timestamp
-#[derive(PMessage, Clone, Abomonation, Serialize, Deserialize)]
-#[serde(bound = "A: ArconType")]
+#[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
+#[derive(PMessage, Clone, Abomonation)]
+#[cfg_attr(feature = "arcon_serde", serde(bound = "A: ArconType"))]
 pub struct ArconElement<A: ArconType> {
     #[prost(message, tag = "1")]
     pub data: Option<A>,
@@ -96,9 +111,8 @@ impl<A: ArconType> ArconElement<A> {
 }
 
 /// Watermark message containing a [u64] timestamp
-#[derive(
-    PMessage, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Abomonation, Serialize, Deserialize,
-)]
+#[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
+#[derive(PMessage, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Abomonation)]
 pub struct Watermark {
     #[prost(uint64, tag = "1")]
     pub timestamp: u64,
@@ -111,9 +125,8 @@ impl Watermark {
 }
 
 /// Epoch marker message
-#[derive(
-    PMessage, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Abomonation, Serialize, Deserialize,
-)]
+#[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
+#[derive(PMessage, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Abomonation)]
 pub struct Epoch {
     #[prost(uint64, tag = "1")]
     pub epoch: u64,
@@ -126,8 +139,9 @@ impl Epoch {
 }
 
 /// An ArconMessage contains a batch of [ArconEvent] and one [NodeID] identifier
-#[derive(Clone, Debug, Abomonation, Serialize, Deserialize)]
-#[serde(bound = "A: ArconType")]
+#[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
+#[derive(Clone, Debug, Abomonation)]
+#[cfg_attr(feature = "arcon_serde", serde(bound = "A: ArconType"))]
 pub struct ArconMessage<A: ArconType> {
     /// Buffer of ArconEvents
     pub events: Vec<ArconEvent<A>>,
@@ -179,9 +193,8 @@ impl<A: ArconType> ArconMessage<A> {
 }
 
 /// A NodeID is used to identify a message sender
-#[derive(
-    PMessage, PartialEq, Eq, PartialOrd, Ord, Hash, Copy, Clone, Abomonation, Serialize, Deserialize,
-)]
+#[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
+#[derive(PMessage, PartialEq, Eq, PartialOrd, Ord, Hash, Copy, Clone, Abomonation)]
 pub struct NodeID {
     #[prost(uint32, tag = "1")]
     pub id: u32,
@@ -212,7 +225,8 @@ impl ArconType for String {}
 /// Float wrapper for f32 in order to impl Hash [std::hash::Hash]
 ///
 /// The `Hash` impl rounds the floats down to an integer and then hashes it.
-#[derive(Clone, PMessage, Abomonation, Serialize, Deserialize)]
+#[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
+#[derive(Clone, PMessage, Abomonation)]
 #[repr(transparent)]
 pub struct ArconF32 {
     #[prost(float, tag = "1")]
@@ -262,7 +276,8 @@ impl PartialEq for ArconF32 {
 /// Float wrapper for f64 in order to impl Hash [std::hash::Hash]
 ///
 /// The `Hash` impl rounds the floats down to an integer and then hashes it.
-#[derive(Clone, PMessage, Abomonation, Serialize, Deserialize)]
+#[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
+#[derive(Clone, PMessage, Abomonation)]
 #[repr(transparent)]
 pub struct ArconF64 {
     #[prost(double, tag = "1")]

@@ -37,7 +37,8 @@ pub fn arcon(metadata: TokenStream, input: TokenStream) -> TokenStream {
 
         let output: proc_macro2::TokenStream = {
             quote! {
-                #[derive(Clone, ::abomonation_derive::Abomonation, ::serde::Serialize, ::serde::Deserialize, ::prost::Message)]
+                #[cfg_attr(feature = "arcon_serde", derive(::serde::Serialize, ::serde::Deserialize))]
+                #[derive(Clone, ::abomonation_derive::Abomonation, ::prost::Message)]
                 #item
                 impl #impl_generics ArconType for #name #ty_generics #where_clause {}
                 impl ::std::hash::Hash for #name {
