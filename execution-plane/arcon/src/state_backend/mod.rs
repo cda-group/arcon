@@ -68,7 +68,6 @@ mod test {
         *,
     };
 
-    #[cfg(feature = "arcon_rocksdb")]
     #[test]
     fn test_dynamic_backends() {
         // The downside of this approach is that everything is boxed and you have dynamic dispatch.
@@ -94,18 +93,19 @@ mod test {
             );
         }
 
-        let mut test_rocks = rocks::test::TestDb::new();
-        let test_rocks: &mut rocks::RocksDb = &mut *test_rocks;
+        #[cfg(feature = "arcon_rocksdb")]
+        {
+            let mut test_rocks = rocks::test::TestDb::new();
+            let test_rocks: &mut rocks::RocksDb = &mut *test_rocks;
+            let dynamic_rocks: &mut dyn StateBackend = test_rocks;
+            do_backend_ops(dynamic_rocks);
+        }
+
         let mut test_in_memory = in_memory::InMemory::new("test_im").unwrap();
-
-        let dynamic_rocks: &mut dyn StateBackend = test_rocks;
         let dynamic_in_memory: &mut dyn StateBackend = &mut test_in_memory;
-
-        do_backend_ops(dynamic_rocks);
         do_backend_ops(dynamic_in_memory);
     }
 
-    #[cfg(feature = "arcon_rocksdb")]
     #[test]
     fn test_generic_backends() {
         #[derive(Copy, Clone, Debug)]
@@ -148,7 +148,7 @@ mod test {
                 u8,
                 TestMeanAggregator,
                 NativeEndianBytesDump,
-                Prost,
+                NativeEndianBytesDump,
                 Type = AS,
             >,
             // the line below won't be required when chalk will be the default trait solver in rustc
@@ -160,7 +160,7 @@ mod test {
                 (),
                 TestMeanAggregator,
                 NativeEndianBytesDump,
-                Prost,
+                NativeEndianBytesDump,
             );
             mean_state.clear(sb).unwrap();
 
@@ -171,16 +171,18 @@ mod test {
             assert_eq!(mean_state.get(sb).unwrap(), 2);
         }
 
-        let mut test_rocks = rocks::test::TestDb::new();
-        let test_rocks: &mut rocks::RocksDb = &mut *test_rocks;
+        #[cfg(feature = "arcon_rocksdb")]
+        {
+            let mut test_rocks = rocks::test::TestDb::new();
+            let test_rocks: &mut rocks::RocksDb = &mut *test_rocks;
+            do_backend_ops(test_rocks);
+        }
 
         let mut test_in_memory = in_memory::InMemory::new("test_im").unwrap();
-
-        do_backend_ops(test_rocks);
         do_backend_ops(&mut test_in_memory);
 
         // but you *still* can plug a dynamic state backend there anyway
-        let test_dynamic: &mut dyn StateBackend = test_rocks;
+        let test_dynamic: &mut dyn StateBackend = &mut test_in_memory;
         do_backend_ops(test_dynamic);
     }
 }

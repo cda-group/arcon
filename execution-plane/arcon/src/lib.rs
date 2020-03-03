@@ -14,8 +14,6 @@
 extern crate arcon_macros;
 #[macro_use]
 extern crate arcon_error as error;
-#[cfg_attr(test, macro_use)]
-extern crate abomonation_derive;
 
 /// Allocator for message buffers, network buffers, state backends
 pub mod allocator;

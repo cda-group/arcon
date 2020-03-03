@@ -592,10 +592,18 @@ mod test {
     #[test]
     fn test_byte_dump() {
         type X = (u8, u64, i16);
-        let payload = (255, 0xDEADBEEF, -1);
+        let payload = (255, 0xDEAD_BEEF_CAFE_BABE, -128);
         let bytes = X::serialize(&LittleEndianBytesDump, &payload).unwrap();
+        assert_eq!(bytes, vec![
+            255, 0xBE, 0xBA, 0xFE, 0xCA, 0xEF, 0xBE, 0xAD, 0xDE, 128, 255
+        ]);
         let deserialized = X::deserialize(&LittleEndianBytesDump, &bytes).unwrap();
-
         assert_eq!(deserialized, payload);
+
+        let str_payload = "123";
+        let bytes = <&str>::serialize(&LittleEndianBytesDump, &str_payload).unwrap();
+        assert_eq!(bytes, vec![3, 0, 0, 0, 0, 0, 0, 0, b'1', b'2', b'3']);
+        let deserialized = String::deserialize(&LittleEndianBytesDump, &bytes).unwrap();
+        assert_eq!(&deserialized, str_payload);
     }
 }
