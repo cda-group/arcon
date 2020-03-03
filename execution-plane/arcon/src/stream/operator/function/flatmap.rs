@@ -98,7 +98,7 @@ mod tests {
 
         let input_one = ArconEvent::Element(ArconElement::new(6 as i32));
         let msg = ArconMessage {
-            events: vec![input_one, ArconEvent::Death("die".into())],
+            events: vec![input_one.into(), ArconEvent::Death("die".into()).into()],
             sender: NodeID::new(1),
         };
         let flatmap_ref: ActorRefStrong<ArconMessage<i32>> =

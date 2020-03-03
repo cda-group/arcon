@@ -186,12 +186,15 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::state_backend::{serialization::Bincode, MapStateBuilder, StateBackend};
+    use crate::state_backend::{
+        serialization::{HashAndThen, NativeEndianBytesDump, Prost},
+        MapStateBuilder, StateBackend,
+    };
 
     #[test]
     fn map_state_test() {
         let mut db = InMemory::new("test").unwrap();
-        let map_state = db.new_map_state("test_state", (), (), Bincode, Bincode);
+        let map_state = db.new_map_state("test_state", (), (), NativeEndianBytesDump, Prost);
 
         // TODO: &String is weird, maybe look at how it's done with the keys in std hash-map
         assert!(!map_state.contains(&db, &"first key".to_string()).unwrap());

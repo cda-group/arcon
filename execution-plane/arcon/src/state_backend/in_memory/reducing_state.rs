@@ -94,7 +94,10 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::state_backend::{serialization::Bincode, ReducingStateBuilder, StateBackend};
+    use crate::state_backend::{
+        serialization::{NativeEndianBytesDump, Prost},
+        ReducingStateBuilder, StateBackend,
+    };
 
     #[test]
     fn reducing_state_test() {
@@ -104,8 +107,8 @@ mod test {
             (),
             (),
             |old: &i32, new: &i32| *old.max(new),
-            Bincode,
-            Bincode,
+            NativeEndianBytesDump,
+            Prost,
         );
 
         reducing_state.append(&mut db, 7).unwrap();

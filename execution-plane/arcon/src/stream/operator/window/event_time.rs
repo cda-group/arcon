@@ -6,6 +6,7 @@ use crate::{
     stream::operator::{window::WindowContext, OperatorContext},
     util::event_timer::{EventTimer, SerializableEventTimer},
 };
+use prost::Message;
 use std::{
     collections::hash_map::DefaultHasher,
     hash::{BuildHasher, BuildHasherDefault, Hash, Hasher},
@@ -22,6 +23,26 @@ use std::{
 type Key = u64;
 type Index = u64;
 type Timestamp = u64;
+
+#[derive(Message, PartialEq, Clone)]
+pub struct WindowEvent {
+    #[prost(uint64, tag = "1")]
+    key: Key,
+    #[prost(uint64, tag = "2")]
+    index: Index,
+    #[prost(uint64, tag = "3")]
+    timestamp: Timestamp,
+}
+
+impl WindowEvent {
+    fn new(key: Key, index: Index, timestamp: Timestamp) -> WindowEvent {
+        WindowEvent {
+            key,
+            index,
+            timestamp,
+        }
+    }
+}
 
 /// Window Assigner Based on Event Time
 ///
@@ -50,8 +71,8 @@ where
     active_windows: BoxedMapState<(Key, Index), ()>,
 
     // timer is held twice, to avoid serialization overhead - it's a big value
-    transient_timer: EventTimer<(Key, Index, Timestamp)>, // Stores key, "index" and timestamp
-    persistent_timer: BoxedValueState<SerializableEventTimer<(Key, Index, Timestamp)>>,
+    transient_timer: EventTimer<WindowEvent>, // Stores key, "index" and timestamp
+    persistent_timer: BoxedValueState<SerializableEventTimer<WindowEvent>>,
 }
 
 impl<IN, OUT> EventTimeWindowAssigner<IN, OUT>
@@ -75,7 +96,7 @@ where
             panic!("Window Length not divisible by slide!");
         }
 
-        let persistent_timer: BoxedValueState<SerializableEventTimer<(u64, u64, u64)>> =
+        let persistent_timer: BoxedValueState<SerializableEventTimer<WindowEvent>> =
             state_backend.build("timer").value();
 
         // this will be overwritten in init if state backend contains previous data
@@ -118,8 +139,10 @@ where
         let ts = w_start + (index * self.window_slide) + self.window_length;
 
         // Put the window identifier in the timer.
-        self.transient_timer
-            .schedule_at(ts + self.late_arrival_time, (key, index, ts));
+        self.transient_timer.schedule_at(
+            ts + self.late_arrival_time,
+            WindowEvent::new(key, index, ts),
+        );
     }
 
     // Extracts the key from ArconElements
@@ -155,12 +178,12 @@ where
             self.transient_timer.set_time(ts);
         }
 
-        if ts
-            < self
-                .transient_timer
-                .get_time()
-                .saturating_sub(self.late_arrival_time)
-        {
+        let ts_lower_bound = self
+            .transient_timer
+            .get_time()
+            .saturating_sub(self.late_arrival_time);
+
+        if ts < ts_lower_bound {
             // Late arrival: early return
             return ();
         }
@@ -229,7 +252,12 @@ where
         let windows_to_close = self.transient_timer.advance_to(ts);
         let mut result = Vec::with_capacity(windows_to_close.len());
 
-        for (key, index, timestamp) in windows_to_close {
+        for WindowEvent {
+            key,
+            index,
+            timestamp,
+        } in windows_to_close
+        {
             let e = self
                 .window
                 .result(WindowContext::new(ctx.state_backend, key, index))

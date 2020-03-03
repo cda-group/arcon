@@ -92,8 +92,9 @@ where
 mod test {
     use super::*;
     use crate::state_backend::{
-        serialization::Bincode, state_types::ClosuresAggregator, AggregatingStateBuilder,
-        StateBackend,
+        serialization::{NativeEndianBytesDump, Prost},
+        state_types::ClosuresAggregator,
+        AggregatingStateBuilder, StateBackend,
     };
 
     #[test]
@@ -112,8 +113,8 @@ mod test {
                 },
                 |v| format!("{:?}", v),
             ),
-            Bincode,
-            Bincode,
+            NativeEndianBytesDump,
+            Prost,
         );
 
         aggregating_state.append(&mut db, 1).unwrap();

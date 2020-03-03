@@ -62,7 +62,11 @@ pub mod rocks;
 
 #[cfg(test)]
 mod test {
-    use super::{serialization::Bincode, state_types::*, *};
+    use super::{
+        serialization::{NativeEndianBytesDump, Prost},
+        state_types::*,
+        *,
+    };
 
     #[cfg(feature = "arcon_rocksdb")]
     #[test]
@@ -73,10 +77,10 @@ mod test {
         // (see the bounds in the `impl_dynamic_builder!` macro invocations.
         fn do_backend_ops(sb: &mut dyn StateBackend) {
             let value_state: Box<dyn ValueState<dyn StateBackend, _, _, _>> =
-                sb.new_value_state("value", (), (), Bincode, Bincode);
+                sb.new_value_state("value", (), (), NativeEndianBytesDump, Prost);
 
             let map_state: Box<dyn MapState<dyn StateBackend, _, _, _, _>> =
-                sb.new_map_state("map", (), (), Bincode, Bincode);
+                sb.new_map_state("map", (), (), NativeEndianBytesDump, Prost);
 
             value_state.set(sb, 42).unwrap();
             map_state
@@ -143,15 +147,21 @@ mod test {
                 (),
                 u8,
                 TestMeanAggregator,
-                Bincode,
-                Bincode,
+                NativeEndianBytesDump,
+                Prost,
                 Type = AS,
             >,
             // the line below won't be required when chalk will be the default trait solver in rustc
             AS: AggregatingState<SB, u32, (), u8, u8>,
         {
-            let mean_state =
-                sb.new_aggregating_state("mean", 1, (), TestMeanAggregator, Bincode, Bincode);
+            let mean_state = sb.new_aggregating_state(
+                "mean",
+                1,
+                (),
+                TestMeanAggregator,
+                NativeEndianBytesDump,
+                Prost,
+            );
             mean_state.clear(sb).unwrap();
 
             mean_state.append(sb, 1).unwrap();

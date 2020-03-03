@@ -16,9 +16,6 @@ extern crate arcon_macros;
 extern crate arcon_error as error;
 #[cfg_attr(test, macro_use)]
 extern crate abomonation_derive;
-#[cfg(test)]
-#[macro_use]
-extern crate lazy_static;
 
 /// Allocator for message buffers, network buffers, state backends
 pub mod allocator;
@@ -35,12 +32,11 @@ pub mod util;
 #[cfg(test)]
 pub mod test_utils {
     use crate::allocator::ArconAllocator;
+    use once_cell::sync::Lazy;
     use std::sync::{Arc, Mutex};
-    lazy_static! {
-        pub static ref ALLOCATOR: Arc<Mutex<ArconAllocator>> =
-            // Limit the allocator to 1GB during tests
-            { Arc::new(Mutex::new(ArconAllocator::new(1073741824))) };
-    }
+
+    pub static ALLOCATOR: Lazy<Arc<Mutex<ArconAllocator>>> =
+        Lazy::new(|| Arc::new(Mutex::new(ArconAllocator::new(1073741824))));
 }
 
 /// Helper module to fetch all macros related to arcon

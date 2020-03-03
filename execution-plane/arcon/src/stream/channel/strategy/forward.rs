@@ -17,7 +17,7 @@ where
     /// An identifier that is embedded with outgoing messages
     sender_id: NodeID,
     /// A buffer holding outgoing events
-    buffer: Vec<ArconEvent<A>>,
+    buffer: Vec<ArconEventProstMessage<A>>,
     /// A batch size indicating when the channel should flush data
     batch_size: usize,
 }
@@ -57,7 +57,7 @@ where
     #[inline]
     pub fn add(&mut self, event: ArconEvent<A>) {
         if let ArconEvent::Element(_) = &event {
-            self.buffer.push(event);
+            self.buffer.push(event.into());
 
             if self.buffer.len() == self.batch_size {
                 self.flush();
@@ -65,7 +65,7 @@ where
         } else {
             // Watermark/Epoch.
             // Send downstream as soon as possible
-            self.buffer.push(event);
+            self.buffer.push(event.into());
             self.flush();
         }
     }

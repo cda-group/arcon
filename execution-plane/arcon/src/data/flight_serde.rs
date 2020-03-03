@@ -25,7 +25,8 @@ impl Default for FlightSerde {
 /// Module containing the [kompact] serialiser/deserialiser implementation for [FlightSerde::Reliable]
 pub mod reliable_remote {
     use crate::data::{
-        ArconElement, ArconEvent, ArconMessage, ArconType, Epoch, NodeID, Watermark,
+        ArconElement, ArconEvent, ArconEventProstMessage, ArconMessage, ArconType, Epoch, NodeID,
+        Watermark,
     };
     use kompact::prelude::*;
     use prost::*;
@@ -68,7 +69,8 @@ pub mod reliable_remote {
             let network_msg = NetworkMessage::decode(buf.bytes()).map_err(|_| {
                 SerError::InvalidData("Failed to decode NetworkMessage".to_string())
             })?;
-            let mut events: Vec<ArconEvent<A>> = Vec::with_capacity(network_msg.events.len());
+            let mut events: Vec<ArconEventProstMessage<A>> =
+                Vec::with_capacity(network_msg.events.len());
             for raw_event in network_msg.events {
                 match raw_event.event_type {
                     x if x == EventType::Element as i32 => {
@@ -76,28 +78,28 @@ pub mod reliable_remote {
                             ArconElement::decode(raw_event.bytes.into_buf()).map_err(|_| {
                                 SerError::InvalidData("Failed to decode Element".to_string())
                             })?;
-                        events.push(ArconEvent::Element(elem));
+                        events.push(ArconEvent::Element(elem).into());
                     }
                     x if x == EventType::Watermark as i32 => {
                         let watermark: Watermark = Watermark::decode(raw_event.bytes.into_buf())
                             .map_err(|_| {
                                 SerError::InvalidData("Failed to decode Watermark".to_string())
                             })?;
-                        events.push(ArconEvent::Watermark(watermark));
+                        events.push(ArconEvent::Watermark(watermark).into());
                     }
                     x if x == EventType::Epoch as i32 => {
                         let epoch: Epoch =
                             Epoch::decode(raw_event.bytes.into_buf()).map_err(|_| {
                                 SerError::InvalidData("Failed to decode Epoch".to_string())
                             })?;
-                        events.push(ArconEvent::Epoch(epoch));
+                        events.push(ArconEvent::Epoch(epoch).into());
                     }
                     x if x == EventType::Death as i32 => {
                         let death: String =
                             String::decode(raw_event.bytes.into_buf()).map_err(|_| {
                                 SerError::InvalidData("Failed to decode Death".to_string())
                             })?;
-                        events.push(ArconEvent::Death(death));
+                        events.push(ArconEvent::Death(death).into());
                     }
                     _ => {
                         panic!("Matched unknown EventType");
@@ -118,7 +120,11 @@ pub mod reliable_remote {
         fn size_hint(&self) -> Option<usize> {
             let mut total_len = 0;
             for event in &self.0.events {
-                let event_len = match &event {
+                let event_len = match event
+                    .inner
+                    .as_ref()
+                    .expect("this should always be some, prost deserialization error")
+                {
                     ArconEvent::Element(e) => e.data.as_ref().unwrap().encoded_len(),
                     ArconEvent::Watermark(w) => w.encoded_len(),
                     ArconEvent::Epoch(epoch) => epoch.encoded_len(),
@@ -134,7 +140,11 @@ pub mod reliable_remote {
             let mut raw_events: Vec<RawEvent> = Vec::with_capacity(self.0.events.len());
 
             for event in &self.0.events {
-                match event {
+                match event
+                    .inner
+                    .as_ref()
+                    .expect("this should always be some, prost deserialization error")
+                {
                     ArconEvent::Element(elem) => {
                         let mut bytes = Vec::with_capacity(elem.encoded_len());
                         elem.encode(&mut bytes).map_err(|_| {
@@ -222,7 +232,7 @@ pub mod unsafe_remote {
             tmp_buf.put_slice(&bytes);
             if let Some((msg, _)) = unsafe { abomonation::decode::<ArconMessage<A>>(&mut tmp_buf) }
             {
-                Ok(msg.clone())
+                Ok(msg.clone().into())
             } else {
                 Err(SerError::InvalidData(
                     "Failed to decode flight data".to_string(),

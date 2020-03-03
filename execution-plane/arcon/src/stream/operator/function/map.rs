@@ -98,7 +98,11 @@ mod tests {
         let input_one = ArconEvent::Element(ArconElement::new(6 as i32));
         let input_two = ArconEvent::Element(ArconElement::new(7 as i32));
         let msg = ArconMessage {
-            events: vec![input_one, input_two, ArconEvent::Death("die".into())],
+            events: vec![
+                input_one.into(),
+                input_two.into(),
+                ArconEvent::Death("die".into()).into(),
+            ],
             sender: NodeID::new(1),
         };
         let map_ref: ActorRefStrong<ArconMessage<i32>> =

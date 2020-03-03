@@ -3,7 +3,7 @@
 
 use super::DEFAULT_BATCH_SIZE;
 use crate::{
-    data::{ArconEvent, ArconMessage, ArconType, NodeID},
+    data::{ArconEvent, ArconEventProstMessage, ArconMessage, ArconType, NodeID},
     stream::channel::{strategy::send, Channel},
 };
 
@@ -19,7 +19,7 @@ where
     /// Which channel is currently the target
     curr_index: usize,
     /// A buffer holding outgoing events
-    buffer: Vec<ArconEvent<A>>,
+    buffer: Vec<ArconEventProstMessage<A>>,
     /// A batch size indicating when the channel should flush data
     batch_size: usize,
 }
@@ -41,7 +41,7 @@ where
     #[inline]
     pub fn add(&mut self, event: ArconEvent<A>) {
         if let ArconEvent::Element(_) = &event {
-            self.buffer.push(event);
+            self.buffer.push(event.into());
 
             if self.buffer.len() == self.batch_size {
                 self.flush();
@@ -49,7 +49,7 @@ where
         } else {
             // Watermark/Epoch.
             // Send downstream as soon as possible
-            self.buffer.push(event);
+            self.buffer.push(event.into());
             self.flush();
         }
     }

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 // similar to basic_pipeline_tests, but with changes to test recovery capabilities
-
+#![cfg(feature = "arcon_rocksdb")]
 #![allow(bare_trait_objects)]
 extern crate arcon;
 

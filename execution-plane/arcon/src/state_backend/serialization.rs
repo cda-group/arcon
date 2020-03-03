@@ -1,6 +1,8 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
+#![allow(non_snake_case)]
+
 use crate::prelude::ArconResult;
 use bytes::{Buf, BufMut};
 use prost::Message;
@@ -233,7 +235,6 @@ macro_rules! impl_byte_dump {
         }
     )+};
 }
-
 macro_rules! impl_byte_dump_for_unit {
     ($serializer: ident) => {
         impl SerializableWith<$serializer> for () {
@@ -269,6 +270,167 @@ macro_rules! impl_byte_dump_for_unit {
         }
     };
 }
+macro_rules! impl_byte_dump_for_tuples {
+    ($serializer: ident; $(($($T: ident),*)),*) => {$(
+        impl<$($T: SerializableWith<$serializer>),*> SerializableWith<$serializer> for ($($T),*) {
+            fn serialize(serializer: &$serializer, payload: &Self) -> ArconResult<Vec<u8>> {
+                let size = 0 $(+ std::mem::size_of::<$T>())*;
+                let mut res = Vec::with_capacity(size);
+                let ($($T),*) = payload;
+                $(
+                    $T::serialize_into(serializer, &mut res, $T)?;
+                )*
+                Ok(res)
+            }
+
+            fn serialize_into(
+                serializer: &$serializer,
+                mut target: impl BufMut,
+                payload: &Self,
+            ) -> ArconResult<()> {
+                let ($($T),*) = payload;
+                $(
+                    $T::serialize_into(serializer, &mut target, $T)?;
+                )*
+
+                Ok(())
+            }
+
+            fn size_hint(_serializer: &$serializer, _payload: &Self) -> Option<usize> {
+                Some(0 $(+ std::mem::size_of::<$T>())*)
+            }
+        }
+
+        unsafe impl<$($T: SerializableFixedSizeWith<$serializer>),*> SerializableFixedSizeWith<$serializer> for ($($T),*) {
+            const SIZE: usize = 0 $(+ $T::SIZE)*;
+        }
+
+        impl<$($T: DeserializableWith<$serializer>),*> DeserializableWith<$serializer> for ($($T),*) {
+            fn deserialize(serializer: &$serializer, mut bytes: &[u8]) -> ArconResult<Self> {
+                Ok(($(
+                    $T::deserialize_from(serializer, &mut bytes)?
+                ),*))
+            }
+
+            fn deserialize_from(serializer: &$serializer, mut source: impl Buf) -> ArconResult<Self> {
+                Ok(($(
+                    $T::deserialize_from(serializer, &mut source)?
+                ),*))
+            }
+        }
+    )*};
+}
+macro_rules! impl_byte_dump_for_node_id {
+    ($serializer: ident) => {
+        impl SerializableWith<$serializer> for crate::data::NodeID {
+            fn serialize(serializer: &$serializer, payload: &Self) -> ArconResult<Vec<u8>> {
+                u32::serialize(serializer, &payload.id)
+            }
+
+            fn serialize_into(
+                serializer: &$serializer,
+                target: impl BufMut,
+                payload: &Self,
+            ) -> ArconResult<()> {
+                u32::serialize_into(serializer, target, &payload.id)
+            }
+
+            fn size_hint(serializer: &$serializer, payload: &Self) -> Option<usize> {
+                u32::size_hint(serializer, &payload.id)
+            }
+        }
+
+        unsafe impl SerializableFixedSizeWith<$serializer> for crate::data::NodeID {
+            const SIZE: usize = <u32 as SerializableFixedSizeWith<$serializer>>::SIZE;
+        }
+
+        impl DeserializableWith<$serializer> for crate::data::NodeID {
+            fn deserialize(serializer: &$serializer, bytes: &[u8]) -> ArconResult<Self> {
+                let id = u32::deserialize(serializer, bytes)?;
+                Ok(id.into())
+            }
+
+            fn deserialize_from(serializer: &$serializer, source: impl Buf) -> ArconResult<Self> {
+                let id = u32::deserialize_from(serializer, source)?;
+                Ok(id.into())
+            }
+        }
+    };
+}
+macro_rules! impl_byte_dump_for_string {
+    ($serializer: ident) => {
+        impl SerializableWith<$serializer> for &'_ str {
+            fn serialize(serializer: &$serializer, payload: &Self) -> ArconResult<Vec<u8>> {
+                let len = payload.len();
+                let mut res = Vec::with_capacity(std::mem::size_of_val(&len) + len);
+                usize::serialize_into(serializer, &mut res, &len)?;
+                res.extend_from_slice(payload.as_bytes());
+                Ok(res)
+            }
+
+            fn serialize_into(
+                serializer: &$serializer,
+                mut target: impl BufMut,
+                payload: &Self,
+            ) -> ArconResult<()> {
+                let len = payload.len();
+                usize::serialize_into(serializer, &mut target, &len)?;
+                target.put_slice(payload.as_bytes());
+                Ok(())
+            }
+
+            fn size_hint(_serializer: &$serializer, payload: &Self) -> Option<usize> {
+                Some(std::mem::size_of::<usize>() + payload.len())
+            }
+        }
+
+        impl SerializableWith<$serializer> for String {
+            fn serialize(serializer: &$serializer, payload: &Self) -> ArconResult<Vec<u8>> {
+                <&str>::serialize(serializer, &payload.as_str())
+            }
+
+            fn serialize_into(
+                serializer: &$serializer,
+                target: impl BufMut,
+                payload: &Self,
+            ) -> ArconResult<()> {
+                <&str>::serialize_into(serializer, target, &payload.as_str())
+            }
+
+            fn size_hint(serializer: &$serializer, payload: &Self) -> Option<usize> {
+                <&str>::size_hint(serializer, &payload.as_str())
+            }
+        }
+
+        impl DeserializableWith<$serializer> for String {
+            fn deserialize(serializer: &$serializer, mut bytes: &[u8]) -> ArconResult<Self> {
+                let len = usize::deserialize_from(serializer, &mut bytes)?;
+                if bytes.len() < len {
+                    return arcon_err!("insufficient bytes to deserialize a String");
+                }
+                let vec = bytes[..len].to_vec();
+                let res = String::from_utf8(vec)
+                    .map_err(|e| arcon_err_kind!("String deserialization error: {}", e))?;
+                Ok(res)
+            }
+
+            fn deserialize_from(
+                serializer: &$serializer,
+                mut source: impl Buf,
+            ) -> ArconResult<Self> {
+                let len = usize::deserialize_from(serializer, &mut source)?;
+                if source.remaining() < len {
+                    return arcon_err!("insufficient bytes to deserialize a String");
+                }
+                let mut vec = vec![0; len];
+                source.copy_to_slice(&mut vec);
+                let res = String::from_utf8(vec)
+                    .map_err(|e| arcon_err_kind!("String deserialization error: {}", e))?;
+                Ok(res)
+            }
+        }
+    };
+}
 
 // floats depend on unstable library features and don't make much sense as keys anyway
 // (this is mostly for serializing keys btw)
@@ -279,6 +441,15 @@ impl_byte_dump!(NativeEndianBytesDump, to_ne_bytes, from_ne_bytes;
 //    ,f32, f64
 );
 impl_byte_dump_for_unit!(NativeEndianBytesDump);
+impl_byte_dump_for_tuples!(NativeEndianBytesDump;
+    (A, B),
+    (A, B, C),
+    (A, B, C, D),
+    (A, B, C, D, E),
+    (A, B, C, D, E, F)
+);
+impl_byte_dump_for_node_id!(NativeEndianBytesDump);
+impl_byte_dump_for_string!(NativeEndianBytesDump);
 
 impl_byte_dump!(BigEndianBytesDump, to_be_bytes, from_be_bytes;
     u8, u16, u32, u64, usize, u128,
@@ -286,6 +457,15 @@ impl_byte_dump!(BigEndianBytesDump, to_be_bytes, from_be_bytes;
 //    ,f32, f64
 );
 impl_byte_dump_for_unit!(BigEndianBytesDump);
+impl_byte_dump_for_tuples!(BigEndianBytesDump;
+    (A, B),
+    (A, B, C),
+    (A, B, C, D),
+    (A, B, C, D, E),
+    (A, B, C, D, E, F)
+);
+impl_byte_dump_for_node_id!(BigEndianBytesDump);
+impl_byte_dump_for_string!(BigEndianBytesDump);
 
 impl_byte_dump!(LittleEndianBytesDump, to_le_bytes, from_le_bytes;
     u8, u16, u32, u64, usize, u128,
@@ -293,6 +473,15 @@ impl_byte_dump!(LittleEndianBytesDump, to_le_bytes, from_le_bytes;
 //    ,f32, f64
 );
 impl_byte_dump_for_unit!(LittleEndianBytesDump);
+impl_byte_dump_for_tuples!(LittleEndianBytesDump;
+    (A, B),
+    (A, B, C),
+    (A, B, C, D),
+    (A, B, C, D, E),
+    (A, B, C, D, E, F)
+);
+impl_byte_dump_for_node_id!(LittleEndianBytesDump);
+impl_byte_dump_for_string!(LittleEndianBytesDump);
 
 #[derive(Debug, Default, Copy, Clone)]
 pub struct HashAndThen<S, H = BuildHasherDefault<DefaultHasher>>(S, H);
@@ -398,5 +587,15 @@ mod test {
         let serialized = SerializableWith::serialize(&Bincode, &s).unwrap();
         let deserialized: String = DeserializableWith::deserialize(&Bincode, &serialized).unwrap();
         assert_eq!(deserialized, s);
+    }
+
+    #[test]
+    fn test_byte_dump() {
+        type X = (u8, u64, i16);
+        let payload = (255, 0xDEADBEEF, -1);
+        let bytes = X::serialize(&LittleEndianBytesDump, &payload).unwrap();
+        let deserialized = X::deserialize(&LittleEndianBytesDump, &bytes).unwrap();
+
+        assert_eq!(deserialized, payload);
     }
 }

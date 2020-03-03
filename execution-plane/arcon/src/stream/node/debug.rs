@@ -35,7 +35,10 @@ where
     }
     fn handle_msg(&mut self, msg: ArconMessage<IN>) {
         for event in msg.events.into_iter() {
-            match event {
+            match event
+                .inner
+                .expect("this should always be some, prost deserialization error")
+            {
                 ArconEvent::Element(e) => {
                     info!(self.ctx.log(), "Sink element: {:?}", e.data);
                     self.data.push(e);

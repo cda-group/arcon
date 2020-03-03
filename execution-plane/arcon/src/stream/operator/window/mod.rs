@@ -5,7 +5,10 @@ pub mod event_time;
 
 pub use event_time::EventTimeWindowAssigner;
 
-use crate::{prelude::*, util::SafelySendableFn};
+use crate::{
+    prelude::*,
+    util::{prost_helpers::ProstOption, SafelySendableFn},
+};
 
 pub struct WindowContext<'s> {
     state_backend: &'s mut dyn StateBackend,
@@ -124,19 +127,19 @@ where
         );
 
         impl<IN: ArconType, OUT: ArconType> Aggregator<IN> for IncrementalWindowAggregator<IN, OUT> {
-            type Accumulator = Option<OUT>;
+            type Accumulator = ProstOption<OUT>; // this should be an option, but prost
             type Result = OUT;
 
             fn create_accumulator(&self) -> Self::Accumulator {
-                None
+                None.into()
             }
 
             fn add(&self, acc: &mut Self::Accumulator, value: IN) {
-                match acc {
+                match &mut acc.inner {
                     None => {
-                        *acc = Some((self.0)(value));
+                        *acc = Some((self.0)(value)).into();
                     }
-                    Some(inner) => *acc = Some((self.1)(value, inner)),
+                    Some(inner) => *acc = Some((self.1)(value, inner)).into(),
                 }
             }
 
@@ -149,7 +152,8 @@ where
             }
 
             fn accumulator_into_result(&self, acc: Self::Accumulator) -> Self::Result {
-                acc.expect("uninitialized incremental window")
+                let opt: Option<_> = acc.into();
+                opt.expect("uninitialized incremental window")
             }
         }
 

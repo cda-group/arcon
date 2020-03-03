@@ -5,6 +5,8 @@ pub mod event_timer;
 #[cfg(feature = "socket")]
 pub mod io;
 
+pub mod prost_helpers;
+
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub fn get_system_time() -> u64 {

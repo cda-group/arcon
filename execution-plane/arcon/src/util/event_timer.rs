@@ -30,25 +30,45 @@ use uuid::Uuid;
         advance_to to return ordered set of actions to perform.
 */
 
+#[derive(Message, PartialEq, Clone)]
+pub struct EventTimerEvent<E: Message + Default + PartialEq> {
+    #[prost(uint64, tag = "1")]
+    time_when_scheduled: u64,
+    #[prost(uint64, tag = "2")]
+    timeout_millis: u64,
+    #[prost(message, required, tag = "3")]
+    payload: E,
+}
+
+impl<E: Message + Default + PartialEq> EventTimerEvent<E> {
+    fn new(time_when_scheduled: u64, timeout_millis: u64, payload: E) -> EventTimerEvent<E> {
+        EventTimerEvent {
+            time_when_scheduled,
+            timeout_millis,
+            payload,
+        }
+    }
+}
+
 /// The serializable part of EventTimer<E>
 #[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Message)]
 pub struct SerializableEventTimer<E>
 where
-    E: Send + Sync + Debug + Default + PartialEq,
+    E: Message + Default + PartialEq,
 {
     #[prost(uint64, tag = "1")]
     time: u64,
     // this was HashMap<Uuid, (u64, Duration, E)>, but then prost happened
     #[prost(map(string, message), tag = "2")]
-    handles: HashMap<String, (u64, Duration, E)>,
+    handles: HashMap<String, EventTimerEvent<E>>,
 }
 
 // when serializing this we treat the timer field as transient and recreate it from the serializable
 // part when deserializing
 pub struct EventTimer<E>
 where
-    E: Send + Sync + Debug + Default + PartialEq,
+    E: Message + Default + PartialEq,
 {
     timer: QuadWheelWithOverflow,
     pub inner: SerializableEventTimer<E>,
@@ -56,7 +76,7 @@ where
 
 impl<E> Default for EventTimer<E>
 where
-    E: Send + Sync + Debug + Default + PartialEq,
+    E: Message + Default + PartialEq,
 {
     fn default() -> Self {
         Self::new()
@@ -65,7 +85,7 @@ where
 
 impl<E> EventTimer<E>
 where
-    E: Send + Sync + Debug + Default + PartialEq,
+    E: Message + Default + PartialEq,
 {
     pub fn new() -> EventTimer<E> {
         EventTimer {
@@ -79,9 +99,10 @@ where
     // Basic scheduling function
     fn schedule_once(&mut self, timeout: Duration, entry: E) {
         let id = Uuid::new_v4();
-        self.inner
-            .handles
-            .insert(id.to_string(), (self.inner.time, timeout, entry));
+        self.inner.handles.insert(
+            id.to_string(), // alloc :(
+            EventTimerEvent::new(self.inner.time, timeout.as_millis() as u64, entry),
+        );
 
         let e = TimerEntry::OneShot {
             id,
@@ -156,7 +177,11 @@ where
     #[inline(always)]
     fn execute(&mut self, e: TimerEntry) -> Option<E> {
         let id = e.id();
-        let res = self.inner.handles.remove(&id.to_string()).map(|x| x.2);
+        let res = self
+            .inner
+            .handles
+            .remove(&id.to_string()) // alloc :(
+            .map(|x| x.payload);
 
         // Reschedule the event
         if let Some(re_e) = e.execute() {
@@ -175,7 +200,7 @@ where
 
 impl<E> Debug for EventTimer<E>
 where
-    E: Send + Sync + Debug + Default + PartialEq,
+    E: Message + Default + PartialEq,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "<EventTimer>")
@@ -183,20 +208,28 @@ where
 }
 
 // Allows the EventTimer to be scheduled on different threads, but should never be used concurrently
-unsafe impl<E> Send for EventTimer<E> where E: Send + Sync + Debug + Default + PartialEq {}
+unsafe impl<E> Send for EventTimer<E> where E: Message + Default + PartialEq {}
 
 impl<E> From<SerializableEventTimer<E>> for EventTimer<E>
 where
-    E: Send + Sync + Debug + Default + PartialEq,
+    E: Message + Default + PartialEq,
 {
     fn from(SerializableEventTimer { time, handles }: SerializableEventTimer<E>) -> Self {
         let mut res = EventTimer::new();
         res.set_time(time);
 
         // the internal ids WILL change
-        for (_id, (insertion_time, timeout, event)) in handles {
-            let new_timeout = insertion_time + timeout.as_millis() as u64 - time;
-            res.schedule_once(Duration::from_millis(new_timeout), event)
+        for (
+            _id,
+            EventTimerEvent {
+                time_when_scheduled,
+                timeout_millis,
+                payload,
+            },
+        ) in handles
+        {
+            let new_timeout = time_when_scheduled + timeout_millis - time;
+            res.schedule_once(Duration::from_millis(new_timeout), payload)
         }
 
         res

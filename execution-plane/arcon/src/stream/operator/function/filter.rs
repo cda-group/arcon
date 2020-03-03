@@ -96,11 +96,11 @@ mod tests {
 
         let msg = ArconMessage {
             events: vec![
-                input_one,
-                input_two,
-                input_three,
-                input_four,
-                ArconEvent::Death("die".into()),
+                input_one.into(),
+                input_two.into(),
+                input_three.into(),
+                input_four.into(),
+                ArconEvent::Death("die".into()).into(),
             ],
             sender: NodeID::new(1),
         };

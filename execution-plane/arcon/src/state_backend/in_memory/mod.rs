@@ -280,7 +280,7 @@ mod vec_state;
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::state_backend::serialization::Bincode;
+    use crate::state_backend::serialization::NativeEndianBytesDump;
 
     #[test]
     fn in_mem_test() {
@@ -309,7 +309,7 @@ mod test {
             id: Uuid::new_v4(),
             item_key: 42,
             namespace: 255,
-            key_serializer: Bincode,
+            key_serializer: NativeEndianBytesDump,
         };
 
         let v = state.get_db_key_prefix().unwrap();
