@@ -29,6 +29,7 @@ uuid = "0.8"
 static_assertions = "1.1.0"
 itertools = "0.8.2"
 smallbox = { version = "0.8", features = ["coerce"] }
+cfg-if = "0.1.10"
 fxhash = "0.2.1"
 
 # Serialisation

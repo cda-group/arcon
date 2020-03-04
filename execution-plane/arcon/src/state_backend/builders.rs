@@ -1,6 +1,8 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
+#[cfg(feature = "arcon_serde")]
+use crate::state_backend::serialization::Bincode;
 #[cfg(not(feature = "arcon_serde"))]
 use crate::state_backend::serialization::{LittleEndianBytesDump, Prost};
 use crate::state_backend::{
@@ -390,26 +392,21 @@ impl<'n, 'b, SB: ?Sized, IK, N, KS, TS> StateBuilder<'n, 'b, SB, IK, N, KS, TS> 
     }
 }
 
-#[cfg(not(feature = "arcon_serde"))]
-pub type DefaultKeySerializer = LittleEndianBytesDump;
-#[cfg(not(feature = "arcon_serde"))]
-pub const DEFAULT_KEY_SERIALIZER: DefaultKeySerializer = LittleEndianBytesDump;
-#[cfg(not(feature = "arcon_serde"))]
-pub type DefaultValueSerializer = Prost;
-#[cfg(not(feature = "arcon_serde"))]
-pub const DEFAULT_VALUE_SERIALIZER: DefaultValueSerializer = Prost;
+cfg_if::cfg_if! {
+    if #[cfg(feature = "arcon_serde")] {
+        pub type DefaultKeySerializer = Bincode;
+        pub const DEFAULT_KEY_SERIALIZER: DefaultKeySerializer = Bincode;
 
-#[cfg(feature = "arcon_serde")]
-pub type DefaultKeySerializer = crate::state_backend::serialization::bincode_serialization::Bincode;
-#[cfg(feature = "arcon_serde")]
-pub const DEFAULT_KEY_SERIALIZER: DefaultKeySerializer =
-    crate::state_backend::serialization::bincode_serialization::Bincode;
-#[cfg(feature = "arcon_serde")]
-pub type DefaultValueSerializer =
-    crate::state_backend::serialization::bincode_serialization::Bincode;
-#[cfg(feature = "arcon_serde")]
-pub const DEFAULT_VALUE_SERIALIZER: DefaultValueSerializer =
-    crate::state_backend::serialization::bincode_serialization::Bincode;
+        pub type DefaultValueSerializer = Bincode;
+        pub const DEFAULT_VALUE_SERIALIZER: DefaultValueSerializer = Bincode;
+    } else {
+        pub type DefaultKeySerializer = LittleEndianBytesDump;
+        pub const DEFAULT_KEY_SERIALIZER: DefaultKeySerializer = LittleEndianBytesDump;
+
+        pub type DefaultValueSerializer = Prost;
+        pub const DEFAULT_VALUE_SERIALIZER: DefaultValueSerializer = Prost;
+    }
+}
 
 pub trait StateBackendExt {
     fn build<'b, 'n>(

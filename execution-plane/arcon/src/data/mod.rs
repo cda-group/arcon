@@ -26,18 +26,15 @@ impl<T> ArconTypeBoundsNoSerde for T where
 {
 }
 
-#[cfg(feature = "arcon_serde")]
-pub trait ArconTypeBounds: ArconTypeBoundsNoSerde + Serialize + for<'de> Deserialize<'de> {}
-
-#[cfg(feature = "arcon_serde")]
-impl<T> ArconTypeBounds for T where T: ArconTypeBoundsNoSerde + Serialize + for<'de> Deserialize<'de>
-{}
-
-#[cfg(not(feature = "arcon_serde"))]
-pub trait ArconTypeBounds: ArconTypeBoundsNoSerde {}
-
-#[cfg(not(feature = "arcon_serde"))]
-impl<T> ArconTypeBounds for T where T: ArconTypeBoundsNoSerde {}
+cfg_if::cfg_if! {
+    if #[cfg(feature = "arcon_serde")] {
+        pub trait ArconTypeBounds: ArconTypeBoundsNoSerde + Serialize + for<'de> Deserialize<'de> {}
+        impl<T> ArconTypeBounds for T where T: ArconTypeBoundsNoSerde + Serialize + for<'de> Deserialize<'de> {}
+    } else {
+        pub trait ArconTypeBounds: ArconTypeBoundsNoSerde {}
+        impl<T> ArconTypeBounds for T where T: ArconTypeBoundsNoSerde {}
+    }
+}
 
 /// Type that can be passed through the Arcon runtime
 pub trait ArconType: ArconTypeBounds

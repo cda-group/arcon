@@ -5,7 +5,7 @@ use core::time::Duration;
 use kompact::timer::*;
 use prost::Message;
 #[cfg(feature = "arcon_serde")]
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, convert::TryInto, fmt, fmt::Debug};
 use uuid::Uuid;
 /*
@@ -234,31 +234,5 @@ where
         }
 
         res
-    }
-}
-
-#[cfg(feature = "arcon_serde")]
-impl<E> Serialize for EventTimer<E>
-where
-    E: Message + Default + PartialEq + Serialize,
-{
-    fn serialize<S>(&self, serializer: S) -> Result<<S as Serializer>::Ok, <S as Serializer>::Error>
-    where
-        S: Serializer,
-    {
-        self.inner.serialize(serializer)
-    }
-}
-
-#[cfg(feature = "arcon_serde")]
-impl<'de, E> Deserialize<'de> for EventTimer<E>
-where
-    E: Message + Default + PartialEq + Deserialize<'de>,
-{
-    fn deserialize<D>(deserializer: D) -> Result<Self, <D as Deserializer<'de>>::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        SerializableEventTimer::<E>::deserialize(deserializer).map(|et| et.into())
     }
 }
