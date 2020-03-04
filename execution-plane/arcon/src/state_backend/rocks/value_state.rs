@@ -58,12 +58,20 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::state_backend::{rocks::test::TestDb, serialization::Bincode, ValueStateBuilder};
+    use crate::state_backend::{
+        rocks::test::TestDb, serialization::NativeEndianBytesDump, ValueStateBuilder,
+    };
 
     #[test]
     fn rocksdb_value_state_test() {
         let mut db = TestDb::new();
-        let value_state = db.new_value_state("test_state", (), (), Bincode, Bincode);
+        let value_state = db.new_value_state(
+            "test_state",
+            (),
+            (),
+            NativeEndianBytesDump,
+            NativeEndianBytesDump,
+        );
 
         let unset = value_state.get(&db).unwrap();
         assert!(unset.is_none());
@@ -80,8 +88,20 @@ mod test {
     #[test]
     fn rocksdb_value_states_are_independant() {
         let mut db = TestDb::new();
-        let v1 = db.new_value_state("test1", (), (), Bincode, Bincode);
-        let v2 = db.new_value_state("test2", (), (), Bincode, Bincode);
+        let v1 = db.new_value_state(
+            "test1",
+            (),
+            (),
+            NativeEndianBytesDump,
+            NativeEndianBytesDump,
+        );
+        let v2 = db.new_value_state(
+            "test2",
+            (),
+            (),
+            NativeEndianBytesDump,
+            NativeEndianBytesDump,
+        );
 
         v1.set(&mut db, 123).unwrap();
         v2.set(&mut db, 456).unwrap();
@@ -101,7 +121,13 @@ mod test {
     #[test]
     fn rocksdb_value_states_handle_state_for_different_keys_and_namespaces() {
         let mut db = TestDb::new();
-        let mut value_state = db.new_value_state("test_state", 0, 0, Bincode, Bincode);
+        let mut value_state = db.new_value_state(
+            "test_state",
+            0,
+            0,
+            NativeEndianBytesDump,
+            NativeEndianBytesDump,
+        );
 
         value_state.set(&mut db, 0).unwrap();
         value_state.set_current_key(1).unwrap();

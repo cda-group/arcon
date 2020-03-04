@@ -232,12 +232,20 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::state_backend::{rocks::test::TestDb, serialization::Bincode, MapStateBuilder};
+    use crate::state_backend::{
+        rocks::test::TestDb, serialization::NativeEndianBytesDump, MapStateBuilder,
+    };
 
     #[test]
     fn map_state_test() {
         let mut db = TestDb::new();
-        let map_state = db.new_map_state("test_state", (), (), Bincode, Bincode);
+        let map_state = db.new_map_state(
+            "test_state",
+            (),
+            (),
+            NativeEndianBytesDump,
+            NativeEndianBytesDump,
+        );
 
         // TODO: &String is weird, maybe look at how it's done with the keys in std hash-map
         assert!(!map_state.contains(&db, &"first key".to_string()).unwrap());
@@ -283,7 +291,13 @@ mod test {
     #[test]
     fn clearing_test() {
         let mut db = TestDb::new();
-        let mut map_state = db.new_map_state("test_state", 0u8, 0u8, Bincode, Bincode);
+        let mut map_state = db.new_map_state(
+            "test_state",
+            0u8,
+            0u8,
+            NativeEndianBytesDump,
+            NativeEndianBytesDump,
+        );
 
         let mut expected_for_key_zero = vec![];
         for i in 0..10 {

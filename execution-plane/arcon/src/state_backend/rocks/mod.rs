@@ -794,7 +794,7 @@ mod vec_state;
 #[cfg(test)]
 pub mod test {
     use super::*;
-    use crate::state_backend::serialization::Bincode;
+    use crate::state_backend::serialization::NativeEndianBytesDump;
     use std::ops::{Deref, DerefMut};
     use tempfile::TempDir;
 
@@ -853,8 +853,8 @@ pub mod test {
             cf_name: "".to_string(),
             item_key: (),
             namespace: (),
-            key_serializer: Bincode,
-            value_serializer: Bincode,
+            key_serializer: NativeEndianBytesDump,
+            value_serializer: NativeEndianBytesDump,
         };
 
         let v = state.get_db_key_prefix().unwrap();
@@ -938,7 +938,8 @@ pub mod test {
     #[test]
     fn checkpoint_restore_state_test() {
         let mut original = TestDb::new();
-        let a_value = original.new_value_state("a", (), (), Bincode, Bincode);
+        let a_value =
+            original.new_value_state("a", (), (), NativeEndianBytesDump, NativeEndianBytesDump);
         a_value.set(&mut original, 420).unwrap();
 
         let checkpoint_dir = original.checkpoint();
@@ -951,7 +952,8 @@ pub mod test {
         // TODO: serialize value state metadata (type names, serialization, etc.) into rocksdb, so
         //   that type mismatches are caught early. Right now it would be possible to, let's say,
         //   store an integer, and then read a float from the restored state backend
-        let a_value_restored = restored.new_value_state("a", (), (), Bincode, Bincode);
+        let a_value_restored =
+            restored.new_value_state("a", (), (), NativeEndianBytesDump, NativeEndianBytesDump);
         assert_eq!(a_value_restored.get(&restored).unwrap().unwrap(), 420);
 
         a_value_restored.set(&mut restored, 1337).unwrap();
@@ -963,8 +965,10 @@ pub mod test {
     #[test]
     fn missing_state_raises_errors() {
         let mut original = TestDb::new();
-        let a_value = original.new_value_state("a", (), (), Bincode, Bincode);
-        let b_value = original.new_value_state("b", (), (), Bincode, Bincode);
+        let a_value =
+            original.new_value_state("a", (), (), NativeEndianBytesDump, NativeEndianBytesDump);
+        let b_value =
+            original.new_value_state("b", (), (), NativeEndianBytesDump, NativeEndianBytesDump);
         a_value.set(&mut original, 420).unwrap();
         b_value.set(&mut original, 69).unwrap();
 
@@ -972,7 +976,7 @@ pub mod test {
 
         let mut restored = TestDb::from_checkpoint(&checkpoint_dir.to_string_lossy());
         let a_value_restored: RocksDbValueState<_, _, i32, _, _> =
-            restored.new_value_state("a", (), (), Bincode, Bincode);
+            restored.new_value_state("a", (), (), NativeEndianBytesDump, NativeEndianBytesDump);
         // original backend had two states created, and here we try to mess with state before we
         // declare all the states
         if let ErrorKind::ArconError(message) = a_value_restored.get(&restored).unwrap_err().kind()
@@ -989,8 +993,14 @@ pub mod test {
     #[test]
     fn test_key_serialization() {
         let mut db = TestDb::new();
-        let state =
-            StateCommon::new_for_map_state(&mut db, "test-name", 0u8, 0u8, Bincode, Bincode);
+        let state = StateCommon::new_for_map_state(
+            &mut db,
+            "test-name",
+            0u8,
+            0u8,
+            NativeEndianBytesDump,
+            NativeEndianBytesDump,
+        );
         let key = state
             .get_db_key_with_user_key(&"foobar".to_string())
             .unwrap();

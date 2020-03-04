@@ -164,7 +164,7 @@ where
 mod test {
     use super::*;
     use crate::state_backend::{
-        rocks::test::TestDb, serialization::Bincode, state_types::ClosuresAggregator,
+        rocks::test::TestDb, serialization::NativeEndianBytesDump, state_types::ClosuresAggregator,
         AggregatingStateBuilder,
     };
 
@@ -176,7 +176,7 @@ mod test {
             (),
             (),
             ClosuresAggregator::new(
-                || vec![],
+                Vec::<u32>::new,
                 Vec::push,
                 |mut fst, mut snd| {
                     fst.append(&mut snd);
@@ -184,8 +184,8 @@ mod test {
                 },
                 |v| format!("{:?}", v),
             ),
-            Bincode,
-            Bincode,
+            NativeEndianBytesDump,
+            NativeEndianBytesDump,
         );
 
         aggregating_state.append(&mut db, 1).unwrap();

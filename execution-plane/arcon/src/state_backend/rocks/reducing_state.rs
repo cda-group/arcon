@@ -130,7 +130,9 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::state_backend::{rocks::test::TestDb, serialization::Bincode, ReducingStateBuilder};
+    use crate::state_backend::{
+        rocks::test::TestDb, serialization::NativeEndianBytesDump, ReducingStateBuilder,
+    };
 
     #[test]
     fn reducing_state_test() {
@@ -140,8 +142,8 @@ mod test {
             (),
             (),
             |old: &i32, new: &i32| *old.max(new),
-            Bincode,
-            Bincode,
+            NativeEndianBytesDump,
+            NativeEndianBytesDump,
         );
 
         reducing_state.append(&mut db, 7).unwrap();
@@ -159,16 +161,16 @@ mod test {
             (),
             (),
             |old: &i32, new: &i32| *old.max(new),
-            Bincode,
-            Bincode,
+            NativeEndianBytesDump,
+            NativeEndianBytesDump,
         );
         let rs2 = db.new_reducing_state(
             "rs2",
             (),
             (),
             |old: &i32, new: &i32| *old.min(new),
-            Bincode,
-            Bincode,
+            NativeEndianBytesDump,
+            NativeEndianBytesDump,
         );
 
         rs1.append(&mut db, 7).unwrap();

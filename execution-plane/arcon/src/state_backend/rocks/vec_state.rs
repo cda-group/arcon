@@ -243,12 +243,20 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::state_backend::{rocks::test::TestDb, serialization::Bincode, VecStateBuilder};
+    use crate::state_backend::{
+        rocks::test::TestDb, serialization::NativeEndianBytesDump, VecStateBuilder,
+    };
 
     #[test]
     fn vec_state_test() {
         let mut db = TestDb::new();
-        let vec_state = db.new_vec_state("test_state", (), (), Bincode, Bincode);
+        let vec_state = db.new_vec_state(
+            "test_state",
+            (),
+            (),
+            NativeEndianBytesDump,
+            NativeEndianBytesDump,
+        );
         assert!(vec_state.is_empty(&db).unwrap());
         assert_eq!(vec_state.len(&db).unwrap(), 0);
 
