@@ -24,6 +24,7 @@ type Key = u64;
 type Index = u64;
 type Timestamp = u64;
 
+#[cfg_attr(feature = "arcon_serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Message, PartialEq, Clone)]
 pub struct WindowEvent {
     #[prost(uint64, tag = "1")]

@@ -5,7 +5,7 @@
 
 use crate::prelude::ArconResult;
 use bytes::{Buf, BufMut};
-use prost::Message;
+use prost::{encoding::encoded_len_varint, Message};
 use std::{
     any::type_name,
     collections::hash_map::DefaultHasher,
@@ -35,7 +35,7 @@ pub unsafe trait SerializableFixedSizeWith<S>: SerializableWith<S> {
 }
 
 #[cfg(feature = "arcon_serde")]
-mod bincode {
+pub mod bincode_serialization {
     use super::*;
     use bytes::buf::ext::*;
     use serde::{Deserialize, Serialize};
@@ -116,9 +116,6 @@ mod bincode {
         char: 1, bool: 1, (): 0
     );
 }
-#[cfg(target = "arcon_serde")]
-pub use self::bincode::Bincode;
-use prost::encoding::encoded_len_varint;
 
 #[derive(Debug, Default, Copy, Clone)]
 pub struct Prost;
@@ -580,6 +577,8 @@ where
 
 #[cfg(test)]
 mod test {
+    #[cfg(feature = "arcon_serde")]
+    use super::bincode_serialization::Bincode;
     use super::*;
 
     #[cfg(feature = "arcon_serde")]

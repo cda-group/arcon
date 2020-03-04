@@ -1,11 +1,10 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
+#[cfg(not(feature = "arcon_serde"))]
+use crate::state_backend::serialization::{LittleEndianBytesDump, Prost};
 use crate::state_backend::{
-    serialization::{
-        DeserializableWith, LittleEndianBytesDump, Prost, SerializableFixedSizeWith,
-        SerializableWith,
-    },
+    serialization::{DeserializableWith, SerializableFixedSizeWith, SerializableWith},
     state_types::{AggregatingState, Aggregator, MapState, ReducingState, ValueState, VecState},
     StateBackend,
 };
@@ -391,18 +390,39 @@ impl<'n, 'b, SB: ?Sized, IK, N, KS, TS> StateBuilder<'n, 'b, SB, IK, N, KS, TS> 
     }
 }
 
+#[cfg(not(feature = "arcon_serde"))]
+pub type DefaultKeySerializer = LittleEndianBytesDump;
+#[cfg(not(feature = "arcon_serde"))]
+pub const DEFAULT_KEY_SERIALIZER: DefaultKeySerializer = LittleEndianBytesDump;
+#[cfg(not(feature = "arcon_serde"))]
+pub type DefaultValueSerializer = Prost;
+#[cfg(not(feature = "arcon_serde"))]
+pub const DEFAULT_VALUE_SERIALIZER: DefaultValueSerializer = Prost;
+
+#[cfg(feature = "arcon_serde")]
+pub type DefaultKeySerializer = crate::state_backend::serialization::bincode_serialization::Bincode;
+#[cfg(feature = "arcon_serde")]
+pub const DEFAULT_KEY_SERIALIZER: DefaultKeySerializer =
+    crate::state_backend::serialization::bincode_serialization::Bincode;
+#[cfg(feature = "arcon_serde")]
+pub type DefaultValueSerializer =
+    crate::state_backend::serialization::bincode_serialization::Bincode;
+#[cfg(feature = "arcon_serde")]
+pub const DEFAULT_VALUE_SERIALIZER: DefaultValueSerializer =
+    crate::state_backend::serialization::bincode_serialization::Bincode;
+
 pub trait StateBackendExt {
     fn build<'b, 'n>(
         &'b mut self,
         name: &'n str,
-    ) -> StateBuilder<'n, 'b, Self, (), (), LittleEndianBytesDump, Prost> {
+    ) -> StateBuilder<'n, 'b, Self, (), (), DefaultKeySerializer, DefaultValueSerializer> {
         StateBuilder {
             name,
             state_backend: self,
             init_item_key: (),
             init_namespace: (),
-            key_serializer: LittleEndianBytesDump,
-            value_serializer: Prost,
+            key_serializer: DEFAULT_KEY_SERIALIZER,
+            value_serializer: DEFAULT_VALUE_SERIALIZER,
         }
     }
 }

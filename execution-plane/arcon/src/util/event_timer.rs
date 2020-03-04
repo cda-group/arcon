@@ -30,6 +30,7 @@ use uuid::Uuid;
         advance_to to return ordered set of actions to perform.
 */
 
+#[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
 #[derive(Message, PartialEq, Clone)]
 pub struct EventTimerEvent<E: Message + Default + PartialEq> {
     #[prost(uint64, tag = "1")]
@@ -239,7 +240,7 @@ where
 #[cfg(feature = "arcon_serde")]
 impl<E> Serialize for EventTimer<E>
 where
-    E: Serialize,
+    E: Message + Default + PartialEq + Serialize,
 {
     fn serialize<S>(&self, serializer: S) -> Result<<S as Serializer>::Ok, <S as Serializer>::Error>
     where
@@ -252,7 +253,7 @@ where
 #[cfg(feature = "arcon_serde")]
 impl<'de, E> Deserialize<'de> for EventTimer<E>
 where
-    E: Deserialize<'de>,
+    E: Message + Default + PartialEq + Deserialize<'de>,
 {
     fn deserialize<D>(deserializer: D) -> Result<Self, <D as Deserializer<'de>>::Error>
     where
