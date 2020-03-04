@@ -25,7 +25,7 @@ impl Default for FlightSerde {
 /// Module containing the [kompact] serialiser/deserialiser implementation for [FlightSerde::Reliable]
 pub mod reliable_remote {
     use crate::data::{
-        ArconElement, ArconEvent, ArconEventProstMessage, ArconMessage, ArconType, Epoch, NodeID,
+        ArconElement, ArconEvent, ArconEventWrapper, ArconMessage, ArconType, Epoch, NodeID,
         Watermark,
     };
     use kompact::prelude::*;
@@ -69,7 +69,7 @@ pub mod reliable_remote {
             let network_msg = NetworkMessage::decode(buf.bytes()).map_err(|_| {
                 SerError::InvalidData("Failed to decode NetworkMessage".to_string())
             })?;
-            let mut events: Vec<ArconEventProstMessage<A>> =
+            let mut events: Vec<ArconEventWrapper<A>> =
                 Vec::with_capacity(network_msg.events.len());
             for raw_event in network_msg.events {
                 match raw_event.event_type {

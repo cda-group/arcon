@@ -119,10 +119,7 @@ where
         }
 
         'event_loop: for event in message.events {
-            match event
-                .inner
-                .expect("this should always be some, prost deserialization error")
-            {
+            match event.unwrap() {
                 ArconEvent::Element(e) => {
                     if e.timestamp.unwrap_or(u64::max_value())
                         <= self

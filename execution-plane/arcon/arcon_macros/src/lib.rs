@@ -35,9 +35,16 @@ pub fn arcon(metadata: TokenStream, input: TokenStream) -> TokenStream {
             }
         }
 
+        #[allow(unused)]
+        let maybe_serde = quote! {};
+        #[cfg(feature = "arcon_serde")]
+        let maybe_serde = quote! {
+            #[derive(::serde::Serialize, ::serde::Deserialize)]
+        };
+
         let output: proc_macro2::TokenStream = {
             quote! {
-                #[cfg_attr(feature = "arcon_serde", derive(::serde::Serialize, ::serde::Deserialize))]
+                #maybe_serde
                 #[derive(Clone, ::abomonation_derive::Abomonation, ::prost::Message)]
                 #item
                 impl #impl_generics ArconType for #name #ty_generics #where_clause {}

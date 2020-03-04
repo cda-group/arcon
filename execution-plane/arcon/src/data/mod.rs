@@ -78,17 +78,41 @@ pub enum ArconEvent<A: ArconType> {
     Death(String),
 }
 
+// The struct below is required because of the peculiarity of prost/protobuf - you cannot have
+// repeated (like, a Vec<_>) oneof fields, so we wrap ArconEvent in a struct which implements
+// prost::Message. Unfortunately protobuf also doesn't allow for required oneof fields, so the inner
+// value has to be optional. In practice we expect it to always be Some.
+
 #[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
 #[derive(PMessage, Clone, Abomonation)]
 #[cfg_attr(feature = "arcon_serde", serde(bound = "A: ArconType"))]
-pub struct ArconEventProstMessage<A: ArconType> {
+pub struct ArconEventWrapper<A: ArconType> {
     #[prost(oneof = "ArconEvent::<A>", tags = "1, 2, 3, 4")]
-    pub inner: Option<ArconEvent<A>>,
+    inner: Option<ArconEvent<A>>,
 }
 
-impl<A: ArconType> From<ArconEvent<A>> for ArconEventProstMessage<A> {
+impl<A: ArconType> ArconEventWrapper<A> {
+    pub fn unwrap(self) -> ArconEvent<A> {
+        self.inner
+            .expect("ArconEventWrapper.inner is None. Prost deserialization error?")
+    }
+
+    pub fn unwrap_ref(&self) -> &ArconEvent<A> {
+        self.inner
+            .as_ref()
+            .expect("ArconEventWrapper.inner is None. Prost deserialization error?")
+    }
+
+    pub fn unwrap_mut(&mut self) -> &mut ArconEvent<A> {
+        self.inner
+            .as_mut()
+            .expect("ArconEventWrapper.inner is None. Prost deserialization error?")
+    }
+}
+
+impl<A: ArconType> From<ArconEvent<A>> for ArconEventWrapper<A> {
     fn from(inner: ArconEvent<A>) -> Self {
-        ArconEventProstMessage { inner: Some(inner) }
+        ArconEventWrapper { inner: Some(inner) }
     }
 }
 
@@ -156,7 +180,7 @@ impl Epoch {
 pub struct ArconMessage<A: ArconType> {
     /// Buffer of ArconEvents
     #[prost(message, repeated, tag = "1")]
-    pub events: Vec<ArconEventProstMessage<A>>,
+    pub events: Vec<ArconEventWrapper<A>>,
     /// ID identifying where the message is sent from
     #[prost(message, required, tag = "5")]
     pub sender: NodeID,

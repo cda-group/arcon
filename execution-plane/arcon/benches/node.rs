@@ -78,7 +78,7 @@ pub fn node_forward_bench(b: &mut Bencher, messages: usize) {
         .wait_timeout(timeout)
         .expect("node never started!");
 
-    let mut buffer: Vec<ArconEventProstMessage<i32>> = Vec::with_capacity(BATCH_SIZE);
+    let mut buffer: Vec<ArconEventWrapper<i32>> = Vec::with_capacity(BATCH_SIZE);
     for i in 0..BATCH_SIZE {
         buffer.push(ArconEvent::Element(ArconElement::new(i as i32)).into());
     }

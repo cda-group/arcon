@@ -3,7 +3,7 @@
 
 use super::DEFAULT_BATCH_SIZE;
 use crate::{
-    data::{ArconEvent, ArconEventProstMessage, ArconMessage, ArconType, NodeID},
+    data::{ArconEvent, ArconEventWrapper, ArconMessage, ArconType, NodeID},
     stream::channel::{strategy::send, Channel},
 };
 
@@ -17,7 +17,7 @@ where
     /// An Identifier that is embedded in each outgoing message
     sender_id: NodeID,
     /// A buffer holding outgoing events
-    buffer: Vec<ArconEventProstMessage<A>>,
+    buffer: Vec<ArconEventWrapper<A>>,
     /// A batch size indicating when the channel should flush data
     batch_size: usize,
 }

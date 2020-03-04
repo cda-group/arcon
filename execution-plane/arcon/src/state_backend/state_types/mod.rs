@@ -1,7 +1,6 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// TODO: Q: Should methods that mutate the state actually take a mutable reference to self?
 // TODO: Q: For now this is modelled after Flink. Do we want a different hierarchy, or maybe get
 //  rid of the hierarchy altogether?
 
@@ -28,13 +27,18 @@ macro_rules! erase_backend_type {
     };
 }
 
+// different state traits and their hierarchy have been inspired by Flink's State interface hierarchy
+
 //// abstract states ////
 
-/// State inside a stream.
+/// State from state backend. Can have different values depending on the current key (e.g. the
+/// key associated with the current item being processed) and the current namespace (e.g. window
+/// index). The existence of these two parameters is heavily inspired by Flink and they may be
+/// removed in the future.
 ///
 /// `SB` - state backend type
-/// `IK` - type of key of the item currently in the stream
-/// `N`  - type of the namespace
+/// `IK` - key type
+/// `N`  - namespace type
 pub trait State<SB: ?Sized, IK, N> {
     fn clear(&self, backend: &mut SB) -> ArconResult<()>;
 
@@ -84,10 +88,7 @@ pub trait MergingState<SB: ?Sized, IK, N, IN, OUT>: AppendingState<SB, IK, N, IN
 //// concrete-ish states ////
 
 pub trait ValueState<SB: ?Sized, IK, N, T>: State<SB, IK, N> {
-    // bikeshed: get / value (Flink)
     fn get(&self, backend: &SB) -> ArconResult<Option<T>>;
-
-    // bikeshed: set / update (Flink)
     fn set(&self, backend: &mut SB, new_value: T) -> ArconResult<()>;
 
     erase_backend_type!(ValueState<_, IK, N, T>);
@@ -138,10 +139,9 @@ pub trait MapState<SB: ?Sized, IK, N, K, V>: State<SB, IK, N> {
     erase_backend_type!(MapState<_, IK, N, K, V>);
 }
 
-// analogous to ListState in Flink
 // TODO: Q: Should MergingState::OUT be Vec, or something else? More abstract?
+// TODO: add more useful methods
 pub trait VecState<SB: ?Sized, IK, N, T>: MergingState<SB, IK, N, T, Vec<T>> {
-    // bikeshed: set / update (Flink)
     fn set(&self, backend: &mut SB, value: Vec<T>) -> ArconResult<()>;
     fn add_all(&self, backend: &mut SB, values: impl IntoIterator<Item = T>) -> ArconResult<()>
     where
@@ -167,7 +167,6 @@ pub trait Aggregator<T> {
     type Result;
 
     fn create_accumulator(&self) -> Self::Accumulator;
-    // bikeshed - immutable + return value instead of mutable acc? (like in Flink)
     fn add(&self, acc: &mut Self::Accumulator, value: T);
     fn merge_accumulators(
         &self,
@@ -186,7 +185,6 @@ pub struct ClosuresAggregator<CREATE, ADD, MERGE, RES> {
 }
 
 impl<CREATE, ADD, MERGE, RES> ClosuresAggregator<CREATE, ADD, MERGE, RES> {
-    #[allow(dead_code)] // used by tests
     pub fn new<T, ACC, R>(
         create: CREATE,
         add: ADD,

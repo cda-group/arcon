@@ -17,7 +17,7 @@ where
     /// An identifier that is embedded with outgoing messages
     sender_id: NodeID,
     /// A buffer holding outgoing events
-    buffer: Vec<ArconEventProstMessage<A>>,
+    buffer: Vec<ArconEventWrapper<A>>,
     /// A batch size indicating when the channel should flush data
     batch_size: usize,
 }

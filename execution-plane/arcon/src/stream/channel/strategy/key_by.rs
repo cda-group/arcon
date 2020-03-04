@@ -30,7 +30,7 @@ where
     /// An identifier that is embedded with outgoing messages
     sender_id: NodeID,
     /// A map with hashed indexes and their respective Channel/Buffer
-    buffer_map: HashMap<usize, (Channel<A>, Vec<ArconEventProstMessage<A>>)>,
+    buffer_map: HashMap<usize, (Channel<A>, Vec<ArconEventWrapper<A>>)>,
     /// A batch size indicating when the channel should flush data
     batch_size: usize,
     /// A counter keeping track of buffered elements across all channels
@@ -76,7 +76,7 @@ where
         B: Hasher + Default,
     {
         assert_eq!(channels.len(), parallelism as usize);
-        let mut buffer_map: HashMap<usize, (Channel<A>, Vec<ArconEventProstMessage<A>>)> =
+        let mut buffer_map: HashMap<usize, (Channel<A>, Vec<ArconEventWrapper<A>>)> =
             HashMap::new();
 
         for (i, channel) in channels.into_iter().enumerate() {

@@ -86,9 +86,6 @@ impl InitializedRocksDb {
     }
 
     fn remove_prefix(&mut self, cf: impl AsRef<str>, prefix: impl AsRef<[u8]>) -> ArconResult<()> {
-        // We use DB::delete_range_cf here, which should be faster than what Flink does, because it
-        // doesn't require explicit iteration.
-
         let prefix = prefix.as_ref();
         let cf_name = cf.as_ref();
 
