@@ -8,7 +8,6 @@
 //! [arcon_codegen] to generate the Rust code.
 
 #![feature(unboxed_closures)]
-#![feature(fn_traits)]
 
 #[cfg_attr(test, macro_use)]
 extern crate arcon_macros;
