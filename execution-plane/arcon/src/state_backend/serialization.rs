@@ -511,13 +511,11 @@ macro_rules! impl_byte_dump_for_vecs {
 }
 
 macro_rules! impl_byte_dump_all {
-    ($serializer: ident) => {
-        // floats depend on unstable library features and don't make much sense as keys anyway
-
-        impl_byte_dump!($serializer, to_ne_bytes, from_ne_bytes;
+    ($serializer: ident; $to_bytes: ident, $from_bytes: ident) => {
+        impl_byte_dump!($serializer, $to_bytes, $from_bytes;
             u8, u16, u32, u64, usize, u128,
-            i8, i16, i32, i64, isize, i128
-            // ,f32, f64
+            i8, i16, i32, i64, isize, i128,
+            f32, f64
         );
         impl_byte_dump_for_unit!($serializer);
         impl_byte_dump_for_tuples!($serializer;
@@ -533,9 +531,9 @@ macro_rules! impl_byte_dump_all {
     };
 }
 
-impl_byte_dump_all!(NativeEndianBytesDump);
-impl_byte_dump_all!(BigEndianBytesDump);
-impl_byte_dump_all!(LittleEndianBytesDump);
+impl_byte_dump_all!(NativeEndianBytesDump; to_ne_bytes, from_ne_bytes);
+impl_byte_dump_all!(BigEndianBytesDump; to_be_bytes, from_be_bytes);
+impl_byte_dump_all!(LittleEndianBytesDump; to_le_bytes, from_le_bytes);
 
 #[derive(Debug, Default, Copy, Clone)]
 pub struct HashAndThen<S, H = BuildHasherDefault<DefaultHasher>>(S, H);
