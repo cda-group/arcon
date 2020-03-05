@@ -85,9 +85,17 @@ pub fn arcon_keyed(keys: TokenStream, input: TokenStream) -> TokenStream {
             })
             .collect();
 
+        #[allow(unused)]
+        let maybe_serde = quote! {};
+        #[cfg(feature = "arcon_serde")]
+        let maybe_serde = quote! {
+            #[derive(::serde::Serialize, ::serde::Deserialize)]
+        };
+
         let output: proc_macro2::TokenStream = {
             quote! {
-                #[derive(Clone, ::abomonation_derive::Abomonation, ::serde::Serialize, ::serde::Deserialize, ::prost::Message)]
+                #maybe_serde
+                #[derive(Clone, ::abomonation_derive::Abomonation, ::prost::Message)]
                 #item
                 impl #impl_generics ArconType for #name #ty_generics #where_clause {}
                 impl ::std::hash::Hash for #name {
