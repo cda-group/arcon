@@ -6,7 +6,7 @@ use crate::{
     state_backend::{
         in_memory::{InMemory, StateCommon},
         serialization::{DeserializableWith, SerializableFixedSizeWith, SerializableWith},
-        state_types::{MapState, State},
+        state_types::{BoxedIteratorOfArconResult, MapState, State},
     },
 };
 use smallbox::SmallBox;
@@ -118,7 +118,7 @@ where
     fn iter<'a>(
         &self,
         backend: &'a InMemory,
-    ) -> ArconResult<Box<dyn Iterator<Item = ArconResult<(K, V)>> + 'a>> {
+    ) -> ArconResult<BoxedIteratorOfArconResult<'a, (K, V)>> {
         let prefix = self.common.get_db_key_prefix()?;
         let id_len = self.common.id.as_bytes().len();
         let key_serializer = self.common.key_serializer.clone();
@@ -137,10 +137,7 @@ where
         Ok(Box::new(iter))
     }
 
-    fn keys<'a>(
-        &self,
-        backend: &'a InMemory,
-    ) -> ArconResult<Box<dyn Iterator<Item = ArconResult<K>> + 'a>> {
+    fn keys<'a>(&self, backend: &'a InMemory) -> ArconResult<BoxedIteratorOfArconResult<'a, K>> {
         let prefix = self.common.get_db_key_prefix()?;
         let id_len = self.common.id.as_bytes().len();
         let key_serializer = self.common.key_serializer.clone();
@@ -155,10 +152,7 @@ where
         Ok(Box::new(iter))
     }
 
-    fn values<'a>(
-        &self,
-        backend: &'a InMemory,
-    ) -> ArconResult<Box<dyn Iterator<Item = ArconResult<V>> + 'a>> {
+    fn values<'a>(&self, backend: &'a InMemory) -> ArconResult<BoxedIteratorOfArconResult<'a, V>> {
         let prefix = self.common.get_db_key_prefix()?;
         let iter = backend.iter_matching(prefix).map(move |(_, v)| {
             let value = v

@@ -94,6 +94,8 @@ pub trait ValueState<SB: ?Sized, IK, N, T>: State<SB, IK, N> {
     erase_backend_type!(ValueState<_, IK, N, T>);
 }
 
+pub type BoxedIteratorOfArconResult<'a, T> = Box<dyn Iterator<Item = ArconResult<T>> + 'a>;
+
 pub trait MapState<SB: ?Sized, IK, N, K, V>: State<SB, IK, N> {
     fn get(&self, backend: &SB, key: &K) -> ArconResult<Option<V>>;
     fn fast_insert(&self, backend: &mut SB, key: K, value: V) -> ArconResult<()>;
@@ -120,18 +122,9 @@ pub trait MapState<SB: ?Sized, IK, N, K, V>: State<SB, IK, N> {
     // unboxed iterators would require associated types generic over backend's lifetime
     // TODO: impl this when GATs land on nightly
 
-    fn iter<'a>(
-        &self,
-        backend: &'a SB,
-    ) -> ArconResult<Box<dyn Iterator<Item = ArconResult<(K, V)>> + 'a>>;
-    fn keys<'a>(
-        &self,
-        backend: &'a SB,
-    ) -> ArconResult<Box<dyn Iterator<Item = ArconResult<K>> + 'a>>;
-    fn values<'a>(
-        &self,
-        backend: &'a SB,
-    ) -> ArconResult<Box<dyn Iterator<Item = ArconResult<V>> + 'a>>;
+    fn iter<'a>(&self, backend: &'a SB) -> ArconResult<BoxedIteratorOfArconResult<'a, (K, V)>>;
+    fn keys<'a>(&self, backend: &'a SB) -> ArconResult<BoxedIteratorOfArconResult<'a, K>>;
+    fn values<'a>(&self, backend: &'a SB) -> ArconResult<BoxedIteratorOfArconResult<'a, V>>;
 
     fn len(&self, backend: &SB) -> ArconResult<usize>;
     fn is_empty(&self, backend: &SB) -> ArconResult<bool>;

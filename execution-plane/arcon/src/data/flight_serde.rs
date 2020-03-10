@@ -109,7 +109,7 @@ pub mod reliable_remote {
             if let Some(sender) = network_msg.sender {
                 Ok(ArconMessage { events, sender })
             } else {
-                return Err(SerError::InvalidData("Failed to decode NodeID".to_string()));
+                Err(SerError::InvalidData("Failed to decode NodeID".to_string()))
             }
         }
     }
@@ -232,7 +232,7 @@ pub mod unsafe_remote {
             tmp_buf.put_slice(&bytes);
             if let Some((msg, _)) = unsafe { abomonation::decode::<ArconMessage<A>>(&mut tmp_buf) }
             {
-                Ok(msg.clone().into())
+                Ok(msg.clone())
             } else {
                 Err(SerError::InvalidData(
                     "Failed to decode flight data".to_string(),

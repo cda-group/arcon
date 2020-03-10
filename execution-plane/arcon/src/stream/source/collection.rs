@@ -50,7 +50,7 @@ where
     IN: ArconType,
     OUT: ArconType,
 {
-    fn handle(&mut self, event: ControlEvent) -> () {
+    fn handle(&mut self, event: ControlEvent) {
         if let ControlEvent::Start = event {
             self.process_collection();
         }

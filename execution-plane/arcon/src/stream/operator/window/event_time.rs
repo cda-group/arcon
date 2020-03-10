@@ -186,7 +186,7 @@ where
 
         if ts < ts_lower_bound {
             // Late arrival: early return
-            return ();
+            return;
         }
 
         let key = self.get_key(&element);

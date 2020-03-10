@@ -78,7 +78,7 @@ pub fn arcon_keyed(keys: TokenStream, input: TokenStream) -> TokenStream {
         let keys: Vec<proc_macro2::TokenStream> = keys
             .to_string()
             .trim()
-            .split(",")
+            .split(',')
             .map(|k| {
                 let struct_field = Ident::new(&k.trim(), Span::call_site());
                 quote! { self.#struct_field.hash(state); }

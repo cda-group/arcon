@@ -6,11 +6,10 @@ use crate::{
     state_backend::{
         rocks::{state_common::StateCommon, RocksDb},
         serialization::{DeserializableWith, SerializableFixedSizeWith, SerializableWith},
-        state_types::{MapState, State},
+        state_types::{BoxedIteratorOfArconResult, MapState, State},
     },
 };
 use rocksdb::WriteBatch;
-
 use std::marker::PhantomData;
 
 pub struct RocksDbMapState<IK, N, K, V, KS, TS> {
@@ -125,7 +124,7 @@ where
     fn iter<'a>(
         &self,
         backend: &'a RocksDb,
-    ) -> ArconResult<Box<dyn Iterator<Item = ArconResult<(K, V)>> + 'a>> {
+    ) -> ArconResult<BoxedIteratorOfArconResult<'a, (K, V)>> {
         let backend = backend.initialized()?;
 
         let prefix = self.common.get_db_key_prefix()?;
@@ -151,10 +150,7 @@ where
         Ok(Box::new(iter))
     }
 
-    fn keys<'a>(
-        &self,
-        backend: &'a RocksDb,
-    ) -> ArconResult<Box<dyn Iterator<Item = ArconResult<K>> + 'a>> {
+    fn keys<'a>(&self, backend: &'a RocksDb) -> ArconResult<BoxedIteratorOfArconResult<'a, K>> {
         let backend = backend.initialized()?;
 
         let prefix = self.common.get_db_key_prefix()?;
@@ -177,10 +173,7 @@ where
         Ok(Box::new(iter))
     }
 
-    fn values<'a>(
-        &self,
-        backend: &'a RocksDb,
-    ) -> ArconResult<Box<dyn Iterator<Item = ArconResult<V>> + 'a>> {
+    fn values<'a>(&self, backend: &'a RocksDb) -> ArconResult<BoxedIteratorOfArconResult<'a, V>> {
         let backend = backend.initialized()?;
 
         let prefix = self.common.get_db_key_prefix()?;

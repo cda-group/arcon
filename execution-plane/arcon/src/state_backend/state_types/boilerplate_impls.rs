@@ -178,21 +178,21 @@ where
     fn iter<'a>(
         &self,
         backend: &'a dyn StateBackend,
-    ) -> ArconResult<Box<dyn Iterator<Item = ArconResult<(K, V)>> + 'a>> {
+    ) -> ArconResult<BoxedIteratorOfArconResult<'a, (K, V)>> {
         self.0.iter(backend.downcast_ref()?)
     }
     #[inline]
     fn keys<'a>(
         &self,
         backend: &'a dyn StateBackend,
-    ) -> ArconResult<Box<dyn Iterator<Item = ArconResult<K>> + 'a>> {
+    ) -> ArconResult<BoxedIteratorOfArconResult<'a, K>> {
         self.0.keys(backend.downcast_ref()?)
     }
     #[inline]
     fn values<'a>(
         &self,
         backend: &'a dyn StateBackend,
-    ) -> ArconResult<Box<dyn Iterator<Item = ArconResult<V>> + 'a>> {
+    ) -> ArconResult<BoxedIteratorOfArconResult<'a, V>> {
         self.0.values(backend.downcast_ref()?)
     }
 
@@ -260,21 +260,21 @@ impl<IK, N, K, V> MapState<dyn StateBackend, IK, N, K, V> for BoxedMapState<K, V
     fn iter<'a>(
         &self,
         backend: &'a dyn StateBackend,
-    ) -> ArconResult<Box<dyn Iterator<Item = ArconResult<(K, V)>> + 'a>> {
+    ) -> ArconResult<BoxedIteratorOfArconResult<'a, (K, V)>> {
         (*self).deref().iter(backend)
     }
     #[inline]
     fn keys<'a>(
         &self,
         backend: &'a dyn StateBackend,
-    ) -> ArconResult<Box<dyn Iterator<Item = ArconResult<K>> + 'a>> {
+    ) -> ArconResult<BoxedIteratorOfArconResult<'a, K>> {
         (*self).deref().keys(backend)
     }
     #[inline]
     fn values<'a>(
         &self,
         backend: &'a dyn StateBackend,
-    ) -> ArconResult<Box<dyn Iterator<Item = ArconResult<V>> + 'a>> {
+    ) -> ArconResult<BoxedIteratorOfArconResult<'a, V>> {
         (*self).deref().values(backend)
     }
 
