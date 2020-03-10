@@ -252,7 +252,16 @@ where
         UK: SerializableWith<KS>,
     {
         // UUID is not always serializable, let's just dump the bytes
-        let mut res = self.id.as_bytes().to_vec();
+        let uuid_bytes = self.id.as_bytes();
+
+        let mut res = Vec::with_capacity(
+            uuid_bytes.len()
+                + IK::SIZE
+                + N::SIZE
+                + UK::size_hint(&self.key_serializer, user_key).unwrap_or(0),
+        );
+
+        res.extend_from_slice(uuid_bytes);
         IK::serialize_into(&self.key_serializer, &mut res, &self.item_key)?;
         N::serialize_into(&self.key_serializer, &mut res, &self.namespace)?;
         UK::serialize_into(&self.key_serializer, &mut res, user_key)?;
@@ -263,7 +272,10 @@ where
     // TODO: return a smallvec to (potentially) avoid allocation?
     fn get_db_key_prefix(&self) -> ArconResult<Vec<u8>> {
         // UUID is not always serializable, let's just dump the bytes
-        let mut res = self.id.as_bytes().to_vec();
+        let uuid_bytes = self.id.as_bytes();
+
+        let mut res = Vec::with_capacity(uuid_bytes.len() + IK::SIZE + N::SIZE);
+
         IK::serialize_into(&self.key_serializer, &mut res, &self.item_key)?;
         N::serialize_into(&self.key_serializer, &mut res, &self.namespace)?;
 
