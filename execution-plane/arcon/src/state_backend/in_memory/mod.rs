@@ -13,6 +13,7 @@ use crate::state_backend::{
     ValueStateBuilder, VecStateBuilder,
 };
 use arcon_error::*;
+use bytes::BufMut;
 use smallbox::{space, SmallBox};
 use std::{any::Any, collections::HashMap, fmt::Debug};
 use uuid::Uuid;
@@ -247,6 +248,17 @@ where
         }
     }
 
+    fn serialize_uuid_and_item_key_and_namespace_into(
+        &self,
+        uuid_bytes: &[u8],
+        mut target: impl BufMut,
+    ) -> ArconResult<()> {
+        target.put_slice(uuid_bytes);
+        IK::serialize_into(&self.key_serializer, &mut target, &self.item_key)?;
+        N::serialize_into(&self.key_serializer, &mut target, &self.namespace)?;
+        Ok(())
+    }
+
     fn get_db_key_with_user_key<UK>(&self, user_key: &UK) -> ArconResult<Vec<u8>>
     where
         UK: SerializableWith<KS>,
@@ -261,9 +273,7 @@ where
                 + UK::size_hint(&self.key_serializer, user_key).unwrap_or(0),
         );
 
-        res.extend_from_slice(uuid_bytes);
-        IK::serialize_into(&self.key_serializer, &mut res, &self.item_key)?;
-        N::serialize_into(&self.key_serializer, &mut res, &self.namespace)?;
+        self.serialize_uuid_and_item_key_and_namespace_into(uuid_bytes, &mut res)?;
         UK::serialize_into(&self.key_serializer, &mut res, user_key)?;
 
         Ok(res)
@@ -275,9 +285,7 @@ where
         let uuid_bytes = self.id.as_bytes();
 
         let mut res = Vec::with_capacity(uuid_bytes.len() + IK::SIZE + N::SIZE);
-
-        IK::serialize_into(&self.key_serializer, &mut res, &self.item_key)?;
-        N::serialize_into(&self.key_serializer, &mut res, &self.namespace)?;
+        self.serialize_uuid_and_item_key_and_namespace_into(uuid_bytes, &mut res)?;
 
         Ok(res)
     }
