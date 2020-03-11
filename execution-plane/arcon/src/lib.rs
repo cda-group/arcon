@@ -13,11 +13,6 @@
 extern crate arcon_macros;
 #[macro_use]
 extern crate arcon_error as error;
-#[cfg_attr(test, macro_use)]
-extern crate abomonation_derive;
-#[cfg(test)]
-#[macro_use]
-extern crate lazy_static;
 
 /// Allocator for message buffers, network buffers, state backends
 pub mod allocator;
@@ -34,12 +29,11 @@ pub mod util;
 #[cfg(test)]
 pub mod test_utils {
     use crate::allocator::ArconAllocator;
+    use once_cell::sync::Lazy;
     use std::sync::{Arc, Mutex};
-    lazy_static! {
-        pub static ref ALLOCATOR: Arc<Mutex<ArconAllocator>> =
-            // Limit the allocator to 1GB during tests
-            { Arc::new(Mutex::new(ArconAllocator::new(1073741824))) };
-    }
+
+    pub static ALLOCATOR: Lazy<Arc<Mutex<ArconAllocator>>> =
+        Lazy::new(|| Arc::new(Mutex::new(ArconAllocator::new(1073741824))));
 }
 
 /// Helper module to fetch all macros related to arcon
@@ -51,21 +45,22 @@ pub mod macros {
 
 /// Helper module that imports everything related to arcon into scope
 pub mod prelude {
-    pub use crate::stream::channel::strategy::{
-        broadcast::Broadcast, forward::Forward, key_by::KeyBy, round_robin::RoundRobin,
-        ChannelStrategy,
-    };
-    pub use crate::stream::channel::{Channel, DispatcherSource};
     pub use crate::stream::{
-        node::debug::DebugNode,
-        node::Node,
-        operator::function::{Filter, FlatMap, Map},
-        operator::sink::local_file::LocalFileSink,
-        operator::window::{AppenderWindow, EventTimeWindowAssigner, IncrementalWindow, Window},
-        operator::Operator,
-        source::collection::CollectionSource,
-        source::local_file::LocalFileSource,
-        source::SourceContext,
+        channel::{
+            strategy::{
+                broadcast::Broadcast, forward::Forward, key_by::KeyBy, round_robin::RoundRobin,
+                ChannelStrategy,
+            },
+            Channel, DispatcherSource,
+        },
+        node::{debug::DebugNode, Node},
+        operator::{
+            function::{Filter, FlatMap, Map},
+            sink::local_file::LocalFileSink,
+            window::{AppenderWindow, EventTimeWindowAssigner, IncrementalWindow, Window},
+            Operator,
+        },
+        source::{collection::CollectionSource, local_file::LocalFileSource, SourceContext},
     };
     #[cfg(feature = "socket")]
     pub use crate::stream::{
@@ -76,17 +71,21 @@ pub mod prelude {
     #[cfg(feature = "kafka")]
     pub use crate::stream::{operator::sink::kafka::KafkaSink, source::kafka::KafkaSource};
 
-    pub use crate::data::flight_serde::{
-        reliable_remote::ReliableSerde, unsafe_remote::UnsafeSerde, FlightSerde,
+    pub use crate::data::{
+        flight_serde::{reliable_remote::ReliableSerde, unsafe_remote::UnsafeSerde, FlightSerde},
+        *,
     };
-    pub use crate::data::Watermark;
-    pub use crate::data::*;
     pub use error::ArconResult;
 
-    pub use kompact::default_components::*;
-    pub use kompact::prelude::*;
+    pub use kompact::{default_components::*, prelude::*};
     #[cfg(feature = "thread_pinning")]
     pub use kompact::{get_core_ids, CoreId};
+
+    #[cfg(feature = "arcon_rocksdb")]
+    pub use crate::state_backend::rocks::RocksDb;
+    pub use crate::state_backend::{
+        builders::*, in_memory::InMemory, state_types::*, StateBackend,
+    };
 }
 
 #[cfg(test)]
@@ -95,7 +94,6 @@ mod tests {
     use std::collections::hash_map::DefaultHasher;
 
     #[arcon_keyed(id)]
-    #[derive(prost::Message)]
     pub struct Item {
         #[prost(uint64, tag = "1")]
         id: u64,

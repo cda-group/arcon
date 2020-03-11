@@ -1,10 +1,11 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::data::{ArconElement, ArconEvent, ArconType, Epoch, Watermark};
-use crate::stream::channel::strategy::ChannelStrategy;
-use crate::stream::operator::Operator;
-use crate::util::SafelySendableFn;
+use crate::{
+    data::{ArconElement, ArconEvent, ArconType, Epoch, Watermark},
+    stream::operator::{Operator, OperatorContext},
+    util::SafelySendableFn,
+};
 use arcon_error::ArconResult;
 
 /// IN: Input Event
@@ -14,7 +15,7 @@ where
     IN: ArconType,
     OUT: ArconType,
 {
-    udf: &'static dyn SafelySendableFn<(IN,), OUT>,
+    udf: &'static dyn SafelySendableFn(IN) -> OUT,
 }
 
 impl<IN, OUT> Map<IN, OUT>
@@ -22,7 +23,7 @@ where
     IN: ArconType,
     OUT: ArconType,
 {
-    pub fn new(udf: &'static dyn SafelySendableFn<(IN,), OUT>) -> Self {
+    pub fn new(udf: &'static dyn SafelySendableFn(IN) -> OUT) -> Self {
         Map { udf }
     }
 
@@ -37,21 +38,29 @@ where
     IN: ArconType,
     OUT: ArconType,
 {
-    fn handle_element(&mut self, element: ArconElement<IN>, strategy: &mut ChannelStrategy<OUT>) {
+    fn handle_element(&mut self, element: ArconElement<IN>, mut ctx: OperatorContext<OUT>) {
         if let Some(data) = element.data {
             let result = self.run_udf(data);
             let out_elem = ArconElement {
                 data: Some(result),
                 timestamp: element.timestamp,
             };
-            strategy.add(ArconEvent::Element(out_elem));
+            ctx.output(ArconEvent::Element(out_elem));
         }
     }
 
-    fn handle_watermark(&mut self, _w: Watermark) -> Option<Vec<ArconEvent<OUT>>> {
+    fn handle_watermark(
+        &mut self,
+        _w: Watermark,
+        _ctx: OperatorContext<OUT>,
+    ) -> Option<Vec<ArconEvent<OUT>>> {
         None
     }
-    fn handle_epoch(&mut self, _epoch: Epoch) -> Option<ArconResult<Vec<u8>>> {
+    fn handle_epoch(
+        &mut self,
+        _epoch: Epoch,
+        _ctx: OperatorContext<OUT>,
+    ) -> Option<ArconResult<Vec<u8>>> {
         None
     }
 }
@@ -81,6 +90,7 @@ mod tests {
                 vec![1.into()],
                 channel_strategy,
                 Box::new(Map::new(&map_fn)),
+                Box::new(InMemory::new("test").unwrap()),
             )
         });
         system.start(&map_node);
@@ -88,7 +98,11 @@ mod tests {
         let input_one = ArconEvent::Element(ArconElement::new(6 as i32));
         let input_two = ArconEvent::Element(ArconElement::new(7 as i32));
         let msg = ArconMessage {
-            events: vec![input_one, input_two, ArconEvent::Death("die".into())],
+            events: vec![
+                input_one.into(),
+                input_two.into(),
+                ArconEvent::Death("die".into()).into(),
+            ],
             sender: NodeID::new(1),
         };
         let map_ref: ActorRefStrong<ArconMessage<i32>> =

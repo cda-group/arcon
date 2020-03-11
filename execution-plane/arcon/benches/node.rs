@@ -63,6 +63,7 @@ pub fn node_forward_bench(b: &mut Bencher, messages: usize) {
         vec![1.into()],
         channel_strategy,
         Box::new(Map::new(&map_fn)),
+        Box::new(InMemory::new("bench").unwrap()),
     );
 
     let node = sys.create(|| node_comp);
@@ -77,9 +78,9 @@ pub fn node_forward_bench(b: &mut Bencher, messages: usize) {
         .wait_timeout(timeout)
         .expect("node never started!");
 
-    let mut buffer: Vec<ArconEvent<i32>> = Vec::with_capacity(BATCH_SIZE);
+    let mut buffer: Vec<ArconEventWrapper<i32>> = Vec::with_capacity(BATCH_SIZE);
     for i in 0..BATCH_SIZE {
-        buffer.push(ArconEvent::Element(ArconElement::new(i as i32)));
+        buffer.push(ArconEvent::Element(ArconElement::new(i as i32)).into());
     }
 
     b.iter(|| {

@@ -5,11 +5,9 @@ extern crate arcon;
 
 pub mod throughput_sink;
 
-use arcon::macros::*;
-use arcon::prelude::*;
+use arcon::{macros::*, prelude::*};
 
 #[arcon_keyed(id)]
-#[derive(prost::Message)]
 pub struct Item {
     #[prost(int32, tag = "1")]
     pub id: i32,
@@ -20,7 +18,6 @@ pub struct Item {
 }
 
 #[arcon]
-#[derive(prost::Message)]
 pub struct EnrichedItem {
     #[prost(int32, tag = "1")]
     pub id: i32,

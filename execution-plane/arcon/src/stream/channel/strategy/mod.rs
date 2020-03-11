@@ -1,11 +1,13 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::data::flight_serde::{
-    reliable_remote::ReliableSerde, unsafe_remote::UnsafeSerde, FlightSerde,
+use crate::{
+    data::{
+        flight_serde::{reliable_remote::ReliableSerde, unsafe_remote::UnsafeSerde, FlightSerde},
+        ArconEvent, ArconMessage, ArconType,
+    },
+    stream::channel::Channel,
 };
-use crate::data::{ArconEvent, ArconMessage, ArconType};
-use crate::stream::channel::Channel;
 
 pub mod broadcast;
 pub mod forward;
@@ -90,7 +92,6 @@ pub mod tests {
     use super::*;
 
     #[arcon_keyed(id)]
-    #[derive(prost::Message)]
     pub struct Input {
         #[prost(uint32, tag = "1")]
         pub id: u32,

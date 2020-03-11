@@ -50,7 +50,7 @@ where
     IN: ArconType,
     OUT: ArconType,
 {
-    fn handle(&mut self, event: ControlEvent) -> () {
+    fn handle(&mut self, event: ControlEvent) {
         if let ControlEvent::Start = event {
             self.process_collection();
         }
@@ -70,9 +70,11 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::prelude::{Channel, ChannelStrategy, DebugNode, Filter, Forward, NodeID};
-    use kompact::default_components::DeadletterBox;
-    use kompact::prelude::KompactSystem;
+    use crate::{
+        prelude::{Channel, ChannelStrategy, DebugNode, Filter, Forward, NodeID},
+        state_backend::{in_memory::InMemory, StateBackend},
+    };
+    use kompact::{default_components::DeadletterBox, prelude::KompactSystem};
     use std::sync::Arc;
 
     // Perhaps move this to some common place?
@@ -116,6 +118,7 @@ mod tests {
             None, // no timestamp extractor
             channel_strategy,
             operator,
+            Box::new(InMemory::new("test").unwrap()),
         );
 
         // Generate collection

@@ -1,12 +1,13 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::data::ArconType;
-use crate::stream::source::SourceContext;
+use crate::{data::ArconType, stream::source::SourceContext};
 use kompact::prelude::*;
-use std::fs::File;
-use std::io::{BufRead, BufReader};
-use std::str::FromStr;
+use std::{
+    fs::File,
+    io::{BufRead, BufReader},
+    str::FromStr,
+};
 
 #[derive(ComponentDefinition)]
 pub struct LocalFileSource<IN, OUT>
@@ -94,13 +95,13 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::data::ArconF64;
-    use crate::prelude::{Channel, ChannelStrategy, DebugNode, Forward, Map, NodeID};
-    use kompact::default_components::DeadletterBox;
-    use kompact::prelude::KompactSystem;
-    use std::io::prelude::*;
-    use std::sync::Arc;
-    use std::{thread, time};
+    use crate::{
+        data::ArconF64,
+        prelude::{Channel, ChannelStrategy, DebugNode, Forward, Map, NodeID},
+        state_backend::{in_memory::InMemory, StateBackend},
+    };
+    use kompact::{default_components::DeadletterBox, prelude::KompactSystem};
+    use std::{io::prelude::*, sync::Arc, thread, time};
     use tempfile::NamedTempFile;
 
     // Shared methods for test cases
@@ -153,6 +154,7 @@ mod tests {
             None, // no timestamp extractor
             channel_strategy,
             operator,
+            Box::new(InMemory::new("test").unwrap()),
         );
 
         let file_source: LocalFileSource<u64, u64> =
@@ -201,6 +203,7 @@ mod tests {
             None, // no timestamp extractor
             channel_strategy,
             operator,
+            Box::new(InMemory::new("test").unwrap()),
         );
 
         let file_source: LocalFileSource<ArconF64, ArconF64> =

@@ -1,7 +1,6 @@
 //! The arcon_error crate provide error utilities for Arcon related crates.
 
-use std::error::Error as StdError;
-use std::fmt;
+use std::{error::Error as StdError, fmt};
 
 /// Helper macro for generating an Error
 #[macro_export]

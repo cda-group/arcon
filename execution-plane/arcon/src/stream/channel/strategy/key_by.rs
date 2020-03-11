@@ -1,12 +1,16 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::data::{ArconEvent, ArconType};
-use crate::prelude::*;
-use crate::stream::channel::strategy::send;
-use std::collections::{hash_map::DefaultHasher, HashMap};
-use std::default::Default;
-use std::hash::{BuildHasher, BuildHasherDefault, Hasher};
+use crate::{
+    data::{ArconEvent, ArconType},
+    prelude::*,
+    stream::channel::strategy::send,
+};
+use std::{
+    collections::{hash_map::DefaultHasher, HashMap},
+    default::Default,
+    hash::{BuildHasher, BuildHasherDefault, Hasher},
+};
 
 type DefaultHashBuilder = BuildHasherDefault<DefaultHasher>;
 
@@ -26,7 +30,7 @@ where
     /// An identifier that is embedded with outgoing messages
     sender_id: NodeID,
     /// A map with hashed indexes and their respective Channel/Buffer
-    buffer_map: HashMap<usize, (Channel<A>, Vec<ArconEvent<A>>)>,
+    buffer_map: HashMap<usize, (Channel<A>, Vec<ArconEventWrapper<A>>)>,
     /// A batch size indicating when the channel should flush data
     batch_size: usize,
     /// A counter keeping track of buffered elements across all channels
@@ -45,7 +49,7 @@ where
         batch_size: usize,
     ) -> KeyBy<A> {
         assert_eq!(channels.len(), parallelism as usize);
-        let mut buffer_map: HashMap<usize, (Channel<A>, Vec<ArconEvent<A>>)> = HashMap::new();
+        let mut buffer_map = HashMap::new();
 
         for (i, channel) in channels.into_iter().enumerate() {
             buffer_map.insert(i, (channel, Vec::with_capacity(batch_size)));
@@ -72,7 +76,8 @@ where
         B: Hasher + Default,
     {
         assert_eq!(channels.len(), parallelism as usize);
-        let mut buffer_map: HashMap<usize, (Channel<A>, Vec<ArconEvent<A>>)> = HashMap::new();
+        let mut buffer_map: HashMap<usize, (Channel<A>, Vec<ArconEventWrapper<A>>)> =
+            HashMap::new();
 
         for (i, channel) in channels.into_iter().enumerate() {
             buffer_map.insert(i, (channel, Vec::with_capacity(batch_size)));
@@ -97,7 +102,7 @@ where
                     let hash = h.finish() as u32;
                     let index = (hash % self.parallelism) as usize;
                     if let Some((_, buffer)) = self.buffer_map.get_mut(&index) {
-                        buffer.push(event);
+                        buffer.push(event.into());
                         self.buffer_counter += 1;
                     } else {
                         panic!("Bad KeyBy setup");
@@ -110,7 +115,7 @@ where
             _ => {
                 // Push watermark/epoch into all outgoing buffers
                 for (_, (_, buffer)) in self.buffer_map.iter_mut() {
-                    buffer.push(event.clone());
+                    buffer.push(event.clone().into());
                 }
                 self.flush();
             }
@@ -136,8 +141,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::data::ArconEvent;
-    use crate::stream::channel::strategy::tests::*;
+    use crate::{data::ArconEvent, stream::channel::strategy::tests::*};
     use kompact::prelude::*;
     use rand::Rng;
     use std::sync::Arc;

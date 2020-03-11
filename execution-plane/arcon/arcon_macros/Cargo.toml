@@ -11,6 +11,9 @@ Macros for Arcon
 """
 edition = "2018"
 
+[features]
+arcon_serde = []
+
 [dependencies]
 syn = "1.0"
 quote = "1.0"

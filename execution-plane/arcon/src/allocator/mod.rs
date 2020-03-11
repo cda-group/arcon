@@ -125,7 +125,7 @@ impl ArconAllocator {
 impl Drop for ArconAllocator {
     fn drop(&mut self) {
         // Just to make sure we are not leaving any outstanding allocations
-        let ids: Vec<AllocId> = self.allocations.keys().map(|i| i.clone()).collect();
+        let ids: Vec<AllocId> = self.allocations.keys().copied().collect();
         for id in ids {
             unsafe {
                 self.dealloc(id);

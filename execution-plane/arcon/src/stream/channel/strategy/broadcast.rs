@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use super::DEFAULT_BATCH_SIZE;
-use crate::data::{ArconEvent, ArconMessage, ArconType, NodeID};
-use crate::stream::channel::{strategy::send, Channel};
+use crate::{
+    data::{ArconEvent, ArconEventWrapper, ArconMessage, ArconType, NodeID},
+    stream::channel::{strategy::send, Channel},
+};
 
 /// A Broadcast strategy for one-to-many message sending
 pub struct Broadcast<A>
@@ -15,7 +17,7 @@ where
     /// An Identifier that is embedded in each outgoing message
     sender_id: NodeID,
     /// A buffer holding outgoing events
-    buffer: Vec<ArconEvent<A>>,
+    buffer: Vec<ArconEventWrapper<A>>,
     /// A batch size indicating when the channel should flush data
     batch_size: usize,
 }
@@ -48,7 +50,7 @@ where
     #[inline]
     pub fn add(&mut self, event: ArconEvent<A>) {
         if let ArconEvent::Element(_) = &event {
-            self.buffer.push(event);
+            self.buffer.push(event.into());
 
             if self.buffer.len() == self.batch_size {
                 self.flush();
@@ -56,7 +58,7 @@ where
         } else {
             // Watermark/Epoch.
             // Send downstream as soon as possible
-            self.buffer.push(event);
+            self.buffer.push(event.into());
             self.flush();
         }
     }
@@ -79,11 +81,14 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::data::ArconElement;
-    use crate::prelude::DebugNode;
-    use crate::stream::channel::strategy::tests::*;
-    use crate::stream::channel::strategy::ChannelStrategy;
-    use crate::stream::channel::FlightSerde;
+    use crate::{
+        data::ArconElement,
+        prelude::DebugNode,
+        stream::channel::{
+            strategy::{tests::*, ChannelStrategy},
+            FlightSerde,
+        },
+    };
     use kompact::prelude::*;
     use std::sync::Arc;
 
@@ -161,10 +166,9 @@ mod tests {
             let _ = remote.register_by_alias(&comp, comp_id.clone());
             remote.start(&comp);
 
-            let remote_path = ActorPath::Named(NamedPath::with_system(
-                remote.system_path(),
-                vec![comp_id.into()],
-            ));
+            let remote_path = ActorPath::Named(NamedPath::with_system(remote.system_path(), vec![
+                comp_id.into(),
+            ]));
             channels.push(Channel::Remote(
                 remote_path,
                 FlightSerde::Reliable,

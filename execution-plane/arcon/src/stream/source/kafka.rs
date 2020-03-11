@@ -3,14 +3,14 @@
 
 use crate::prelude::*;
 use futures::executor::block_on_stream;
-use rdkafka::config::ClientConfig;
-use rdkafka::consumer::stream_consumer::StreamConsumer;
-use rdkafka::consumer::{CommitMode, Consumer};
-use rdkafka::error::KafkaResult;
-use rdkafka::message::*;
-use rdkafka::topic_partition_list::Offset;
-use std::collections::HashMap;
-use std::time::Duration;
+use rdkafka::{
+    config::ClientConfig,
+    consumer::{stream_consumer::StreamConsumer, CommitMode, Consumer},
+    error::KafkaResult,
+    message::*,
+    topic_partition_list::Offset,
+};
+use std::{collections::HashMap, time::Duration};
 
 /*
     KafkaSource: work in progress
@@ -245,7 +245,6 @@ mod tests {
     use std::{thread, time};
 
     #[arcon]
-    #[derive(prost::Message, ::serde::Serialize, ::serde::Deserialize)]
     pub struct Thing {
         #[prost(uint32, tag = "1")]
         pub id: u32,
@@ -312,6 +311,7 @@ mod tests {
                 vec![0.into()],
                 mute_strategy::<Thing>(),
                 Box::new(kafka_sink),
+                Box::new(InMemory::new("test").unwrap()),
             )
         });
 

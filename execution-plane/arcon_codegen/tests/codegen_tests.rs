@@ -45,8 +45,7 @@ fn _add_test_spec(name: &str) {
 
 fn _add_empty_main(path: &str) {
     let main = "fn main() {}";
-    use std::fs::OpenOptions;
-    use std::io::Write;
+    use std::{fs::OpenOptions, io::Write};
 
     let mut file = OpenOptions::new()
         .write(true)

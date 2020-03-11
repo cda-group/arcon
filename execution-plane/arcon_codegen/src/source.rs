@@ -1,10 +1,11 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::common::*;
-use crate::spec::source::SourceKind;
-use crate::spec::Source;
-use crate::types::to_token_stream;
+use crate::{
+    common::*,
+    spec::{source::SourceKind, Source},
+    types::to_token_stream,
+};
 use proc_macro2::{Ident, Span, TokenStream};
 use std::collections::HashSet;
 

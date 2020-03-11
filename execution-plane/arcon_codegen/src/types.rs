@@ -2,8 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::GENERATED_STRUCTS;
-use arcon_proto::arcon_spec::type_holder::ArconType;
-use arcon_proto::arcon_spec::TypeHolder;
+use arcon_proto::arcon_spec::{type_holder::ArconType, TypeHolder};
 use proc_macro2::{Ident, Span, TokenStream};
 
 pub fn to_token_stream(t: &TypeHolder, spec_id: &str) -> TokenStream {

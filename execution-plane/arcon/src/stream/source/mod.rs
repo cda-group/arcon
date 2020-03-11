@@ -1,10 +1,15 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::data::{ArconElement, ArconEvent, ArconType, Watermark};
-use crate::stream::channel::strategy::ChannelStrategy;
-use crate::stream::operator::Operator;
-use crate::util::SafelySendableFn;
+use crate::{
+    data::{ArconElement, ArconEvent, ArconType, Watermark},
+    state_backend::StateBackend,
+    stream::{
+        channel::strategy::ChannelStrategy,
+        operator::{Operator, OperatorContext},
+    },
+    util::SafelySendableFn,
+};
 
 pub mod collection;
 #[cfg(feature = "kafka")]
@@ -22,7 +27,7 @@ where
     /// Timestamp extractor function
     ///
     /// If set to None, timestamps of ArconElement's will also be None.
-    ts_extractor: Option<&'static dyn for<'r> SafelySendableFn<(&'r IN,), u64>>,
+    ts_extractor: Option<&'static dyn SafelySendableFn(&IN) -> u64>,
     /// Current Watermark
     current_watermark: u64,
     /// Watermark interval
@@ -35,6 +40,8 @@ where
     operator: Box<dyn Operator<IN, OUT> + Send>,
     /// Strategy for outputting events
     channel_strategy: ChannelStrategy<OUT>,
+    /// State backend that a source can keep persistent data in
+    state_backend: Box<dyn StateBackend>,
 }
 
 impl<IN, OUT> SourceContext<IN, OUT>
@@ -44,9 +51,10 @@ where
 {
     pub fn new(
         watermark_interval: u64,
-        ts_extractor: Option<&'static dyn for<'r> SafelySendableFn<(&'r IN,), u64>>,
+        ts_extractor: Option<&'static dyn SafelySendableFn(&IN) -> u64>,
         channel_strategy: ChannelStrategy<OUT>,
         operator: Box<dyn Operator<IN, OUT> + Send>,
+        state_backend: Box<dyn StateBackend>,
     ) -> Self {
         SourceContext {
             ts_extractor,
@@ -54,6 +62,7 @@ where
             watermark_interval,
             operator,
             channel_strategy,
+            state_backend,
         }
     }
 
@@ -90,8 +99,10 @@ where
     /// Calls a transformation function on the source data to generate outgoing ArconEvent<OUT>
     #[inline]
     pub fn process(&mut self, data: ArconElement<IN>) {
-        self.operator
-            .handle_element(data, &mut self.channel_strategy);
+        self.operator.handle_element(
+            data,
+            OperatorContext::new(&mut self.channel_strategy, &mut *self.state_backend),
+        );
     }
 
     /// Build ArconElement

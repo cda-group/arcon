@@ -3,7 +3,7 @@
 
 // Benchmarks for different Window types
 
-use arcon::prelude::*;
+use arcon::{prelude::*, stream::operator::window::WindowContext};
 use criterion::{black_box, criterion_group, criterion_main, Bencher, Criterion};
 
 const WINDOW_MSGS: usize = 100000;
@@ -21,15 +21,20 @@ pub fn window_appender_sum_latency(b: &mut Bencher) {
 }
 
 pub fn window_appender_sum(messages: usize) {
+    let mut state_backend = InMemory::new("bench").unwrap();
+
     #[inline]
     fn materializer(buffer: &[u64]) -> u64 {
         buffer.iter().sum()
     }
-    let mut window: AppenderWindow<u64, u64> = AppenderWindow::new(&materializer);
+    let mut window: AppenderWindow<u64, u64> =
+        AppenderWindow::new(&materializer, &mut state_backend);
     for i in 0..messages {
-        let _ = window.on_element(i as u64);
+        let _ = window.on_element(i as u64, WindowContext::new(&mut state_backend, 0, 0));
     }
-    let s: u64 = window.result().unwrap();
+    let s: u64 = window
+        .result(WindowContext::new(&mut state_backend, 0, 0))
+        .unwrap();
     assert!(s > 0);
 }
 
@@ -38,6 +43,8 @@ pub fn window_incremental_sum_latency(b: &mut Bencher) {
 }
 
 pub fn window_incremental_sum(messages: usize) {
+    let mut state_backend = InMemory::new("bench").unwrap();
+
     #[inline]
     fn init(i: u64) -> u64 {
         i
@@ -48,13 +55,16 @@ pub fn window_incremental_sum(messages: usize) {
         agg + i
     }
 
-    let mut window: IncrementalWindow<u64, u64> = IncrementalWindow::new(&init, &aggregation);
+    let mut window: IncrementalWindow<u64, u64> =
+        IncrementalWindow::new(&init, &aggregation, &mut state_backend);
 
     for i in 0..messages {
-        let _ = window.on_element(i as u64);
+        let _ = window.on_element(i as u64, WindowContext::new(&mut state_backend, 0, 0));
     }
 
-    let s: u64 = window.result().unwrap();
+    let s: u64 = window
+        .result(WindowContext::new(&mut state_backend, 0, 0))
+        .unwrap();
     assert!(s > 0);
 }
 

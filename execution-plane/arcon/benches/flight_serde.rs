@@ -45,10 +45,9 @@ pub fn arcon_flight_bench(b: &mut Bencher, serde: FlightSerde) {
 
     let comp_id = format!("remote_comp");
     let _ = remote.register_by_alias(&comp, comp_id.clone());
-    let remote_path = ActorPath::Named(NamedPath::with_system(
-        remote.system_path(),
-        vec![comp_id.into()],
-    ));
+    let remote_path = ActorPath::Named(NamedPath::with_system(remote.system_path(), vec![
+        comp_id.into()
+    ]));
 
     let channel = Channel::Remote(remote_path, serde, local.dispatcher_ref().into());
     let mut channel_strategy: ChannelStrategy<i32> =

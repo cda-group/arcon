@@ -1,10 +1,11 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::data::{ArconElement, ArconEvent, ArconType, Epoch, Watermark};
-use crate::stream::channel::strategy::ChannelStrategy;
-use crate::stream::operator::Operator;
-use crate::util::SafelySendableFn;
+use crate::{
+    data::{ArconElement, ArconEvent, ArconType, Epoch, Watermark},
+    stream::operator::{Operator, OperatorContext},
+    util::SafelySendableFn,
+};
 use arcon_error::ArconResult;
 
 /// IN: Input Event
@@ -12,14 +13,14 @@ pub struct Filter<IN>
 where
     IN: 'static + ArconType,
 {
-    udf: &'static dyn for<'r> SafelySendableFn<(&'r IN,), bool>,
+    udf: &'static dyn SafelySendableFn(&IN) -> bool,
 }
 
 impl<IN> Filter<IN>
 where
     IN: 'static + ArconType,
 {
-    pub fn new(udf: &'static dyn for<'r> SafelySendableFn<(&'r IN,), bool>) -> Self {
+    pub fn new(udf: &'static dyn SafelySendableFn(&IN) -> bool) -> Self {
         Filter { udf }
     }
 
@@ -33,18 +34,26 @@ impl<IN> Operator<IN, IN> for Filter<IN>
 where
     IN: 'static + ArconType,
 {
-    fn handle_element(&mut self, element: ArconElement<IN>, strategy: &mut ChannelStrategy<IN>) {
+    fn handle_element(&mut self, element: ArconElement<IN>, mut ctx: OperatorContext<IN>) {
         if let Some(data) = &element.data {
-            if self.run_udf(&(data)) {
-                strategy.add(ArconEvent::Element(element));
+            if self.run_udf(&data) {
+                ctx.output(ArconEvent::Element(element));
             }
         }
     }
 
-    fn handle_watermark(&mut self, _w: Watermark) -> Option<Vec<ArconEvent<IN>>> {
+    fn handle_watermark(
+        &mut self,
+        _w: Watermark,
+        _ctx: OperatorContext<IN>,
+    ) -> Option<Vec<ArconEvent<IN>>> {
         None
     }
-    fn handle_epoch(&mut self, _epoch: Epoch) -> Option<ArconResult<Vec<u8>>> {
+    fn handle_epoch(
+        &mut self,
+        _epoch: Epoch,
+        _ctx: OperatorContext<IN>,
+    ) -> Option<ArconResult<Vec<u8>>> {
         None
     }
 }
@@ -75,6 +84,7 @@ mod tests {
                 vec![1.into()],
                 channel_strategy,
                 Box::new(Filter::new(&filter_fn)),
+                Box::new(InMemory::new("test").unwrap()),
             )
         });
         system.start(&filter_node);
@@ -86,11 +96,11 @@ mod tests {
 
         let msg = ArconMessage {
             events: vec![
-                input_one,
-                input_two,
-                input_three,
-                input_four,
-                ArconEvent::Death("die".into()),
+                input_one.into(),
+                input_two.into(),
+                input_three.into(),
+                input_four.into(),
+                ArconEvent::Death("die".into()).into(),
             ],
             sender: NodeID::new(1),
         };

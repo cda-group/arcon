@@ -1,14 +1,13 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::data::ArconType;
-use crate::stream::source::SourceContext;
-use crate::util::io::*;
+use crate::{data::ArconType, stream::source::SourceContext, util::io::*};
 use kompact::prelude::*;
-use std::net::SocketAddr;
-use std::str::from_utf8;
-use std::str::FromStr;
-use std::time::Duration;
+use std::{
+    net::SocketAddr,
+    str::{from_utf8, FromStr},
+    time::Duration,
+};
 
 pub enum SocketKind {
     Tcp,
@@ -112,11 +111,12 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::prelude::{Channel, ChannelStrategy, DebugNode, Forward, Map, NodeID};
+    use crate::{
+        prelude::{Channel, ChannelStrategy, DebugNode, Forward, Map, NodeID},
+        state_backend::{in_memory::InMemory, StateBackend},
+    };
     use std::{thread, time};
-    use tokio::net::TcpStream;
-    use tokio::prelude::*;
-    use tokio::runtime::Runtime;
+    use tokio::{net::TcpStream, prelude::*, runtime::Runtime};
 
     // Shared methods for test cases
     fn wait(time: u64) -> () {
@@ -152,6 +152,7 @@ mod tests {
             None, // no timestamp extractor
             channel_strategy,
             operator,
+            Box::new(InMemory::new("test").unwrap()),
         );
 
         let socket_source: SocketSource<u32, u32> =
@@ -183,7 +184,6 @@ mod tests {
         // add arcon_decoder to decode from String
         #[arcon_decoder(,)]
         #[arcon]
-        #[derive(prost::Message)]
         pub struct ExtractorStruct {
             #[prost(uint32, tag = "1")]
             data: u32,
@@ -197,7 +197,7 @@ mod tests {
         // Setup
         let system = KompactConfig::default().build().expect("KompactSystem");
 
-        let (sink, _) = system.create_and_register(move || DebugNode::<ExtractorStruct>::new());
+        let (sink, _) = system.create_and_register(DebugNode::<ExtractorStruct>::new);
         let sink_ref = sink.actor_ref().hold().expect("Failed to fetch strong ref");
 
         let channel = Channel::Local(sink_ref);
@@ -222,6 +222,7 @@ mod tests {
             Some(&timestamp_extractor),
             channel_strategy,
             operator,
+            Box::new(InMemory::new("test").unwrap()),
         );
 
         let socket_source: SocketSource<ExtractorStruct, ExtractorStruct> =
