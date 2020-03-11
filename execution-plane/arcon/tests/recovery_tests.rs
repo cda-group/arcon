@@ -199,7 +199,9 @@ fn run_pipeline(sink_path: &str) -> Result<(), ()> {
 
 #[test]
 fn run_test() {
-    let test_directory = "./recovery_test";
+    let temp_dir = tempfile::TempDir::new().unwrap();
+
+    let test_directory = temp_dir.path();
     let _ = fs::remove_dir_all(test_directory);
     fs::create_dir(test_directory).unwrap();
 
