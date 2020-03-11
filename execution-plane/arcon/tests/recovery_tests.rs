@@ -62,7 +62,7 @@ fn rocks_backend(node_id: u32) -> Box<dyn StateBackend> {
     }
 }
 
-/// CollectionSource -> Window -> Map -> LocalFileSink
+/// manually sent events -> Window -> Map -> LocalFileSink
 fn run_pipeline(sink_path: &str) -> Result<(), ()> {
     let timeout = std::time::Duration::from_millis(500);
     let system = KompactConfig::default().build().expect("KompactSystem");
