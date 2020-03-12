@@ -4,6 +4,7 @@
 extern crate arcon;
 
 pub mod throughput_sink;
+pub mod nexmark;
 
 use arcon::{macros::*, prelude::*};
 
