@@ -59,6 +59,8 @@ pub mod state_types;
 pub mod in_memory;
 #[cfg(feature = "arcon_rocksdb")]
 pub mod rocks;
+#[cfg(feature = "arcon_sled")]
+pub mod sled;
 
 #[cfg(test)]
 mod test {
