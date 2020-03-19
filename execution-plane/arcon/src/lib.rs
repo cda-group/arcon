@@ -86,6 +86,8 @@ pub mod prelude {
     pub use crate::state_backend::{
         builders::*, in_memory::InMemory, state_types::*, StateBackend,
     };
+    #[cfg(feature = "rayon")]
+    pub use rayon::prelude::*;
 }
 
 #[cfg(test)]
