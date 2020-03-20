@@ -1,7 +1,6 @@
 use crate::{prelude::ArconResult, state_backend::StateBackend};
 use ::sled::{open, Db};
 use std::{
-    fs,
     fs::File,
     io,
     io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write},
@@ -10,6 +9,7 @@ use std::{
 
 pub struct Sled {
     db: Db,
+    restored: bool,
 }
 
 impl StateBackend for Sled {
@@ -18,16 +18,27 @@ impl StateBackend for Sled {
         Self: Sized,
     {
         let db = open(path).map_err(|e| arcon_err_kind!("Could not open sled: {}", e))?;
-        Ok(Sled { db })
+        Ok(Sled {
+            db,
+            restored: false,
+        })
     }
 
+    #[cfg(not(feature = "arcon_sled_checkpoints"))]
+    fn checkpoint(&self, checkpoint_path: &str) -> ArconResult<()> {
+        eprintln!(
+            "Checkpointing sled state backends is off (compiled without `arcon_sled_checkpoints`)"
+        );
+        Ok(())
+    }
+
+    #[cfg(feature = "arcon_sled_checkpoints")]
     fn checkpoint(&self, checkpoint_path: &str) -> ArconResult<()> {
         // TODO: sled doesn't support checkpoints/snapshots, but that and MVCC is planned
         //   for now we'll just dump it via the export/import mechanism WHICH MAY BE VERY SLOW
         let export_data = self.db.export();
 
         let mut p: PathBuf = checkpoint_path.into();
-        fs::create_dir(&p).map_err(|e| arcon_err_kind!("Could not create checkpoint dir {}", e))?;
 
         p.push("SLED_EXPORT");
         let out = File::create(&p)
@@ -39,6 +50,7 @@ impl StateBackend for Sled {
         || -> io::Result<()> {
             writer.write_all(&export_data.len().to_le_bytes())?;
 
+            #[inline]
             fn write_len_and_bytes(mut w: impl Write, bytes: &[u8]) -> io::Result<()> {
                 w.write_all(&bytes.len().to_le_bytes())?;
                 w.write_all(bytes)?;
@@ -80,14 +92,24 @@ impl StateBackend for Sled {
         Self: Sized,
     {
         let db = open(restore_path).map_err(|e| arcon_err_kind!("Could open sled, {}", e))?;
-        let import_data = parse_dumped_sled_export(checkpoint_path)?;
-        db.import(import_data);
+        #[allow(unused_assignments)]
+        let mut restored = false;
 
-        Ok(Sled { db })
+        #[cfg(feature = "arcon_sled_checkpoints")]
+        {
+            let mut p: PathBuf = checkpoint_path.into();
+            p.push("SLED_EXPORT");
+            let import_data = parse_dumped_sled_export(p.to_string_lossy().as_ref())?;
+            db.import(import_data);
+
+            restored = true;
+        }
+
+        Ok(Sled { db, restored })
     }
 
-    fn just_restored(&mut self) -> bool {
-        self.db.was_recovered()
+    fn was_restored(&self) -> bool {
+        self.db.was_recovered() || self.restored
     }
 }
 
@@ -151,3 +173,53 @@ fn parse_dumped_sled_export(
 // mod reducing_state;
 // mod value_state;
 // mod vec_state;
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use sled::IVec;
+
+    #[cfg(feature = "arcon_sled_checkpoints")]
+    #[test]
+    fn test_sled_checkpoints() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let sled = Sled::new(dir.path().to_string_lossy().as_ref()).unwrap();
+
+        sled.db.insert(b"a", b"1").unwrap();
+        sled.db.insert(b"b", b"2").unwrap();
+
+        let t = sled.db.open_tree(b"other tree").unwrap();
+        t.insert(b"x", b"10").unwrap();
+        t.insert(b"y", b"20").unwrap();
+
+        let chkp_dir = tempfile::TempDir::new().unwrap();
+        let restore_dir = tempfile::TempDir::new().unwrap();
+
+        sled.checkpoint(chkp_dir.path().to_string_lossy().as_ref())
+            .unwrap();
+
+        let restored = Sled::restore(
+            restore_dir.path().to_string_lossy().as_ref(),
+            chkp_dir.path().to_string_lossy().as_ref(),
+        )
+        .unwrap();
+
+        assert!(!sled.was_restored());
+        assert!(restored.was_restored());
+
+        assert_eq!(restored.db.len(), 2);
+        assert_eq!(restored.db.get(b"a"), Ok(Some(IVec::from(b"1"))));
+        assert_eq!(restored.db.get(b"b"), Ok(Some(IVec::from(b"2"))));
+
+        assert_eq!(restored.db.tree_names().len(), 2);
+        assert!(restored
+            .db
+            .tree_names()
+            .contains(&IVec::from(b"other tree")));
+
+        let restored_t = restored.db.open_tree(b"other tree").unwrap();
+        assert_eq!(restored_t.len(), 2);
+        assert_eq!(restored_t.get(b"x"), Ok(Some(IVec::from(b"10"))));
+        assert_eq!(restored_t.get(b"y"), Ok(Some(IVec::from(b"20"))));
+    }
+}

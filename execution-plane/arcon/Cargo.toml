@@ -19,6 +19,7 @@ thread_pinning = ["kompact/thread_pinning"]
 socket = ["tokio-util", "tokio", "futures", "serde_json", "serde"]
 arcon_rocksdb = ["rocksdb"]
 arcon_sled = ["sled"]
+arcon_sled_checkpoints = []
 quiet = ["slog"]
 
 [dependencies]

@@ -299,7 +299,7 @@ where
             ControlEvent::Start => {
                 debug!(self.ctx.log(), "Started Arcon Node");
 
-                if self.state_backend.just_restored() {
+                if self.state_backend.was_restored() {
                     if let Err(e) = self.after_state_save() {
                         error!(self.ctx.log(), "restoration error: {}", e);
                     }

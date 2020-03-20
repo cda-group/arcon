@@ -222,7 +222,7 @@ impl StateBackend for InMemory {
         Self::new(restore_path)
     }
 
-    fn just_restored(&mut self) -> bool {
+    fn was_restored(&self) -> bool {
         false
     }
 }

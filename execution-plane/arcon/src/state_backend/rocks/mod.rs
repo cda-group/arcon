@@ -399,10 +399,8 @@ impl StateBackend for RocksDb {
         })
     }
 
-    fn just_restored(&mut self) -> bool {
-        let res = self.restored;
-        self.restored = false;
-        res
+    fn was_restored(&self) -> bool {
+        self.restored
     }
 }
 
