@@ -5,9 +5,12 @@ use crate::{
     prelude::ArconResult,
     state_backend::{
         serialization::{DeserializableWith, SerializableFixedSizeWith, SerializableWith},
+        sled::{Sled, StateCommon},
         state_types::{BoxedIteratorOfArconResult, MapState, State},
     },
 };
+use error::ResultExt;
+use sled::Batch;
 use std::marker::PhantomData;
 
 pub struct SledMapState<IK, N, K, V, KS, TS> {
@@ -22,7 +25,7 @@ where
 {
     fn clear(&self, backend: &mut Sled) -> ArconResult<()> {
         let prefix = self.common.get_db_key_prefix()?;
-        backend.remove_prefix(&self.common.cf_name, prefix)
+        backend.remove_prefix(&self.common.tree_name, prefix)
     }
 
     delegate_key_and_namespace!(common);
@@ -39,7 +42,7 @@ where
 {
     fn get(&self, backend: &Sled, key: &K) -> ArconResult<Option<V>> {
         let key = self.common.get_db_key_with_user_key(key)?;
-        if let Some(serialized) = backend.get(&self.common.cf_name, &key)? {
+        if let Some(serialized) = backend.get(&self.common.tree_name, &key)? {
             let value = V::deserialize(&self.common.value_serializer, &serialized)?;
             Ok(Some(value))
         } else {
@@ -50,24 +53,19 @@ where
     fn fast_insert(&self, backend: &mut Sled, key: K, value: V) -> ArconResult<()> {
         let key = self.common.get_db_key_with_user_key(&key)?;
         let serialized = V::serialize(&self.common.value_serializer, &value)?;
-        backend.put(&self.common.cf_name, key, serialized)?;
+        backend.put(&self.common.tree_name, &key, &serialized)?;
 
         Ok(())
     }
 
-    // NOTE: not atomic!
     fn insert(&self, backend: &mut Sled, key: K, value: V) -> ArconResult<Option<V>> {
         let key = self.common.get_db_key_with_user_key(&key)?;
 
-        // couldn't find a `put` that would return the previous value from rocks
-        let old = if let Some(slice) = backend.get(&self.common.cf_name, &key)? {
-            Some(V::deserialize(&self.common.value_serializer, &*slice)?)
-        } else {
-            None
-        };
-
         let serialized = V::serialize(&self.common.value_serializer, &value)?;
-        backend.put(&self.common.cf_name, key, serialized)?;
+        let old = match backend.put(&self.common.tree_name, &key, &serialized)? {
+            Some(x) => Some(V::deserialize(&self.common.value_serializer, &x)?),
+            None => None,
+        };
 
         Ok(old)
     }
@@ -88,132 +86,98 @@ where
     where
         Self: Sized,
     {
-        let backend = backend.initialized_mut()?;
-
-        let mut wb = WriteBatch::default();
-        let cf = backend.get_cf_handle(&self.common.cf_name)?;
+        let mut batch = Batch::default();
+        let tree = backend.tree(&self.common.tree_name)?;
 
         for (user_key, value) in key_value_pairs {
             let key = self.common.get_db_key_with_user_key(&user_key)?;
             let serialized = V::serialize(&self.common.value_serializer, &value)?;
-            wb.put_cf(cf, key, serialized)
-                .map_err(|e| arcon_err_kind!("Could not create put operation: {}", e))?;
+            batch.insert(key, serialized);
         }
 
-        backend
-            .db
-            .write(wb)
-            .map_err(|e| arcon_err_kind!("Could not perform batch put operation: {}", e))
+        tree.apply_batch(batch)
+            .ctx("Could not perform batch insert operation")
     }
 
     fn remove(&self, backend: &mut Sled, key: &K) -> ArconResult<()> {
         let key = self.common.get_db_key_with_user_key(key)?;
-        backend.remove(&self.common.cf_name, &key)?;
+        backend.remove(&self.common.tree_name, &key)?;
 
         Ok(())
     }
 
     fn contains(&self, backend: &Sled, key: &K) -> ArconResult<bool> {
         let key = self.common.get_db_key_with_user_key(key)?;
-        backend.contains(&self.common.cf_name, &key)
+        backend.contains(&self.common.tree_name, &key)
     }
 
     // TODO: unboxed versions of below
     fn iter<'a>(&self, backend: &'a Sled) -> ArconResult<BoxedIteratorOfArconResult<'a, (K, V)>> {
-        let backend = backend.initialized()?;
-
         let prefix = self.common.get_db_key_prefix()?;
-        let cf = backend.get_cf_handle(&self.common.cf_name)?;
+        let tree = backend.tree(&self.common.tree_name)?;
         let key_serializer = self.common.key_serializer.clone();
         let value_serializer = self.common.value_serializer.clone();
-        // NOTE: prefix_iterator only works as expected when the cf has proper prefix_extractor
-        //   option set. We do that in Sled::create_cf_options_for
-        let iter = backend
-            .db
-            .prefix_iterator_cf(cf, prefix)
-            .map_err(|e| arcon_err_kind!("Could not create prefix iterator: {}", e))?
-            .map(move |(db_key, serialized_value)| {
-                let mut key_cursor = &db_key[..];
-                let _item_key = IK::deserialize_from(&key_serializer, &mut key_cursor)?;
-                let _namespace = N::deserialize_from(&key_serializer, &mut key_cursor)?;
-                let key = K::deserialize_from(&key_serializer, &mut key_cursor)?;
-                let value = V::deserialize(&value_serializer, &serialized_value)?;
 
-                Ok((key, value))
-            });
+        let iter = tree.scan_prefix(prefix).map(move |entry| {
+            let (db_key, serialized_value) =
+                entry.ctx("Could not get the values from sled iterator")?;
+            let mut key_cursor = &db_key[..];
+            let _item_key = IK::deserialize_from(&key_serializer, &mut key_cursor)?;
+            let _namespace = N::deserialize_from(&key_serializer, &mut key_cursor)?;
+            let key = K::deserialize_from(&key_serializer, &mut key_cursor)?;
+            let value = V::deserialize(&value_serializer, &serialized_value)?;
+
+            Ok((key, value))
+        });
 
         Ok(Box::new(iter))
     }
 
     fn keys<'a>(&self, backend: &'a Sled) -> ArconResult<BoxedIteratorOfArconResult<'a, K>> {
-        let backend = backend.initialized()?;
-
         let prefix = self.common.get_db_key_prefix()?;
-        let cf = backend.get_cf_handle(&self.common.cf_name)?;
+        let tree = backend.tree(&self.common.tree_name)?;
         let key_serializer = self.common.key_serializer.clone();
 
-        let iter = backend
-            .db
-            .prefix_iterator_cf(cf, prefix)
-            .map_err(|e| arcon_err_kind!("Could not create prefix iterator: {}", e))?
-            .map(move |(db_key, _)| {
-                let mut key_cursor = &db_key[..];
-                let _ = IK::deserialize_from(&key_serializer, &mut key_cursor)?;
-                let _ = N::deserialize_from(&key_serializer, &mut key_cursor)?;
-                let key = K::deserialize_from(&key_serializer, &mut key_cursor)?;
+        let iter = tree.scan_prefix(prefix).map(move |entry| {
+            let (db_key, _) = entry.ctx("Could not get the values from sled iterator")?;
+            let mut key_cursor = &db_key[..];
+            let _ = IK::deserialize_from(&key_serializer, &mut key_cursor)?;
+            let _ = N::deserialize_from(&key_serializer, &mut key_cursor)?;
+            let key = K::deserialize_from(&key_serializer, &mut key_cursor)?;
 
-                Ok(key)
-            });
+            Ok(key)
+        });
 
         Ok(Box::new(iter))
     }
 
     fn values<'a>(&self, backend: &'a Sled) -> ArconResult<BoxedIteratorOfArconResult<'a, V>> {
-        let backend = backend.initialized()?;
-
         let prefix = self.common.get_db_key_prefix()?;
-        let cf = backend.get_cf_handle(&self.common.cf_name)?;
+        let tree = backend.tree(&self.common.tree_name)?;
         let value_serializer = self.common.value_serializer.clone();
 
-        let iter = backend
-            .db
-            .prefix_iterator_cf(cf, prefix)
-            .map_err(|e| arcon_err_kind!("Could not create prefix iterator: {}", e))?
-            .map(move |(_, serialized_value)| {
-                let value: V = V::deserialize(&value_serializer, &serialized_value)?;
+        let iter = tree.scan_prefix(prefix).map(move |entry| {
+            let (_, serialized_value) = entry.ctx("Could not get the values from sled iterator")?;
+            let value: V = V::deserialize(&value_serializer, &serialized_value)?;
 
-                Ok(value)
-            });
+            Ok(value)
+        });
 
         Ok(Box::new(iter))
     }
 
     fn len(&self, backend: &Sled) -> ArconResult<usize> {
-        let backend = backend.initialized()?;
-
         let prefix = self.common.get_db_key_prefix()?;
-        let cf = backend.get_cf_handle(&self.common.cf_name)?;
-
-        let count = backend
-            .db
-            .prefix_iterator_cf(cf, prefix)
-            .map_err(|e| arcon_err_kind!("Could not create prefix iterator: {}", e))?
-            .count();
+        let tree = backend.tree(&self.common.tree_name)?;
+        let count = tree.scan_prefix(prefix).count();
 
         Ok(count)
     }
 
     fn is_empty(&self, backend: &Sled) -> ArconResult<bool> {
-        let backend = backend.initialized()?;
-
         let prefix = self.common.get_db_key_prefix()?;
-        let cf = backend.get_cf_handle(&self.common.cf_name)?;
-        Ok(backend
-            .db
-            .prefix_iterator_cf(cf, prefix)
-            .map_err(|e| arcon_err_kind!("Could not create prefix iterator: {}", e))?
-            .next()
-            .is_none())
+        let tree = backend.tree(&self.common.tree_name)?;
+        Ok(tree.scan_prefix(prefix).next().is_none())
     }
 }
 
@@ -221,7 +185,7 @@ where
 mod test {
     use super::*;
     use crate::state_backend::{
-        rocks::test::TestDb, serialization::NativeEndianBytesDump, MapStateBuilder,
+        serialization::NativeEndianBytesDump, sled::test::TestDb, MapStateBuilder,
     };
 
     #[test]

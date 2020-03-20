@@ -2,15 +2,14 @@ use crate::{
     prelude::{ArconResult, ValueStateBuilder},
     state_backend::{
         serialization::{DeserializableWith, SerializableFixedSizeWith, SerializableWith},
-        sled::value_state::SledValueState,
-        StateBackend,
+        sled::{map_state::SledMapState, value_state::SledValueState},
+        MapStateBuilder, StateBackend,
     },
 };
 use ::sled::{open, Db};
 use error::ResultExt;
-use sled::{IVec, Tree};
+use sled::{Batch, IVec, Tree};
 use std::{
-    borrow::Borrow,
     fs::File,
     io,
     io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write},
@@ -193,16 +192,35 @@ impl Sled {
         Ok(val)
     }
 
-    fn put(&mut self, tree_name: &[u8], key: &[u8], value: &[u8]) -> ArconResult<()> {
+    fn put(&mut self, tree_name: &[u8], key: &[u8], value: &[u8]) -> ArconResult<Option<IVec>> {
         let tree = self.tree(tree_name)?;
-        tree.insert(key, value).ctx("Could not insert value")?;
-        Ok(())
+        let old = tree.insert(key, value).ctx("Could not insert value")?;
+        Ok(old)
     }
 
     fn remove(&mut self, tree_name: &[u8], key: &[u8]) -> ArconResult<()> {
         let tree = self.tree(tree_name)?;
         tree.remove(key).ctx("Could not remove")?;
         Ok(())
+    }
+
+    fn remove_prefix(&mut self, tree_name: &[u8], prefix: Vec<u8>) -> ArconResult<()> {
+        let tree = self.tree(tree_name)?;
+
+        let mut batch = Batch::default();
+        for key in tree.scan_prefix(prefix).keys() {
+            batch.remove(key.ctx("Could not get key from sled iterator")?);
+        }
+
+        tree.apply_batch(batch).ctx("Could not batch remove")?;
+
+        Ok(())
+    }
+
+    fn contains(&self, tree_name: &[u8], key: &[u8]) -> ArconResult<bool> {
+        let tree = self.tree(tree_name)?;
+        tree.contains_key(key)
+            .ctx("Could not check if tree contains the given key")
     }
 }
 
@@ -271,8 +289,40 @@ where
     }
 }
 
+impl<IK, N, K, V, KS, TS> MapStateBuilder<IK, N, K, V, KS, TS> for Sled
+where
+    IK: SerializableFixedSizeWith<KS> + DeserializableWith<KS>,
+    N: SerializableFixedSizeWith<KS> + DeserializableWith<KS>,
+    K: SerializableWith<KS> + DeserializableWith<KS>,
+    V: SerializableWith<TS> + DeserializableWith<TS>,
+    KS: Clone + 'static,
+    TS: Clone + 'static,
+{
+    type Type = SledMapState<IK, N, K, V, KS, TS>;
+
+    fn new_map_state(
+        &mut self,
+        name: &str,
+        item_key: IK,
+        namespace: N,
+        key_serializer: KS,
+        value_serializer: TS,
+    ) -> Self::Type {
+        SledMapState {
+            common: StateCommon {
+                tree_name: name.as_bytes().to_vec(),
+                item_key,
+                namespace,
+                key_serializer,
+                value_serializer,
+            },
+            _phantom: Default::default(),
+        }
+    }
+}
+
 // mod aggregating_state;
-// mod map_state;
+mod map_state;
 // mod reducing_state;
 mod value_state;
 // mod vec_state;

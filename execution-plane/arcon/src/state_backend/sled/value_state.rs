@@ -9,7 +9,7 @@ use crate::{
         state_types::{State, ValueState},
     },
 };
-use std::{borrow::Borrow, marker::PhantomData};
+use std::marker::PhantomData;
 
 pub struct SledValueState<IK, N, T, KS, TS> {
     pub(crate) common: StateCommon<IK, N, KS, TS>,
@@ -40,7 +40,7 @@ where
     fn get(&self, backend: &Sled) -> ArconResult<Option<T>> {
         let key = self.common.get_db_key_prefix()?;
         if let Some(serialized) = backend.get(&self.common.tree_name, &key)? {
-            let value = T::deserialize(&self.common.value_serializer, serialized.borrow())?;
+            let value = T::deserialize(&self.common.value_serializer, &serialized)?;
             Ok(Some(value))
         } else {
             Ok(None)
