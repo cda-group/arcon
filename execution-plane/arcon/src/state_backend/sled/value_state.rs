@@ -5,10 +5,11 @@ use crate::{
     prelude::ArconResult,
     state_backend::{
         serialization::{DeserializableWith, SerializableFixedSizeWith, SerializableWith},
+        sled::{Sled, StateCommon},
         state_types::{State, ValueState},
     },
 };
-use std::marker::PhantomData;
+use std::{borrow::Borrow, marker::PhantomData};
 
 pub struct SledValueState<IK, N, T, KS, TS> {
     pub(crate) common: StateCommon<IK, N, KS, TS>,
@@ -23,7 +24,7 @@ where
 {
     fn clear(&self, backend: &mut Sled) -> ArconResult<()> {
         let key = self.common.get_db_key_prefix()?;
-        backend.remove(&self.common.cf_name, &key)?;
+        backend.remove(&self.common.tree_name, &key)?;
         Ok(())
     }
 
@@ -38,8 +39,8 @@ where
 {
     fn get(&self, backend: &Sled) -> ArconResult<Option<T>> {
         let key = self.common.get_db_key_prefix()?;
-        if let Some(serialized) = backend.get(&self.common.cf_name, &key)? {
-            let value = T::deserialize(&self.common.value_serializer, &serialized)?;
+        if let Some(serialized) = backend.get(&self.common.tree_name, &key)? {
+            let value = T::deserialize(&self.common.value_serializer, serialized.borrow())?;
             Ok(Some(value))
         } else {
             Ok(None)
@@ -49,7 +50,7 @@ where
     fn set(&self, backend: &mut Sled, new_value: T) -> ArconResult<()> {
         let key = self.common.get_db_key_prefix()?;
         let serialized = T::serialize(&self.common.value_serializer, &new_value)?;
-        backend.put(&self.common.cf_name, key, serialized)?;
+        backend.put(&self.common.tree_name, &key, &serialized)?;
         Ok(())
     }
 }
@@ -58,11 +59,11 @@ where
 mod test {
     use super::*;
     use crate::state_backend::{
-        rocks::test::TestDb, serialization::NativeEndianBytesDump, ValueStateBuilder,
+        serialization::NativeEndianBytesDump, sled::test::TestDb, ValueStateBuilder,
     };
 
     #[test]
-    fn Sled_value_state_test() {
+    fn sled_value_state_test() {
         let mut db = TestDb::new();
         let value_state = db.new_value_state(
             "test_state",
@@ -85,7 +86,7 @@ mod test {
     }
 
     #[test]
-    fn Sled_value_states_are_independant() {
+    fn sled_value_states_are_independant() {
         let mut db = TestDb::new();
         let v1 = db.new_value_state(
             "test1",
@@ -118,7 +119,7 @@ mod test {
     }
 
     #[test]
-    fn Sled_value_states_handle_state_for_different_keys_and_namespaces() {
+    fn sled_value_states_handle_state_for_different_keys_and_namespaces() {
         let mut db = TestDb::new();
         let mut value_state = db.new_value_state(
             "test_state",

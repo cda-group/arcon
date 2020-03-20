@@ -1,6 +1,16 @@
-use crate::{prelude::ArconResult, state_backend::StateBackend};
+use crate::{
+    prelude::{ArconResult, ValueStateBuilder},
+    state_backend::{
+        serialization::{DeserializableWith, SerializableFixedSizeWith, SerializableWith},
+        sled::value_state::SledValueState,
+        StateBackend,
+    },
+};
 use ::sled::{open, Db};
+use error::ResultExt;
+use sled::{IVec, Tree};
 use std::{
+    borrow::Borrow,
     fs::File,
     io,
     io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write},
@@ -17,7 +27,7 @@ impl StateBackend for Sled {
     where
         Self: Sized,
     {
-        let db = open(path).map_err(|e| arcon_err_kind!("Could not open sled: {}", e))?;
+        let db = open(path).ctx("Could not open sled")?;
         Ok(Sled {
             db,
             restored: false,
@@ -41,8 +51,7 @@ impl StateBackend for Sled {
         let mut p: PathBuf = checkpoint_path.into();
 
         p.push("SLED_EXPORT");
-        let out = File::create(&p)
-            .map_err(|e| arcon_err_kind!("Could not create checkpoint file {}", e))?;
+        let out = File::create(&p).ctx("Could not create checkpoint file")?;
         let mut writer = BufWriter::new(out);
 
         // TODO: the following section has a lot of io::Result-returning methods, and `try` expressions
@@ -82,7 +91,7 @@ impl StateBackend for Sled {
             }
             Ok(())
         }()
-        .map_err(|e| arcon_err_kind!("sled checkpoint io error, {}", e))?;
+        .ctx("sled checkpoint io error")?;
 
         Ok(())
     }
@@ -91,7 +100,7 @@ impl StateBackend for Sled {
     where
         Self: Sized,
     {
-        let db = open(restore_path).map_err(|e| arcon_err_kind!("Could open sled, {}", e))?;
+        let db = open(restore_path).ctx("Could open sled")?;
         #[allow(unused_assignments)]
         let mut restored = false;
 
@@ -116,7 +125,7 @@ impl StateBackend for Sled {
 fn parse_dumped_sled_export(
     dump_path: &str,
 ) -> ArconResult<Vec<(Vec<u8>, Vec<u8>, impl Iterator<Item = Vec<Vec<u8>>>)>> {
-    let f = File::open(dump_path).map_err(|e| arcon_err_kind!("Sled restore error, {}", e))?;
+    let f = File::open(dump_path).ctx("Sled restore error")?;
     let mut reader = BufReader::new(f);
 
     // immediately executed closure trick, TODO: use `try` expression when it stabilises
@@ -163,21 +172,169 @@ fn parse_dumped_sled_export(
 
         Ok(res)
     }()
-    .map_err(|e| arcon_err_kind!("sled restore io error, {}", e))?;
+    .ctx("sled restore io error")?;
 
     Ok(res)
+}
+
+impl Sled {
+    fn tree(&self, tree_name: &[u8]) -> ArconResult<Tree> {
+        Ok(self
+            .db
+            .open_tree(tree_name)
+            .ctx("Could not find the correct sled tree")?)
+    }
+
+    fn get(&self, tree_name: &[u8], key: &[u8]) -> ArconResult<Option<IVec>> {
+        let tree = self.tree(tree_name)?;
+
+        let val = tree.get(key).ctx("Could not get value")?;
+
+        Ok(val)
+    }
+
+    fn put(&mut self, tree_name: &[u8], key: &[u8], value: &[u8]) -> ArconResult<()> {
+        let tree = self.tree(tree_name)?;
+        tree.insert(key, value).ctx("Could not insert value")?;
+        Ok(())
+    }
+
+    fn remove(&mut self, tree_name: &[u8], key: &[u8]) -> ArconResult<()> {
+        let tree = self.tree(tree_name)?;
+        tree.remove(key).ctx("Could not remove")?;
+        Ok(())
+    }
+}
+
+pub(crate) struct StateCommon<IK, N, KS, TS> {
+    pub tree_name: Vec<u8>,
+    pub item_key: IK,
+    pub namespace: N,
+    pub key_serializer: KS,
+    pub value_serializer: TS,
+}
+
+impl<IK, N, KS, TS> StateCommon<IK, N, KS, TS>
+where
+    IK: SerializableFixedSizeWith<KS>,
+    N: SerializableFixedSizeWith<KS>,
+{
+    pub fn get_db_key_with_user_key<UK>(&self, user_key: &UK) -> ArconResult<Vec<u8>>
+    where
+        UK: SerializableWith<KS>,
+    {
+        let mut res = Vec::with_capacity(
+            IK::SIZE + N::SIZE + UK::size_hint(&self.key_serializer, user_key).unwrap_or(0),
+        );
+        IK::serialize_into(&self.key_serializer, &mut res, &self.item_key)?;
+        N::serialize_into(&self.key_serializer, &mut res, &self.namespace)?;
+        UK::serialize_into(&self.key_serializer, &mut res, user_key)?;
+
+        Ok(res)
+    }
+
+    pub fn get_db_key_prefix(&self) -> ArconResult<Vec<u8>> {
+        let mut res = Vec::with_capacity(IK::SIZE + N::SIZE);
+        IK::serialize_into(&self.key_serializer, &mut res, &self.item_key)?;
+        N::serialize_into(&self.key_serializer, &mut res, &self.namespace)?;
+
+        Ok(res)
+    }
+}
+
+impl<IK, N, T, KS, TS> ValueStateBuilder<IK, N, T, KS, TS> for Sled
+where
+    IK: SerializableFixedSizeWith<KS>,
+    N: SerializableFixedSizeWith<KS>,
+    T: SerializableWith<TS> + DeserializableWith<TS>,
+{
+    type Type = SledValueState<IK, N, T, KS, TS>;
+
+    fn new_value_state(
+        &mut self,
+        name: &str,
+        item_key: IK,
+        namespace: N,
+        key_serializer: KS,
+        value_serializer: TS,
+    ) -> Self::Type {
+        SledValueState {
+            common: StateCommon {
+                tree_name: name.as_bytes().to_vec(),
+                item_key,
+                namespace,
+                key_serializer,
+                value_serializer,
+            },
+            _phantom: Default::default(),
+        }
+    }
 }
 
 // mod aggregating_state;
 // mod map_state;
 // mod reducing_state;
-// mod value_state;
+mod value_state;
 // mod vec_state;
 
 #[cfg(test)]
-mod test {
+pub mod test {
     use super::*;
     use sled::IVec;
+    use std::{
+        fs,
+        ops::{Deref, DerefMut},
+    };
+    use tempfile::TempDir;
+
+    pub struct TestDb {
+        sled: Sled,
+        dir: TempDir,
+    }
+
+    impl TestDb {
+        pub fn new() -> TestDb {
+            let dir = TempDir::new().unwrap();
+            let mut dir_path = dir.path().to_path_buf();
+            dir_path.push("sled");
+            fs::create_dir(&dir_path).unwrap();
+            let dir_path = dir_path.to_string_lossy();
+            let sled = Sled::new(&dir_path).unwrap();
+            TestDb { sled, dir }
+        }
+
+        pub fn checkpoint(&mut self) -> PathBuf {
+            let mut checkpoint_dir = self.dir.path().to_path_buf();
+            checkpoint_dir.push("checkpoint");
+            self.sled
+                .checkpoint(&checkpoint_dir.to_string_lossy())
+                .unwrap();
+            checkpoint_dir
+        }
+
+        pub fn from_checkpoint(checkpoint_dir: &str) -> TestDb {
+            let dir = TempDir::new().unwrap();
+            let mut dir_path = dir.path().to_path_buf();
+            dir_path.push("sled");
+            let dir_path = dir_path.to_string_lossy();
+            let sled = Sled::restore(checkpoint_dir, &dir_path).unwrap();
+            TestDb { sled, dir }
+        }
+    }
+
+    impl Deref for TestDb {
+        type Target = Sled;
+
+        fn deref(&self) -> &Self::Target {
+            &self.sled
+        }
+    }
+
+    impl DerefMut for TestDb {
+        fn deref_mut(&mut self) -> &mut Self::Target {
+            &mut self.sled
+        }
+    }
 
     #[cfg(feature = "arcon_sled_checkpoints")]
     #[test]
