@@ -81,7 +81,7 @@ dependencies = [
  "rocksdb 0.13.0 (git+https://github.com/mrobakowski/rust-rocksdb.git?branch=arcon)",
  "serde 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_json 1.0.48 (registry+https://github.com/rust-lang/crates.io-index)",
- "sled 0.31.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "sled 0.31.0 (git+https://github.com/mrobakowski/sled.git)",
  "slog 2.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "smallbox 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "static_assertions 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2412,7 +2412,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [[package]]
 name = "sled"
 version = "0.31.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
+source = "git+https://github.com/mrobakowski/sled.git#2d0494ac3e72abe2f958572479a3ba6d2e2ce11f"
 dependencies = [
  "crc32fast 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "crossbeam-epoch 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -3370,7 +3370,7 @@ dependencies = [
 "checksum shlex 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)" = "7fdf1b9db47230893d76faad238fd6097fd6d6a9245cd7a4d90dbd639536bbd2"
 "checksum signal-hook-registry 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "94f478ede9f64724c5d173d7bb56099ec3e2d9fc2774aac65d34b8b890405f41"
 "checksum slab 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)" = "c111b5bd5695e56cffe5129854aa230b39c93a305372fdbb2668ca2394eea9f8"
-"checksum sled 0.31.0 (registry+https://github.com/rust-lang/crates.io-index)" = "8fb6824dde66ad33bf20c6e8476f5b82b871bc8bc3c129a10ea2f7dae5060fa3"
+"checksum sled 0.31.0 (git+https://github.com/mrobakowski/sled.git)" = "<none>"
 "checksum slog 2.5.2 (registry+https://github.com/rust-lang/crates.io-index)" = "1cc9c640a4adbfbcc11ffb95efe5aa7af7309e002adab54b185507dbf2377b99"
 "checksum slog-async 2.4.0 (registry+https://github.com/rust-lang/crates.io-index)" = "78ca925b180da88ccc595cbe4a3d378d79cb49fe5906c2cbc2488eaf700913ee"
 "checksum slog-term 2.5.0 (registry+https://github.com/rust-lang/crates.io-index)" = "124501187c410b6a46fe8a47a48435ae462fae4e02d03c558d358f40b17308cb"

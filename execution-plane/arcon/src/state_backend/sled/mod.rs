@@ -1,8 +1,8 @@
 use crate::{
-    prelude::{ArconResult, ValueStateBuilder},
+    prelude::{ArconResult, ValueStateBuilder, VecStateBuilder},
     state_backend::{
         serialization::{DeserializableWith, SerializableFixedSizeWith, SerializableWith},
-        sled::{map_state::SledMapState, value_state::SledValueState},
+        sled::{map_state::SledMapState, value_state::SledValueState, vec_state::SledVecState},
         MapStateBuilder, StateBackend,
     },
 };
@@ -12,7 +12,11 @@ use sled::{Batch, IVec, Tree};
 use std::{
     fs::File,
     io,
-    io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write},
+    io::{BufReader, Read},
+};
+#[cfg(feature = "arcon_sled_checkpoints")]
+use std::{
+    io::{BufWriter, Seek, SeekFrom, Write},
     path::PathBuf,
 };
 
@@ -34,7 +38,7 @@ impl StateBackend for Sled {
     }
 
     #[cfg(not(feature = "arcon_sled_checkpoints"))]
-    fn checkpoint(&self, checkpoint_path: &str) -> ArconResult<()> {
+    fn checkpoint(&self, _checkpoint_path: &str) -> ArconResult<()> {
         eprintln!(
             "Checkpointing sled state backends is off (compiled without `arcon_sled_checkpoints`)"
         );
@@ -95,12 +99,13 @@ impl StateBackend for Sled {
         Ok(())
     }
 
+    #[allow(unused_variables)]
     fn restore(restore_path: &str, checkpoint_path: &str) -> ArconResult<Self>
     where
         Self: Sized,
     {
         let db = open(restore_path).ctx("Could open sled")?;
-        #[allow(unused_assignments)]
+        #[allow(unused_assignments, unused_mut)]
         let mut restored = false;
 
         #[cfg(feature = "arcon_sled_checkpoints")]
@@ -121,6 +126,7 @@ impl StateBackend for Sled {
     }
 }
 
+#[allow(dead_code)]
 fn parse_dumped_sled_export(
     dump_path: &str,
 ) -> ArconResult<Vec<(Vec<u8>, Vec<u8>, impl Iterator<Item = Vec<Vec<u8>>>)>> {
@@ -321,11 +327,46 @@ where
     }
 }
 
+impl<IK, N, T, KS, TS> VecStateBuilder<IK, N, T, KS, TS> for Sled
+where
+    IK: SerializableFixedSizeWith<KS>,
+    N: SerializableFixedSizeWith<KS>,
+    T: SerializableWith<TS> + DeserializableWith<TS>,
+{
+    type Type = SledVecState<IK, N, T, KS, TS>;
+
+    fn new_vec_state(
+        &mut self,
+        name: &str,
+        init_item_key: IK,
+        init_namespace: N,
+        key_serializer: KS,
+        value_serializer: TS,
+    ) -> Self::Type {
+        // TODO: the below could panic. Should we change the signature in the builder traits?
+        let tree = self
+            .tree(name.as_bytes())
+            .expect("Could not get the required tree");
+        tree.set_merge_operator(self::vec_state::vec_merge);
+
+        SledVecState {
+            common: StateCommon {
+                tree_name: name.as_bytes().to_vec(),
+                item_key: init_item_key,
+                namespace: init_namespace,
+                key_serializer,
+                value_serializer,
+            },
+            _phantom: Default::default(),
+        }
+    }
+}
+
 // mod aggregating_state;
 mod map_state;
 // mod reducing_state;
 mod value_state;
-// mod vec_state;
+mod vec_state;
 
 #[cfg(test)]
 pub mod test {

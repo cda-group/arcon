@@ -7,10 +7,12 @@ use crate::{
         serialization::{
             DeserializableWith, LittleEndianBytesDump, SerializableFixedSizeWith, SerializableWith,
         },
+        sled::{Sled, StateCommon},
         state_types::{AppendingState, MergingState, State, VecState},
     },
 };
-use std::{marker::PhantomData, mem};
+use error::ResultExt;
+use std::{iter, marker::PhantomData, mem};
 
 pub struct SledVecState<IK, N, T, KS, TS> {
     pub(crate) common: StateCommon<IK, N, KS, TS>,
@@ -24,7 +26,7 @@ where
 {
     fn clear(&self, backend: &mut Sled) -> ArconResult<()> {
         let key = self.common.get_db_key_prefix()?;
-        backend.remove(&self.common.cf_name, &key)?;
+        backend.remove(&self.common.tree_name, &key)?;
         Ok(())
     }
 
@@ -37,9 +39,9 @@ type VecLenSerializer = LittleEndianBytesDump;
 const VEC_LEN_SERIALIZER: &VecLenSerializer = &LittleEndianBytesDump;
 
 // NOTE: this requires all of the operands to begin with an LE-encoded usize length
-pub fn vec_merge(_key: &[u8], first: Option<&[u8]>, rest: &mut MergeOperands) -> Option<Vec<u8>> {
+pub fn vec_merge(_key: &[u8], existent: Option<&[u8]>, new: &[u8]) -> Option<Vec<u8>> {
     let mut result: Vec<u8> = Vec::with_capacity(
-        mem::size_of::<usize>() + first.map(|x| x.len()).unwrap_or(0) + rest.size_hint().0,
+        mem::size_of::<usize>() + existent.map(|x| x.len()).unwrap_or(0) + new.len(),
     );
 
     // reserve space for the length
@@ -64,7 +66,7 @@ pub fn vec_merge(_key: &[u8], first: Option<&[u8]>, rest: &mut MergeOperands) ->
             .ok()
     }
 
-    for mut op in first.into_iter().chain(rest) {
+    for mut op in existent.into_iter().chain(iter::once(new)) {
         len += get_len(&mut op)?;
         result.extend_from_slice(op);
     }
@@ -91,7 +93,7 @@ where
 {
     fn get(&self, backend: &Sled) -> ArconResult<Vec<T>> {
         let key = self.common.get_db_key_prefix()?;
-        if let Some(serialized) = backend.get(&self.common.cf_name, &key)? {
+        if let Some(serialized) = backend.get(&self.common.tree_name, &key)? {
             // reader is updated to point at the yet unconsumed part of the serialized data
             let mut reader = &serialized[..];
             let len = usize::deserialize_from(VEC_LEN_SERIALIZER, &mut reader)?;
@@ -110,7 +112,6 @@ where
     }
 
     fn append(&self, backend: &mut Sled, value: T) -> ArconResult<()> {
-        let backend = backend.initialized_mut()?;
         let key = self.common.get_db_key_prefix()?;
 
         let mut serialized = Vec::with_capacity(
@@ -120,12 +121,12 @@ where
         usize::serialize_into(VEC_LEN_SERIALIZER, &mut serialized, &1)?;
         T::serialize_into(&self.common.value_serializer, &mut serialized, &value)?;
 
-        let cf = backend.get_cf_handle(&self.common.cf_name)?;
+        let tree = backend.tree(&self.common.tree_name)?;
         // See the vec_merge function in this module. It is set as the merge operator for every vec state.
-        backend
-            .db
-            .merge_cf(cf, key, serialized)
-            .map_err(|e| arcon_err_kind!("Could not perform merge operation: {}", e))
+        tree.merge(key, serialized)
+            .ctx("Could not perform merge operation")?;
+
+        Ok(())
     }
 }
 
@@ -157,14 +158,15 @@ where
             T::serialize_into(&self.common.value_serializer, &mut storage, &elem)?;
         }
 
-        backend.put(&self.common.cf_name, key, storage)
+        backend.put(&self.common.tree_name, &key, &storage)?;
+
+        Ok(())
     }
 
     fn add_all(&self, backend: &mut Sled, values: impl IntoIterator<Item = T>) -> ArconResult<()>
     where
         Self: Sized,
     {
-        let backend = backend.initialized_mut()?;
         let key = self.common.get_db_key_prefix()?;
 
         // figuring out the correct capacity would require iterating through `values`, but
@@ -185,11 +187,10 @@ where
         // impl for Vec starts at the end and extends it, so we want the first one
         usize::serialize_into(VEC_LEN_SERIALIZER, serialized.as_mut_slice(), &len)?;
 
-        let cf = backend.get_cf_handle(&self.common.cf_name)?;
         backend
-            .db
-            .merge_cf(cf, key, serialized)
-            .map_err(|e| arcon_err_kind!("Could not execute merge operation: {}", e))?;
+            .tree(&self.common.tree_name)?
+            .merge(key, serialized)
+            .ctx("Could not execute merge operation")?;
 
         Ok(())
     }
@@ -204,7 +205,7 @@ where
 
     fn is_empty(&self, backend: &Sled) -> ArconResult<bool> {
         let key = self.common.get_db_key_prefix()?;
-        if let Some(storage) = backend.get(&self.common.cf_name, key)? {
+        if let Some(storage) = backend.get(&self.common.tree_name, &key)? {
             if storage.is_empty() {
                 return Ok(true);
             }
@@ -221,7 +222,7 @@ where
 
     fn len(&self, backend: &Sled) -> ArconResult<usize> {
         let key = self.common.get_db_key_prefix()?;
-        if let Some(storage) = backend.get(&self.common.cf_name, key)? {
+        if let Some(storage) = backend.get(&self.common.tree_name, &key)? {
             if storage.is_empty() {
                 return Ok(0);
             }
@@ -241,7 +242,7 @@ where
 mod test {
     use super::*;
     use crate::state_backend::{
-        rocks::test::TestDb, serialization::NativeEndianBytesDump, VecStateBuilder,
+        serialization::NativeEndianBytesDump, sled::test::TestDb, VecStateBuilder,
     };
 
     #[test]
