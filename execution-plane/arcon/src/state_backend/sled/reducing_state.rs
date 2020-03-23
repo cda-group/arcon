@@ -4,14 +4,15 @@
 use crate::{
     prelude::ArconResult,
     state_backend::{
-        rocks::{state_common::StateCommon, Sled},
         serialization::{DeserializableWith, SerializableFixedSizeWith, SerializableWith},
+        sled::{Sled, StateCommon},
         state_types::{AppendingState, MergingState, ReducingState, State},
     },
 };
+use error::ResultExt;
 use itertools::Itertools;
-use std::marker::PhantomData;
-use Sled::{merge_operator::MergeFn, MergeOperands};
+use sled::MergeOperator;
+use std::{iter, marker::PhantomData};
 
 pub struct SledReducingState<IK, N, T, F, KS, TS> {
     pub(crate) common: StateCommon<IK, N, KS, TS>,
@@ -29,23 +30,26 @@ where
 {
     fn clear(&self, backend: &mut Sled) -> ArconResult<()> {
         let key = self.common.get_db_key_prefix()?;
-        backend.remove(&self.common.cf_name, &key)?;
+        backend.remove(&self.common.tree_name, &key)?;
         Ok(())
     }
 
     delegate_key_and_namespace!(common);
 }
 
-pub fn make_reducing_merge<T, F, TS>(reduce_fn: F, value_serializer: TS) -> impl MergeFn + Clone
+pub fn make_reducing_merge<T, F, TS>(
+    reduce_fn: F,
+    value_serializer: TS,
+) -> impl MergeOperator + 'static
 where
-    F: Fn(&T, &T) -> T + Send + Sync + Clone + 'static,
+    F: Fn(&T, &T) -> T + Send + Sync + 'static,
     T: SerializableWith<TS> + DeserializableWith<TS>,
-    TS: Send + Sync + Clone + 'static,
+    TS: Send + Sync + 'static,
 {
-    move |_key: &[u8], first: Option<&[u8]>, rest: &mut MergeOperands| {
-        let res = first
+    move |_key: &[u8], existant: Option<&[u8]>, new: &[u8]| {
+        let res = existant
             .into_iter()
-            .chain(rest)
+            .chain(iter::once(new))
             .map(|bytes| T::deserialize(&value_serializer, bytes))
             .fold_results(None, |acc, value| match acc {
                 None => Some(value),
@@ -84,7 +88,7 @@ where
 {
     fn get(&self, backend: &Sled) -> ArconResult<Option<T>> {
         let key = self.common.get_db_key_prefix()?;
-        if let Some(storage) = backend.get(&self.common.cf_name, &key)? {
+        if let Some(storage) = backend.get(&self.common.tree_name, &key)? {
             let value = T::deserialize(&self.common.value_serializer, &*storage)?;
             Ok(Some(value))
         } else {
@@ -93,17 +97,16 @@ where
     }
 
     fn append(&self, backend: &mut Sled, value: T) -> ArconResult<()> {
-        let backend = backend.initialized_mut()?;
-
         let key = self.common.get_db_key_prefix()?;
         let serialized = T::serialize(&self.common.value_serializer, &value)?;
 
-        let cf = backend.get_cf_handle(&self.common.cf_name)?;
         // See the make_reducing_merge function in this module. Its result is set as the merging operator for this state.
         backend
-            .db
-            .merge_cf(cf, key, serialized)
-            .map_err(|e| arcon_err_kind!("Could not perform merge operation: {}", e))
+            .tree(&self.common.tree_name)?
+            .merge(key, serialized)
+            .ctx("Could not perform merge operation")?;
+
+        Ok(())
     }
 }
 
@@ -130,7 +133,7 @@ where
 mod test {
     use super::*;
     use crate::state_backend::{
-        rocks::test::TestDb, serialization::NativeEndianBytesDump, ReducingStateBuilder,
+        serialization::NativeEndianBytesDump, sled::test::TestDb, ReducingStateBuilder,
     };
 
     #[test]

@@ -1,8 +1,16 @@
 use crate::{
-    prelude::{ArconResult, ValueStateBuilder, VecStateBuilder},
+    prelude::{
+        AggregatingStateBuilder, ArconResult, ReducingStateBuilder, ValueStateBuilder,
+        VecStateBuilder,
+    },
     state_backend::{
         serialization::{DeserializableWith, SerializableFixedSizeWith, SerializableWith},
-        sled::{map_state::SledMapState, value_state::SledValueState, vec_state::SledVecState},
+        sled::{
+            aggregating_state::SledAggregatingState, map_state::SledMapState,
+            reducing_state::SledReducingState, value_state::SledValueState,
+            vec_state::SledVecState,
+        },
+        state_types::Aggregator,
         MapStateBuilder, StateBackend,
     },
 };
@@ -362,9 +370,94 @@ where
     }
 }
 
-// mod aggregating_state;
+impl<IK, N, T, F, KS, TS> ReducingStateBuilder<IK, N, T, F, KS, TS> for Sled
+where
+    IK: SerializableFixedSizeWith<KS>,
+    N: SerializableFixedSizeWith<KS>,
+    // TODO: the 'static part of this doesn't seem right, but it doesn't compile otherwise
+    T: SerializableWith<TS> + DeserializableWith<TS> + 'static,
+    F: Fn(&T, &T) -> T + Send + Sync + Clone + 'static,
+    TS: Send + Sync + Clone + 'static,
+{
+    type Type = SledReducingState<IK, N, T, F, KS, TS>;
+
+    fn new_reducing_state(
+        &mut self,
+        name: &str,
+        init_item_key: IK,
+        init_namespace: N,
+        reduce_fn: F,
+        key_serializer: KS,
+        value_serializer: TS,
+    ) -> Self::Type {
+        let tree = self
+            .tree(name.as_bytes())
+            .expect("Could not get the required tree");
+
+        tree.set_merge_operator(reducing_state::make_reducing_merge(
+            reduce_fn.clone(),
+            value_serializer.clone(),
+        ));
+
+        SledReducingState {
+            common: StateCommon {
+                tree_name: name.as_bytes().to_vec(),
+                item_key: init_item_key,
+                namespace: init_namespace,
+                key_serializer,
+                value_serializer,
+            },
+            reduce_fn,
+            _phantom: Default::default(),
+        }
+    }
+}
+
+impl<IK, N, T, AGG, KS, TS> AggregatingStateBuilder<IK, N, T, AGG, KS, TS> for Sled
+where
+    IK: SerializableFixedSizeWith<KS>,
+    N: SerializableFixedSizeWith<KS>,
+    T: SerializableWith<TS> + DeserializableWith<TS> + 'static,
+    AGG: Aggregator<T> + Send + Sync + Clone + 'static,
+    AGG::Accumulator: SerializableWith<TS> + DeserializableWith<TS>,
+    TS: Send + Sync + Clone + 'static,
+{
+    type Type = SledAggregatingState<IK, N, T, AGG, KS, TS>;
+
+    fn new_aggregating_state(
+        &mut self,
+        name: &str,
+        init_item_key: IK,
+        init_namespace: N,
+        aggregator: AGG,
+        key_serializer: KS,
+        value_serializer: TS,
+    ) -> Self::Type {
+        let tree = self
+            .tree(name.as_bytes())
+            .expect("Could not get the required tree");
+        tree.set_merge_operator(aggregating_state::make_aggregating_merge(
+            aggregator.clone(),
+            value_serializer.clone(),
+        ));
+
+        SledAggregatingState {
+            common: StateCommon {
+                tree_name: name.as_bytes().to_vec(),
+                item_key: init_item_key,
+                namespace: init_namespace,
+                key_serializer,
+                value_serializer,
+            },
+            aggregator,
+            _phantom: Default::default(),
+        }
+    }
+}
+
+mod aggregating_state;
 mod map_state;
-// mod reducing_state;
+mod reducing_state;
 mod value_state;
 mod vec_state;
 
