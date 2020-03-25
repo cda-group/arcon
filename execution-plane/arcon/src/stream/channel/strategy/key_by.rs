@@ -18,7 +18,7 @@ type DefaultHashBuilder = BuildHasherDefault<DefaultHasher>;
 ///
 /// KeyBy may be constructed with
 /// either a custom hasher or the default [DefaultHasher]
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct KeyBy<A, H = DefaultHashBuilder>
 where
     A: ArconType,

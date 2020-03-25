@@ -18,12 +18,20 @@ extern crate arcon_error as error;
 pub mod allocator;
 /// Arcon data types and serialisers/deserialisers
 pub mod data;
+/// Module containing different runtime managers
+pub mod manager;
 /// State backend implementations
 pub mod state_backend;
 /// Contains the core stream logic
 pub mod stream;
 /// Utilities for Arcon
 pub mod util;
+/// Arcon Configuration
+pub mod conf;
+/// Utilities for creating an Arcon pipeline
+pub mod pipeline;
+/// Arcon metrics
+pub mod metrics;
 
 /// A module containing test utilities such as a global ArconAllocator
 #[cfg(test)]

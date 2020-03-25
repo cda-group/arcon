@@ -20,6 +20,7 @@ const DEFAULT_BATCH_SIZE: usize = 1024;
 /// A `ChannelStrategy` defines a strategy of how messages are sent downstream
 ///
 /// Common strategies include (one-to-one)[forward::Forward] and (one-to-many)[broadcast::Broadcast]
+#[derive(Clone)]
 pub enum ChannelStrategy<A>
 where
     A: ArconType,

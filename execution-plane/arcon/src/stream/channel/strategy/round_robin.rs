@@ -8,6 +8,7 @@ use crate::{
 };
 
 /// A strategy that sends message downstream in a Round-Robin fashion
+#[derive(Clone)]
 pub struct RoundRobin<A>
 where
     A: ArconType,

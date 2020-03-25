@@ -26,11 +26,13 @@ arcon_error = { version = "0.1", path = "arcon_error" }
 arcon_extra = { version = "0.1", path = "arcon_extra" }
 kompact = { git = "https://github.com/kompics/kompact.git", branch = "master"}
 uuid = "0.8"
+sha2 = "0.8.1"
 static_assertions = "1.1.0"
 itertools = "0.8.2"
 smallbox = { version = "0.8", features = ["coerce"] }
 cfg-if = "0.1.10"
 fxhash = "0.2.1"
+num_cpus = "1.0"
 
 # Serialisation
 abomonation = "0.7.3"

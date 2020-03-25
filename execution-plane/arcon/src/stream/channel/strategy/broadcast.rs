@@ -8,6 +8,7 @@ use crate::{
 };
 
 /// A Broadcast strategy for one-to-many message sending
+#[derive(Clone)]
 pub struct Broadcast<A>
 where
     A: ArconType,

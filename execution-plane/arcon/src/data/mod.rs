@@ -4,6 +4,8 @@
 /// Serialisers and Deserialiser for in-flight data
 pub mod flight_serde;
 
+pub mod tree;
+
 use crate::{error::ArconResult, macros::*};
 use abomonation::Abomonation;
 use kompact::prelude::*;
@@ -161,7 +163,7 @@ impl Watermark {
 
 /// Epoch marker message
 #[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
-#[derive(PMessage, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Abomonation)]
+#[derive(PMessage, Clone, Hash, Copy, Ord, PartialOrd, Eq, PartialEq, Abomonation)]
 pub struct Epoch {
     #[prost(uint64, tag = "1")]
     pub epoch: u64,
