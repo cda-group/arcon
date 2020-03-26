@@ -47,7 +47,7 @@ pub struct StateManager {
     // TODO: perhaps should be ordered as closest neighbours by key range
     peers: Vec<ActorPath>,
     /// Current Leader in the region
-    leader: ActorPath,
+    //leader: ActorPath,
     /// Available Merkle trees per KeyedStateID
     state_trees: FxHashMap<KeyedStateID, MerkleTree>,
     /// Execution Mode
@@ -67,13 +67,13 @@ impl StateManager {
     pub fn new(mode: ExecutionMode) -> StateManager {
         let ctx = ComponentContext::<StateManager>::new();
         // ActorPath to one self
-        let actor_path = ctx.actor_path();
+        //let actor_path = ctx.actor_path();
         StateManager {
             ctx: ComponentContext::new(),
             manager_port: ProvidedPort::new(),
             state_trees: FxHashMap::default(),
             peers: Vec::new(),
-            leader: actor_path,
+            //leader: actor_path,
             execution_mode: mode,
             status: Status::Follower,
             replication_factor: 2,

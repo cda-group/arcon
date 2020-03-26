@@ -7,13 +7,30 @@ pub mod debug;
 use crate::{
     data::tree::*,
     manager::{
-        state_manager::{StateEvent, StateUpdate, StateManagerPort},
         node_manager::*,
+        state_manager::{StateEvent, StateManagerPort, StateUpdate},
     },
+    metrics::meter::Meter,
     prelude::*,
     stream::operator::OperatorContext,
 };
 use std::iter;
+
+/// Metrics reported by a Arcon Node
+#[derive(Debug, Clone)]
+pub struct NodeMetrics {
+    /// Meter reporting inbound throughput through EWMA
+    pub inbound_throughput: Meter,
+}
+
+impl NodeMetrics {
+    /// Creates a NodeMetrics struct
+    pub fn new() -> NodeMetrics {
+        NodeMetrics {
+            inbound_throughput: Meter::new(),
+        }
+    }
+}
 
 pub enum NodeKind {
     Keyed(KeyedStateID, KeyRange),
@@ -54,6 +71,7 @@ where
     in_channels: Vec<NodeID>,
     operator: Box<dyn Operator<IN, OUT> + Send>,
     node_state: NodeState<IN>,
+    metrics: NodeMetrics,
     state_backend: Box<dyn StateBackend>,
 }
 
@@ -131,6 +149,7 @@ where
             in_channels,
             operator,
             node_state,
+            metrics: NodeMetrics::new(),
             state_backend,
         }
     }
@@ -140,6 +159,12 @@ where
         if !self.in_channels.contains(&message.sender) {
             return arcon_err!("Message from invalid sender");
         }
+
+        // Mark amount of inbound messages
+        self.metrics
+            .inbound_throughput
+            .mark_n(message.events.len() as u64);
+
         // Check if sender is blocked
         if self
             .node_state
@@ -286,12 +311,11 @@ where
                         // TODO: fix
                         let update = StateUpdate {
                             key_id: String::from("hej"),
-                            key_range: KeyRange::new(0,20),
+                            key_range: KeyRange::new(0, 20),
                             epoch: e,
                         };
 
-                        self.state_manager_port
-                            .trigger(StateEvent::Update(update));
+                        self.state_manager_port.trigger(StateEvent::Update(update));
 
                         // forward the epoch
                         self.channel_strategy.add(ArconEvent::Epoch(e));
@@ -376,7 +400,6 @@ where
     }
 }
 
-
 impl<IN, OUT> Require<StateManagerPort> for Node<IN, OUT>
 where
     IN: ArconType,
@@ -407,7 +430,6 @@ where
 {
     fn handle(&mut self, event: crate::manager::state_manager::StateEvent) {}
 }
-
 
 impl<IN, OUT> Actor for Node<IN, OUT>
 where
