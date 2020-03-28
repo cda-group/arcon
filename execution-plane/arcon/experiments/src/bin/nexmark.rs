@@ -5,22 +5,18 @@
 
 #[macro_use]
 extern crate clap;
+#[macro_use]
+extern crate log;
 
 use anyhow::{Context, Result};
-use arcon::prelude::*;
 use clap::{App, AppSettings, Arg, SubCommand};
-use experiments::{
-    get_items,
-    nexmark::config::*,
-    square_root_newton,
-    throughput_sink::{Run, ThroughputSink},
-    EnrichedItem, Item,
-};
 use std::{fs::metadata, usize};
 
 const DEFAULT_NEXMARK_CONFIG: &str = "nexmark_config.toml";
 
 fn main() {
+    pretty_env_logger::init();
+
     let nexmark_config_arg = Arg::with_name("c")
         .required(true)
         .default_value(".")
@@ -141,7 +137,7 @@ fn main() {
                 pinned,
                 log_throughput,
             ) {
-                eprintln!("{}", err.to_string());
+                error!("{}", err.to_string());
             }
         }
         _ => {
@@ -173,8 +169,18 @@ fn run(
         }
     };
 
-    let nexmark_config = NexmarkConfig::load(&config_file)?;
-    println!("NEXMARK CONF {:?}\n", nexmark_config);
+    // Load Base conf
+    let mut nexmark_config = NEXMarkConfig::load(&config_file)?;
+    // Finish the conf
+    NEXMarkConfig::finish(&mut nexmark_config);
+    info!("NEXMark Config {:?}\n", nexmark_config);
+
+    // Setup pipeline...
+    match nexmark_config.query {
+        NEXMarkQuery::CurrencyConversion => {
+            info!("Setting up CurrencyConversion query");
+        }
+    }
 
     Ok(())
 }
