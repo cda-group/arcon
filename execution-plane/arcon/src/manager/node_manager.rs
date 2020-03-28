@@ -4,22 +4,24 @@
 use crate::{
     data::ArconType,
     manager::state_manager::StateManager,
-    metrics::node_metrics::NodeMetrics,
     prelude::NodeID,
-    stream::{channel::strategy::ChannelStrategy, node::Node},
+    stream::{
+        channel::strategy::ChannelStrategy,
+        node::{Node, NodeMetrics},
+    },
     util::SafelySendableFn,
 };
 use fxhash::FxHashMap;
 use kompact::prelude::*;
 use std::sync::Arc;
 
+/// Enum containing possible local node events
 #[derive(Debug, Clone)]
 pub enum NodeEvent {
     Metrics(NodeID, NodeMetrics),
-    Update,
-    Reconfig,
 }
 
+/// A [kompact] port for communication
 pub struct NodeManagerPort {}
 impl Port for NodeManagerPort {
     type Indication = ();

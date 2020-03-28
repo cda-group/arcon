@@ -136,6 +136,11 @@ where
 
         self.buffer_counter = 0;
     }
+
+    #[inline]
+    pub fn num_channels(&self) -> usize {
+        self.buffer_map.len()
+    }
 }
 
 #[cfg(test)]

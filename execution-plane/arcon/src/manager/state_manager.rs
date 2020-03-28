@@ -119,7 +119,7 @@ impl Provide<StateManagerPort> for StateManager {
                     match self.status {
                         Status::Leader => {
                             // Update tree?
-                        },
+                        }
                         Status::Follower => {
                             // Send to leader
                         }

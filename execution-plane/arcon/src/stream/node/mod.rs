@@ -10,17 +10,25 @@ use crate::{
         node_manager::*,
         state_manager::{StateEvent, StateManagerPort, StateUpdate},
     },
-    metrics::meter::Meter,
+    metrics::{counter::Counter, gauge::Gauge, meter::Meter},
     prelude::*,
     stream::operator::OperatorContext,
 };
 use std::iter;
 
-/// Metrics reported by a Arcon Node
+/// Metrics reported by an Arcon Node
 #[derive(Debug, Clone)]
 pub struct NodeMetrics {
-    /// Meter reporting inbound throughput through EWMA
+    /// Meter reporting inbound throughput
     pub inbound_throughput: Meter,
+    /// Counter for total epochs processed
+    pub epoch_counter: Counter,
+    /// Counter for total watermarks processed
+    pub watermark_counter: Counter,
+    /// Gauge Metric representing number of outbound channels
+    pub outbound_channels: Gauge,
+    /// Gauge Metric representing number of inbound channels
+    pub inbound_channels: Gauge,
 }
 
 impl NodeMetrics {
@@ -28,6 +36,10 @@ impl NodeMetrics {
     pub fn new() -> NodeMetrics {
         NodeMetrics {
             inbound_throughput: Meter::new(),
+            epoch_counter: Counter::new(),
+            watermark_counter: Counter::new(),
+            outbound_channels: Gauge::new(),
+            inbound_channels: Gauge::new(),
         }
     }
 }
@@ -47,7 +59,7 @@ pub struct NodeState<IN: ArconType> {
     current_epoch: BoxedValueState<Epoch>,
     /// Blocked channels during epoch alignment
     blocked_channels: BoxedMapState<NodeID, ()>,
-    /// Temporary Message buffer used during having blocked channels
+    /// Temporary message buffer used while having blocked channels
     message_buffer: BoxedVecState<ArconMessage<IN>>,
 }
 
@@ -61,17 +73,25 @@ where
     IN: ArconType,
     OUT: ArconType,
 {
+    /// Component context
     ctx: ComponentContext<Node<IN, OUT>>,
     /// Port for NodeManager
     pub(crate) node_manager_port: RequiredPort<NodeManagerPort, Self>,
     /// Port for state related concerns
     pub(crate) state_manager_port: RequiredPort<StateManagerPort, Self>,
+    /// A Node identifier
     id: NodeID,
+    /// Strategy used by the Node
     channel_strategy: ChannelStrategy<OUT>,
+    /// Current set of IDs connected to this Node
     in_channels: Vec<NodeID>,
+    /// User-defined Operator
     operator: Box<dyn Operator<IN, OUT> + Send>,
-    node_state: NodeState<IN>,
+    /// Internal state of the Node
+    state: NodeState<IN>,
+    /// Metrics collected by the Node
     metrics: NodeMetrics,
+    /// State Backend used to persist data
     state_backend: Box<dyn StateBackend>,
 }
 
@@ -80,6 +100,7 @@ where
     IN: ArconType,
     OUT: ArconType,
 {
+    /// Creates a new Node
     pub fn new(
         id: NodeID,
         in_channels: Vec<NodeID>,
@@ -132,13 +153,20 @@ where
 
         operator.init(&mut *state_backend);
 
-        let node_state = NodeState {
+        let state = NodeState {
             watermarks,
             current_watermark,
             current_epoch,
             blocked_channels,
             message_buffer,
         };
+
+        // Set up metrics structure
+        let mut metrics = NodeMetrics::new();
+        metrics.inbound_channels.inc_n(in_channels.len());
+        metrics
+            .outbound_channels
+            .inc_n(channel_strategy.num_channels());
 
         Node {
             ctx: ComponentContext::new(),
@@ -148,12 +176,13 @@ where
             channel_strategy,
             in_channels,
             operator,
-            node_state,
-            metrics: NodeMetrics::new(),
+            state,
+            metrics,
             state_backend,
         }
     }
 
+    #[inline]
     fn handle_message(&mut self, message: ArconMessage<IN>) -> ArconResult<()> {
         // Check valid sender
         if !self.in_channels.contains(&message.sender) {
@@ -167,12 +196,12 @@ where
 
         // Check if sender is blocked
         if self
-            .node_state
+            .state
             .blocked_channels
             .contains(&*self.state_backend, &message.sender)?
         {
             // Add the message to the back of the queue
-            self.node_state
+            self.state
                 .message_buffer
                 .append(&mut *self.state_backend, message)?;
             return Ok(());
@@ -183,7 +212,7 @@ where
                 ArconEvent::Element(e) => {
                     if e.timestamp.unwrap_or(u64::max_value())
                         <= self
-                            .node_state
+                            .state
                             .watermarks
                             .get(&*self.state_backend, &message.sender)?
                             .ok_or_else(|| arcon_err_kind!("uninitialized watermark"))?
@@ -199,7 +228,7 @@ where
                 }
                 ArconEvent::Watermark(w) => {
                     if w <= self
-                        .node_state
+                        .state
                         .watermarks
                         .get(&*self.state_backend, &message.sender)?
                         .ok_or_else(|| arcon_err_kind!("uninitialized watermark"))?
@@ -208,17 +237,17 @@ where
                     }
 
                     let current_watermark = self
-                        .node_state
+                        .state
                         .current_watermark
                         .get(&*self.state_backend)?
                         .ok_or_else(|| arcon_err_kind!("current watermark uninitialized"))?;
 
                     // Insert the watermark and try early return
-                    if let Some(old) = self.node_state.watermarks.insert(
-                        &mut *self.state_backend,
-                        message.sender,
-                        w,
-                    )? {
+                    if let Some(old) =
+                        self.state
+                            .watermarks
+                            .insert(&mut *self.state_backend, message.sender, w)?
+                    {
                         if old > current_watermark {
                             continue 'event_loop;
                         }
@@ -230,7 +259,7 @@ where
 
                     // Let new_watermark take the value of the lowest watermark
                     let new_watermark = self
-                        .node_state
+                        .state
                         .watermarks
                         .values(&*self.state_backend)?
                         .chain(iter::once(Ok(w)))
@@ -248,7 +277,7 @@ where
                     // Finally, handle the watermark:
                     if new_watermark > current_watermark {
                         // Update the stored watermark
-                        self.node_state
+                        self.state
                             .current_watermark
                             .set(&mut *self.state_backend, new_watermark)?;
 
@@ -268,11 +297,14 @@ where
                         // Forward the watermark
                         self.channel_strategy
                             .add(ArconEvent::Watermark(new_watermark));
+
+                        // increment watermark counter
+                        self.metrics.watermark_counter.inc();
                     }
                 }
                 ArconEvent::Epoch(e) => {
                     if e <= self
-                        .node_state
+                        .state
                         .current_epoch
                         .get(&*self.state_backend)?
                         .ok_or_else(|| arcon_err_kind!("uninitialized epoch"))?
@@ -281,20 +313,18 @@ where
                     }
 
                     // Add the sender to the blocked set.
-                    self.node_state.blocked_channels.fast_insert(
+                    self.state.blocked_channels.fast_insert(
                         &mut *self.state_backend,
                         message.sender,
                         (),
                     )?;
 
                     // If all senders blocked we can transition to new Epoch
-                    if self.node_state.blocked_channels.len(&*self.state_backend)?
+                    if self.state.blocked_channels.len(&*self.state_backend)?
                         == self.in_channels.len()
                     {
                         // update current epoch
-                        self.node_state
-                            .current_epoch
-                            .set(&mut *self.state_backend, e)?;
+                        self.state.current_epoch.set(&mut *self.state_backend, e)?;
 
                         // call handle_epoch on our operator
                         let _operator_state = self.operator.handle_epoch(
@@ -308,17 +338,11 @@ where
                         // store the state
                         self.save_state()?;
 
-                        // TODO: fix
-                        let update = StateUpdate {
-                            key_id: String::from("hej"),
-                            key_range: KeyRange::new(0, 20),
-                            epoch: e,
-                        };
-
-                        self.state_manager_port.trigger(StateEvent::Update(update));
-
                         // forward the epoch
                         self.channel_strategy.add(ArconEvent::Epoch(e));
+
+                        // increment epoch counter
+                        self.metrics.epoch_counter.inc();
 
                         self.after_state_save()?;
                     }
@@ -335,28 +359,40 @@ where
     }
 
     fn save_state(&mut self) -> ArconResult<()> {
-        // TODO: for now we're saving to cwd, this should probably be configurable
-        let checkpoint_dir = format!(
-            "checkpoint_{id}_{epoch}",
-            id = self.id.id,
-            epoch = self
-                .node_state
-                .current_epoch
-                .get(&*self.state_backend)?
-                .ok_or_else(|| arcon_err_kind!("current epoch uninitialized"))?
-                .epoch
-        );
-        self.state_backend.checkpoint(&checkpoint_dir)?;
+        if let Some(base_dir) = &self.ctx().config()["checkpoint_dir"].as_string() {
+            // TODO: should probably add a node description to the Node,
+            //       so it becomes easier to identify paths to snapshots of different types of nodes...
+            let checkpoint_dir = format!(
+                "{}/checkpoint_{id}_{epoch}",
+                base_dir,
+                id = self.id.id,
+                epoch = self
+                    .state
+                    .current_epoch
+                    .get(&*self.state_backend)?
+                    .ok_or_else(|| arcon_err_kind!("current epoch uninitialized"))?
+                    .epoch
+            );
+            self.state_backend.checkpoint(&checkpoint_dir)?;
+            debug!(
+                self.ctx.log(),
+                "Completed a Checkpoint to path {}", checkpoint_dir
+            );
+        } else {
+            println!("failed to find config");
+            return arcon_err!("Failed to fetch checkpoint_dir from Config");
+        }
+
         Ok(())
     }
 
     fn after_state_save(&mut self) -> ArconResult<()> {
         // flush the blocked_channels list
-        self.node_state
+        self.state
             .blocked_channels
             .clear(&mut *self.state_backend)?;
 
-        let ref mut message_buffer = self.node_state.message_buffer;
+        let ref mut message_buffer = self.state.message_buffer;
 
         // Handle the message buffer.
         if !message_buffer.is_empty(&*self.state_backend)? {
@@ -383,6 +419,16 @@ where
         match event {
             ControlEvent::Start => {
                 debug!(self.ctx.log(), "Started Arcon Node");
+
+                // Start periodic timer reporting Node metrics
+                if let Some(interval) = &self.ctx().config()["node_metrics_interval"].as_i64() {
+                    let time_dur = std::time::Duration::from_millis(*interval as u64);
+                    self.schedule_periodic(time_dur, time_dur, |c_self, _id| {
+                        c_self
+                            .node_manager_port
+                            .trigger(NodeEvent::Metrics(c_self.id, c_self.metrics.clone()));
+                    });
+                }
 
                 if self.state_backend.just_restored() {
                     if let Err(e) = self.after_state_save() {
@@ -469,12 +515,14 @@ where
 mod tests {
     // Tests the message logic of Node.
     use super::*;
+    use crate::pipeline::*;
     use std::{sync::Arc, thread, time};
 
     fn node_test_setup() -> (ActorRef<ArconMessage<i32>>, Arc<Component<DebugNode<i32>>>) {
         // Returns a filter Node with input channels: sender1..sender3
         // And a debug sink receiving its results
-        let system = KompactConfig::default().build().expect("KompactSystem");
+        let mut pipeline = ArconPipeline::new();
+        let mut system = &pipeline.system();
 
         let sink = system.create(move || DebugNode::<i32>::new());
         system.start(&sink);

@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use super::Epoch;
-use kompact::prelude::ActorPath; use std::{cmp::Ordering, sync::Arc};
+use kompact::prelude::ActorPath;
+use std::{cmp::Ordering, sync::Arc};
 
 /// An Arcon pipeline may have multiple stateful nodes
 /// (e.g., Window and Map), thus we must be able to differentiate between them.

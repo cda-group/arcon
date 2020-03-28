@@ -76,6 +76,11 @@ where
             panic!("Bad channel setup");
         }
     }
+
+    #[inline]
+    pub fn num_channels(&self) -> usize {
+        self.channels.len()
+    }
 }
 
 #[cfg(test)]

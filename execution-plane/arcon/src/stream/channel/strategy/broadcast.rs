@@ -77,6 +77,11 @@ where
             send(channel, msg.clone());
         }
     }
+
+    #[inline]
+    pub fn num_channels(&self) -> usize {
+        self.channels.len()
+    }
 }
 
 #[cfg(test)]

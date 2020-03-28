@@ -7,7 +7,7 @@ use kompact::prelude::KompactConfig;
 use serde::Deserialize;
 
 /// Configuration for an Arcon Pipeline
-#[derive(Deserialize, Default, Clone, Debug)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct ArconConf {
     /// Base directory for checkpoints
     #[serde(default = "checkpoint_dir_default")]
@@ -15,6 +15,9 @@ pub struct ArconConf {
     /// Generation interval in milliseconds for Watermarks at sources
     #[serde(default = "watermark_interval_default")]
     watermark_interval: u64,
+    /// Interval in milliseconds for sending off metrics from nodes
+    #[serde(default = "node_metrics_interval_default")]
+    node_metrics_interval: u64,
     /// Amount of threads for Kompact's threadpool
     #[serde(default = "kompact_threads_default")]
     kompact_threads: usize,
@@ -30,10 +33,27 @@ impl ArconConf {
     /// Returns a KompactConfig based on loaded ArconConf
     pub fn kompact_conf(&self) -> KompactConfig {
         let mut cfg = KompactConfig::default();
+        // inject checkpoint_dir into Kompact
+        let component_cfg = format!(
+            "{{ checkpoint_dir = {}, node_metrics_interval = {} }}",
+            self.checkpoint_dir, self.node_metrics_interval
+        );
+        cfg.load_config_str(component_cfg);
         cfg.threads(self.kompact_threads);
         cfg.throughput(self.kompact_throughput);
         cfg.msg_priority(self.kompact_msg_priority);
         cfg
+    }
+
+    pub fn default() -> ArconConf {
+        ArconConf {
+            checkpoint_dir: checkpoint_dir_default(),
+            watermark_interval: watermark_interval_default(),
+            node_metrics_interval: node_metrics_interval_default(),
+            kompact_threads: kompact_threads_default(),
+            kompact_throughput: kompact_throughput_default(),
+            kompact_msg_priority: kompact_msg_priority_default(),
+        }
     }
 
     /// Loads ArconConf from a file
@@ -63,12 +83,17 @@ fn watermark_interval_default() -> u64 {
     250
 }
 
+fn node_metrics_interval_default() -> u64 {
+    // in milliseconds
+    250
+}
+
 fn kompact_threads_default() -> usize {
-    num_cpus::get()
+    std::cmp::max(1, num_cpus::get())
 }
 
 fn kompact_throughput_default() -> usize {
-    1
+    50
 }
 
 fn kompact_msg_priority_default() -> f32 {
@@ -96,6 +121,7 @@ mod tests {
         assert_eq!(conf.checkpoint_dir, String::from("/dev/null"));
         assert_eq!(conf.watermark_interval, 1000);
         // Check defaults
+        assert_eq!(conf.node_metrics_interval, 250);
         assert_eq!(conf.kompact_threads, kompact_threads_default());
         assert_eq!(conf.kompact_throughput, kompact_throughput_default());
         assert_eq!(conf.kompact_msg_priority, kompact_msg_priority_default());
