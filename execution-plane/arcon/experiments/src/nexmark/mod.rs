@@ -5,11 +5,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 pub mod config;
+pub mod queries;
 
-use arcon::{macros::*, prelude::*};
+use arcon::macros::*;
 use config::NEXMarkConfig;
-use prost::*;
-use rand::{rngs::SmallRng, Rng, *};
+use rand::seq::SliceRandom;
+use rand::{rngs::SmallRng, Rng};
 use std::cmp::{max, min};
 
 trait NEXMarkRNG {
@@ -45,22 +46,25 @@ pub struct Person {
 }
 
 impl Person {
-    pub fn new(id: u32, time: u32, rng: &mut SmallRng, nex: &NEXMarkConfig) -> Person {
+    #[inline]
+    pub fn new(id: u32, time: u32, mut rng: &mut SmallRng, nex: &NEXMarkConfig) -> Person {
         Person {
             id,
             name: String::new(),
             email_address: String::new(),
             credit_card: String::new(),
-            city: rng.choose(&nex.us_cities).unwrap().clone(),
-            state: rng.choose(&nex.us_states).unwrap().clone(),
+            city: nex.us_cities.choose(&mut rng).unwrap().clone(),
+            state: nex.us_states.choose(&mut rng).unwrap().clone(),
             date: time,
         }
     }
+    #[inline]
     fn next_id(id: u32, rng: &mut SmallRng, nex: &NEXMarkConfig) -> u32 {
         let people = Self::last_id(id, nex) + 1;
         let active = min(people, nex.num_active_people as u32);
         people - active + rng.gen_range(0, active + nex.person_id_lead as u32)
     }
+    #[inline]
     fn last_id(id: u32, nex: &NEXMarkConfig) -> u32 {
         let epoch = id / nex.proportion_denominator;
         let mut offset = id % nex.proportion_denominator;
@@ -94,6 +98,7 @@ pub struct Auction {
 }
 
 impl Auction {
+    #[inline]
     pub fn new(
         events_so_far: u32,
         id: u32,
@@ -120,6 +125,7 @@ impl Auction {
         }
     }
 
+    #[inline]
     fn next_id(id: u32, rng: &mut SmallRng, nex: &NEXMarkConfig) -> u32 {
         let max_auction = Self::last_id(id, nex);
         let min_auction = if max_auction < nex.in_flight_auctions {
@@ -134,6 +140,7 @@ impl Auction {
             )
     }
 
+    #[inline]
     fn last_id(id: u32, nex: &NEXMarkConfig) -> u32 {
         let mut epoch = id / nex.proportion_denominator;
         let mut offset = id % nex.proportion_denominator;
@@ -148,6 +155,7 @@ impl Auction {
         epoch * nex.auction_proportion + offset
     }
 
+    #[inline]
     fn next_length(events_so_far: u32, rng: &mut SmallRng, time: u32, nex: &NEXMarkConfig) -> u32 {
         let current_event = nex.next_adjusted_event(events_so_far);
         let events_for_auctions =
@@ -171,6 +179,7 @@ pub struct Bid {
 }
 
 impl Bid {
+    #[inline]
     fn new(id: u32, time: u32, rng: &mut SmallRng, nex: &NEXMarkConfig) -> Self {
         let auction = if 0 < rng.gen_range(0, nex.hot_auction_ratio as usize) {
             (Auction::last_id(id, nex) / nex.hot_auction_ratio_2) * nex.hot_auction_ratio_2
@@ -198,6 +207,7 @@ pub struct NEXMarkEvent {
 }
 
 impl NEXMarkEvent {
+    #[inline]
     pub fn create(events_so_far: u32, rng: &mut SmallRng, nex: &mut NEXMarkConfig) -> Self {
         let rem = nex.next_adjusted_event(events_so_far) % nex.proportion_denominator;
         let timestamp = nex.event_timestamp_ns(nex.next_adjusted_event(events_so_far));
@@ -224,6 +234,7 @@ impl NEXMarkEvent {
         }
     }
 
+    #[inline]
     pub fn id(&self) -> u32 {
         match *self.inner.as_ref().unwrap() {
             Event::Person(ref p) => p.id,
@@ -231,6 +242,7 @@ impl NEXMarkEvent {
             Event::Bid(ref b) => b.auction, // Bid events don't have ids, so use the associated auction id
         }
     }
+    #[inline]
     pub fn time(&self) -> u32 {
         match *self.inner.as_ref().unwrap() {
             Event::Person(ref p) => p.date,

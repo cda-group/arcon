@@ -8,9 +8,10 @@ extern crate clap;
 #[macro_use]
 extern crate log;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use clap::{App, AppSettings, Arg, SubCommand};
-use std::{fs::metadata, usize};
+use std::fs::metadata;
+use experiments::nexmark::config::*;
 
 const DEFAULT_NEXMARK_CONFIG: &str = "nexmark_config.toml";
 
@@ -25,14 +26,6 @@ fn main() {
         .short("c")
         .help("Path to Nexmark Config");
 
-    let kompact_threads_arg = Arg::with_name("t")
-        .required(false)
-        .default_value("4")
-        .takes_value(true)
-        .long("Threads for the KompactSystem")
-        .short("t")
-        .help("Threads for the KompactSystem");
-
     let batch_size_arg = Arg::with_name("b")
         .required(false)
         .default_value("1024")
@@ -40,14 +33,6 @@ fn main() {
         .long("Batch size for ChannelStrategy")
         .short("b")
         .help("Batch size for ChannelStrategy");
-
-    let kompact_throughput_arg = Arg::with_name("k")
-        .required(false)
-        .default_value("50")
-        .takes_value(true)
-        .long("Kompact cfg throughput")
-        .short("k")
-        .help("kompact cfg throughput");
 
     let log_frequency_arg = Arg::with_name("f")
         .required(false)
@@ -83,8 +68,6 @@ fn main() {
             SubCommand::with_name("run")
                 .setting(AppSettings::ColoredHelp)
                 .arg(&nexmark_config_arg)
-                .arg(&kompact_throughput_arg)
-                .arg(&kompact_threads_arg)
                 .arg(&batch_size_arg)
                 .arg(&log_frequency_arg)
                 .about("Run Nexmark Query"),
@@ -115,24 +98,11 @@ fn main() {
                 .parse::<u64>()
                 .unwrap();
 
-            let kompact_throughput = arg_matches
-                .value_of("k")
-                .expect("Should not happen as there is a default")
-                .parse::<u64>()
-                .unwrap();
-
-            let kompact_threads = arg_matches
-                .value_of("t")
-                .expect("Should not happen as there is a default")
-                .parse::<usize>()
-                .unwrap();
 
             if let Err(err) = run(
                 &config_path,
                 batch_size,
-                kompact_threads,
                 log_freq,
-                kompact_throughput,
                 dedicated,
                 pinned,
                 log_throughput,
@@ -152,20 +122,21 @@ fn fetch_args() -> Vec<String> {
 
 fn run(
     config_path: &str,
-    batch_size: u64,
-    kompact_threads: usize,
-    log_freq: u64,
-    kompact_throughput: u64,
-    dedicated: bool,
-    pinned: bool,
-    log_throughput: bool,
+    _batch_size: u64,
+    _log_freq: u64,
+    _dedicated: bool,
+    _pinned: bool,
+    _log_throughput: bool,
 ) -> Result<()> {
+
+    // ArconPipeline::with_conf(..)
+
     let config_file: String = {
         let md = metadata(&config_path)?;
         if md.is_file() {
             config_path.to_string()
         } else {
-            (config_path.to_owned() + "/" + DEFAULT_NEXMARK_CONFIG)
+            config_path.to_owned() + "/" + DEFAULT_NEXMARK_CONFIG
         }
     };
 
