@@ -12,7 +12,7 @@ Arcon's execution plane
 """
 
 [features]
-default = []
+default = ["serde"]
 arcon_serde = ["serde_json", "bincode", "serde", "uuid/serde", "arcon_macros/arcon_serde"]
 kafka = ["rdkafka", "futures", "serde_json", "serde"]
 thread_pinning = ["kompact/thread_pinning"]
@@ -31,6 +31,8 @@ itertools = "0.8.2"
 smallbox = { version = "0.8", features = ["coerce"] }
 cfg-if = "0.1.10"
 fxhash = "0.2.1"
+num_cpus = "1.0"
+hocon = {version = "0.3", default-features = false, features = ["serde-support"]}
 
 # Serialisation
 abomonation = "0.7.3"
@@ -49,6 +51,7 @@ serde = { version = "1.0.104", features = ["derive"], optional = true }
 bincode = { version = "1.2.1", optional = true }
 rocksdb = { git = "https://github.com/mrobakowski/rust-rocksdb.git", branch = "arcon", optional = true }
 slog = { version = "2.2", features = ["release_max_level_off"], optional = true }
+rayon = { version = "1.3.0", optional = true }
 
 [dev-dependencies]
 tempfile = "3"

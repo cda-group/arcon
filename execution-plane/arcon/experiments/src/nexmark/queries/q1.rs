@@ -15,6 +15,7 @@ pub fn q1() {
     // TODO
     let channel_strategy = ChannelStrategy::Mute;
     let _node = Node::<Bid, Bid>::new(
+        String::from("map_node"),
         1.into(),
         vec![2.into()],
         channel_strategy,

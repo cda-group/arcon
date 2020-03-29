@@ -161,7 +161,7 @@ impl Watermark {
 
 /// Epoch marker message
 #[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
-#[derive(PMessage, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Abomonation)]
+#[derive(PMessage, Clone, Hash, Copy, Ord, PartialOrd, Eq, PartialEq, Abomonation)]
 pub struct Epoch {
     #[prost(uint64, tag = "1")]
     pub epoch: u64,

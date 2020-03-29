@@ -86,6 +86,7 @@ mod tests {
 
         let map_node = system.create(move || {
             Node::<i32, i32>::new(
+                String::from("map_node"),
                 0.into(),
                 vec![1.into()],
                 channel_strategy,

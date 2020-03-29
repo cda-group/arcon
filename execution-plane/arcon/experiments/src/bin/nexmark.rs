@@ -10,8 +10,9 @@ extern crate log;
 
 use anyhow::Result;
 use clap::{App, AppSettings, Arg, SubCommand};
-use std::fs::metadata;
 use experiments::nexmark::config::*;
+use arcon::prelude::{ArconPipeline, ArconConf};
+use std::fs::metadata;
 
 const DEFAULT_NEXMARK_CONFIG: &str = "nexmark_config.toml";
 
@@ -25,6 +26,12 @@ fn main() {
         .long("Nexmark config")
         .short("c")
         .help("Path to Nexmark Config");
+
+    let arcon_config_path = Arg::with_name("a")
+        .takes_value(true)
+        .long("Arcon config")
+        .short("a")
+        .help("Path to Arcon Config");
 
     let batch_size_arg = Arg::with_name("b")
         .required(false)
@@ -68,6 +75,7 @@ fn main() {
             SubCommand::with_name("run")
                 .setting(AppSettings::ColoredHelp)
                 .arg(&nexmark_config_arg)
+                .arg(&arcon_config_path)
                 .arg(&batch_size_arg)
                 .arg(&log_frequency_arg)
                 .about("Run Nexmark Query"),
@@ -80,11 +88,21 @@ fn main() {
 
     match matches.subcommand() {
         ("run", Some(arg_matches)) => {
-            let config_path = arg_matches
+            let nexmark_config_path = arg_matches
                 .value_of("c")
                 .expect("Should not happen as there is a default")
                 .parse::<String>()
                 .unwrap();
+
+            let arcon_path_opt = arg_matches.value_of("a");
+
+            let arcon_config_path = {
+                if let Some(p) = arcon_path_opt {
+                    Some(p.to_string())
+                } else {
+                    None
+                }
+            };
 
             let log_freq = arg_matches
                 .value_of("f")
@@ -98,9 +116,9 @@ fn main() {
                 .parse::<u64>()
                 .unwrap();
 
-
             if let Err(err) = run(
-                &config_path,
+                &nexmark_config_path,
+                arcon_config_path,
                 batch_size,
                 log_freq,
                 dedicated,
@@ -121,7 +139,8 @@ fn fetch_args() -> Vec<String> {
 }
 
 fn run(
-    config_path: &str,
+    nexmark_config_path: &str,
+    arcon_config_path: Option<String>,
     _batch_size: u64,
     _log_freq: u64,
     _dedicated: bool,
@@ -129,23 +148,32 @@ fn run(
     _log_throughput: bool,
 ) -> Result<()> {
 
-    // ArconPipeline::with_conf(..)
-
-    let config_file: String = {
-        let md = metadata(&config_path)?;
+    let nexmark_config_file: String = {
+        let md = metadata(&nexmark_config_path)?;
         if md.is_file() {
-            config_path.to_string()
+            nexmark_config_path.to_string()
         } else {
-            config_path.to_owned() + "/" + DEFAULT_NEXMARK_CONFIG
+            nexmark_config_path.to_owned() + "/" + DEFAULT_NEXMARK_CONFIG
         }
     };
 
     // Load Base conf
-    let mut nexmark_config = NEXMarkConfig::load(&config_file)?;
+    let mut nexmark_config = NEXMarkConfig::load(&nexmark_config_file)?;
     // Finish the conf
     NEXMarkConfig::finish(&mut nexmark_config);
-    info!("NEXMark Config {:?}\n", nexmark_config);
+    info!("{:?}\n", nexmark_config);
 
+    // Set up ArconPipeline
+    let pipeline = {
+        if let Some(path) = arcon_config_path {
+            let conf = ArconConf::from_file(&path).unwrap();
+            ArconPipeline::with_conf(conf)
+        } else {
+            ArconPipeline::new()
+        }
+    };
+
+    info!("{:?}\n", pipeline.arcon_conf());
     // Setup pipeline...
     match nexmark_config.query {
         NEXMarkQuery::CurrencyConversion => {

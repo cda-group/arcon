@@ -8,6 +8,7 @@ use crate::{
 };
 
 /// A strategy that sends message downstream in a Round-Robin fashion
+#[derive(Clone)]
 pub struct RoundRobin<A>
 where
     A: ArconType,
@@ -74,6 +75,11 @@ where
         } else {
             panic!("Bad channel setup");
         }
+    }
+
+    #[inline]
+    pub fn num_channels(&self) -> usize {
+        self.channels.len()
     }
 }
 

@@ -25,12 +25,13 @@ pub struct NormaliseElements {
 
 static PANIC_COUNTDOWN: Lazy<RwLock<u32>> = Lazy::new(|| RwLock::new(0));
 
-fn rocks_backend(node_id: u32) -> Box<dyn StateBackend> {
-    let runtime_dir = format!("running_{}", node_id);
-    let _ = fs::remove_dir_all(&runtime_dir);
-    fs::create_dir(&runtime_dir).unwrap();
+fn rocks_backend(base_dir: String, node_id: u32) -> Box<dyn StateBackend> {
+    let _ = fs::create_dir(&base_dir);
+    let restore_dir = format!("{}/restore_{}", base_dir, node_id);
+    let _ = fs::remove_dir_all(&restore_dir);
+    let _ = fs::create_dir(&restore_dir);
 
-    let dirs: Vec<String> = fs::read_dir(std::env::current_dir().unwrap())
+    let dirs: Vec<String> = fs::read_dir(&base_dir)
         .unwrap()
         .map(|d| d.unwrap().file_name().to_string_lossy().into_owned())
         .collect();
@@ -53,28 +54,40 @@ fn rocks_backend(node_id: u32) -> Box<dyn StateBackend> {
     match latest_complete_checkpoint {
         Some(epoch) => Box::new(
             RocksDb::restore(
-                &format!("checkpoint_{id}_{epoch}", id = node_id, epoch = epoch),
-                &runtime_dir,
+                &format!(
+                    "{}/checkpoint_{id}_{epoch}",
+                    base_dir,
+                    id = node_id,
+                    epoch = epoch
+                ),
+                &restore_dir,
             )
             .unwrap(),
         ),
-        None => Box::new(RocksDb::new(&runtime_dir).unwrap()),
+        None => Box::new(RocksDb::new(&restore_dir).unwrap()),
     }
 }
 
 /// manually sent events -> Window -> Map -> LocalFileSink
-fn run_pipeline(sink_path: &str) -> Result<(), ()> {
+fn run_pipeline(sink_path: &str, conf: ArconConf) -> Result<(), ()> {
     let timeout = std::time::Duration::from_millis(500);
-    let system = KompactConfig::default().build().expect("KompactSystem");
+    let mut pipeline = arcon::pipeline::ArconPipeline::with_conf(conf);
+    let checkpoint_dir = pipeline.arcon_conf().checkpoint_dir.clone();
+    let _ = fs::create_dir(&checkpoint_dir);
+    std::env::set_current_dir(&checkpoint_dir).unwrap();
+    let system = &pipeline.system();
 
     // Create Sink Component
+    let sink_base_dir = checkpoint_dir.clone();
+    let sink_descriptor = String::from("sink_node");
     let file_sink_node = system.create(move || {
         Node::new(
+            sink_descriptor.clone(),
             4.into(),
             vec![3.into()],
             ChannelStrategy::Mute,
             Box::new(LocalFileSink::new(sink_path)),
-            rocks_backend(4),
+            rocks_backend(sink_base_dir.clone(), 4),
         )
     });
     system
@@ -92,20 +105,23 @@ fn run_pipeline(sink_path: &str) -> Result<(), ()> {
 
     fn map_fn(x: NormaliseElements) -> i64 {
         if *PANIC_COUNTDOWN.read().unwrap() == 0 {
-            panic!("AAAAAA!!!")
+            panic!("expected panic!")
         }
         *PANIC_COUNTDOWN.write().unwrap() -= 1;
 
         x.data.iter().map(|x| x + 3).sum()
     }
 
+    let map_base_dir = checkpoint_dir.clone();
+    let map_descriptor = String::from("map_node");
     let map_node = system.create(move || {
         Node::<NormaliseElements, i64>::new(
+            map_descriptor.clone(),
             3.into(),
             vec![2.into()],
             channel_strategy,
             Box::new(Map::<NormaliseElements, i64>::new(&map_fn)),
-            rocks_backend(3),
+            rocks_backend(map_base_dir, 3),
         )
     });
 
@@ -123,7 +139,8 @@ fn run_pipeline(sink_path: &str) -> Result<(), ()> {
         NormaliseElements { data }
     }
 
-    let mut window_state_backend = rocks_backend(2);
+    let window_descriptor = String::from("window_node");
+    let mut window_state_backend = rocks_backend(checkpoint_dir.clone(), 2);
 
     let window: Box<dyn Window<i64, NormaliseElements>> =
         Box::new(AppenderWindow::new(&window_fn, &mut *window_state_backend));
@@ -134,6 +151,7 @@ fn run_pipeline(sink_path: &str) -> Result<(), ()> {
 
     let window_node = system.create(move || {
         Node::<i64, NormaliseElements>::new(
+            window_descriptor,
             2.into(),
             vec![1.into()],
             channel_strategy,
@@ -187,7 +205,7 @@ fn run_pipeline(sink_path: &str) -> Result<(), ()> {
 
     std::thread::sleep(std::time::Duration::from_secs(1));
 
-    system.shutdown().expect("Shutdown failed");
+    pipeline.shutdown();
 
     // check if any of the nodes panicked
     if window_node.is_faulty() || map_node.is_faulty() || file_sink_node.is_faulty() {
@@ -205,14 +223,15 @@ fn run_test() {
     let _ = fs::remove_dir_all(test_directory);
     fs::create_dir(test_directory).unwrap();
 
-    std::env::set_current_dir(test_directory).unwrap();
+    let mut conf = ArconConf::default();
+    conf.checkpoint_dir = test_directory.to_string_lossy().into_owned();
 
     // Define Sink File
     let sink_file = NamedTempFile::new().unwrap();
     let sink_path = sink_file.path().to_string_lossy().into_owned();
 
     *PANIC_COUNTDOWN.write().unwrap() = 2; // reaches zero quite quickly
-    run_pipeline(&sink_path).unwrap_err();
+    run_pipeline(&sink_path, conf.clone()).unwrap_err();
     {
         // Check results from the sink file!
         let file = File::open(sink_file.path()).expect("no such file");
@@ -226,7 +245,7 @@ fn run_test() {
     }
 
     *PANIC_COUNTDOWN.write().unwrap() = 100; // won't reach zero
-    run_pipeline(&sink_path).unwrap();
+    run_pipeline(&sink_path, conf).unwrap();
 
     // Check results from the sink file!
     let file = File::open(sink_file.path()).expect("no such file");

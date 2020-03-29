@@ -20,6 +20,7 @@ const DEFAULT_BATCH_SIZE: usize = 1024;
 /// A `ChannelStrategy` defines a strategy of how messages are sent downstream
 ///
 /// Common strategies include (one-to-one)[forward::Forward] and (one-to-many)[broadcast::Broadcast]
+#[derive(Clone)]
 pub enum ChannelStrategy<A>
 where
     A: ArconType,
@@ -60,6 +61,17 @@ where
             ChannelStrategy::KeyBy(s) => s.flush(),
             ChannelStrategy::RoundRobin(s) => s.flush(),
             ChannelStrategy::Mute => (),
+        }
+    }
+    /// Returns number of outgoing channels
+    #[inline]
+    pub(crate) fn num_channels(&self) -> usize {
+        match self {
+            ChannelStrategy::Forward(_) => 1,
+            ChannelStrategy::Broadcast(s) => s.num_channels(),
+            ChannelStrategy::KeyBy(s) => s.num_channels(),
+            ChannelStrategy::RoundRobin(s) => s.num_channels(),
+            ChannelStrategy::Mute => 0,
         }
     }
 }

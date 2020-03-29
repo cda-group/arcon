@@ -227,6 +227,7 @@ fn exec(
     ));
 
     let node = Node::<Item, EnrichedItem>::new(
+        String::from("map_node"),
         1.into(),
         vec![2.into()],
         channel_strategy,
