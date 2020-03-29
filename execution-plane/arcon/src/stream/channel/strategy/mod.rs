@@ -67,7 +67,7 @@ where
     #[inline]
     pub(crate) fn num_channels(&self) -> usize {
         match self {
-            ChannelStrategy::Forward(s) => 1,
+            ChannelStrategy::Forward(_) => 1,
             ChannelStrategy::Broadcast(s) => s.num_channels(),
             ChannelStrategy::KeyBy(s) => s.num_channels(),
             ChannelStrategy::RoundRobin(s) => s.num_channels(),

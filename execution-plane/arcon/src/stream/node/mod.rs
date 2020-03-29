@@ -6,15 +6,15 @@ pub mod debug;
 
 use crate::{
     data::tree::*,
-    manager::{
-        node_manager::*,
-        state_manager::{StateEvent, StateManagerPort, StateUpdate},
-    },
+    manager::{node_manager::*, state_manager::StateManagerPort},
     metrics::{counter::Counter, gauge::Gauge, meter::Meter},
     prelude::*,
     stream::operator::OperatorContext,
 };
 use std::iter;
+
+/// Type alias for a Node description
+pub type NodeDescriptor = String;
 
 /// Metrics reported by an Arcon Node
 #[derive(Debug, Clone)]
@@ -79,6 +79,8 @@ where
     pub(crate) node_manager_port: RequiredPort<NodeManagerPort, Self>,
     /// Port for state related concerns
     pub(crate) state_manager_port: RequiredPort<StateManagerPort, Self>,
+    /// Node descriptor
+    descriptor: NodeDescriptor,
     /// A Node identifier
     id: NodeID,
     /// Strategy used by the Node
@@ -102,6 +104,7 @@ where
 {
     /// Creates a new Node
     pub fn new(
+        descriptor: NodeDescriptor,
         id: NodeID,
         in_channels: Vec<NodeID>,
         channel_strategy: ChannelStrategy<OUT>,
@@ -172,6 +175,7 @@ where
             ctx: ComponentContext::new(),
             state_manager_port: RequiredPort::new(),
             node_manager_port: RequiredPort::new(),
+            descriptor,
             id,
             channel_strategy,
             in_channels,
@@ -360,8 +364,6 @@ where
 
     fn save_state(&mut self) -> ArconResult<()> {
         if let Some(base_dir) = &self.ctx().config()["checkpoint_dir"].as_string() {
-            // TODO: should probably add a node description to the Node,
-            //       so it becomes easier to identify paths to snapshots of different types of nodes...
             let checkpoint_dir = format!(
                 "{}/checkpoint_{id}_{epoch}",
                 base_dir,
@@ -379,7 +381,6 @@ where
                 "Completed a Checkpoint to path {}", checkpoint_dir
             );
         } else {
-            println!("failed to find config");
             return arcon_err!("Failed to fetch checkpoint_dir from Config");
         }
 
@@ -418,7 +419,10 @@ where
     fn handle(&mut self, event: ControlEvent) {
         match event {
             ControlEvent::Start => {
-                debug!(self.ctx.log(), "Started Arcon Node");
+                debug!(
+                    self.ctx.log(),
+                    "Started Arcon Node {} with Node ID {:?}", self.descriptor, self.id
+                );
 
                 // Start periodic timer reporting Node metrics
                 if let Some(interval) = &self.ctx().config()["node_metrics_interval"].as_i64() {
@@ -451,7 +455,7 @@ where
     IN: ArconType,
     OUT: ArconType,
 {
-    fn handle(&mut self, event: ()) {}
+    fn handle(&mut self, _: ()) {}
 }
 
 impl<IN, OUT> Require<NodeManagerPort> for Node<IN, OUT>
@@ -459,14 +463,14 @@ where
     IN: ArconType,
     OUT: ArconType,
 {
-    fn handle(&mut self, event: ()) {}
+    fn handle(&mut self, _: ()) {}
 }
 impl<IN, OUT> Provide<NodeManagerPort> for Node<IN, OUT>
 where
     IN: ArconType,
     OUT: ArconType,
 {
-    fn handle(&mut self, event: NodeEvent) {}
+    fn handle(&mut self, _: NodeEvent) {}
 }
 
 impl<IN, OUT> Provide<StateManagerPort> for Node<IN, OUT>
@@ -474,7 +478,7 @@ where
     IN: ArconType,
     OUT: ArconType,
 {
-    fn handle(&mut self, event: crate::manager::state_manager::StateEvent) {}
+    fn handle(&mut self, _: crate::manager::state_manager::StateEvent) {}
 }
 
 impl<IN, OUT> Actor for Node<IN, OUT>
@@ -538,6 +542,7 @@ mod tests {
 
         let filter_node = system.create(move || {
             Node::<i32, i32>::new(
+                String::from("filter_node"),
                 0.into(),
                 vec![1.into(), 2.into(), 3.into()],
                 channel_strategy,

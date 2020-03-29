@@ -27,7 +27,7 @@ impl Gauge {
 
     /// Decrement the Gauge by one
     #[inline]
-    pub fn dec(&mut self, n: usize) {
+    pub fn dec(&mut self) {
         self.dec_n(1);
     }
 

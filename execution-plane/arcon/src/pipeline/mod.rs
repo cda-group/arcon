@@ -66,11 +66,16 @@ impl ArconPipeline {
         (system, state_manager)
     }
 
-    /// Give out a reference to the KompactSystem of the pipeline
+    /// Give out a mutable reference to the KompactSystem of the pipeline
     ///
     /// Useful for testing purposes
-    pub(crate) fn system(&mut self) -> &mut KompactSystem {
+    pub fn system(&mut self) -> &mut KompactSystem {
         &mut self.system
+    }
+
+    /// Give out a reference to the ArconConf of the pipeline
+    pub fn arcon_conf(&self) -> &ArconConf {
+        &self.conf
     }
 
     /// Adds a NodeManager to the Arcon Pipeline
@@ -78,6 +83,7 @@ impl ArconPipeline {
         &mut self,
         node_description: String,
         node_fn: &'static dyn SafelySendableFn(
+            String,
             NodeID,
             Vec<NodeID>,
             ChannelStrategy<OUT>,
@@ -156,6 +162,7 @@ mod tests {
 
         // Define the function to create our Node
         fn node_fn(
+            description: String,
             id: NodeID,
             in_channels: Vec<NodeID>,
             channel_strategy: ChannelStrategy<u32>,
@@ -166,6 +173,7 @@ mod tests {
             }
 
             Node::new(
+                description,
                 id,
                 in_channels,
                 channel_strategy,
@@ -175,6 +183,7 @@ mod tests {
         }
 
         let node_one = node_fn(
+            String::from("node_one"),
             NodeID::new(0),
             vec![NodeID::new(1)],
             channel_strategy.clone(),

@@ -42,6 +42,7 @@ impl Port for NodeManagerPort {
 ///          MapNode2  ------> WindowNode2
 ///
 /// ```
+#[allow(dead_code)]
 #[derive(ComponentDefinition)]
 pub struct NodeManager<IN, OUT>
 where
@@ -81,8 +82,12 @@ where
     /// It is defined as an Option as sink components won't have any next_manager
     next_manager: Option<RequiredRef<NodeManagerPort>>,
     /// Function to create a Node on this NodeManager
-    node_fn:
-        &'static dyn SafelySendableFn(NodeID, Vec<NodeID>, ChannelStrategy<OUT>) -> Node<IN, OUT>,
+    node_fn: &'static dyn SafelySendableFn(
+        String,
+        NodeID,
+        Vec<NodeID>,
+        ChannelStrategy<OUT>,
+    ) -> Node<IN, OUT>,
 }
 
 impl<IN, OUT> NodeManager<IN, OUT>
@@ -93,6 +98,7 @@ where
     pub fn new(
         node_description: String,
         node_fn: &'static dyn SafelySendableFn(
+            String,
             NodeID,
             Vec<NodeID>,
             ChannelStrategy<OUT>,
@@ -142,11 +148,11 @@ where
                     "Started NodeManager for {}", self.node_description
                 );
 
-                let mut manager_port = &mut self.manager_port;
+                let manager_port = &mut self.manager_port;
                 // For each node, connect its NodeManagerPort to NodeManager
                 for (_, node) in &self.nodes {
-                    let mut node_port = &node.on_definition(|cd| {
-                        let mut p = &mut cd.node_manager_port;
+                    &node.on_definition(|cd| {
+                        let p = &mut cd.node_manager_port;
                         biconnect_ports::<NodeManagerPort, _, _>(manager_port, p);
                     });
                 }
@@ -168,7 +174,6 @@ where
             NodeEvent::Metrics(id, metrics) => {
                 self.node_metrics.insert(id, metrics);
             }
-            _ => {}
         }
     }
 }
@@ -178,7 +183,7 @@ where
     IN: ArconType,
     OUT: ArconType,
 {
-    fn handle(&mut self, event: ()) {}
+    fn handle(&mut self, _: ()) {}
 }
 
 impl<IN, OUT> Actor for NodeManager<IN, OUT>

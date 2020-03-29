@@ -11,22 +11,22 @@ use serde::Deserialize;
 pub struct ArconConf {
     /// Base directory for checkpoints
     #[serde(default = "checkpoint_dir_default")]
-    checkpoint_dir: String,
+    pub checkpoint_dir: String,
     /// Generation interval in milliseconds for Watermarks at sources
     #[serde(default = "watermark_interval_default")]
-    watermark_interval: u64,
+    pub watermark_interval: u64,
     /// Interval in milliseconds for sending off metrics from nodes
     #[serde(default = "node_metrics_interval_default")]
-    node_metrics_interval: u64,
+    pub node_metrics_interval: u64,
     /// Amount of threads for Kompact's threadpool
     #[serde(default = "kompact_threads_default")]
-    kompact_threads: usize,
+    pub kompact_threads: usize,
     /// Controls the amount of messages a component processes per schedule iteration
     #[serde(default = "kompact_throughput_default")]
-    kompact_throughput: usize,
+    pub kompact_throughput: usize,
     /// Float value that sets message priority
     #[serde(default = "kompact_msg_priority_default")]
-    kompact_msg_priority: f32,
+    pub kompact_msg_priority: f32,
 }
 
 impl ArconConf {

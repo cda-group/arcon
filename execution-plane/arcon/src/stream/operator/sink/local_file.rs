@@ -79,6 +79,7 @@ mod tests {
         let node_id = NodeID::new(1);
         let sink_comp = system.create(move || {
             Node::new(
+                String::from("sink_comp"),
                 0.into(),
                 vec![node_id],
                 ChannelStrategy::Mute,

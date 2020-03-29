@@ -62,7 +62,7 @@ impl EWMA {
         let instant_rate: f64 = count as f64 / self.interval;
 
         if self.initialised {
-            self.rate += (self.alpha * (instant_rate - self.rate));
+            self.rate += self.alpha * (instant_rate - self.rate);
         } else {
             self.rate = instant_rate;
             self.initialised = true;

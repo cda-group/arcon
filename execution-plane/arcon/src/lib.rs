@@ -53,6 +53,8 @@ pub mod macros {
 
 /// Helper module that imports everything related to arcon into scope
 pub mod prelude {
+    pub use crate::conf::ArconConf;
+    pub use crate::pipeline::ArconPipeline;
     pub use crate::stream::{
         channel::{
             strategy::{
