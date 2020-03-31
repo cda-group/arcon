@@ -8,6 +8,8 @@ use crate::{
 };
 use arcon_error::ArconResult;
 
+/// An Arcon operator for performing an in-place map
+///
 /// IN: Input Event
 pub struct MapInPlace<IN>
 where

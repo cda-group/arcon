@@ -71,7 +71,7 @@ pub mod prelude {
             },
             node::{debug::DebugNode, Node, NodeDescriptor},
             operator::{
-                function::{Filter, FlatMap, Map, MapInPlace},
+                function::{Filter, FilterMap, FlatMap, Map, MapInPlace},
                 sink::local_file::LocalFileSink,
                 window::{AppenderWindow, EventTimeWindowAssigner, IncrementalWindow, Window},
                 Operator,

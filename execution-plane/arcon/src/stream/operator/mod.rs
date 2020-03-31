@@ -1,8 +1,11 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/// Available function operators
 pub mod function;
+/// Available sink operators
 pub mod sink;
+/// Available window operators
 pub mod window;
 
 use crate::{
