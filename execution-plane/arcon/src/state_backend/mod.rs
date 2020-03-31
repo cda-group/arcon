@@ -56,6 +56,8 @@ pub mod serialization;
 #[macro_use]
 pub mod state_types;
 
+#[cfg(feature = "arcon_faster")]
+pub mod faster;
 pub mod in_memory;
 #[cfg(feature = "arcon_rocksdb")]
 pub mod rocks;
