@@ -24,7 +24,7 @@ where
 {
     fn clear(&self, backend: &mut Faster) -> ArconResult<()> {
         let key = self.common.get_db_key_prefix()?;
-        backend.in_session_mut(|backend| backend.remove(key))?;
+        backend.in_session_mut(|backend| backend.remove(&key))?;
         Ok(())
     }
 
@@ -40,7 +40,7 @@ where
     fn get(&self, backend: &Faster) -> ArconResult<Option<T>> {
         backend.in_session(|backend| {
             let key = self.common.get_db_key_prefix()?;
-            if let Some(serialized) = backend.get(key)? {
+            if let Some(serialized) = backend.get(&key)? {
                 let value = T::deserialize(&self.common.value_serializer, &serialized)?;
                 Ok(Some(value))
             } else {
@@ -53,7 +53,7 @@ where
         backend.in_session_mut(|backend| {
             let key = self.common.get_db_key_prefix()?;
             let serialized = T::serialize(&self.common.value_serializer, &new_value)?;
-            backend.put(key, serialized)?;
+            backend.put(&key, &serialized)?;
             Ok(())
         })
     }

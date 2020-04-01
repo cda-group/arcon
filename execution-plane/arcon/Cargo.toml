@@ -20,7 +20,7 @@ socket = ["tokio-util", "tokio", "futures", "serde_json", "serde"]
 arcon_rocksdb = ["rocksdb"]
 arcon_sled = ["sled"]
 arcon_sled_checkpoints = []
-arcon_faster = ["faster-rs"]
+arcon_faster = ["faster-rs", "serde"]
 quiet = ["slog"]
 
 [dependencies]

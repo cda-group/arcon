@@ -4,14 +4,15 @@ use crate::{
         VecStateBuilder,
     },
     state_backend::{
-        faster::value_state::FasterValueState,
-        serialization::{DeserializableWith, SerializableWith},
+        faster::{map_state::FasterMapState, value_state::FasterValueState},
+        serialization::{DeserializableWith, LittleEndianBytesDump, SerializableWith},
         state_types::Aggregator,
         MapStateBuilder, StateBackend,
     },
 };
 use error::ResultExt;
-use faster_rs::{status, FasterKv, FasterKvBuilder};
+use faster_rs::{status, FasterKv, FasterKvBuilder, FasterRmw};
+use serde::{Deserialize, Serialize};
 use static_assertions::_core::sync::atomic::AtomicI64;
 use std::{
     cell::Cell,
@@ -186,6 +187,7 @@ fn copy_checkpoint(
     Ok(())
 }
 
+// NOTE: weird types (&Vec<u8>, which should be &[u8]) are due to the design of the faster-rs lib
 impl Faster {
     fn next_serial_number(&self) -> u64 {
         self.monotonic_serial_number.fetch_add(1, Ordering::SeqCst)
@@ -205,9 +207,9 @@ impl Faster {
         res
     }
 
-    fn get(&self, key: Vec<u8>) -> ArconResult<Option<Vec<u8>>> {
+    fn get(&self, key: &Vec<u8>) -> ArconResult<Option<Vec<u8>>> {
         // TODO: make the return of `read` more rusty
-        let (status, receiver) = self.db.read(&key, self.next_serial_number());
+        let (status, receiver) = self.db.read(key, self.next_serial_number());
         match status {
             status::NOT_FOUND => Ok(None),
             status::OK | status::PENDING => {
@@ -220,29 +222,80 @@ impl Faster {
         }
     }
 
-    fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> ArconResult<()> {
+    fn get_vec(&self, key: &Vec<u8>) -> ArconResult<Option<Vec<Vec<u8>>>> {
+        let (status, receiver) = self.db.read(key, self.next_serial_number());
+        match status {
+            status::NOT_FOUND => Ok(None),
+            status::OK | status::PENDING => {
+                let vec_ops: FasterVecOps = receiver
+                    .recv_timeout(Duration::from_secs(2)) // TODO: make that customizable
+                    .ctx("Could not receive result from faster thread")?;
+
+                use FasterVecOps::*;
+                let val = match vec_ops {
+                    Value(v) => v,
+                    Push(single) | PushIfAbsent(single) => vec![single],
+                    _ => return arcon_err!("invalid faster vec ops value"),
+                };
+
+                Ok(Some(val))
+            }
+            _ => arcon_err!("faster get error: {}", status),
+        }
+    }
+
+    fn put(&mut self, key: &Vec<u8>, value: &Vec<u8>) -> ArconResult<()> {
         // TODO: make the return of `upsert` more rusty
-        let status = self.db.upsert(&key, &value, self.next_serial_number());
+        let status = self.db.upsert(key, value, self.next_serial_number());
         match status {
             status::OK | status::PENDING => Ok(()),
             _ => arcon_err!("faster put error: {}", status),
         }
     }
 
-    fn remove(&mut self, key: Vec<u8>) -> ArconResult<()> {
-        let status = self.db.delete(&key, self.next_serial_number());
+    fn remove(&mut self, key: &Vec<u8>) -> ArconResult<()> {
+        let status = self.db.delete(key, self.next_serial_number());
         match status {
             status::OK | status::PENDING => Ok(()),
             _ => arcon_err!("faster remove error: {}", status),
         }
     }
 
-    fn remove_prefix(&mut self, prefix: Vec<u8>) -> ArconResult<()> {
-        todo!()
+    fn vec_remove(&mut self, key: &Vec<u8>, to_remove: Vec<u8>) -> ArconResult<()> {
+        let status = self.db.rmw(
+            key,
+            &FasterVecOps::Remove(to_remove),
+            self.next_serial_number(),
+        );
+
+        match status {
+            status::OK | status::PENDING => Ok(()),
+            _ => arcon_err!("faster remove error: {}", status),
+        }
     }
 
-    fn contains(&self, tree_name: &[u8], key: &[u8]) -> ArconResult<bool> {
-        todo!()
+    fn vec_push(&mut self, key: &Vec<u8>, to_push: Vec<u8>) -> ArconResult<()> {
+        let status = self
+            .db
+            .rmw(key, &FasterVecOps::Push(to_push), self.next_serial_number());
+
+        match status {
+            status::OK | status::PENDING => Ok(()),
+            _ => arcon_err!("faster remove error: {}", status),
+        }
+    }
+
+    fn vec_push_if_absent(&mut self, key: &Vec<u8>, to_push: Vec<u8>) -> ArconResult<()> {
+        let status = self.db.rmw(
+            key,
+            &FasterVecOps::PushIfAbsent(to_push),
+            self.next_serial_number(),
+        );
+
+        match status {
+            status::OK | status::PENDING => Ok(()),
+            _ => arcon_err!("faster remove error: {}", status),
+        }
     }
 }
 
@@ -264,12 +317,12 @@ where
         UK: SerializableWith<KS>,
     {
         let mut res = Vec::with_capacity(
-            self.state_name.len()
+            Vec::<u8>::size_hint(&LittleEndianBytesDump, &self.state_name).unwrap_or(0)
                 + IK::size_hint(&self.key_serializer, &self.item_key).unwrap_or(0)
                 + N::size_hint(&self.key_serializer, &self.namespace).unwrap_or(0)
                 + UK::size_hint(&self.key_serializer, user_key).unwrap_or(0),
         );
-        res.extend_from_slice(&self.state_name);
+        Vec::<u8>::serialize_into(&LittleEndianBytesDump, &mut res, &self.state_name)?;
         IK::serialize_into(&self.key_serializer, &mut res, &self.item_key)?;
         N::serialize_into(&self.key_serializer, &mut res, &self.namespace)?;
         UK::serialize_into(&self.key_serializer, &mut res, user_key)?;
@@ -279,15 +332,57 @@ where
 
     pub fn get_db_key_prefix(&self) -> ArconResult<Vec<u8>> {
         let mut res = Vec::with_capacity(
-            self.state_name.len()
+            Vec::<u8>::size_hint(&LittleEndianBytesDump, &self.state_name).unwrap_or(0)
                 + IK::size_hint(&self.key_serializer, &self.item_key).unwrap_or(0)
                 + N::size_hint(&self.key_serializer, &self.namespace).unwrap_or(0),
         );
-        res.extend_from_slice(&self.state_name);
+        Vec::<u8>::serialize_into(&LittleEndianBytesDump, &mut res, &self.state_name)?;
         IK::serialize_into(&self.key_serializer, &mut res, &self.item_key)?;
         N::serialize_into(&self.key_serializer, &mut res, &self.namespace)?;
 
         Ok(res)
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+enum FasterVecOps {
+    Value(Vec<Vec<u8>>),
+    Push(Vec<u8>),
+    PushIfAbsent(Vec<u8>),
+    Remove(Vec<u8>),
+    RemoveIdx(usize),
+}
+
+impl FasterRmw for FasterVecOps {
+    fn rmw(&self, modification: Self) -> Self {
+        use FasterVecOps::*;
+        let mut res = match self {
+            Value(v) => v.clone(),
+            Push(single) | PushIfAbsent(single) => vec![single.clone()],
+            _ => panic!("invalid faster vec ops value"),
+        };
+
+        match modification {
+            Value(elems) => res.extend_from_slice(&elems),
+            Push(elem) => res.push(elem),
+            PushIfAbsent(elem) => {
+                if !res.contains(&elem) {
+                    res.push(elem);
+                }
+            }
+            Remove(elem) => {
+                let idx = res.iter().position(|i| i == &elem);
+                if let Some(idx) = idx {
+                    res.remove(idx);
+                }
+                // does nothing if the item doesn't exist
+            }
+            RemoveIdx(idx) => {
+                res.remove(idx);
+            }
+        }
+
+        Value(res)
     }
 }
 
@@ -320,8 +415,40 @@ where
     }
 }
 
+impl<IK, N, K, V, KS, TS> MapStateBuilder<IK, N, K, V, KS, TS> for Faster
+where
+    IK: SerializableWith<KS> + DeserializableWith<KS>,
+    N: SerializableWith<KS> + DeserializableWith<KS>,
+    K: SerializableWith<KS> + DeserializableWith<KS>,
+    V: SerializableWith<TS> + DeserializableWith<TS>,
+    KS: Clone + 'static,
+    TS: Clone + 'static,
+{
+    type Type = FasterMapState<IK, N, K, V, KS, TS>;
+
+    fn new_map_state(
+        &mut self,
+        name: &str,
+        item_key: IK,
+        namespace: N,
+        key_serializer: KS,
+        value_serializer: TS,
+    ) -> Self::Type {
+        FasterMapState {
+            common: StateCommon {
+                state_name: name.as_bytes().to_vec(),
+                item_key,
+                namespace,
+                key_serializer,
+                value_serializer,
+            },
+            _phantom: Default::default(),
+        }
+    }
+}
+
 // mod aggregating_state;
-// mod map_state;
+mod map_state;
 // mod reducing_state;
 mod value_state;
 // mod vec_state;
@@ -390,11 +517,11 @@ pub mod test {
         let mut faster = Faster::new(dir.path().to_string_lossy().as_ref()).unwrap();
 
         faster.in_session_mut(|faster| {
-            faster.put(b"a".to_vec(), b"1".to_vec()).unwrap();
-            faster.put(b"b".to_vec(), b"2".to_vec()).unwrap();
+            faster.put(&b"a".to_vec(), &b"1".to_vec()).unwrap();
+            faster.put(&b"b".to_vec(), &b"2".to_vec()).unwrap();
 
-            let one = faster.get(b"a".to_vec()).unwrap().unwrap();
-            let two = faster.get(b"b".to_vec()).unwrap().unwrap();
+            let one = faster.get(&b"a".to_vec()).unwrap().unwrap();
+            let two = faster.get(&b"b".to_vec()).unwrap().unwrap();
 
             assert_eq!(&one, b"1");
             assert_eq!(&two, b"2");
@@ -417,16 +544,16 @@ pub mod test {
         assert!(restored.was_restored());
 
         restored.in_session(|restored| {
-            let one = restored.get(b"a".to_vec()).unwrap().unwrap();
-            let two = restored.get(b"b".to_vec()).unwrap().unwrap();
+            let one = restored.get(&b"a".to_vec()).unwrap().unwrap();
+            let two = restored.get(&b"b".to_vec()).unwrap().unwrap();
 
             assert_eq!(&one, b"1");
             assert_eq!(&two, b"2");
         });
 
         restored.in_session_mut(|restored| {
-            restored.remove(b"a".to_vec()).unwrap();
-            restored.put(b"c".to_vec(), b"3".to_vec()).unwrap();
+            restored.remove(&b"a".to_vec()).unwrap();
+            restored.put(&b"c".to_vec(), &b"3".to_vec()).unwrap();
         });
 
         let chkp2_dir = tempfile::TempDir::new().unwrap();
@@ -443,9 +570,9 @@ pub mod test {
         .unwrap();
 
         restored2.in_session_mut(|r2| {
-            let one = r2.get(b"a".to_vec()).unwrap();
-            let two = r2.get(b"b".to_vec()).unwrap().unwrap();
-            let three = r2.get(b"c".to_vec()).unwrap().unwrap();
+            let one = r2.get(&b"a".to_vec()).unwrap();
+            let two = r2.get(&b"b".to_vec()).unwrap().unwrap();
+            let three = r2.get(&b"c".to_vec()).unwrap().unwrap();
 
             assert_eq!(one, None);
             assert_eq!(&two, b"2");
