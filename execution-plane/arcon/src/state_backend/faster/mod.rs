@@ -5,7 +5,8 @@ use crate::{
     },
     state_backend::{
         faster::{
-            map_state::FasterMapState, value_state::FasterValueState, vec_state::FasterVecState,
+            map_state::FasterMapState, reducing_state::FasterReducingState,
+            value_state::FasterValueState, vec_state::FasterVecState,
         },
         serialization::{DeserializableWith, LittleEndianBytesDump, SerializableWith},
         state_types::Aggregator,
@@ -15,7 +16,7 @@ use crate::{
 use error::ResultExt;
 use faster_rs::{status, FasterKv, FasterKvBuilder, FasterRmw};
 use serde::{Deserialize, Serialize};
-use static_assertions::_core::sync::atomic::AtomicI64;
+use static_assertions::_core::{marker::PhantomData, sync::atomic::AtomicI64};
 use std::{
     cell::Cell,
     fs::File,
@@ -307,6 +308,46 @@ impl Faster {
             _ => arcon_err!("faster put error: {}", status),
         }
     }
+
+    fn aggregate(
+        &mut self,
+        key: &Vec<u8>,
+        new: Vec<u8>,
+        fun: &dyn Fn(&Vec<u8>, &Vec<u8>) -> Vec<u8>,
+    ) -> ArconResult<()> {
+        let fun_fat_ptr_bytes = unsafe { std::mem::transmute(fun) };
+
+        let status = self.db.rmw(
+            key,
+            &FasterAgg::Modify(new, fun_fat_ptr_bytes),
+            self.next_serial_number(),
+        );
+
+        match status {
+            status::OK | status::PENDING => Ok(()),
+            _ => arcon_err!("faster put error: {}", status),
+        }
+    }
+
+    fn get_agg(&self, key: &Vec<u8>) -> ArconResult<Option<Vec<u8>>> {
+        let (status, receiver) = self.db.read(key, self.next_serial_number());
+        match status {
+            status::NOT_FOUND => Ok(None),
+            status::OK | status::PENDING => {
+                let vec_ops: FasterAgg = receiver
+                    .recv_timeout(Duration::from_secs(2)) // TODO: make that customizable
+                    .ctx("Could not receive result from faster thread")?;
+
+                let val = match vec_ops {
+                    FasterAgg::Value(v) => v,
+                    FasterAgg::Modify(v, _fn_fat_ptr_bytes) => v,
+                };
+
+                Ok(Some(val))
+            }
+            _ => arcon_err!("faster get error: {}", status),
+        }
+    }
 }
 
 pub(crate) struct StateCommon<IK, N, KS, TS> {
@@ -393,6 +434,33 @@ impl FasterRmw for FasterVecOps {
         }
 
         Value(res)
+    }
+}
+
+// HACK: we box the closure and serialize a raw pointer to it
+#[derive(Serialize, Deserialize)]
+enum FasterAgg {
+    Value(Vec<u8>),
+    Modify(
+        Vec<u8>,
+        [u8; std::mem::size_of::<&dyn Fn(&Vec<u8>, &Vec<u8>) -> Vec<u8>>()],
+    ),
+}
+
+impl FasterRmw for FasterAgg {
+    fn rmw(&self, modification: Self) -> Self {
+        let old = match self {
+            FasterAgg::Value(v) => v,
+            FasterAgg::Modify(v, _fun_fat_ptr_bytes) => v,
+        };
+
+        if let FasterAgg::Modify(new, fun_fat_ptr_bytes) = modification {
+            let f: &dyn Fn(&Vec<u8>, &Vec<u8>) -> Vec<u8> =
+                unsafe { std::mem::transmute(fun_fat_ptr_bytes) };
+            FasterAgg::Value(f(old, &new))
+        } else {
+            panic!("modification argument must be Agg::Modify");
+        }
     }
 }
 
@@ -486,9 +554,42 @@ where
     }
 }
 
+impl<IK, N, T, F, KS, TS> ReducingStateBuilder<IK, N, T, F, KS, TS> for Faster
+where
+    IK: SerializableWith<KS>,
+    N: SerializableWith<KS>,
+    T: SerializableWith<TS> + DeserializableWith<TS>,
+    F: Fn(&T, &T) -> T + 'static,
+    TS: Clone + 'static,
+{
+    type Type = FasterReducingState<IK, N, T, F, KS, TS>;
+
+    fn new_reducing_state(
+        &mut self,
+        name: &str,
+        init_item_key: IK,
+        init_namespace: N,
+        reduce_fn: F,
+        key_serializer: KS,
+        value_serializer: TS,
+    ) -> Self::Type {
+        FasterReducingState {
+            common: StateCommon {
+                state_name: name.as_bytes().to_vec(),
+                item_key: init_item_key,
+                namespace: init_namespace,
+                key_serializer,
+                value_serializer: value_serializer.clone(),
+            },
+            reduce_fn: reducing_state::make_reduce_fn(reduce_fn, value_serializer),
+            _phantom: Default::default(),
+        }
+    }
+}
+
 // mod aggregating_state;
 mod map_state;
-// mod reducing_state;
+mod reducing_state;
 mod value_state;
 mod vec_state;
 
