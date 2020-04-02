@@ -185,14 +185,12 @@ where
 
         let iter = keys.into_iter().flatten().map(move |serialized_key| {
             // TODO: multiple sessions opened and closed often
-            backend.in_session(|backend| {
-                let mut key_cursor = &serialized_key[..];
-                let _ = Vec::<u8>::deserialize_from(&LittleEndianBytesDump, &mut key_cursor)?;
-                let _ = IK::deserialize_from(&key_serializer, &mut key_cursor)?;
-                let _ = N::deserialize_from(&key_serializer, &mut key_cursor)?;
-                let key = K::deserialize_from(&key_serializer, &mut key_cursor)?;
-                Ok(key)
-            })
+            let mut key_cursor = &serialized_key[..];
+            let _ = Vec::<u8>::deserialize_from(&LittleEndianBytesDump, &mut key_cursor)?;
+            let _ = IK::deserialize_from(&key_serializer, &mut key_cursor)?;
+            let _ = N::deserialize_from(&key_serializer, &mut key_cursor)?;
+            let key = K::deserialize_from(&key_serializer, &mut key_cursor)?;
+            Ok(key)
         });
 
         Ok(Box::new(iter))

@@ -4,7 +4,9 @@ use crate::{
         VecStateBuilder,
     },
     state_backend::{
-        faster::{map_state::FasterMapState, value_state::FasterValueState},
+        faster::{
+            map_state::FasterMapState, value_state::FasterValueState, vec_state::FasterVecState,
+        },
         serialization::{DeserializableWith, LittleEndianBytesDump, SerializableWith},
         state_types::Aggregator,
         MapStateBuilder, StateBackend,
@@ -297,6 +299,14 @@ impl Faster {
             _ => arcon_err!("faster remove error: {}", status),
         }
     }
+
+    fn vec_set(&mut self, key: &Vec<u8>, value: &Vec<Vec<u8>>) -> ArconResult<()> {
+        let status = self.db.upsert(key, value, self.next_serial_number());
+        match status {
+            status::OK | status::PENDING => Ok(()),
+            _ => arcon_err!("faster put error: {}", status),
+        }
+    }
 }
 
 pub(crate) struct StateCommon<IK, N, KS, TS> {
@@ -447,11 +457,40 @@ where
     }
 }
 
+impl<IK, N, T, KS, TS> VecStateBuilder<IK, N, T, KS, TS> for Faster
+where
+    IK: SerializableWith<KS>,
+    N: SerializableWith<KS>,
+    T: SerializableWith<TS> + DeserializableWith<TS>,
+{
+    type Type = FasterVecState<IK, N, T, KS, TS>;
+
+    fn new_vec_state(
+        &mut self,
+        name: &str,
+        item_key: IK,
+        namespace: N,
+        key_serializer: KS,
+        value_serializer: TS,
+    ) -> Self::Type {
+        FasterVecState {
+            common: StateCommon {
+                state_name: name.as_bytes().to_vec(),
+                item_key,
+                namespace,
+                key_serializer,
+                value_serializer,
+            },
+            _phantom: Default::default(),
+        }
+    }
+}
+
 // mod aggregating_state;
 mod map_state;
 // mod reducing_state;
 mod value_state;
-// mod vec_state;
+mod vec_state;
 
 #[cfg(test)]
 pub mod test {
