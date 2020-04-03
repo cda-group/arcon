@@ -49,6 +49,8 @@ pub struct NEXMarkConfig {
     pub next_rate: u32,
     #[serde(default = "out_of_order_group_size")]
     pub out_of_order_group_size: u32,
+    #[serde(default = "time_dilation")]
+    pub time_dilation: u64,
     // Filled during setup
     #[serde(default)]
     pub inter_event_delays_ns: Vec<f64>,
@@ -56,6 +58,7 @@ pub struct NEXMarkConfig {
     #[serde(default)]
     pub step_length: u32,
     #[serde(default)]
+    // Filled during setup
     pub base_time_ns: u32,
     #[serde(default)]
     pub epoch_period: f32,
@@ -248,6 +251,10 @@ fn auction_proportion() -> u32 {
 
 fn bid_proportion() -> u32 {
     3
+}
+
+fn time_dilation() -> u64 {
+    1
 }
 
 fn first_rate() -> u32 {

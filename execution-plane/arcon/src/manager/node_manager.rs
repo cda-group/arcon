@@ -14,6 +14,14 @@ use fxhash::FxHashMap;
 use kompact::prelude::*;
 use std::sync::Arc;
 
+#[derive(Debug, Clone)]
+pub struct MetricReport {
+    pub(crate) descriptor: String,
+    pub(crate) id: NodeID,
+    pub(crate) parallelism: usize,
+    pub(crate) metrics: NodeMetrics,
+}
+
 /// Enum containing possible local node events
 #[derive(Debug, Clone)]
 pub enum NodeEvent {
@@ -85,6 +93,8 @@ where
         Vec<NodeID>,
         ChannelStrategy<OUT>,
     ) -> Node<IN, OUT>,
+    #[cfg(feature = "arcon_tui")]
+    tui_ref: ActorRefStrong<MetricReport>,
 }
 
 impl<IN, OUT> NodeManager<IN, OUT>
@@ -105,6 +115,7 @@ where
         node_comps: Vec<Arc<Component<Node<IN, OUT>>>>,
         prev_manager: Option<RequiredRef<NodeManagerPort>>,
         next_manager: Option<RequiredRef<NodeManagerPort>>,
+        #[cfg(feature = "arcon_tui")] tui_ref: ActorRefStrong<MetricReport>,
     ) -> NodeManager<IN, OUT> {
         let total_nodes = node_comps.len() as u32;
         let mut nodes_map = FxHashMap::default();
@@ -126,6 +137,8 @@ where
             prev_manager,
             next_manager,
             node_fn,
+            #[cfg(feature = "arcon_tui")]
+            tui_ref,
         }
     }
 }
@@ -167,6 +180,17 @@ where
         debug!(self.ctx.log(), "Got Event {:?}", event);
         match event {
             NodeEvent::Metrics(id, metrics) => {
+                #[cfg(feature = "arcon_tui")]
+                {
+                    let report = MetricReport {
+                        descriptor: self.node_description.clone(),
+                        id,
+                        parallelism: self.node_parallelism,
+                        metrics: metrics.clone(),
+                    };
+                    self.tui_ref.tell(report);
+                }
+
                 self.node_metrics.insert(id, metrics);
             }
         }

@@ -36,4 +36,9 @@ impl Gauge {
     pub fn dec_n(&mut self, n: usize) {
         self.value = self.value.checked_sub(n as u128).unwrap_or(0);
     }
+
+    #[inline]
+    pub fn get(&self) -> u128 {
+        self.value
+    }
 }

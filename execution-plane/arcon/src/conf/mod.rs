@@ -18,6 +18,9 @@ pub struct ArconConf {
     /// Interval in milliseconds for sending off metrics from nodes
     #[serde(default = "node_metrics_interval_default")]
     pub node_metrics_interval: u64,
+    /// Batch size for channels
+    #[serde(default = "channel_batch_size_default")]
+    pub channel_batch_size: usize,
     /// Amount of threads for Kompact's threadpool
     #[serde(default = "kompact_threads_default")]
     pub kompact_threads: usize,
@@ -50,6 +53,7 @@ impl ArconConf {
             checkpoint_dir: checkpoint_dir_default(),
             watermark_interval: watermark_interval_default(),
             node_metrics_interval: node_metrics_interval_default(),
+            channel_batch_size: channel_batch_size_default(),
             kompact_threads: kompact_threads_default(),
             kompact_throughput: kompact_throughput_default(),
             kompact_msg_priority: kompact_msg_priority_default(),
@@ -88,6 +92,10 @@ fn node_metrics_interval_default() -> u64 {
     250
 }
 
+fn channel_batch_size_default() -> usize {
+    248
+}
+
 fn kompact_threads_default() -> usize {
     std::cmp::max(1, num_cpus::get())
 }
@@ -122,6 +130,7 @@ mod tests {
         assert_eq!(conf.watermark_interval, 1000);
         // Check defaults
         assert_eq!(conf.node_metrics_interval, 250);
+        assert_eq!(conf.channel_batch_size, 248);
         assert_eq!(conf.kompact_threads, kompact_threads_default());
         assert_eq!(conf.kompact_throughput, kompact_throughput_default());
         assert_eq!(conf.kompact_msg_priority, kompact_msg_priority_default());

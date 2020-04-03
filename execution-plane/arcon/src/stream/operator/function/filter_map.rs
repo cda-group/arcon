@@ -9,7 +9,7 @@ use crate::{
 use arcon_error::ArconResult;
 
 /// An Arcon operator for filter-mapping
-/// 
+///
 /// IN: Input Event
 /// OUT: Output Event
 pub struct FilterMap<IN, OUT>

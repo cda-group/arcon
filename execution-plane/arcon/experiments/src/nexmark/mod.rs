@@ -9,8 +9,7 @@ pub mod queries;
 
 use arcon::macros::*;
 use config::NEXMarkConfig;
-use rand::seq::SliceRandom;
-use rand::{rngs::SmallRng, Rng};
+use rand::{rngs::SmallRng, seq::SliceRandom, Rng};
 use std::cmp::{max, min};
 
 trait NEXMarkRNG {
@@ -250,6 +249,11 @@ impl NEXMarkEvent {
             Event::Bid(ref b) => b.date,
         }
     }
+
+    #[inline]
+    pub fn inner(&mut self) -> Event {
+        self.inner.take().unwrap()
+    }
 }
 
 #[derive(prost::Oneof, Clone, Abomonation, Hash)]
@@ -260,4 +264,28 @@ pub enum Event {
     Auction(Auction),
     #[prost(message, tag = "3")]
     Bid(Bid),
+}
+
+impl Event {
+    #[inline]
+    pub fn is_bid(&self) -> bool {
+        match self {
+            Event::Bid(_) => true,
+            _ => false,
+        }
+    }
+    #[inline]
+    pub fn is_person(&self) -> bool {
+        match self {
+            Event::Person(_) => true,
+            _ => false,
+        }
+    }
+    #[inline]
+    pub fn is_auction(&self) -> bool {
+        match self {
+            Event::Auction(_) => true,
+            _ => false,
+        }
+    }
 }

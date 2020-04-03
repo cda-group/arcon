@@ -24,6 +24,10 @@ pub struct NodeMetrics {
     pub epoch_counter: Counter,
     /// Counter for total watermarks processed
     pub watermark_counter: Counter,
+    /// Current watermark
+    pub watermark: Watermark,
+    /// Current epoch
+    pub epoch: Epoch,
     /// Gauge Metric representing number of outbound channels
     pub outbound_channels: Gauge,
     /// Gauge Metric representing number of inbound channels
@@ -37,6 +41,8 @@ impl NodeMetrics {
             inbound_throughput: Meter::new(),
             epoch_counter: Counter::new(),
             watermark_counter: Counter::new(),
+            watermark: Watermark::new(0),
+            epoch: Epoch::new(0),
             outbound_channels: Gauge::new(),
             inbound_channels: Gauge::new(),
         }
@@ -289,6 +295,9 @@ where
                             }
                         }
 
+                        // Set current watermark
+                        self.metrics.watermark = new_watermark.clone();
+
                         // Forward the watermark
                         self.channel_strategy
                             .add(ArconEvent::Watermark(new_watermark));
@@ -332,6 +341,9 @@ where
 
                         // store the state
                         self.save_state()?;
+
+                        // Set current epoch
+                        self.metrics.epoch = e.clone();
 
                         // forward the epoch
                         self.channel_strategy.add(ArconEvent::Epoch(e));

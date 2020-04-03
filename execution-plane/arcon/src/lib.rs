@@ -30,6 +30,8 @@ pub mod pipeline;
 pub mod state_backend;
 /// Contains the core stream logic
 pub mod stream;
+#[cfg(feature = "arcon_tui")]
+mod tui;
 /// Utilities for Arcon
 pub mod util;
 

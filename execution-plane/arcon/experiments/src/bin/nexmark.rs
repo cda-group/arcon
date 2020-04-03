@@ -9,9 +9,9 @@ extern crate clap;
 extern crate log;
 
 use anyhow::Result;
+use arcon::prelude::{ArconConf, ArconPipeline};
 use clap::{App, AppSettings, Arg, SubCommand};
-use experiments::nexmark::config::*;
-use arcon::prelude::{ArconPipeline, ArconConf};
+use experiments::nexmark::{config::*, queries};
 use std::fs::metadata;
 
 const DEFAULT_NEXMARK_CONFIG: &str = "nexmark_config.toml";
@@ -147,7 +147,6 @@ fn run(
     _pinned: bool,
     _log_throughput: bool,
 ) -> Result<()> {
-
     let nexmark_config_file: String = {
         let md = metadata(&nexmark_config_path)?;
         if md.is_file() {
@@ -164,7 +163,7 @@ fn run(
     info!("{:?}\n", nexmark_config);
 
     // Set up ArconPipeline
-    let pipeline = {
+    let mut pipeline = {
         if let Some(path) = arcon_config_path {
             let conf = ArconConf::from_file(&path).unwrap();
             ArconPipeline::with_conf(conf)
@@ -174,12 +173,22 @@ fn run(
     };
 
     info!("{:?}\n", pipeline.arcon_conf());
-    // Setup pipeline...
+
+    //let nexmark_timer = NexmarkTimer { nexmark_config.time_dilation };
+
+    let timer = ::std::time::Instant::now();
+    // Establish a start of the computation.
+    let elapsed_ns = timer.elapsed().as_nanos();
+    nexmark_config.base_time_ns = elapsed_ns as u32;
+
     match nexmark_config.query {
         NEXMarkQuery::CurrencyConversion => {
             info!("Setting up CurrencyConversion query");
+            queries::q1::q1(&mut pipeline);
         }
     }
+
+    pipeline.tui();
 
     Ok(())
 }
