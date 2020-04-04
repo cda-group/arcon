@@ -5,9 +5,7 @@ use crate::{
     prelude::ArconResult,
     state_backend::{
         faster::{Faster, StateCommon},
-        serialization::{
-            DeserializableWith, LittleEndianBytesDump, SerializableFixedSizeWith, SerializableWith,
-        },
+        serialization::{DeserializableWith, LittleEndianBytesDump, SerializableWith},
         state_types::{BoxedIteratorOfArconResult, MapState, State},
     },
 };
@@ -149,7 +147,6 @@ where
 
     // TODO: unboxed versions of below
     fn iter<'a>(&self, backend: &'a Faster) -> ArconResult<BoxedIteratorOfArconResult<'a, (K, V)>> {
-        use std::iter;
         let prefix = self.common.get_db_key_prefix()?;
         let keys = backend.in_session(|backend| backend.get_vec(&prefix))?;
 
@@ -177,7 +174,6 @@ where
     }
 
     fn keys<'a>(&self, backend: &'a Faster) -> ArconResult<BoxedIteratorOfArconResult<'a, K>> {
-        use std::iter;
         let prefix = self.common.get_db_key_prefix()?;
         let keys = backend.in_session(|backend| backend.get_vec(&prefix))?;
 
@@ -197,7 +193,6 @@ where
     }
 
     fn values<'a>(&self, backend: &'a Faster) -> ArconResult<BoxedIteratorOfArconResult<'a, V>> {
-        use std::iter;
         let prefix = self.common.get_db_key_prefix()?;
         let keys = backend.in_session(|backend| backend.get_vec(&prefix))?;
 

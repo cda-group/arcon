@@ -5,11 +5,11 @@ use crate::{
     prelude::ArconResult,
     state_backend::{
         faster::{Faster, StateCommon},
-        serialization::{DeserializableWith, LittleEndianBytesDump, SerializableWith},
+        serialization::{DeserializableWith, SerializableWith},
         state_types::{AppendingState, MergingState, State, VecState},
     },
 };
-use std::{marker::PhantomData, mem};
+use std::marker::PhantomData;
 
 pub struct FasterVecState<IK, N, T, KS, TS> {
     pub(crate) common: StateCommon<IK, N, KS, TS>,
@@ -55,7 +55,7 @@ where
     fn append(&self, backend: &mut Faster, value: T) -> ArconResult<()> {
         backend.in_session_mut(|backend| {
             let key = self.common.get_db_key_prefix()?;
-            let mut serialized = T::serialize(&self.common.value_serializer, &value)?;
+            let serialized = T::serialize(&self.common.value_serializer, &value)?;
 
             backend.vec_push(&key, serialized)
         })

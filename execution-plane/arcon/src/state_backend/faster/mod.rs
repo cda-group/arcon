@@ -5,8 +5,9 @@ use crate::{
     },
     state_backend::{
         faster::{
-            map_state::FasterMapState, reducing_state::FasterReducingState,
-            value_state::FasterValueState, vec_state::FasterVecState,
+            aggregating_state::FasterAggregatingState, map_state::FasterMapState,
+            reducing_state::FasterReducingState, value_state::FasterValueState,
+            vec_state::FasterVecState,
         },
         serialization::{DeserializableWith, LittleEndianBytesDump, SerializableWith},
         state_types::Aggregator,
@@ -16,13 +17,10 @@ use crate::{
 use error::ResultExt;
 use faster_rs::{status, FasterKv, FasterKvBuilder, FasterRmw};
 use serde::{Deserialize, Serialize};
-use static_assertions::_core::{marker::PhantomData, sync::atomic::AtomicI64};
 use std::{
-    cell::Cell,
     fs::File,
-    io,
-    io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write},
-    path::{Path, PathBuf},
+    io::{Read, Write},
+    path::PathBuf,
     sync::atomic::{AtomicU64, Ordering},
     time::Duration,
 };
@@ -259,7 +257,7 @@ impl Faster {
     fn remove(&mut self, key: &Vec<u8>) -> ArconResult<()> {
         let status = self.db.delete(key, self.next_serial_number());
         match status {
-            status::OK | status::PENDING => Ok(()),
+            status::OK | status::PENDING | status::NOT_FOUND => Ok(()),
             _ => arcon_err!("faster remove error: {}", status),
         }
     }
@@ -313,7 +311,7 @@ impl Faster {
         &mut self,
         key: &Vec<u8>,
         new: Vec<u8>,
-        fun: &dyn Fn(&Vec<u8>, &Vec<u8>) -> Vec<u8>,
+        fun: &dyn Fn(&[u8], &[u8]) -> Vec<u8>,
     ) -> ArconResult<()> {
         let fun_fat_ptr_bytes = unsafe { std::mem::transmute(fun) };
 
@@ -443,7 +441,7 @@ enum FasterAgg {
     Value(Vec<u8>),
     Modify(
         Vec<u8>,
-        [u8; std::mem::size_of::<&dyn Fn(&Vec<u8>, &Vec<u8>) -> Vec<u8>>()],
+        [u8; std::mem::size_of::<&dyn Fn(&[u8], &[u8]) -> Vec<u8>>()],
     ),
 }
 
@@ -455,7 +453,7 @@ impl FasterRmw for FasterAgg {
         };
 
         if let FasterAgg::Modify(new, fun_fat_ptr_bytes) = modification {
-            let f: &dyn Fn(&Vec<u8>, &Vec<u8>) -> Vec<u8> =
+            let f: &dyn Fn(&[u8], &[u8]) -> Vec<u8> =
                 unsafe { std::mem::transmute(fun_fat_ptr_bytes) };
             FasterAgg::Value(f(old, &new))
         } else {
@@ -559,8 +557,8 @@ where
     IK: SerializableWith<KS>,
     N: SerializableWith<KS>,
     T: SerializableWith<TS> + DeserializableWith<TS>,
-    F: Fn(&T, &T) -> T + 'static,
-    TS: Clone + 'static,
+    F: Fn(&T, &T) -> T + Send + Sync + 'static,
+    TS: Clone + Send + Sync + 'static,
 {
     type Type = FasterReducingState<IK, N, T, F, KS, TS>;
 
@@ -587,7 +585,42 @@ where
     }
 }
 
-// mod aggregating_state;
+impl<IK, N, T, AGG, KS, TS> AggregatingStateBuilder<IK, N, T, AGG, KS, TS> for Faster
+where
+    IK: SerializableWith<KS>,
+    N: SerializableWith<KS>,
+    T: SerializableWith<TS> + DeserializableWith<TS>,
+    AGG: Aggregator<T> + Clone + Send + Sync + 'static,
+    AGG::Accumulator: SerializableWith<TS> + DeserializableWith<TS>,
+    TS: Clone + Send + Sync + 'static,
+{
+    type Type = FasterAggregatingState<IK, N, T, AGG, KS, TS>;
+
+    fn new_aggregating_state(
+        &mut self,
+        name: &str,
+        init_item_key: IK,
+        init_namespace: N,
+        aggregator: AGG,
+        key_serializer: KS,
+        value_serializer: TS,
+    ) -> Self::Type {
+        FasterAggregatingState {
+            common: StateCommon {
+                state_name: name.as_bytes().to_vec(),
+                item_key: init_item_key,
+                namespace: init_namespace,
+                key_serializer,
+                value_serializer: value_serializer.clone(),
+            },
+            aggregator: aggregator.clone(),
+            aggregate_fn: aggregating_state::make_aggregate_fn(aggregator, value_serializer),
+            _phantom: Default::default(),
+        }
+    }
+}
+
+mod aggregating_state;
 mod map_state;
 mod reducing_state;
 mod value_state;
@@ -654,7 +687,8 @@ pub mod test {
     #[test]
     fn test_faster_checkpoints() {
         let dir = tempfile::TempDir::new().unwrap();
-        let mut faster = Faster::new(dir.path().to_string_lossy().as_ref()).unwrap();
+        let dir = dir.path().to_string_lossy().into_owned();
+        let mut faster = Faster::new(dir.as_ref()).unwrap();
 
         faster.in_session_mut(|faster| {
             faster.put(&b"a".to_vec(), &b"1".to_vec()).unwrap();

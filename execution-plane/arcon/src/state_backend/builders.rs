@@ -52,6 +52,10 @@ macro_rules! impl_dynamic_builder {
                 handle_backend!(crate::state_backend::in_memory::InMemory);
                 #[cfg(feature = "arcon_rocksdb")]
                 handle_backend!(crate::state_backend::rocks::RocksDb);
+                #[cfg(feature = "arcon_sled")]
+                handle_backend!(crate::state_backend::sled::Sled);
+                #[cfg(feature = "arcon_faster")]
+                handle_backend!(crate::state_backend::faster::Faster);
 
                 // NOTE: every implemented state backend should be added here
 

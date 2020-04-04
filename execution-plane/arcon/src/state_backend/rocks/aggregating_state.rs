@@ -89,7 +89,11 @@ where
             }
         }
 
-        let mut result = vec![ACCUMULATOR_MARKER];
+        let mut result = Vec::with_capacity(
+            1 + AGG::Accumulator::size_hint(&value_serializer, &accumulator).unwrap_or(0),
+        );
+        result.push(ACCUMULATOR_MARKER);
+
         AGG::Accumulator::serialize_into(&value_serializer, &mut result, &accumulator).ok()?;
 
         Some(result)

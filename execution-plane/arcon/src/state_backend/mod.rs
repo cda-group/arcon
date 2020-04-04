@@ -105,6 +105,22 @@ mod test {
             do_backend_ops(dynamic_rocks);
         }
 
+        #[cfg(feature = "arcon_sled")]
+        {
+            let mut test_sled = super::sled::test::TestDb::new();
+            let test_sled: &mut super::sled::Sled = &mut *test_sled;
+            let dynamic_sled: &mut dyn StateBackend = test_sled;
+            do_backend_ops(dynamic_sled);
+        }
+
+        #[cfg(feature = "arcon_faster")]
+        {
+            let mut test_faster = faster::test::TestDb::new();
+            let test_faster: &mut faster::Faster = &mut *test_faster;
+            let dynamic_faster: &mut dyn StateBackend = test_faster;
+            do_backend_ops(dynamic_faster);
+        }
+
         let mut test_in_memory = in_memory::InMemory::new("test_im").unwrap();
         let dynamic_in_memory: &mut dyn StateBackend = &mut test_in_memory;
         do_backend_ops(dynamic_in_memory);
@@ -180,6 +196,20 @@ mod test {
             let mut test_rocks = rocks::test::TestDb::new();
             let test_rocks: &mut rocks::RocksDb = &mut *test_rocks;
             do_backend_ops(test_rocks);
+        }
+
+        #[cfg(feature = "arcon_sled")]
+        {
+            let mut test_sled = super::sled::test::TestDb::new();
+            let test_sled: &mut super::sled::Sled = &mut *test_sled;
+            do_backend_ops(test_sled);
+        }
+
+        #[cfg(feature = "arcon_faster")]
+        {
+            let mut test_faster = faster::test::TestDb::new();
+            let test_faster: &mut faster::Faster = &mut *test_faster;
+            do_backend_ops(test_faster);
         }
 
         let mut test_in_memory = in_memory::InMemory::new("test_im").unwrap();

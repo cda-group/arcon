@@ -9,12 +9,11 @@ use crate::{
         state_types::{AppendingState, MergingState, ReducingState, State},
     },
 };
-use itertools::Itertools;
 use std::marker::PhantomData;
 
 pub struct FasterReducingState<IK, N, T, F, KS, TS> {
     pub(crate) common: StateCommon<IK, N, KS, TS>,
-    pub(crate) reduce_fn: Box<dyn Fn(&Vec<u8>, &Vec<u8>) -> Vec<u8>>,
+    pub(crate) reduce_fn: Box<dyn Fn(&[u8], &[u8]) -> Vec<u8> + Send + Sync>,
     pub(crate) _phantom: PhantomData<(T, F)>,
 }
 
@@ -37,15 +36,15 @@ where
 pub fn make_reduce_fn<T, F, TS>(
     fun: F,
     serializer: TS,
-) -> Box<dyn Fn(&Vec<u8>, &Vec<u8>) -> Vec<u8>>
+) -> Box<dyn Fn(&[u8], &[u8]) -> Vec<u8> + Send + Sync>
 where
     T: SerializableWith<TS> + DeserializableWith<TS>,
-    F: Fn(&T, &T) -> T + 'static,
-    TS: 'static,
+    F: Fn(&T, &T) -> T + Send + Sync + 'static,
+    TS: Send + Sync + 'static,
 {
     Box::new(move |old, new| {
-        let old = T::deserialize(&serializer, &*old).expect("Could not deserialize old value");
-        let new = T::deserialize(&serializer, &*new).expect("Could not deserialize new value");
+        let old = T::deserialize(&serializer, old).expect("Could not deserialize old value");
+        let new = T::deserialize(&serializer, new).expect("Could not deserialize new value");
 
         let res = fun(&old, &new);
 

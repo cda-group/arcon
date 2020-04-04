@@ -5,7 +5,7 @@ use crate::{
     prelude::ArconResult,
     state_backend::{
         faster::{Faster, StateCommon},
-        serialization::{DeserializableWith, SerializableFixedSizeWith, SerializableWith},
+        serialization::{DeserializableWith, SerializableWith},
         state_types::{State, ValueState},
     },
 };
