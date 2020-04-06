@@ -1,3 +1,8 @@
+// Copyright (c) 2019 Caleb Bassi
+// SPDX-License-Identifier: MIT
+// Modifications Copyright (c) 2020, KTH Royal Institute of Technology.
+// SPDX-License-Identifier: AGPL-3.0-only
+
 use tui::{
     backend::Backend,
     layout::{Constraint, Direction, Layout, Rect},
@@ -19,14 +24,6 @@ pub fn draw<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) {
 }
 
 pub fn draw_widgets<B: Backend>(frame: &mut Frame<B>, widgets: &mut Widgets, area: Rect) {
-    /*
-    let vertical_chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)].as_ref())
-        .split(area);
-    draw_top_row(frame, widgets, vertical_chunks[0]);
-    draw_bottom_row(frame, widgets, vertical_chunks[1]);
-    */
     let vertical_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints(
@@ -41,47 +38,32 @@ pub fn draw_widgets<B: Backend>(frame: &mut Frame<B>, widgets: &mut Widgets, are
     draw_top_row(frame, widgets, vertical_chunks[0]);
     draw_middle_row(frame, widgets, vertical_chunks[1]);
     draw_bottom_row(frame, widgets, vertical_chunks[2]);
-    /*
-    if widgets.temp.is_some() {
-    } else {
-    }
-    */
 }
 
-// NODES?
 pub fn draw_top_row<B: Backend>(frame: &mut Frame<B>, widgets: &mut Widgets, area: Rect) {
     let horizontal_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(100)].as_ref())
         .split(area);
     widgets.node.render(frame, horizontal_chunks[0]);
-    /*
-    if let Some(net) = widgets.net.as_mut() {
-        net.render(frame, horizontal_chunks[0]);
-    } else {
-        widgets.mem.render(frame, horizontal_chunks[0]);
-    }
-    */
-    //widgets.proc.render(frame, horizontal_chunks[1]);
 }
 
-// CPU
 pub fn draw_middle_row<B: Backend>(frame: &mut Frame<B>, widgets: &mut Widgets, area: Rect) {
     let horizontal_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(100)].as_ref())
         .split(area);
-    widgets.cpu.render(frame, horizontal_chunks[0]);
+    widgets.mem.render(frame, horizontal_chunks[0]);
 }
 
-// NET / MEM
 pub fn draw_bottom_row<B: Backend>(frame: &mut Frame<B>, widgets: &mut Widgets, area: Rect) {
     let horizontal_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Ratio(1, 3), Constraint::Ratio(2, 3)].as_ref())
         .split(area);
+
     widgets.net.render(frame, horizontal_chunks[0]);
-    widgets.mem.render(frame, horizontal_chunks[1]);
+    widgets.cpu.render(frame, horizontal_chunks[1]);
 }
 
 /*

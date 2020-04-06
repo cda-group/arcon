@@ -1,9 +1,8 @@
-use tui::{
-    style::{Color, Modifier, Style},
-    widgets::{Block, Borders},
-};
+// Copyright (c) 2019 Caleb Bassi
+// SPDX-License-Identifier: MIT
 
 use crate::tui::colorscheme::Colorscheme;
+use tui::widgets::{Block, Borders};
 
 pub fn new<'a>(colorscheme: &Colorscheme, title: &'a str) -> Block<'a> {
     Block::default()

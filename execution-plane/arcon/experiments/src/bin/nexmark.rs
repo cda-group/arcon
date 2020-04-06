@@ -33,6 +33,11 @@ fn main() {
         .short("a")
         .help("Path to Arcon Config");
 
+    let tui_arg = Arg::with_name("t")
+        .help("toggle tui mode off")
+        .help("toggle tui mode off")
+        .short("t");
+
     let batch_size_arg = Arg::with_name("b")
         .required(false)
         .default_value("1024")
@@ -76,6 +81,7 @@ fn main() {
                 .setting(AppSettings::ColoredHelp)
                 .arg(&nexmark_config_arg)
                 .arg(&arcon_config_path)
+                .arg(&tui_arg)
                 .arg(&batch_size_arg)
                 .arg(&log_frequency_arg)
                 .about("Run Nexmark Query"),
@@ -104,6 +110,8 @@ fn main() {
                 }
             };
 
+            let tui = !arg_matches.is_present("t");
+
             let log_freq = arg_matches
                 .value_of("f")
                 .expect("Should not happen as there is a default")
@@ -124,6 +132,7 @@ fn main() {
                 dedicated,
                 pinned,
                 log_throughput,
+                tui,
             ) {
                 error!("{}", err.to_string());
             }
@@ -146,6 +155,7 @@ fn run(
     _dedicated: bool,
     _pinned: bool,
     _log_throughput: bool,
+    tui: bool,
 ) -> Result<()> {
     let nexmark_config_file: String = {
         let md = metadata(&nexmark_config_path)?;
@@ -188,7 +198,11 @@ fn run(
         }
     }
 
-    pipeline.tui();
+    if tui {
+        pipeline.tui();
+    } else {
+        pipeline.await_termination();
+    }
 
     Ok(())
 }

@@ -1,3 +1,8 @@
+// Copyright (c) 2019 Caleb Bassi
+// SPDX-License-Identifier: MIT
+// Modifications Copyright (c) 2020, KTH Royal Institute of Technology.
+// SPDX-License-Identifier: AGPL-3.0-only
+
 use num_rational::Ratio;
 
 use crate::tui::app::Widgets;
@@ -8,7 +13,7 @@ pub trait UpdatableWidget {
 }
 
 pub fn update_widgets(widgets: &mut Widgets, seconds: Ratio<u64>) {
-    let mut widgets_to_update: Vec<&mut (dyn UpdatableWidget)> = vec![
+    let widgets_to_update: Vec<&mut (dyn UpdatableWidget)> = vec![
         &mut widgets.cpu,
         &mut widgets.net,
         &mut widgets.mem,

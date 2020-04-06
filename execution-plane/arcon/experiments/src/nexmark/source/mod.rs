@@ -1,6 +1,8 @@
 use arcon::prelude::*;
+use crate::nexmark::config::NEXMarkConfig;
 
 #[derive(ComponentDefinition)]
+#[allow(dead_code)]
 pub struct NEXMarkSource<IN, OUT>
 where
     IN: ArconType,
@@ -17,7 +19,7 @@ where
     OUT: ArconType,
 {
     pub fn new(nexmark_config: NEXMarkConfig, source_ctx: SourceContext<IN, OUT>) -> Self {
-        CollectionSource {
+        NEXMarkSource {
             ctx: ComponentContext::new(),
             source_ctx,
             nexmark_config,
@@ -25,12 +27,9 @@ where
     }
 
     pub fn process(&mut self) {
-        let mut events_so_far: u32 = 0;
-        use rand::{rngs::SmallRng, SeedableRng};
-        //let mut rng = SmallRng::from_seed([worker.peers() as u8;16]);
-        loop {
-            //let data = NEXMarkEvent::create(events_so_far,
-        }
+        //let mut events_so_far: u32 = 0;
+        //use rand::{rngs::SmallRng, SeedableRng};
+        // TODO: add logic that creates events and sends it off using self.source_ctx
     }
 }
 
@@ -40,9 +39,7 @@ where
     OUT: ArconType,
 {
     fn handle(&mut self, event: ControlEvent) {
-        if let ControlEvent::Start = event {
-            //
-        }
+        if let ControlEvent::Start = event {}
     }
 }
 

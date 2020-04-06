@@ -1,3 +1,6 @@
+// Copyright (c) 2019 Caleb Bassi
+// SPDX-License-Identifier: MIT
+
 use std::{fs, path::Path, str::FromStr};
 
 use serde::Deserialize;

@@ -1,3 +1,6 @@
+// Copyright (c) 2019 Caleb Bassi
+// SPDX-License-Identifier: MIT
+
 use num_rational::Ratio;
 use psutil::cpu;
 use tui::{

@@ -1,3 +1,8 @@
+// Copyright (c) 2019 Caleb Bassi
+// SPDX-License-Identifier: MIT
+// Modifications Copyright (c) 2020, KTH Royal Institute of Technology.
+// SPDX-License-Identifier: AGPL-3.0-only
+
 use crate::tui::{
     colorscheme::Colorscheme,
     widgets::{cpu::CpuWidget, mem::MemWidget, net::NetWidget, node::NodeWidget},
@@ -19,7 +24,6 @@ pub fn setup_app<'a, 'b>(
     cpu_update_interval: Ratio<u64>,
     mem_update_interval: Ratio<u64>,
     colorscheme: &'a Colorscheme,
-    program_name: &str,
 ) -> App<'a, 'b> {
     let cpu = CpuWidget::new(colorscheme, cpu_update_interval, false, true);
     let mem = MemWidget::new(colorscheme, mem_update_interval);

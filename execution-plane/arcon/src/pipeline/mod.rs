@@ -1,12 +1,16 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-#[cfg(feature = "arcon_tui")]
-use crate::tui::{component::TuiComponent, widgets::node::Node as TuiNode};
+cfg_if::cfg_if! {
+ if #[cfg(feature = "arcon_tui")] {
+    use crate::tui::{component::TuiComponent, widgets::node::Node as TuiNode};
+    use std::sync::Arc;
+ }
+}
+
 use crate::{conf::ArconConf, manager::node_manager::*, prelude::*, util::SafelySendableFn};
 use fxhash::FxHashMap;
 use kompact::prelude::KompactSystem;
-use std::sync::Arc;
 
 /// A struct meant to simplify the creation of an Arcon Pipeline
 #[derive(Clone)]
@@ -166,6 +170,7 @@ impl ArconPipeline {
     /// Launches tui dashboard
     #[cfg(feature = "arcon_tui")]
     pub fn tui(&mut self) {
+        // This is mainly code from ytop's main.rs
         use tui_helpers::*;
 
         better_panic::install();
@@ -175,7 +180,7 @@ impl ArconPipeline {
         let mem_interval = Ratio::from_integer(1);
         let schemes = Colorschemes::from_str("default").unwrap();
         let colorscheme = read_colorscheme(std::path::Path::new(""), &schemes);
-        let mut app = app::setup_app(cpu_interval, mem_interval, &colorscheme, "test");
+        let mut app = app::setup_app(cpu_interval, mem_interval, &colorscheme);
 
         let backend = CrosstermBackend::new(std::io::stdout());
         let mut terminal = Terminal::new(backend).unwrap();
@@ -211,7 +216,7 @@ impl ArconPipeline {
                 }
                 recv(self.arcon_event_receiver) -> message => {
                     app.widgets.node.node_update(message.expect("Recv Error"));
-                    // let the normal ticker update the nodes...
+                    // let the normal ticker update do the drawing
                 }
                 recv(ticker) -> _ => {
                     if !paused {
@@ -268,10 +273,6 @@ impl ArconPipeline {
                                         app.widgets.mem.scale_out();
                                         graphs_modified = true;
                                     },
-                                    KeyCode::Tab => {
-                                        //app.widgets.proc.toggle_grouping();
-                                        node_modified = true;
-                                    },
                                     _ => {}
                                 }
                             } else if key_event.modifiers == KeyModifiers::CONTROL {
@@ -280,19 +281,19 @@ impl ArconPipeline {
                                         break
                                     },
                                     KeyCode::Char('d') => {
-                                        //app.widgets.proc.scroll_half_page_down();
+                                        app.widgets.node.scroll_half_page_down();
                                         node_modified = true;
                                     },
                                     KeyCode::Char('u') => {
-                                        //app.widgets.proc.scroll_half_page_up();
+                                        app.widgets.node.scroll_half_page_up();
                                         node_modified = true;
                                     },
                                     KeyCode::Char('f') => {
-                                        //app.widgets.proc.scroll_full_page_down();
+                                        app.widgets.node.scroll_full_page_down();
                                         node_modified = true;
                                     },
                                     KeyCode::Char('b') => {
-                                        //app.widgets.proc.scroll_full_page_up();
+                                        app.widgets.node.scroll_full_page_up();
                                         node_modified = true;
                                     },
                                     _ => {}
@@ -339,12 +340,9 @@ impl ArconPipeline {
 #[cfg(feature = "arcon_tui")]
 pub(crate) mod tui_helpers {
     pub(crate) use crate::tui::{
-        app::*,
         colorscheme::*,
-        component::TuiComponent,
         draw::{draw, draw_graphs, draw_node},
         update::update_widgets,
-        widgets::node::Node,
         *,
     };
     pub(crate) use crossbeam_channel::{select, tick, unbounded, Receiver};
@@ -361,6 +359,8 @@ pub(crate) mod tui_helpers {
         time::Duration,
     };
     pub(crate) use tui::{backend::CrosstermBackend, Terminal};
+
+    // Helper functions from ytop...
 
     pub fn setup_terminal() {
         let mut stdout = io::stdout();
@@ -421,64 +421,5 @@ pub(crate) mod tui_helpers {
             cleanup_terminal();
             better_panic::Settings::auto().create_panic_handler()(panic_info);
         }));
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn simple_pipeline_test() {
-        let mut pipeline = ArconPipeline::new();
-        let ref mut system = pipeline.system();
-        // Create a Debug Node for test purposes
-        let sink = system.create(move || DebugNode::<u32>::new());
-        system.start(&sink);
-        let actor_ref: ActorRefStrong<ArconMessage<u32>> =
-            sink.actor_ref().hold().expect("Failed to fetch");
-        let channel = Channel::Local(actor_ref);
-        let channel_strategy: ChannelStrategy<u32> =
-            ChannelStrategy::Forward(Forward::new(channel, NodeID::new(0)));
-
-        // Define the function to create our Node
-        fn node_fn(
-            description: String,
-            id: NodeID,
-            in_channels: Vec<NodeID>,
-            channel_strategy: ChannelStrategy<u32>,
-        ) -> Node<u32, u32> {
-            #[inline]
-            fn map_fn(u: u32) -> u32 {
-                u
-            }
-
-            Node::new(
-                description,
-                id,
-                in_channels,
-                channel_strategy,
-                Box::new(Map::new(&map_fn)),
-                Box::new(InMemory::new("perf").unwrap()),
-            )
-        }
-
-        let node_one = node_fn(
-            String::from("map_node"),
-            NodeID::new(0),
-            vec![NodeID::new(1)],
-            channel_strategy.clone(),
-        );
-
-        // Create node manager
-        pipeline.create_node_manager(
-            String::from("map_node"),
-            &node_fn,
-            vec![NodeID::new(1)],
-            channel_strategy,
-            vec![node_one],
-        );
-
-        pipeline.shutdown();
     }
 }
