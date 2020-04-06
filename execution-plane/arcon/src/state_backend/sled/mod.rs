@@ -18,7 +18,7 @@ use ::sled::{open, Db};
 use error::ResultExt;
 use sled::{Batch, IVec, Tree};
 use std::{
-    fs::File,
+    fs::{create_dir_all, File},
     io,
     io::{BufReader, Read},
 };
@@ -60,6 +60,9 @@ impl StateBackend for Sled {
         let export_data = self.db.export();
 
         let mut p: PathBuf = checkpoint_path.into();
+        if !p.exists() {
+            create_dir_all(&p).ctx("could not create checkpoint directory")?;
+        }
 
         p.push("SLED_EXPORT");
         let out = File::create(&p).ctx("Could not create checkpoint file")?;

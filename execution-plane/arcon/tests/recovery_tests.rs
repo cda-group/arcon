@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 // similar to basic_pipeline_tests, but with changes to test recovery capabilities
-#![cfg(feature = "arcon_rocksdb")]
 #![allow(bare_trait_objects)]
 extern crate arcon;
 
@@ -23,9 +22,12 @@ pub struct NormaliseElements {
     pub data: Vec<i64>,
 }
 
+// TODO: this global state makes running the three tests together pretty much impossible
+#[allow(dead_code)]
 static PANIC_COUNTDOWN: Lazy<RwLock<u32>> = Lazy::new(|| RwLock::new(0));
 
-fn rocks_backend(node_id: u32) -> Box<dyn StateBackend> {
+#[allow(dead_code)]
+fn backend<SB: StateBackend>(node_id: u32) -> Box<dyn StateBackend> {
     let runtime_dir = format!("running_{}", node_id);
     let _ = fs::remove_dir_all(&runtime_dir);
     fs::create_dir(&runtime_dir).unwrap();
@@ -52,18 +54,19 @@ fn rocks_backend(node_id: u32) -> Box<dyn StateBackend> {
 
     match latest_complete_checkpoint {
         Some(epoch) => Box::new(
-            RocksDb::restore(
-                &format!("checkpoint_{id}_{epoch}", id = node_id, epoch = epoch),
+            SB::restore(
                 &runtime_dir,
+                &format!("checkpoint_{id}_{epoch}", id = node_id, epoch = epoch),
             )
             .unwrap(),
         ),
-        None => Box::new(RocksDb::new(&runtime_dir).unwrap()),
+        None => Box::new(SB::new(&runtime_dir).unwrap()),
     }
 }
 
+#[allow(dead_code)]
 /// manually sent events -> Window -> Map -> LocalFileSink
-fn run_pipeline(sink_path: &str) -> Result<(), ()> {
+fn run_pipeline<SB: StateBackend>(sink_path: &str) -> Result<(), ()> {
     let timeout = std::time::Duration::from_millis(500);
     let system = KompactConfig::default().build().expect("KompactSystem");
 
@@ -74,7 +77,7 @@ fn run_pipeline(sink_path: &str) -> Result<(), ()> {
             vec![3.into()],
             ChannelStrategy::Mute,
             Box::new(LocalFileSink::new(sink_path)),
-            rocks_backend(4),
+            backend::<SB>(4),
         )
     });
     system
@@ -91,7 +94,8 @@ fn run_pipeline(sink_path: &str) -> Result<(), ()> {
         ChannelStrategy::Forward(Forward::new(Channel::Local(file_sink_ref), NodeID::new(3)));
 
     fn map_fn(x: NormaliseElements) -> i64 {
-        if *PANIC_COUNTDOWN.read().unwrap() == 0 {
+        let panic_countdown = *PANIC_COUNTDOWN.read().unwrap();
+        if panic_countdown == 0 {
             panic!("AAAAAA!!!")
         }
         *PANIC_COUNTDOWN.write().unwrap() -= 1;
@@ -105,7 +109,7 @@ fn run_pipeline(sink_path: &str) -> Result<(), ()> {
             vec![2.into()],
             channel_strategy,
             Box::new(Map::<NormaliseElements, i64>::new(&map_fn)),
-            rocks_backend(3),
+            backend::<SB>(3),
         )
     });
 
@@ -123,7 +127,7 @@ fn run_pipeline(sink_path: &str) -> Result<(), ()> {
         NormaliseElements { data }
     }
 
-    let mut window_state_backend = rocks_backend(2);
+    let mut window_state_backend = backend::<SB>(2);
 
     let window: Box<dyn Window<i64, NormaliseElements>> =
         Box::new(AppenderWindow::new(&window_fn, &mut *window_state_backend));
@@ -197,8 +201,8 @@ fn run_pipeline(sink_path: &str) -> Result<(), ()> {
     Ok(())
 }
 
-#[test]
-fn run_test() {
+#[allow(dead_code)]
+fn run_test<SB: StateBackend>() {
     let temp_dir = tempfile::TempDir::new().unwrap();
 
     let test_directory = temp_dir.path();
@@ -212,7 +216,7 @@ fn run_test() {
     let sink_path = sink_file.path().to_string_lossy().into_owned();
 
     *PANIC_COUNTDOWN.write().unwrap() = 2; // reaches zero quite quickly
-    run_pipeline(&sink_path).unwrap_err();
+    run_pipeline::<SB>(&sink_path).unwrap_err();
     {
         // Check results from the sink file!
         let file = File::open(sink_file.path()).expect("no such file");
@@ -226,7 +230,7 @@ fn run_test() {
     }
 
     *PANIC_COUNTDOWN.write().unwrap() = 100; // won't reach zero
-    run_pipeline(&sink_path).unwrap();
+    run_pipeline::<SB>(&sink_path).unwrap();
 
     // Check results from the sink file!
     let file = File::open(sink_file.path()).expect("no such file");
@@ -237,4 +241,22 @@ fn run_test() {
         .collect();
 
     assert_eq!(result, vec![9, 8, 7]); // full result without repetitions
+}
+
+#[cfg(feature = "arcon_rocksdb")]
+#[test]
+fn test_rocks_recovery_pipeline() {
+    run_test::<RocksDb>()
+}
+
+#[cfg(all(feature = "arcon_sled", feature = "arcon_sled_checkpoints"))]
+#[test]
+fn test_sled_recovery_pipeline() {
+    run_test::<Sled>()
+}
+
+#[cfg(feature = "arcon_faster")]
+#[test]
+fn test_faster_recovery_pipeline() {
+    run_test::<Faster>()
 }

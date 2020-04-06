@@ -343,7 +343,7 @@ impl StateBackend for RocksDb {
         Ok(())
     }
 
-    fn restore(checkpoint_path: &str, restore_path: &str) -> ArconResult<Self>
+    fn restore(restore_path: &str, checkpoint_path: &str) -> ArconResult<Self>
     where
         Self: Sized,
     {
@@ -823,7 +823,7 @@ pub mod test {
             let mut dir_path = dir.path().to_path_buf();
             dir_path.push("rocks");
             let dir_path = dir_path.to_string_lossy();
-            let rocks = RocksDb::restore(checkpoint_dir, &dir_path).unwrap();
+            let rocks = RocksDb::restore(&dir_path, checkpoint_dir).unwrap();
             TestDb { rocks, dir }
         }
     }
@@ -910,7 +910,7 @@ pub mod test {
         db.put(column_family, key, new_value)
             .expect("second put failed");
 
-        let db_from_checkpoint = RocksDb::restore(&checkpoints_dir_path, &restore_dir_path)
+        let db_from_checkpoint = RocksDb::restore(&restore_dir_path, &checkpoints_dir_path)
             .expect("Could not open checkpointed db");
 
         assert_eq!(

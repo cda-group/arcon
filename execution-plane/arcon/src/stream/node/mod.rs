@@ -42,7 +42,6 @@ where
         mut operator: Box<dyn Operator<IN, OUT> + Send>,
         mut state_backend: Box<dyn StateBackend>,
     ) -> Node<IN, OUT> {
-        // TODO: hardcoded Bincode serializers (via state_backend.build API)
         // Initiate our watermarks
 
         // some backends require you to first specify all the states and mess with them later
