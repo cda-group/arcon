@@ -107,7 +107,7 @@ fn run_pipeline<SB: StateBackend>(state_dir: &str, sink_path: &str) -> Result<()
         if panic_countdown == 0 {
             panic!("AAAAAA!!!")
         }
-        *PANIC_COUNTDOWN.write().unwrap().entry(t).or_insert(0) -= 1;
+        *PANIC_COUNTDOWN.write().unwrap().entry(t).or_insert(1) -= 1;
 
         x.data.iter().map(|x| x + 3).sum()
     }
