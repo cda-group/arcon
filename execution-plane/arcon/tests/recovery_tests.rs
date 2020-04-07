@@ -23,7 +23,6 @@ pub struct NormaliseElements {
     pub data: Vec<i64>,
 }
 
-// TODO: this global state makes running the three tests together pretty much impossible
 #[allow(dead_code)]
 static PANIC_COUNTDOWN: Lazy<RwLock<HashMap<TypeId, u32>>> =
     Lazy::new(|| RwLock::new(HashMap::new()));
