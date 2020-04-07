@@ -200,7 +200,7 @@ fn run_pipeline<SB: StateBackend>(state_dir: &str, sink_path: &str) -> Result<()
     window_node_ref.tell(watermark(20, 1));
     window_node_ref.tell(epoch(3, 1));
 
-    std::thread::sleep(std::time::Duration::from_secs(3));
+    std::thread::sleep(std::time::Duration::from_secs(1));
 
     system.shutdown().expect("Shutdown failed");
 
