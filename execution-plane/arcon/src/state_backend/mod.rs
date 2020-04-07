@@ -56,7 +56,7 @@ pub mod serialization;
 #[macro_use]
 pub mod state_types;
 
-#[cfg(feature = "arcon_faster")]
+#[cfg(all(feature = "arcon_faster", target_os = "linux"))]
 pub mod faster;
 pub mod in_memory;
 #[cfg(feature = "arcon_rocksdb")]
@@ -113,7 +113,7 @@ mod test {
             do_backend_ops(dynamic_sled);
         }
 
-        #[cfg(feature = "arcon_faster")]
+        #[cfg(all(feature = "arcon_faster", target_os = "linux"))]
         {
             let mut test_faster = faster::test::TestDb::new();
             let test_faster: &mut faster::Faster = &mut *test_faster;
@@ -205,7 +205,7 @@ mod test {
             do_backend_ops(test_sled);
         }
 
-        #[cfg(feature = "arcon_faster")]
+        #[cfg(all(feature = "arcon_faster", target_os = "linux"))]
         {
             let mut test_faster = faster::test::TestDb::new();
             let test_faster: &mut faster::Faster = &mut *test_faster;

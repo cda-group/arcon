@@ -54,7 +54,7 @@ macro_rules! impl_dynamic_builder {
                 handle_backend!(crate::state_backend::rocks::RocksDb);
                 #[cfg(feature = "arcon_sled")]
                 handle_backend!(crate::state_backend::sled::Sled);
-                #[cfg(feature = "arcon_faster")]
+                #[cfg(all(feature = "arcon_faster", target_os = "linux"))]
                 handle_backend!(crate::state_backend::faster::Faster);
 
                 // NOTE: every implemented state backend should be added here

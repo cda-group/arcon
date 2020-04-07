@@ -266,7 +266,7 @@ fn test_sled_recovery_pipeline() {
     run_test::<Sled>()
 }
 
-#[cfg(feature = "arcon_faster")]
+#[cfg(all(feature = "arcon_faster", target_os = "linux"))]
 #[test]
 fn test_faster_recovery_pipeline() {
     run_test::<Faster>()
