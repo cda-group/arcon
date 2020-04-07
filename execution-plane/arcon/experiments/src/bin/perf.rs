@@ -232,6 +232,7 @@ fn exec(
         channel_strategy,
         Box::new(Map::new(&map_fn)),
         Box::new(InMemory::new("perf").unwrap()),
+        ".".into(),
     );
 
     let map_node = if dedicated {

@@ -91,6 +91,7 @@ mod tests {
                 channel_strategy,
                 Box::new(Map::new(&map_fn)),
                 Box::new(InMemory::new("test").unwrap()),
+                ".".into(),
             )
         });
         system.start(&map_node);

@@ -8,6 +8,7 @@ extern crate arcon;
 use arcon::{macros::*, prelude::*};
 use once_cell::sync::Lazy;
 use std::{
+    any::TypeId,
     collections::HashMap,
     fs,
     fs::File,
@@ -24,15 +25,16 @@ pub struct NormaliseElements {
 
 // TODO: this global state makes running the three tests together pretty much impossible
 #[allow(dead_code)]
-static PANIC_COUNTDOWN: Lazy<RwLock<u32>> = Lazy::new(|| RwLock::new(0));
+static PANIC_COUNTDOWN: Lazy<RwLock<HashMap<TypeId, u32>>> =
+    Lazy::new(|| RwLock::new(HashMap::new()));
 
 #[allow(dead_code)]
-fn backend<SB: StateBackend>(node_id: u32) -> Box<dyn StateBackend> {
-    let runtime_dir = format!("running_{}", node_id);
-    let _ = fs::remove_dir_all(&runtime_dir);
-    fs::create_dir(&runtime_dir).unwrap();
+fn backend<SB: StateBackend>(state_dir: &str, node_id: u32) -> Box<dyn StateBackend> {
+    let running_dir = format!("{}/running_{}", state_dir, node_id);
+    let _ = fs::remove_dir_all(&running_dir);
+    fs::create_dir(&running_dir).unwrap();
 
-    let dirs: Vec<String> = fs::read_dir(std::env::current_dir().unwrap())
+    let dirs: Vec<String> = fs::read_dir(state_dir)
         .unwrap()
         .map(|d| d.unwrap().file_name().to_string_lossy().into_owned())
         .collect();
@@ -55,18 +57,23 @@ fn backend<SB: StateBackend>(node_id: u32) -> Box<dyn StateBackend> {
     match latest_complete_checkpoint {
         Some(epoch) => Box::new(
             SB::restore(
-                &runtime_dir,
-                &format!("checkpoint_{id}_{epoch}", id = node_id, epoch = epoch),
+                &running_dir,
+                &format!(
+                    "{prefix}/checkpoint_{id}_{epoch}",
+                    prefix = state_dir,
+                    id = node_id,
+                    epoch = epoch
+                ),
             )
             .unwrap(),
         ),
-        None => Box::new(SB::new(&runtime_dir).unwrap()),
+        None => Box::new(SB::new(&running_dir).unwrap()),
     }
 }
 
 #[allow(dead_code)]
 /// manually sent events -> Window -> Map -> LocalFileSink
-fn run_pipeline<SB: StateBackend>(sink_path: &str) -> Result<(), ()> {
+fn run_pipeline<SB: StateBackend>(state_dir: &str, sink_path: &str) -> Result<(), ()> {
     let timeout = std::time::Duration::from_millis(500);
     let system = KompactConfig::default().build().expect("KompactSystem");
 
@@ -77,7 +84,8 @@ fn run_pipeline<SB: StateBackend>(sink_path: &str) -> Result<(), ()> {
             vec![3.into()],
             ChannelStrategy::Mute,
             Box::new(LocalFileSink::new(sink_path)),
-            backend::<SB>(4),
+            backend::<SB>(state_dir, 4),
+            state_dir.into(),
         )
     });
     system
@@ -93,12 +101,14 @@ fn run_pipeline<SB: StateBackend>(sink_path: &str) -> Result<(), ()> {
     let channel_strategy =
         ChannelStrategy::Forward(Forward::new(Channel::Local(file_sink_ref), NodeID::new(3)));
 
-    fn map_fn(x: NormaliseElements) -> i64 {
-        let panic_countdown = *PANIC_COUNTDOWN.read().unwrap();
+    fn map_fn<SB: 'static>(x: NormaliseElements) -> i64 {
+        let t = TypeId::of::<SB>();
+
+        let panic_countdown = *PANIC_COUNTDOWN.read().unwrap().get(&t).unwrap_or(&0);
         if panic_countdown == 0 {
             panic!("AAAAAA!!!")
         }
-        *PANIC_COUNTDOWN.write().unwrap() -= 1;
+        *PANIC_COUNTDOWN.write().unwrap().entry(t).or_insert(0) -= 1;
 
         x.data.iter().map(|x| x + 3).sum()
     }
@@ -108,8 +118,9 @@ fn run_pipeline<SB: StateBackend>(sink_path: &str) -> Result<(), ()> {
             3.into(),
             vec![2.into()],
             channel_strategy,
-            Box::new(Map::<NormaliseElements, i64>::new(&map_fn)),
-            backend::<SB>(3),
+            Box::new(Map::<NormaliseElements, i64>::new(&map_fn::<SB>)),
+            backend::<SB>(state_dir, 3),
+            state_dir.into(),
         )
     });
 
@@ -127,7 +138,7 @@ fn run_pipeline<SB: StateBackend>(sink_path: &str) -> Result<(), ()> {
         NormaliseElements { data }
     }
 
-    let mut window_state_backend = backend::<SB>(2);
+    let mut window_state_backend = backend::<SB>(state_dir, 2);
 
     let window: Box<dyn Window<i64, NormaliseElements>> =
         Box::new(AppenderWindow::new(&window_fn, &mut *window_state_backend));
@@ -150,6 +161,7 @@ fn run_pipeline<SB: StateBackend>(sink_path: &str) -> Result<(), ()> {
                 &mut *window_state_backend,
             )),
             window_state_backend,
+            state_dir.into(),
         )
     });
     system
@@ -189,7 +201,7 @@ fn run_pipeline<SB: StateBackend>(sink_path: &str) -> Result<(), ()> {
     window_node_ref.tell(watermark(20, 1));
     window_node_ref.tell(epoch(3, 1));
 
-    std::thread::sleep(std::time::Duration::from_secs(1));
+    std::thread::sleep(std::time::Duration::from_secs(3));
 
     system.shutdown().expect("Shutdown failed");
 
@@ -203,20 +215,20 @@ fn run_pipeline<SB: StateBackend>(sink_path: &str) -> Result<(), ()> {
 
 #[allow(dead_code)]
 fn run_test<SB: StateBackend>() {
-    let temp_dir = tempfile::TempDir::new().unwrap();
+    let t = TypeId::of::<SB>();
 
-    let test_directory = temp_dir.path();
-    let _ = fs::remove_dir_all(test_directory);
-    fs::create_dir(test_directory).unwrap();
-
-    std::env::set_current_dir(test_directory).unwrap();
+    let test_dir = tempfile::TempDir::new().unwrap();
+    let test_dir = test_dir.path();
+    let _ = fs::remove_dir_all(test_dir);
+    fs::create_dir(test_dir).unwrap();
+    let test_dir = test_dir.to_string_lossy();
 
     // Define Sink File
     let sink_file = NamedTempFile::new().unwrap();
     let sink_path = sink_file.path().to_string_lossy().into_owned();
 
-    *PANIC_COUNTDOWN.write().unwrap() = 2; // reaches zero quite quickly
-    run_pipeline::<SB>(&sink_path).unwrap_err();
+    PANIC_COUNTDOWN.write().unwrap().insert(t, 2); // reaches zero quite quickly
+    run_pipeline::<SB>(&test_dir, &sink_path).unwrap_err();
     {
         // Check results from the sink file!
         let file = File::open(sink_file.path()).expect("no such file");
@@ -229,8 +241,8 @@ fn run_test<SB: StateBackend>() {
         assert_eq!(result, vec![9, 8]); // partial result after panic
     }
 
-    *PANIC_COUNTDOWN.write().unwrap() = 100; // won't reach zero
-    run_pipeline::<SB>(&sink_path).unwrap();
+    PANIC_COUNTDOWN.write().unwrap().insert(t, 100); // won't reach zero
+    run_pipeline::<SB>(&test_dir, &sink_path).unwrap();
 
     // Check results from the sink file!
     let file = File::open(sink_file.path()).expect("no such file");

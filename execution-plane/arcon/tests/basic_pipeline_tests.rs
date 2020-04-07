@@ -49,6 +49,7 @@ fn normalise_pipeline_test() {
             ChannelStrategy::Mute,
             Box::new(LocalFileSink::new(&sink_path)),
             Box::new(InMemory::new("test5").unwrap()),
+            ".".into(),
         )
     });
     system
@@ -75,6 +76,7 @@ fn normalise_pipeline_test() {
             channel_strategy,
             Box::new(Map::<NormaliseElements, i64>::new(&map_fn)),
             Box::new(InMemory::new("test4").unwrap()),
+            ".".into(),
         )
     });
 
@@ -118,6 +120,7 @@ fn normalise_pipeline_test() {
                 &mut *state_backend_2,
             )),
             state_backend_2,
+            ".".into(),
         )
     });
     system

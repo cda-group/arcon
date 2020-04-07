@@ -84,6 +84,7 @@ mod tests {
                 ChannelStrategy::Mute,
                 Box::new(LocalFileSink::new(&file_path)),
                 Box::new(InMemory::new("test").unwrap()),
+                ".".into(),
             )
         });
         system.start(&sink_comp);

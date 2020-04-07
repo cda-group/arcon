@@ -351,6 +351,7 @@ mod tests {
                 channel_strategy,
                 Box::new(window_assigner),
                 state_backend,
+                ".".into(),
             )
         });
 

@@ -92,6 +92,7 @@ mod tests {
                 channel_strategy,
                 Box::new(FlatMap::new(&flatmap_fn)),
                 Box::new(InMemory::new("test").unwrap()),
+                ".".into(),
             )
         });
         system.start(&flatmap_node);

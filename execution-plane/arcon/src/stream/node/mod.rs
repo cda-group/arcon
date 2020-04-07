@@ -28,6 +28,7 @@ where
     blocked_channels: BoxedMapState<NodeID, ()>,
     message_buffer: BoxedVecState<ArconMessage<IN>>,
     state_backend: Box<dyn StateBackend>,
+    checkpoint_dir: String,
 }
 
 impl<IN, OUT> Node<IN, OUT>
@@ -41,6 +42,7 @@ where
         channel_strategy: ChannelStrategy<OUT>,
         mut operator: Box<dyn Operator<IN, OUT> + Send>,
         mut state_backend: Box<dyn StateBackend>,
+        checkpoint_dir: String,
     ) -> Node<IN, OUT> {
         // Initiate our watermarks
 
@@ -98,6 +100,7 @@ where
             blocked_channels,
             message_buffer,
             state_backend,
+            checkpoint_dir,
         }
     }
 
@@ -254,9 +257,9 @@ where
     }
 
     fn save_state(&mut self) -> ArconResult<()> {
-        // TODO: for now we're saving to cwd, this should probably be configurable
         let checkpoint_dir = format!(
-            "checkpoint_{id}_{epoch}",
+            "{dir}/checkpoint_{id}_{epoch}",
+            dir = self.checkpoint_dir,
             id = self.id.id,
             epoch = self
                 .current_epoch
@@ -378,6 +381,7 @@ mod tests {
                 channel_strategy,
                 Box::new(Filter::new(&node_fn)),
                 Box::new(InMemory::new("test").unwrap()),
+                ".".into(),
             )
         });
 
