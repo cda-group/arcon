@@ -1,16 +1,12 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-cfg_if::cfg_if! {
- if #[cfg(feature = "arcon_tui")] {
-    use crate::tui::{component::TuiComponent, widgets::node::Node as TuiNode};
-    use std::sync::Arc;
- }
-}
-
+#[cfg(feature = "arcon_tui")]
+use crate::tui::{component::TuiComponent, widgets::node::Node as TuiNode};
 use crate::{conf::ArconConf, manager::node_manager::*, prelude::*, util::SafelySendableFn};
 use fxhash::FxHashMap;
 use kompact::prelude::KompactSystem;
+use std::sync::Arc;
 
 /// A struct meant to simplify the creation of an Arcon Pipeline
 #[derive(Clone)]
@@ -117,7 +113,8 @@ impl ArconPipeline {
         in_channels: Vec<NodeID>,
         channel_strategy: ChannelStrategy<OUT>,
         nodes: Vec<Node<IN, OUT>>,
-    ) where
+    ) -> Vec<Arc<Component<Node<IN, OUT>>>>
+    where
         IN: ArconType,
         OUT: ArconType,
     {
@@ -138,7 +135,7 @@ impl ArconPipeline {
             node_fn,
             channel_strategy,
             in_channels,
-            node_comps,
+            node_comps.clone(),
             None,
             None,
             #[cfg(feature = "arcon_tui")]
@@ -154,6 +151,8 @@ impl ArconPipeline {
             .start_notify(&node_manager_comp)
             .wait_timeout(timeout)
             .expect("node_manager never started!");
+
+        node_comps
     }
 
     /// Awaits termination from the pipeline

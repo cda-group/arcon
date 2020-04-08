@@ -33,64 +33,33 @@ fn main() {
         .short("a")
         .help("Path to Arcon Config");
 
-    let tui_arg = Arg::with_name("t")
-        .help("toggle tui mode off")
-        .help("toggle tui mode off")
-        .short("t");
+    let tui_arg = Arg::with_name("t").help("toggle tui mode off").short("t");
 
-    let batch_size_arg = Arg::with_name("b")
-        .required(false)
-        .default_value("1024")
-        .takes_value(true)
-        .long("Batch size for ChannelStrategy")
-        .short("b")
-        .help("Batch size for ChannelStrategy");
+    let debug_arg = Arg::with_name("d").help("toggle debug mode on").short("d");
 
-    let log_frequency_arg = Arg::with_name("f")
+    let query_arg = Arg::with_name("q")
         .required(false)
-        .default_value("100000")
+        .default_value("1")
         .takes_value(true)
-        .long("How often we log throughput")
-        .short("f")
-        .help("throughput log freq");
+        .long("NEXMark query")
+        .short("q")
+        .help("NEXMark query");
 
     let matches = App::new("Arcon Nexmark Queries")
         .setting(AppSettings::ColoredHelp)
         .version(crate_version!())
         .setting(AppSettings::SubcommandRequired)
-        .arg(
-            Arg::with_name("d")
-                .help("dedicated mode")
-                .long("dedicated")
-                .short("d"),
-        )
-        .arg(
-            Arg::with_name("p")
-                .help("dedicated-pinned mode")
-                .long("dedicated-pinned")
-                .short("p"),
-        )
-        .arg(
-            Arg::with_name("log")
-                .help("log-throughput")
-                .long("log pipeline throughput")
-                .short("log"),
-        )
         .subcommand(
             SubCommand::with_name("run")
                 .setting(AppSettings::ColoredHelp)
+                .arg(&query_arg)
                 .arg(&nexmark_config_arg)
                 .arg(&arcon_config_path)
                 .arg(&tui_arg)
-                .arg(&batch_size_arg)
-                .arg(&log_frequency_arg)
+                .arg(&debug_arg)
                 .about("Run Nexmark Query"),
         )
         .get_matches_from(fetch_args());
-
-    let dedicated: bool = matches.is_present("d");
-    let pinned: bool = matches.is_present("p");
-    let log_throughput: bool = matches.is_present("log");
 
     match matches.subcommand() {
         ("run", Some(arg_matches)) => {
@@ -110,29 +79,25 @@ fn main() {
                 }
             };
 
-            let tui = !arg_matches.is_present("t");
+            let mut tui = !arg_matches.is_present("t");
+            let debug_mode = arg_matches.is_present("d");
+            if debug_mode {
+                // If debug mode enabled, disable tui...
+                tui = false;
+            }
 
-            let log_freq = arg_matches
-                .value_of("f")
+            let query = arg_matches
+                .value_of("q")
                 .expect("Should not happen as there is a default")
-                .parse::<u64>()
-                .unwrap();
-
-            let batch_size = arg_matches
-                .value_of("b")
-                .expect("Should not happen as there is a default")
-                .parse::<u64>()
+                .parse::<u8>()
                 .unwrap();
 
             if let Err(err) = run(
+                query,
                 &nexmark_config_path,
                 arcon_config_path,
-                batch_size,
-                log_freq,
-                dedicated,
-                pinned,
-                log_throughput,
                 tui,
+                debug_mode,
             ) {
                 error!("{}", err.to_string());
             }
@@ -148,14 +113,11 @@ fn fetch_args() -> Vec<String> {
 }
 
 fn run(
+    nexmark_query: u8,
     nexmark_config_path: &str,
     arcon_config_path: Option<String>,
-    _batch_size: u64,
-    _log_freq: u64,
-    _dedicated: bool,
-    _pinned: bool,
-    _log_throughput: bool,
     tui: bool,
+    debug_mode: bool,
 ) -> Result<()> {
     let nexmark_config_file: String = {
         let md = metadata(&nexmark_config_path)?;
@@ -167,7 +129,17 @@ fn run(
     };
 
     // Load Base conf
-    let mut nexmark_config = NEXMarkConfig::load(&nexmark_config_file)?;
+    let mut nexmark_config = {
+        if let Ok(conf) = NEXMarkConfig::load(&nexmark_config_file) {
+            conf
+        } else {
+            // If loading from file failed, just load a default one...
+            let mut conf = NEXMarkConfig::default();
+            let q: NEXMarkQuery = unsafe { ::std::mem::transmute(nexmark_query) };
+            conf.query = q;
+            conf
+        }
+    };
     // Finish the conf
     NEXMarkConfig::finish(&mut nexmark_config);
     info!("{:?}\n", nexmark_config);
@@ -184,17 +156,10 @@ fn run(
 
     info!("{:?}\n", pipeline.arcon_conf());
 
-    //let nexmark_timer = NexmarkTimer { nexmark_config.time_dilation };
-
-    let timer = ::std::time::Instant::now();
-    // Establish a start of the computation.
-    let elapsed_ns = timer.elapsed().as_nanos();
-    nexmark_config.base_time_ns = elapsed_ns as u32;
-
     match nexmark_config.query {
         NEXMarkQuery::CurrencyConversion => {
-            info!("Setting up CurrencyConversion query");
-            queries::q1::q1(&mut pipeline);
+            info!("Running CurrencyConversion query");
+            queries::q1::q1(debug_mode, nexmark_config, &mut pipeline);
         }
     }
 

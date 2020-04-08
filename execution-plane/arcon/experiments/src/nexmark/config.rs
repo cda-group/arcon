@@ -16,6 +16,7 @@ pub enum RateShape {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NEXMarkConfig {
+    #[serde(default = "nexmark_query")]
     pub query: NEXMarkQuery,
     #[serde(default = "num_events")]
     pub num_events: u32,
@@ -36,7 +37,7 @@ pub struct NEXMarkConfig {
     #[serde(default = "in_flight_auctions")]
     pub in_flight_auctions: u32,
     #[serde(default = "stream_timeout")]
-    pub stream_timeout: u32,
+    pub stream_timeout: u64,
     #[serde(default = "person_id_lead")]
     pub person_id_lead: u32,
     #[serde(default = "rate_shape")]
@@ -103,6 +104,13 @@ pub struct NEXMarkConfig {
 }
 
 impl NEXMarkConfig {
+    pub fn default() -> NEXMarkConfig {
+        // NOTE: this will make sure it loads the defaults from serde...
+        toml::from_str("")
+            .map_err(|e| anyhow!("failed to parse conf {}", e))
+            .unwrap()
+    }
+
     pub fn load(path: &str) -> Result<NEXMarkConfig> {
         let data = std::fs::read_to_string(path)
             .with_context(|| format!("Failed to read config from {}", path))?;
@@ -182,6 +190,10 @@ pub enum NEXMarkQuery {
 
 // Default Values
 
+fn nexmark_query() -> NEXMarkQuery {
+    NEXMarkQuery::CurrencyConversion
+}
+
 fn num_events() -> u32 {
     10000
 }
@@ -229,7 +241,7 @@ fn in_flight_auctions() -> u32 {
     100
 }
 
-fn stream_timeout() -> u32 {
+fn stream_timeout() -> u64 {
     100
 }
 
@@ -302,19 +314,41 @@ fn out_of_order_group_size() -> u32 {
 }
 
 fn us_states() -> Vec<String> {
-    vec!["A".into()]
+    vec![
+        "AZ".into(),
+        "CA".into(),
+        "ID".into(),
+        "OR".into(),
+        "WA".into(),
+        "WY".into(),
+    ]
 }
 
 fn us_cities() -> Vec<String> {
-    vec!["A".into()]
+    vec![
+        "Phoenix".into(),
+        "Los Angeles".into(),
+        "Seattle".into(),
+        "San Francisco".into(),
+    ]
 }
 
 fn first_names() -> Vec<String> {
-    Vec::new()
+    vec![
+        "Ben".into(),
+        "Andrew".into(),
+        "Steve".into(),
+        "Derek".into(),
+    ]
 }
 
 fn last_names() -> Vec<String> {
-    Vec::new()
+    vec![
+        "Svensson".into(),
+        "Andersson".into(),
+        "Antonsson".into(),
+        "Rikardsson".into(),
+    ]
 }
 
 pub struct NexMarkInputTimes {
