@@ -5,15 +5,28 @@ use super::SourceContext;
 use crate::data::ArconType;
 use kompact::prelude::*;
 
-#[derive(ComponentDefinition)]
+const RESCHEDULE_EVERY: usize = 500000;
+
+#[derive(Debug, Clone, Copy)]
+struct ContinueSending;
+struct LoopbackPort;
+impl Port for LoopbackPort {
+    type Indication = Never;
+    type Request = ContinueSending;
+}
+
+#[derive(ComponentDefinition, Actor)]
 pub struct CollectionSource<IN, OUT>
 where
     IN: ArconType,
     OUT: ArconType,
 {
     ctx: ComponentContext<Self>,
+    loopback_send: RequiredPort<LoopbackPort, Self>,
+    loopback_receive: ProvidedPort<LoopbackPort, Self>,
     source_ctx: SourceContext<IN, OUT>,
-    collection: Option<Vec<IN>>,
+    collection: Vec<IN>,
+    counter: usize,
 }
 
 impl<IN, OUT> CollectionSource<IN, OUT>
@@ -24,24 +37,44 @@ where
     pub fn new(collection: Vec<IN>, source_ctx: SourceContext<IN, OUT>) -> Self {
         CollectionSource {
             ctx: ComponentContext::new(),
+            loopback_send: RequiredPort::new(),
+            loopback_receive: ProvidedPort::new(),
             source_ctx,
-            collection: Some(collection),
+            collection,
+            counter: 0,
         }
     }
-    pub fn process_collection(&mut self) {
-        let mut counter: u64 = 0;
-        for record in self.collection.take().unwrap() {
+    // fn process_collection(&mut self) {
+    //     let mut counter = 0;
+    //     for record in self.collection.drain(..) {
+    //         let elem = self.source_ctx.extract_element(record);
+    //         self.source_ctx.process(elem);
+    //         counter += 1;
+    //         if counter == self.source_ctx.watermark_interval {
+    //             self.source_ctx.generate_watermark();
+    //             counter = 0;
+    //         }
+    //     }
+    //     self.source_ctx.generate_watermark();
+    // }
+    fn process_collection(&mut self) {
+        let drain_to = RESCHEDULE_EVERY
+            .min(self.collection.len());
+        for record in self.collection.drain(..drain_to) {
             let elem = self.source_ctx.extract_element(record);
             self.source_ctx.process(elem);
 
-            counter += 1;
-
-            if counter == self.source_ctx.watermark_interval {
+            self.counter += 1;
+            if (self.counter as u64) == self.source_ctx.watermark_interval {
                 self.source_ctx.generate_watermark();
-                counter = 0;
+                self.counter = 0;
             }
         }
-        self.source_ctx.generate_watermark();
+        if !self.collection.is_empty() {
+            self.loopback_send.trigger(ContinueSending);
+        } else {
+            self.source_ctx.generate_watermark();
+        }
     }
 }
 
@@ -52,20 +85,44 @@ where
 {
     fn handle(&mut self, event: ControlEvent) {
         if let ControlEvent::Start = event {
-            self.process_collection();
+            let shared = self.loopback_receive.share();
+            self.loopback_send.connect(shared);
+            self.loopback_send.trigger(ContinueSending);
         }
     }
 }
 
-impl<IN, OUT> Actor for CollectionSource<IN, OUT>
+impl<IN, OUT> Provide<LoopbackPort> for CollectionSource<IN, OUT>
 where
     IN: ArconType,
     OUT: ArconType,
 {
-    type Message = ();
-    fn receive_local(&mut self, _msg: Self::Message) {}
-    fn receive_network(&mut self, _msg: NetMessage) {}
+    fn handle(&mut self, _event: ContinueSending) {
+        self.process_collection();
+    }
 }
+
+impl<IN, OUT> Require<LoopbackPort> for CollectionSource<IN, OUT>
+where
+    IN: ArconType,
+    OUT: ArconType,
+{
+    fn handle(&mut self, _event: Never) {
+        unreachable!("Never type has no instance");
+    }
+}
+
+//ignore_indications!(LoopbackPort, CollectionSource);
+
+// impl<IN, OUT> Actor for CollectionSource<IN, OUT>
+// where
+//     IN: ArconType,
+//     OUT: ArconType,
+// {
+//     type Message = ();
+//     fn receive_local(&mut self, _msg: Self::Message) {}
+//     fn receive_network(&mut self, _msg: NetMessage) {}
+// }
 
 #[cfg(test)]
 mod tests {
@@ -139,7 +196,7 @@ mod tests {
 
         assert_eq!(
             watermark_len as u64,
-            (collection_elements / watermark_interval) + 1 // One more is generated after the loop
+            (collection_elements / watermark_interval) + 1// One more is generated after the loop
         );
         assert_eq!(data_len, 1000);
     }
