@@ -2,7 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 extern crate arcon;
+#[macro_use]
+extern crate anyhow;
 
+pub mod nexmark;
 pub mod throughput_sink;
 
 use arcon::{macros::*, prelude::*};

@@ -346,6 +346,7 @@ mod tests {
 
         let window_node = system.create(move || {
             Node::<Item, u64>::new(
+                String::from("window_node"),
                 1.into(),
                 vec![0.into()],
                 channel_strategy,

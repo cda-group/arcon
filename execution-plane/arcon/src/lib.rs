@@ -16,12 +16,23 @@ extern crate arcon_error as error;
 
 /// Allocator for message buffers, network buffers, state backends
 pub mod allocator;
+/// Arcon Configuration
+pub mod conf;
 /// Arcon data types and serialisers/deserialisers
 pub mod data;
+/// Module containing different runtime managers
+pub mod manager;
+/// Arcon metrics
+pub mod metrics;
+/// Utilities for creating an Arcon pipeline
+pub mod pipeline;
 /// State backend implementations
 pub mod state_backend;
 /// Contains the core stream logic
 pub mod stream;
+/// Arcon terminal user interface
+#[cfg(feature = "arcon_tui")]
+mod tui;
 /// Utilities for Arcon
 pub mod util;
 
@@ -45,27 +56,31 @@ pub mod macros {
 
 /// Helper module that imports everything related to arcon into scope
 pub mod prelude {
-    pub use crate::stream::{
-        channel::{
-            strategy::{
-                broadcast::Broadcast, forward::Forward, key_by::KeyBy, round_robin::RoundRobin,
-                ChannelStrategy,
-            },
-            Channel, DispatcherSource,
-        },
-        node::{debug::DebugNode, Node},
-        operator::{
-            function::{Filter, FlatMap, Map},
-            sink::local_file::LocalFileSink,
-            window::{AppenderWindow, EventTimeWindowAssigner, IncrementalWindow, Window},
-            Operator,
-        },
-        source::{collection::CollectionSource, local_file::LocalFileSource, SourceContext},
-    };
     #[cfg(feature = "socket")]
     pub use crate::stream::{
         operator::sink::socket::SocketSink,
         source::socket::{SocketKind, SocketSource},
+    };
+    pub use crate::{
+        conf::ArconConf,
+        pipeline::ArconPipeline,
+        stream::{
+            channel::{
+                strategy::{
+                    broadcast::Broadcast, forward::Forward, key_by::KeyBy, round_robin::RoundRobin,
+                    ChannelStrategy,
+                },
+                Channel, DispatcherSource,
+            },
+            node::{debug::DebugNode, Node, NodeDescriptor},
+            operator::{
+                function::{Filter, FilterMap, FlatMap, Map, MapInPlace},
+                sink::local_file::LocalFileSink,
+                window::{AppenderWindow, EventTimeWindowAssigner, IncrementalWindow, Window},
+                Operator,
+            },
+            source::{collection::CollectionSource, local_file::LocalFileSource, SourceContext},
+        },
     };
 
     #[cfg(feature = "kafka")]

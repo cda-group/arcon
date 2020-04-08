@@ -8,6 +8,7 @@ use crate::{
 };
 
 /// A Broadcast strategy for one-to-many message sending
+#[derive(Clone)]
 pub struct Broadcast<A>
 where
     A: ArconType,
@@ -75,6 +76,11 @@ where
         for channel in &self.channels {
             send(channel, msg.clone());
         }
+    }
+
+    #[inline]
+    pub fn num_channels(&self) -> usize {
+        self.channels.len()
     }
 }
 

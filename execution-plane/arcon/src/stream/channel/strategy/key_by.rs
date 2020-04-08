@@ -18,7 +18,7 @@ type DefaultHashBuilder = BuildHasherDefault<DefaultHasher>;
 ///
 /// KeyBy may be constructed with
 /// either a custom hasher or the default [DefaultHasher]
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct KeyBy<A, H = DefaultHashBuilder>
 where
     A: ArconType,
@@ -135,6 +135,11 @@ where
         }
 
         self.buffer_counter = 0;
+    }
+
+    #[inline]
+    pub fn num_channels(&self) -> usize {
+        self.buffer_map.len()
     }
 }
 
