@@ -11,6 +11,7 @@ pub mod source;
 use arcon::macros::*;
 use config::NEXMarkConfig;
 use rand::{rngs::SmallRng, seq::SliceRandom, Rng};
+use serde::{Deserialize, Serialize};
 use std::cmp::{max, min};
 
 trait NEXMarkRNG {
@@ -257,7 +258,7 @@ impl NEXMarkEvent {
     }
 }
 
-#[derive(prost::Oneof, Clone, Abomonation, Hash)]
+#[derive(prost::Oneof, Serialize, Deserialize, Clone, Abomonation, Hash)]
 pub enum Event {
     #[prost(message, tag = "1")]
     Person(Person),
