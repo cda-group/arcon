@@ -22,10 +22,31 @@ use uuid::Uuid;
 type Value = SmallBox<dyn Any + Send + Sync, space::S8>;
 
 pub struct InMemory {
+    states: HashMap<String, Uuid>,
     db: HashMap<Vec<u8>, Value>,
 }
 
 impl InMemory {
+    fn get_state_common<IK, N, KS>(
+        &mut self,
+        name: &str,
+        item_key: IK,
+        namespace: N,
+        key_serializer: KS,
+    ) -> StateCommon<IK, N, KS>
+    where
+        IK: SerializableFixedSizeWith<KS>,
+        N: SerializableFixedSizeWith<KS>,
+    {
+        if let Some(id) = self.states.get(name) {
+            StateCommon::with_id(*id, item_key, namespace, key_serializer)
+        } else {
+            let c = StateCommon::new(item_key, namespace, key_serializer);
+            self.states.insert(name.to_string(), c.id);
+            c
+        }
+    }
+
     pub fn remove_matching(&mut self, prefix: &[u8]) {
         self.db.retain(|k, _| &k[..prefix.len()] != prefix)
     }
@@ -83,13 +104,13 @@ where
 
     fn new_value_state(
         &mut self,
-        _name: &str,
+        name: &str,
         init_item_key: IK,
         init_namespace: N,
         key_serializer: KS,
         _value_serializer: TS,
     ) -> Self::Type {
-        let common = StateCommon::new(init_item_key, init_namespace, key_serializer);
+        let common = self.get_state_common(name, init_item_key, init_namespace, key_serializer);
         InMemoryValueState {
             common,
             _phantom: Default::default(),
@@ -110,13 +131,13 @@ where
 
     fn new_map_state(
         &mut self,
-        _name: &str,
+        name: &str,
         init_item_key: IK,
         init_namespace: N,
         key_serializer: KS,
         _value_serializer: TS,
     ) -> Self::Type {
-        let common = StateCommon::new(init_item_key, init_namespace, key_serializer);
+        let common = self.get_state_common(name, init_item_key, init_namespace, key_serializer);
         InMemoryMapState {
             common,
             _phantom: Default::default(),
@@ -134,13 +155,13 @@ where
 
     fn new_vec_state(
         &mut self,
-        _name: &str,
+        name: &str,
         init_item_key: IK,
         init_namespace: N,
         key_serializer: KS,
         _value_serializer: TS,
     ) -> Self::Type {
-        let common = StateCommon::new(init_item_key, init_namespace, key_serializer);
+        let common = self.get_state_common(name, init_item_key, init_namespace, key_serializer);
         InMemoryVecState {
             common,
             _phantom: Default::default(),
@@ -159,14 +180,14 @@ where
 
     fn new_reducing_state(
         &mut self,
-        _name: &str,
+        name: &str,
         init_item_key: IK,
         init_namespace: N,
         reduce_fn: F,
         key_serializer: KS,
         _value_serializer: TS,
     ) -> Self::Type {
-        let common = StateCommon::new(init_item_key, init_namespace, key_serializer);
+        let common = self.get_state_common(name, init_item_key, init_namespace, key_serializer);
         InMemoryReducingState {
             common,
             reduce_fn,
@@ -186,14 +207,14 @@ where
 
     fn new_aggregating_state(
         &mut self,
-        _name: &str,
+        name: &str,
         init_item_key: IK,
         init_namespace: N,
         aggregator: AGG,
         key_serializer: KS,
         _value_serializer: TS,
     ) -> Self::Type {
-        let common = StateCommon::new(init_item_key, init_namespace, key_serializer);
+        let common = self.get_state_common(name, init_item_key, init_namespace, key_serializer);
         InMemoryAggregatingState {
             common,
             aggregator,
@@ -204,7 +225,10 @@ where
 
 impl StateBackend for InMemory {
     fn new(_path: &str) -> ArconResult<InMemory> {
-        Ok(InMemory { db: HashMap::new() })
+        Ok(InMemory {
+            states: HashMap::new(),
+            db: HashMap::new(),
+        })
     }
 
     fn checkpoint(&self, _id: &str) -> ArconResult<()> {
@@ -239,6 +263,15 @@ where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
 {
+    fn with_id(id: Uuid, item_key: IK, namespace: N, key_serializer: KS) -> StateCommon<IK, N, KS> {
+        StateCommon {
+            id,
+            item_key,
+            namespace,
+            key_serializer,
+        }
+    }
+
     fn new(item_key: IK, namespace: N, key_serializer: KS) -> StateCommon<IK, N, KS> {
         StateCommon {
             id: Uuid::new_v4(),
