@@ -417,16 +417,16 @@ where
     fn new_value_state(
         &mut self,
         name: &str,
-        init_item_key: IK,
-        init_namespace: N,
+        item_key: IK,
+        namespace: N,
         key_serializer: KS,
         value_serializer: TS,
     ) -> Self::Type {
         let common = StateCommon::new_for_value_state(
             self,
             name,
-            init_item_key,
-            init_namespace,
+            item_key,
+            namespace,
             key_serializer,
             value_serializer,
         );
@@ -451,16 +451,16 @@ where
     fn new_map_state(
         &mut self,
         name: &str,
-        init_item_key: IK,
-        init_namespace: N,
+        item_key: IK,
+        namespace: N,
         key_serializer: KS,
         value_serializer: TS,
     ) -> Self::Type {
         let common = StateCommon::new_for_map_state(
             self,
             name,
-            init_item_key,
-            init_namespace,
+            item_key,
+            namespace,
             key_serializer,
             value_serializer,
         );
@@ -482,16 +482,16 @@ where
     fn new_vec_state(
         &mut self,
         name: &str,
-        init_item_key: IK,
-        init_namespace: N,
+        item_key: IK,
+        namespace: N,
         key_serializer: KS,
         value_serializer: TS,
     ) -> Self::Type {
         let common = StateCommon::new_for_vec_state(
             self,
             name,
-            init_item_key,
-            init_namespace,
+            item_key,
+            namespace,
             key_serializer,
             value_serializer,
         );
@@ -515,8 +515,8 @@ where
     fn new_reducing_state(
         &mut self,
         name: &str,
-        init_item_key: IK,
-        init_namespace: N,
+        item_key: IK,
+        namespace: N,
         reduce_fn: F,
         key_serializer: KS,
         value_serializer: TS,
@@ -524,8 +524,8 @@ where
         let common = StateCommon::new_for_reducing_state(
             self,
             name,
-            init_item_key,
-            init_namespace,
+            item_key,
+            namespace,
             reduce_fn.clone(),
             key_serializer,
             value_serializer,
@@ -552,8 +552,8 @@ where
     fn new_aggregating_state(
         &mut self,
         name: &str,
-        init_item_key: IK,
-        init_namespace: N,
+        item_key: IK,
+        namespace: N,
         aggregator: AGG,
         key_serializer: KS,
         value_serializer: TS,
@@ -561,8 +561,8 @@ where
         let common = StateCommon::new_for_aggregating_state(
             self,
             name,
-            init_item_key,
-            init_namespace,
+            item_key,
+            namespace,
             aggregator.clone(),
             key_serializer,
             value_serializer,

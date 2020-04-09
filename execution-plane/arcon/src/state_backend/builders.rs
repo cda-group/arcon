@@ -26,8 +26,8 @@ macro_rules! impl_dynamic_builder {
             fn $builder_fn(
                 &mut self,
                 name: &str,
-                init_item_key: IK,
-                init_namespace: N,
+                item_key: IK,
+                namespace: N,
                 $($($arg_name: $arg_ty,)*)?
                 key_serializer: KS,
                 value_serializer: TS,
@@ -39,8 +39,8 @@ macro_rules! impl_dynamic_builder {
                          if let Ok(b) = self.downcast_mut::<$backend>() {
                             return $state_name::erase_backend_type(b.$builder_fn(
                                 name,
-                                init_item_key,
-                                init_namespace,
+                                item_key,
+                                namespace,
                                 $($($arg_name,)*)?
                                 key_serializer,
                                 value_serializer,
@@ -71,8 +71,8 @@ pub trait ValueStateBuilder<IK, N, T, KS, TS> {
     fn new_value_state(
         &mut self,
         name: &str,
-        init_item_key: IK,
-        init_namespace: N,
+        item_key: IK,
+        namespace: N,
         key_serializer: KS,
         value_serializer: TS,
     ) -> Self::Type;
@@ -93,8 +93,8 @@ pub trait MapStateBuilder<IK, N, K, V, KS, TS> {
     fn new_map_state(
         &mut self,
         name: &str,
-        init_item_key: IK,
-        init_namespace: N,
+        item_key: IK,
+        namespace: N,
         key_serializer: KS,
         value_serializer: TS,
     ) -> Self::Type;
@@ -116,8 +116,8 @@ pub trait VecStateBuilder<IK, N, T, KS, TS> {
     fn new_vec_state(
         &mut self,
         name: &str,
-        init_item_key: IK,
-        init_namespace: N,
+        item_key: IK,
+        namespace: N,
         key_serializer: KS,
         value_serializer: TS,
     ) -> Self::Type;
@@ -138,8 +138,8 @@ pub trait ReducingStateBuilder<IK, N, T, F, KS, TS> {
     fn new_reducing_state(
         &mut self,
         name: &str,
-        init_item_key: IK,
-        init_namespace: N,
+        item_key: IK,
+        namespace: N,
         reduce_fn: F,
         key_serializer: KS,
         value_serializer: TS,
@@ -162,8 +162,8 @@ pub trait AggregatingStateBuilder<IK, N, T, AGG: Aggregator<T>, KS, TS> {
     fn new_aggregating_state(
         &mut self,
         name: &str,
-        init_item_key: IK,
-        init_namespace: N,
+        item_key: IK,
+        namespace: N,
         aggregator: AGG,
         key_serializer: KS,
         value_serializer: TS,
@@ -187,22 +187,19 @@ impl_dynamic_builder! {
 pub struct StateBuilder<'n, 'b, SB: ?Sized, IK, N, KS, TS> {
     name: &'n str,
     state_backend: &'b mut SB,
-    init_item_key: IK,
-    init_namespace: N,
+    item_key: IK,
+    namespace: N,
     key_serializer: KS,
     value_serializer: TS,
 }
 
 // 200 lines of boilerplate ;_;
 impl<'n, 'b, SB: ?Sized, IK, N, KS, TS> StateBuilder<'n, 'b, SB, IK, N, KS, TS> {
-    pub fn with_init_item_key<NIK>(
-        self,
-        init_item_key: NIK,
-    ) -> StateBuilder<'n, 'b, SB, NIK, N, KS, TS> {
+    pub fn with_item_key<NIK>(self, item_key: NIK) -> StateBuilder<'n, 'b, SB, NIK, N, KS, TS> {
         let StateBuilder {
             name,
             state_backend,
-            init_namespace,
+            namespace,
             key_serializer,
             value_serializer,
             ..
@@ -210,21 +207,18 @@ impl<'n, 'b, SB: ?Sized, IK, N, KS, TS> StateBuilder<'n, 'b, SB, IK, N, KS, TS> 
         StateBuilder {
             name,
             state_backend,
-            init_item_key,
-            init_namespace,
+            item_key,
+            namespace,
             key_serializer,
             value_serializer,
         }
     }
 
-    pub fn with_init_namespace<NN>(
-        self,
-        init_namespace: NN,
-    ) -> StateBuilder<'n, 'b, SB, IK, NN, KS, TS> {
+    pub fn with_namespace<NN>(self, namespace: NN) -> StateBuilder<'n, 'b, SB, IK, NN, KS, TS> {
         let StateBuilder {
             name,
             state_backend,
-            init_item_key,
+            item_key,
             key_serializer,
             value_serializer,
             ..
@@ -232,8 +226,8 @@ impl<'n, 'b, SB: ?Sized, IK, N, KS, TS> StateBuilder<'n, 'b, SB, IK, N, KS, TS> 
         StateBuilder {
             name,
             state_backend,
-            init_item_key,
-            init_namespace,
+            item_key,
+            namespace,
             key_serializer,
             value_serializer,
         }
@@ -246,16 +240,16 @@ impl<'n, 'b, SB: ?Sized, IK, N, KS, TS> StateBuilder<'n, 'b, SB, IK, N, KS, TS> 
         let StateBuilder {
             name,
             state_backend,
-            init_item_key,
-            init_namespace,
+            item_key,
+            namespace,
             value_serializer,
             ..
         } = self;
         StateBuilder {
             name,
             state_backend,
-            init_item_key,
-            init_namespace,
+            item_key,
+            namespace,
             key_serializer,
             value_serializer,
         }
@@ -268,16 +262,16 @@ impl<'n, 'b, SB: ?Sized, IK, N, KS, TS> StateBuilder<'n, 'b, SB, IK, N, KS, TS> 
         let StateBuilder {
             name,
             state_backend,
-            init_item_key,
-            init_namespace,
+            item_key,
+            namespace,
             key_serializer,
             ..
         } = self;
         StateBuilder {
             name,
             state_backend,
-            init_item_key,
-            init_namespace,
+            item_key,
+            namespace,
             key_serializer,
             value_serializer,
         }
@@ -290,18 +284,12 @@ impl<'n, 'b, SB: ?Sized, IK, N, KS, TS> StateBuilder<'n, 'b, SB, IK, N, KS, TS> 
         let StateBuilder {
             name,
             state_backend,
-            init_item_key,
-            init_namespace,
+            item_key,
+            namespace,
             key_serializer,
             value_serializer,
         } = self;
-        state_backend.new_value_state(
-            name,
-            init_item_key,
-            init_namespace,
-            key_serializer,
-            value_serializer,
-        )
+        state_backend.new_value_state(name, item_key, namespace, key_serializer, value_serializer)
     }
 
     pub fn map<K, V>(self) -> SB::Type
@@ -311,18 +299,12 @@ impl<'n, 'b, SB: ?Sized, IK, N, KS, TS> StateBuilder<'n, 'b, SB, IK, N, KS, TS> 
         let StateBuilder {
             name,
             state_backend,
-            init_item_key,
-            init_namespace,
+            item_key,
+            namespace,
             key_serializer,
             value_serializer,
         } = self;
-        state_backend.new_map_state(
-            name,
-            init_item_key,
-            init_namespace,
-            key_serializer,
-            value_serializer,
-        )
+        state_backend.new_map_state(name, item_key, namespace, key_serializer, value_serializer)
     }
 
     pub fn vec<T>(self) -> SB::Type
@@ -332,18 +314,12 @@ impl<'n, 'b, SB: ?Sized, IK, N, KS, TS> StateBuilder<'n, 'b, SB, IK, N, KS, TS> 
         let StateBuilder {
             name,
             state_backend,
-            init_item_key,
-            init_namespace,
+            item_key,
+            namespace,
             key_serializer,
             value_serializer,
         } = self;
-        state_backend.new_vec_state(
-            name,
-            init_item_key,
-            init_namespace,
-            key_serializer,
-            value_serializer,
-        )
+        state_backend.new_vec_state(name, item_key, namespace, key_serializer, value_serializer)
     }
 
     pub fn reducing<T, F>(self, reduce_fn: F) -> SB::Type
@@ -353,15 +329,15 @@ impl<'n, 'b, SB: ?Sized, IK, N, KS, TS> StateBuilder<'n, 'b, SB, IK, N, KS, TS> 
         let StateBuilder {
             name,
             state_backend,
-            init_item_key,
-            init_namespace,
+            item_key,
+            namespace,
             key_serializer,
             value_serializer,
         } = self;
         state_backend.new_reducing_state(
             name,
-            init_item_key,
-            init_namespace,
+            item_key,
+            namespace,
             reduce_fn,
             key_serializer,
             value_serializer,
@@ -376,15 +352,15 @@ impl<'n, 'b, SB: ?Sized, IK, N, KS, TS> StateBuilder<'n, 'b, SB, IK, N, KS, TS> 
         let StateBuilder {
             name,
             state_backend,
-            init_item_key,
-            init_namespace,
+            item_key,
+            namespace,
             key_serializer,
             value_serializer,
         } = self;
         state_backend.new_aggregating_state(
             name,
-            init_item_key,
-            init_namespace,
+            item_key,
+            namespace,
             aggregator,
             key_serializer,
             value_serializer,
@@ -416,8 +392,8 @@ pub trait StateBackendExt {
         StateBuilder {
             name,
             state_backend: self,
-            init_item_key: (),
-            init_namespace: (),
+            item_key: (),
+            namespace: (),
             key_serializer: DEFAULT_KEY_SERIALIZER,
             value_serializer: DEFAULT_VALUE_SERIALIZER,
         }
