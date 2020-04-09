@@ -105,12 +105,12 @@ where
     fn new_value_state(
         &mut self,
         name: &str,
-        init_item_key: IK,
-        init_namespace: N,
+        item_key: IK,
+        namespace: N,
         key_serializer: KS,
         _value_serializer: TS,
     ) -> Self::Type {
-        let common = self.get_state_common(name, init_item_key, init_namespace, key_serializer);
+        let common = self.get_state_common(name, item_key, namespace, key_serializer);
         InMemoryValueState {
             common,
             _phantom: Default::default(),
@@ -132,12 +132,12 @@ where
     fn new_map_state(
         &mut self,
         name: &str,
-        init_item_key: IK,
-        init_namespace: N,
+        item_key: IK,
+        namespace: N,
         key_serializer: KS,
         _value_serializer: TS,
     ) -> Self::Type {
-        let common = self.get_state_common(name, init_item_key, init_namespace, key_serializer);
+        let common = self.get_state_common(name, item_key, namespace, key_serializer);
         InMemoryMapState {
             common,
             _phantom: Default::default(),
@@ -156,12 +156,12 @@ where
     fn new_vec_state(
         &mut self,
         name: &str,
-        init_item_key: IK,
-        init_namespace: N,
+        item_key: IK,
+        namespace: N,
         key_serializer: KS,
         _value_serializer: TS,
     ) -> Self::Type {
-        let common = self.get_state_common(name, init_item_key, init_namespace, key_serializer);
+        let common = self.get_state_common(name, item_key, namespace, key_serializer);
         InMemoryVecState {
             common,
             _phantom: Default::default(),
@@ -181,13 +181,13 @@ where
     fn new_reducing_state(
         &mut self,
         name: &str,
-        init_item_key: IK,
-        init_namespace: N,
+        item_key: IK,
+        namespace: N,
         reduce_fn: F,
         key_serializer: KS,
         _value_serializer: TS,
     ) -> Self::Type {
-        let common = self.get_state_common(name, init_item_key, init_namespace, key_serializer);
+        let common = self.get_state_common(name, item_key, namespace, key_serializer);
         InMemoryReducingState {
             common,
             reduce_fn,
@@ -208,13 +208,13 @@ where
     fn new_aggregating_state(
         &mut self,
         name: &str,
-        init_item_key: IK,
-        init_namespace: N,
+        item_key: IK,
+        namespace: N,
         aggregator: AGG,
         key_serializer: KS,
         _value_serializer: TS,
     ) -> Self::Type {
-        let common = self.get_state_common(name, init_item_key, init_namespace, key_serializer);
+        let common = self.get_state_common(name, item_key, namespace, key_serializer);
         InMemoryAggregatingState {
             common,
             aggregator,
