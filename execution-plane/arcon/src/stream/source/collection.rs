@@ -44,19 +44,6 @@ where
             counter: 0,
         }
     }
-    // fn process_collection(&mut self) {
-    //     let mut counter = 0;
-    //     for record in self.collection.drain(..) {
-    //         let elem = self.source_ctx.extract_element(record);
-    //         self.source_ctx.process(elem);
-    //         counter += 1;
-    //         if counter == self.source_ctx.watermark_interval {
-    //             self.source_ctx.generate_watermark();
-    //             counter = 0;
-    //         }
-    //     }
-    //     self.source_ctx.generate_watermark();
-    // }
     fn process_collection(&mut self) {
         let drain_to = RESCHEDULE_EVERY
             .min(self.collection.len());
@@ -113,16 +100,6 @@ where
 }
 
 //ignore_indications!(LoopbackPort, CollectionSource);
-
-// impl<IN, OUT> Actor for CollectionSource<IN, OUT>
-// where
-//     IN: ArconType,
-//     OUT: ArconType,
-// {
-//     type Message = ();
-//     fn receive_local(&mut self, _msg: Self::Message) {}
-//     fn receive_network(&mut self, _msg: NetMessage) {}
-// }
 
 #[cfg(test)]
 mod tests {
