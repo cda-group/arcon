@@ -199,7 +199,7 @@ impl<'n, 'b, SB: ?Sized, IK, N, KS, TS> StateBuilder<'n, 'b, SB, IK, N, KS, TS> 
         let StateBuilder {
             name,
             state_backend,
-            namespace: namespace,
+            namespace,
             key_serializer,
             value_serializer,
             ..

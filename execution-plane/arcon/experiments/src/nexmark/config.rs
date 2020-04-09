@@ -185,6 +185,7 @@ impl NEXMarkConfig {
 #[repr(u8)]
 pub enum NEXMarkQuery {
     CurrencyConversion = 1,
+    LocalItemSuggestion = 3,
     // TODO: add more..
 }
 
