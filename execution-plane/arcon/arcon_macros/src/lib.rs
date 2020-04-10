@@ -1,3 +1,6 @@
+// Copyright (c) 2020, KTH Royal Institute of Technology.
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! The arcon_macros crate contains macros used by [arcon].
 
 #![recursion_limit = "128"]

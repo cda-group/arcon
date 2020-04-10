@@ -1,3 +1,6 @@
+// Copyright (c) 2020, KTH Royal Institute of Technology.
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! The arcon_error crate provide error utilities for Arcon related crates.
 
 use std::{error::Error as StdError, fmt};

@@ -28,3 +28,12 @@ Arcon is a streaming-first execution engine for the [Arc](https://github.com/cda
 
 * [Arc](https://github.com/cda-group/arc): An IR and compiler for data analytics.
 * [Kompact](https://github.com/kompics/kompact): A hybrid Actor + Component model framework.
+
+
+## License
+
+This project is licensed under the [AGPL-3.0 license](LICENSE).
+
+## Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in Arcon by you shall be licensed as AGPL-3.0, without any additional terms or conditions.
