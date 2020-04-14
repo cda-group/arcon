@@ -202,7 +202,7 @@ mod tests {
 
     #[test]
     fn sum_appender_window_test() {
-        let mut state_backend = InMemory::new("test").unwrap();
+        let mut state_backend = InMemory::new("test".as_ref()).unwrap();
 
         fn materializer(buffer: &[i32]) -> i32 {
             buffer.iter().sum()
@@ -222,7 +222,7 @@ mod tests {
 
     #[test]
     fn sum_incremental_window_test() {
-        let mut state_backend = InMemory::new("test").unwrap();
+        let mut state_backend = InMemory::new("test".as_ref()).unwrap();
 
         fn init(i: i32) -> u64 {
             i as u64

@@ -152,7 +152,7 @@ mod tests {
             None, // no timestamp extractor
             channel_strategy,
             operator,
-            Box::new(InMemory::new("test").unwrap()),
+            Box::new(InMemory::new("test".as_ref()).unwrap()),
         );
 
         let socket_source: SocketSource<u32, u32> =
@@ -222,7 +222,7 @@ mod tests {
             Some(&timestamp_extractor),
             channel_strategy,
             operator,
-            Box::new(InMemory::new("test").unwrap()),
+            Box::new(InMemory::new("test".as_ref()).unwrap()),
         );
 
         let socket_source: SocketSource<ExtractorStruct, ExtractorStruct> =

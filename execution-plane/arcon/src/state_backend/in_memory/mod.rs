@@ -15,7 +15,7 @@ use crate::state_backend::{
 use arcon_error::*;
 use bytes::BufMut;
 use smallbox::{space, SmallBox};
-use std::{any::Any, collections::HashMap, fmt::Debug};
+use std::{any::Any, collections::HashMap, fmt::Debug, path::Path};
 use uuid::Uuid;
 
 // we'll store values of size up to 8 * size_of::<usize>() inline
@@ -224,20 +224,20 @@ where
 }
 
 impl StateBackend for InMemory {
-    fn new(_path: &str) -> ArconResult<InMemory> {
+    fn new(_path: &Path) -> ArconResult<InMemory> {
         Ok(InMemory {
             states: HashMap::new(),
             db: HashMap::new(),
         })
     }
 
-    fn checkpoint(&self, _id: &str) -> ArconResult<()> {
+    fn checkpoint(&self, _id: &Path) -> ArconResult<()> {
         // TODO: proper logging
         eprintln!("InMemory backend snapshotting is not implemented");
         Ok(())
     }
 
-    fn restore(restore_path: &str, _checkpoint_path: &str) -> ArconResult<Self>
+    fn restore(restore_path: &Path, _checkpoint_path: &Path) -> ArconResult<Self>
     where
         Self: Sized,
     {
@@ -246,7 +246,7 @@ impl StateBackend for InMemory {
         Self::new(restore_path)
     }
 
-    fn just_restored(&mut self) -> bool {
+    fn was_restored(&self) -> bool {
         false
     }
 }
@@ -337,7 +337,7 @@ mod test {
 
     #[test]
     fn in_mem_test() {
-        let mut db = InMemory::new("test").unwrap();
+        let mut db = InMemory::new("test".as_ref()).unwrap();
         let key = "key";
         let value = "hej".to_string();
         assert!(db

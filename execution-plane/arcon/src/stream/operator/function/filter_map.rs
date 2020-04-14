@@ -98,7 +98,7 @@ mod tests {
                 vec![1.into()],
                 channel_strategy,
                 Box::new(FilterMap::new(&filter_map_fn)),
-                Box::new(InMemory::new("test").unwrap()),
+                Box::new(InMemory::new("test".as_ref()).unwrap()),
             )
         });
         system.start(&filter_map_node);

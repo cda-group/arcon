@@ -92,7 +92,7 @@ mod tests {
                 vec![1.into()],
                 channel_strategy,
                 Box::new(FlatMap::new(&flatmap_fn)),
-                Box::new(InMemory::new("test").unwrap()),
+                Box::new(InMemory::new("test".as_ref()).unwrap()),
             )
         });
         system.start(&flatmap_node);

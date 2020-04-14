@@ -4,16 +4,17 @@
 use crate::{
     prelude::ArconResult,
     state_backend::{
-        rocks::{state_common::StateCommon, RocksDb},
         serialization::{DeserializableWith, SerializableFixedSizeWith, SerializableWith},
+        sled::{Sled, StateCommon},
         state_types::{AggregatingState, Aggregator, AppendingState, MergingState, State},
     },
 };
-use rocksdb::{merge_operator::MergeFn, MergeOperands};
 
-use std::marker::PhantomData;
+use error::ResultExt;
+use sled::MergeOperator;
+use std::{iter, marker::PhantomData};
 
-pub struct RocksDbAggregatingState<IK, N, T, AGG, KS, TS> {
+pub struct SledAggregatingState<IK, N, T, AGG, KS, TS> {
     pub(crate) common: StateCommon<IK, N, KS, TS>,
     pub(crate) aggregator: AGG,
     pub(crate) _phantom: PhantomData<T>,
@@ -22,14 +23,14 @@ pub struct RocksDbAggregatingState<IK, N, T, AGG, KS, TS> {
 pub(crate) const ACCUMULATOR_MARKER: u8 = 0xAC;
 pub(crate) const VALUE_MARKER: u8 = 0x00;
 
-impl<IK, N, T, AGG, KS, TS> State<RocksDb, IK, N> for RocksDbAggregatingState<IK, N, T, AGG, KS, TS>
+impl<IK, N, T, AGG, KS, TS> State<Sled, IK, N> for SledAggregatingState<IK, N, T, AGG, KS, TS>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
 {
-    fn clear(&self, backend: &mut RocksDb) -> ArconResult<()> {
+    fn clear(&self, backend: &mut Sled) -> ArconResult<()> {
         let key = self.common.get_db_key_prefix()?;
-        backend.remove(&self.common.cf_name, &key)?;
+        backend.remove(&self.common.tree_name, &key)?;
         Ok(())
     }
 
@@ -39,15 +40,15 @@ where
 pub fn make_aggregating_merge<T, AGG, TS>(
     aggregator: AGG,
     value_serializer: TS,
-) -> impl MergeFn + Clone
+) -> impl MergeOperator + 'static
 where
     T: DeserializableWith<TS>,
     AGG: Aggregator<T> + Send + Sync + Clone + 'static,
     AGG::Accumulator: SerializableWith<TS> + DeserializableWith<TS>,
     TS: Send + Sync + Clone + 'static,
 {
-    move |_key: &[u8], first: Option<&[u8]>, rest: &mut MergeOperands| {
-        let mut all_slices = first.into_iter().chain(rest).fuse();
+    move |_key: &[u8], existent: Option<&[u8]>, new: &[u8]| {
+        let mut all_slices = existent.into_iter().chain(iter::once(new));
 
         let first = all_slices.next();
         let mut accumulator = {
@@ -89,19 +90,15 @@ where
             }
         }
 
-        let mut result = Vec::with_capacity(
-            1 + AGG::Accumulator::size_hint(&value_serializer, &accumulator).unwrap_or(0),
-        );
-        result.push(ACCUMULATOR_MARKER);
-
+        let mut result = vec![ACCUMULATOR_MARKER];
         AGG::Accumulator::serialize_into(&value_serializer, &mut result, &accumulator).ok()?;
 
         Some(result)
     }
 }
 
-impl<IK, N, T, AGG, KS, TS> AppendingState<RocksDb, IK, N, T, AGG::Result>
-    for RocksDbAggregatingState<IK, N, T, AGG, KS, TS>
+impl<IK, N, T, AGG, KS, TS> AppendingState<Sled, IK, N, T, AGG::Result>
+    for SledAggregatingState<IK, N, T, AGG, KS, TS>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
@@ -109,10 +106,10 @@ where
     AGG: Aggregator<T>,
     AGG::Accumulator: SerializableWith<TS> + DeserializableWith<TS>,
 {
-    fn get(&self, backend: &RocksDb) -> ArconResult<AGG::Result> {
+    fn get(&self, backend: &Sled) -> ArconResult<AGG::Result> {
         let key = self.common.get_db_key_prefix()?;
 
-        if let Some(serialized) = backend.get(&self.common.cf_name, &key)? {
+        if let Some(serialized) = backend.get(&self.common.tree_name, &key)? {
             assert_eq!(serialized[0], ACCUMULATOR_MARKER);
             let serialized = &serialized[1..];
 
@@ -126,24 +123,23 @@ where
         }
     }
 
-    fn append(&self, backend: &mut RocksDb, value: T) -> ArconResult<()> {
-        let backend = backend.initialized_mut()?;
-
+    fn append(&self, backend: &mut Sled, value: T) -> ArconResult<()> {
         let key = self.common.get_db_key_prefix()?;
         let mut serialized = vec![VALUE_MARKER];
         T::serialize_into(&self.common.value_serializer, &mut serialized, &value)?;
 
-        let cf = backend.get_cf_handle(&self.common.cf_name)?;
         // See the make_aggregating_merge function in this module. Its result is set as the merging operator for this state.
         backend
-            .db
-            .merge_cf(cf, key, serialized)
-            .map_err(|e| arcon_err_kind!("Could not perform merge operation: {}", e))
+            .tree(&self.common.tree_name)?
+            .merge(key, serialized)
+            .ctx("Could not perform merge operation")?;
+
+        Ok(())
     }
 }
 
-impl<IK, N, T, AGG, KS, TS> MergingState<RocksDb, IK, N, T, AGG::Result>
-    for RocksDbAggregatingState<IK, N, T, AGG, KS, TS>
+impl<IK, N, T, AGG, KS, TS> MergingState<Sled, IK, N, T, AGG::Result>
+    for SledAggregatingState<IK, N, T, AGG, KS, TS>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
@@ -153,8 +149,8 @@ where
 {
 }
 
-impl<IK, N, T, AGG, KS, TS> AggregatingState<RocksDb, IK, N, T, AGG::Result>
-    for RocksDbAggregatingState<IK, N, T, AGG, KS, TS>
+impl<IK, N, T, AGG, KS, TS> AggregatingState<Sled, IK, N, T, AGG::Result>
+    for SledAggregatingState<IK, N, T, AGG, KS, TS>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
@@ -168,7 +164,7 @@ where
 mod test {
     use super::*;
     use crate::state_backend::{
-        rocks::test::TestDb, serialization::NativeEndianBytesDump, state_types::ClosuresAggregator,
+        serialization::NativeEndianBytesDump, sled::test::TestDb, state_types::ClosuresAggregator,
         AggregatingStateBuilder,
     };
 

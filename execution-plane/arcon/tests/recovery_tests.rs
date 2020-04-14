@@ -2,17 +2,18 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 // similar to basic_pipeline_tests, but with changes to test recovery capabilities
-#![cfg(feature = "arcon_rocksdb")]
 #![allow(bare_trait_objects)]
 extern crate arcon;
 
 use arcon::{macros::*, prelude::*};
 use once_cell::sync::Lazy;
 use std::{
+    any::TypeId,
     collections::HashMap,
     fs,
     fs::File,
     io::{BufRead, BufReader},
+    path::{Path, PathBuf},
     sync::RwLock,
 };
 use tempfile::NamedTempFile;
@@ -23,15 +24,22 @@ pub struct NormaliseElements {
     pub data: Vec<i64>,
 }
 
-static PANIC_COUNTDOWN: Lazy<RwLock<u32>> = Lazy::new(|| RwLock::new(0));
+#[allow(dead_code)]
+static PANIC_COUNTDOWN: Lazy<RwLock<HashMap<TypeId, u32>>> =
+    Lazy::new(|| RwLock::new(HashMap::new()));
 
-fn rocks_backend(base_dir: String, node_id: u32) -> Box<dyn StateBackend> {
-    let _ = fs::create_dir(&base_dir);
-    let restore_dir = format!("{}/restore_{}", base_dir, node_id);
-    let _ = fs::remove_dir_all(&restore_dir);
-    let _ = fs::create_dir(&restore_dir);
+#[allow(dead_code)]
+fn backend<SB: StateBackend>(
+    state_dir: &Path,
+    checkpoints_dir: &Path,
+    node_id: u32,
+) -> Box<dyn StateBackend> {
+    let mut running_dir: PathBuf = state_dir.into();
+    running_dir.push(format!("running_{}", node_id));
+    let _ = fs::remove_dir_all(&running_dir); // ignore possible NotFound error
+    fs::create_dir(&running_dir).unwrap();
 
-    let dirs: Vec<String> = fs::read_dir(&base_dir)
+    let dirs: Vec<String> = fs::read_dir(checkpoints_dir)
         .unwrap()
         .map(|d| d.unwrap().file_name().to_string_lossy().into_owned())
         .collect();
@@ -39,55 +47,53 @@ fn rocks_backend(base_dir: String, node_id: u32) -> Box<dyn StateBackend> {
     let latest_complete_checkpoint = dirs
         .into_iter()
         .filter(|x| x.starts_with("checkpoint_"))
-        .map(|x| (x.chars().last().unwrap().to_digit(10).unwrap(), x))
+        .map(|x| x.split('_').last().unwrap().parse::<u64>().unwrap())
         .fold(HashMap::new(), |mut acc, el| {
-            acc.entry(el.0)
-                .or_insert_with(|| Vec::with_capacity(3))
-                .push(el.1);
+            *acc.entry(el).or_insert_with(|| 0) += 1;
             acc
         })
         .into_iter()
-        .filter(|e| e.1.len() == 3) // we have 3 nodes
+        .filter(|e| e.1 == 3) // we have 3 nodes
         .map(|e| e.0)
         .max();
 
     match latest_complete_checkpoint {
-        Some(epoch) => Box::new(
-            RocksDb::restore(
-                &format!(
-                    "{}/checkpoint_{id}_{epoch}",
-                    base_dir,
-                    id = node_id,
-                    epoch = epoch
-                ),
-                &restore_dir,
-            )
-            .unwrap(),
-        ),
-        None => Box::new(RocksDb::new(&restore_dir).unwrap()),
+        Some(epoch) => {
+            let mut checkpoint_path: PathBuf = checkpoints_dir.into();
+            checkpoint_path.push(format!(
+                "checkpoint_{id}_{epoch}",
+                id = node_id,
+                epoch = epoch
+            ));
+
+            Box::new(SB::restore(&running_dir, &checkpoint_path).unwrap())
+        }
+        None => Box::new(SB::new(&running_dir).unwrap()),
     }
 }
 
+#[allow(dead_code)]
 /// manually sent events -> Window -> Map -> LocalFileSink
-fn run_pipeline(sink_path: &str, conf: ArconConf) -> Result<(), ()> {
+fn run_pipeline<SB: StateBackend>(
+    state_dir: &Path,
+    sink_path: &Path,
+    conf: ArconConf,
+) -> Result<(), ()> {
     let timeout = std::time::Duration::from_millis(500);
     let mut pipeline = arcon::pipeline::ArconPipeline::with_conf(conf);
     let checkpoint_dir = pipeline.arcon_conf().checkpoint_dir.clone();
     let _ = fs::create_dir(&checkpoint_dir);
-    std::env::set_current_dir(&checkpoint_dir).unwrap();
     let system = &pipeline.system();
 
     // Create Sink Component
-    let sink_base_dir = checkpoint_dir.clone();
-    let sink_descriptor = String::from("sink_node");
-    let file_sink_node = system.create(move || {
+    let file_sink_node = system.create(|| {
         Node::new(
-            sink_descriptor.clone(),
+            "sink_node".into(),
             4.into(),
             vec![3.into()],
             ChannelStrategy::Mute,
             Box::new(LocalFileSink::new(sink_path)),
-            rocks_backend(sink_base_dir.clone(), 4),
+            backend::<SB>(state_dir, &checkpoint_dir, 4),
         )
     });
     system
@@ -103,25 +109,26 @@ fn run_pipeline(sink_path: &str, conf: ArconConf) -> Result<(), ()> {
     let channel_strategy =
         ChannelStrategy::Forward(Forward::new(Channel::Local(file_sink_ref), NodeID::new(3)));
 
-    fn map_fn(x: NormaliseElements) -> i64 {
-        if *PANIC_COUNTDOWN.read().unwrap() == 0 {
+    fn map_fn<SB: 'static>(x: NormaliseElements) -> i64 {
+        let t = TypeId::of::<SB>();
+
+        let panic_countdown = *PANIC_COUNTDOWN.read().unwrap().get(&t).unwrap_or(&0);
+        if panic_countdown == 0 {
             panic!("expected panic!")
         }
-        *PANIC_COUNTDOWN.write().unwrap() -= 1;
+        *PANIC_COUNTDOWN.write().unwrap().entry(t).or_insert(1) -= 1;
 
         x.data.iter().map(|x| x + 3).sum()
     }
 
-    let map_base_dir = checkpoint_dir.clone();
-    let map_descriptor = String::from("map_node");
-    let map_node = system.create(move || {
+    let map_node = system.create(|| {
         Node::<NormaliseElements, i64>::new(
-            map_descriptor.clone(),
+            "map_node".into(),
             3.into(),
             vec![2.into()],
             channel_strategy,
-            Box::new(Map::<NormaliseElements, i64>::new(&map_fn)),
-            rocks_backend(map_base_dir, 3),
+            Box::new(Map::<NormaliseElements, i64>::new(&map_fn::<SB>)),
+            backend::<SB>(state_dir, &checkpoint_dir, 3),
         )
     });
 
@@ -139,8 +146,7 @@ fn run_pipeline(sink_path: &str, conf: ArconConf) -> Result<(), ()> {
         NormaliseElements { data }
     }
 
-    let window_descriptor = String::from("window_node");
-    let mut window_state_backend = rocks_backend(checkpoint_dir.clone(), 2);
+    let mut window_state_backend = backend::<SB>(state_dir, &checkpoint_dir, 2);
 
     let window: Box<dyn Window<i64, NormaliseElements>> =
         Box::new(AppenderWindow::new(&window_fn, &mut *window_state_backend));
@@ -151,7 +157,7 @@ fn run_pipeline(sink_path: &str, conf: ArconConf) -> Result<(), ()> {
 
     let window_node = system.create(move || {
         Node::<i64, NormaliseElements>::new(
-            window_descriptor,
+            "window_node".into(),
             2.into(),
             vec![1.into()],
             channel_strategy,
@@ -215,23 +221,24 @@ fn run_pipeline(sink_path: &str, conf: ArconConf) -> Result<(), ()> {
     Ok(())
 }
 
-#[test]
-fn run_test() {
-    let temp_dir = tempfile::TempDir::new().unwrap();
+#[allow(dead_code)]
+fn run_test<SB: StateBackend>() {
+    let t = TypeId::of::<SB>();
 
-    let test_directory = temp_dir.path();
-    let _ = fs::remove_dir_all(test_directory);
-    fs::create_dir(test_directory).unwrap();
+    let test_dir = tempfile::tempdir().unwrap();
+    let test_dir = test_dir.path();
 
     let mut conf = ArconConf::default();
-    conf.checkpoint_dir = test_directory.to_string_lossy().into_owned();
+    let mut checkpoint_dir: PathBuf = test_dir.into();
+    checkpoint_dir.push("checkpoints");
+    conf.checkpoint_dir = checkpoint_dir;
 
     // Define Sink File
     let sink_file = NamedTempFile::new().unwrap();
-    let sink_path = sink_file.path().to_string_lossy().into_owned();
+    let sink_path = sink_file.path();
 
-    *PANIC_COUNTDOWN.write().unwrap() = 2; // reaches zero quite quickly
-    run_pipeline(&sink_path, conf.clone()).unwrap_err();
+    PANIC_COUNTDOWN.write().unwrap().insert(t, 2); // reaches zero quite quickly
+    run_pipeline::<SB>(test_dir, sink_path, conf.clone()).unwrap_err();
     {
         // Check results from the sink file!
         let file = File::open(sink_file.path()).expect("no such file");
@@ -244,16 +251,34 @@ fn run_test() {
         assert_eq!(result, vec![9, 8]); // partial result after panic
     }
 
-    *PANIC_COUNTDOWN.write().unwrap() = 100; // won't reach zero
-    run_pipeline(&sink_path, conf).unwrap();
+    PANIC_COUNTDOWN.write().unwrap().insert(t, 100); // won't reach zero
+    run_pipeline::<SB>(test_dir, sink_path, conf).unwrap();
 
     // Check results from the sink file!
-    let file = File::open(sink_file.path()).expect("no such file");
-    let buf = BufReader::new(file);
+    let buf = BufReader::new(sink_file);
     let result: Vec<i64> = buf
         .lines()
         .map(|l| l.unwrap().parse::<i64>().expect("could not parse line"))
         .collect();
 
     assert_eq!(result, vec![9, 8, 7]); // full result without repetitions
+}
+
+#[cfg(feature = "arcon_rocksdb")]
+#[test]
+fn test_rocks_recovery_pipeline() {
+    run_test::<RocksDb>()
+}
+
+#[cfg(all(feature = "arcon_sled", feature = "arcon_sled_checkpoints"))]
+#[test]
+fn test_sled_recovery_pipeline() {
+    run_test::<Sled>()
+}
+
+#[cfg(all(feature = "arcon_faster", target_os = "linux"))]
+#[test]
+#[ignore]
+fn test_faster_recovery_pipeline() {
+    run_test::<Faster>()
 }

@@ -99,7 +99,7 @@ mod test {
 
     #[test]
     fn aggregating_state_test() {
-        let mut db = InMemory::new("test").unwrap();
+        let mut db = InMemory::new("test".as_ref()).unwrap();
         let aggregating_state = db.new_aggregating_state(
             "test_state",
             (),

@@ -91,7 +91,7 @@ mod tests {
                 vec![1.into()],
                 channel_strategy,
                 Box::new(Map::new(&map_fn)),
-                Box::new(InMemory::new("test").unwrap()),
+                Box::new(InMemory::new("test".as_ref()).unwrap()),
             )
         });
         system.start(&map_node);
