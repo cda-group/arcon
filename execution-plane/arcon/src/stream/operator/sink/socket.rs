@@ -131,6 +131,7 @@ mod tests {
 
                 let socket_sink = system.create(move || {
                     Node::new(
+                        String::from("socket_sink"),
                         0.into(),
                         vec![1.into()],
                         ChannelStrategy::Mute,

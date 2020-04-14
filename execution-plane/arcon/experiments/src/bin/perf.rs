@@ -184,7 +184,7 @@ fn exec(
     cfg.threads(kompact_threads);
     if !dedicated {
         cfg.throughput(kompact_throughput as usize);
-        cfg.msg_priority(1.0);
+        cfg.msg_priority(0.5);
     }
 
     let system = cfg.build().expect("KompactSystem");
@@ -227,6 +227,7 @@ fn exec(
     ));
 
     let node = Node::<Item, EnrichedItem>::new(
+        String::from("map_node"),
         1.into(),
         vec![2.into()],
         channel_strategy,

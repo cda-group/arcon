@@ -1,10 +1,10 @@
 [package]
 name = "arcon_extra"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Max Meldrum <mmeldrum@kth.se>"]
 edition = "2018"
 readme = "README.md"
-license = "BSD-3-Clause"
+license = "AGPL-3.0-only"
 repository = "https://github.com/cda-group/arcon"
 homepage = "https://github.com/cda-group/arcon"
 description = """

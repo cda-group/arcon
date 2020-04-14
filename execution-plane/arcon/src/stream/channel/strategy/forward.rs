@@ -8,6 +8,7 @@ use crate::{
 };
 
 /// `Forward` is a one-to-one channel strategy between two components
+#[derive(Clone)]
 pub struct Forward<A>
 where
     A: ArconType,

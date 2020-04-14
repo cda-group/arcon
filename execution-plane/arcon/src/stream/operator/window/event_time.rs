@@ -114,10 +114,7 @@ where
             hasher: BuildHasherDefault::<DefaultHasher>::default(),
             keyed,
 
-            window_start: state_backend
-                .build("window_start")
-                .with_init_item_key(0)
-                .value(),
+            window_start: state_backend.build("window_start").with_item_key(0).value(),
             active_windows: state_backend.build("window_active").map(),
 
             transient_timer,
@@ -346,6 +343,7 @@ mod tests {
 
         let window_node = system.create(move || {
             Node::<Item, u64>::new(
+                String::from("window_node"),
                 1.into(),
                 vec![0.into()],
                 channel_strategy,

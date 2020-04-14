@@ -10,6 +10,7 @@ Requires Rust nightly (See current toolchain [here](rust-toolchain)).
 [`arcon_codegen`]: arcon_codegen
 [`arcon_compiler`]: arcon_compiler
 
+
 ## Ubuntu
 
 Install Protobuf:
@@ -30,13 +31,18 @@ Install Protobuf:
   $ sudo cp /usr/local/opt/protobuf@3.6/include/* /usr/local/include/
 ```
 
+
+## Other Requirements
+
+Depending on what you are compiling, you might need cmake, g++ etc...
+
 ## Building
 
 ```
 $ cargo build --release
 ```
 
-## Running an Example
+## Running an Example (NOT WORKING AT THE MOMENT)
 
 Compile and start binary:
 

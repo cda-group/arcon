@@ -72,19 +72,28 @@ fn backend<SB: StateBackend>(state_dir: &str, node_id: u32) -> Box<dyn StateBack
 
 #[allow(dead_code)]
 /// manually sent events -> Window -> Map -> LocalFileSink
-fn run_pipeline<SB: StateBackend>(state_dir: &str, sink_path: &str) -> Result<(), ()> {
+fn run_pipeline<SB: StateBackend>(
+    state_dir: &str,
+    sink_path: &str,
+    conf: ArconConf,
+) -> Result<(), ()> {
     let timeout = std::time::Duration::from_millis(500);
-    let system = KompactConfig::default().build().expect("KompactSystem");
+    let mut pipeline = arcon::pipeline::ArconPipeline::with_conf(conf);
+    let checkpoint_dir = pipeline.arcon_conf().checkpoint_dir.clone();
+    let _ = fs::create_dir(&checkpoint_dir);
+    let system = &pipeline.system();
 
     // Create Sink Component
+    let sink_base_dir = checkpoint_dir.clone();
+    let sink_descriptor = String::from("sink_node");
     let file_sink_node = system.create(move || {
         Node::new(
+            sink_descriptor.clone(),
             4.into(),
             vec![3.into()],
             ChannelStrategy::Mute,
             Box::new(LocalFileSink::new(sink_path)),
             backend::<SB>(state_dir, 4),
-            state_dir.into(),
         )
     });
     system
@@ -105,21 +114,23 @@ fn run_pipeline<SB: StateBackend>(state_dir: &str, sink_path: &str) -> Result<()
 
         let panic_countdown = *PANIC_COUNTDOWN.read().unwrap().get(&t).unwrap_or(&0);
         if panic_countdown == 0 {
-            panic!("AAAAAA!!!")
+            panic!("expected panic!")
         }
         *PANIC_COUNTDOWN.write().unwrap().entry(t).or_insert(1) -= 1;
 
         x.data.iter().map(|x| x + 3).sum()
     }
 
+    let map_base_dir = checkpoint_dir.clone();
+    let map_descriptor = String::from("map_node");
     let map_node = system.create(move || {
         Node::<NormaliseElements, i64>::new(
+            map_descriptor.clone(),
             3.into(),
             vec![2.into()],
             channel_strategy,
             Box::new(Map::<NormaliseElements, i64>::new(&map_fn::<SB>)),
             backend::<SB>(state_dir, 3),
-            state_dir.into(),
         )
     });
 
@@ -137,6 +148,7 @@ fn run_pipeline<SB: StateBackend>(state_dir: &str, sink_path: &str) -> Result<()
         NormaliseElements { data }
     }
 
+    let window_descriptor = String::from("window_node");
     let mut window_state_backend = backend::<SB>(state_dir, 2);
 
     let window: Box<dyn Window<i64, NormaliseElements>> =
@@ -148,6 +160,7 @@ fn run_pipeline<SB: StateBackend>(state_dir: &str, sink_path: &str) -> Result<()
 
     let window_node = system.create(move || {
         Node::<i64, NormaliseElements>::new(
+            window_descriptor,
             2.into(),
             vec![1.into()],
             channel_strategy,
@@ -160,7 +173,6 @@ fn run_pipeline<SB: StateBackend>(state_dir: &str, sink_path: &str) -> Result<()
                 &mut *window_state_backend,
             )),
             window_state_backend,
-            state_dir.into(),
         )
     });
     system
@@ -202,7 +214,7 @@ fn run_pipeline<SB: StateBackend>(state_dir: &str, sink_path: &str) -> Result<()
 
     std::thread::sleep(std::time::Duration::from_secs(1));
 
-    system.shutdown().expect("Shutdown failed");
+    pipeline.shutdown();
 
     // check if any of the nodes panicked
     if window_node.is_faulty() || map_node.is_faulty() || file_sink_node.is_faulty() {
@@ -222,12 +234,15 @@ fn run_test<SB: StateBackend>() {
     fs::create_dir(test_dir).unwrap();
     let test_dir = test_dir.to_string_lossy();
 
+    let mut conf = ArconConf::default();
+    conf.checkpoint_dir = test_dir.into_owned();
+
     // Define Sink File
     let sink_file = NamedTempFile::new().unwrap();
     let sink_path = sink_file.path().to_string_lossy().into_owned();
 
     PANIC_COUNTDOWN.write().unwrap().insert(t, 2); // reaches zero quite quickly
-    run_pipeline::<SB>(&test_dir, &sink_path).unwrap_err();
+    run_pipeline::<SB>(&test_dir, &sink_path, conf.clone()).unwrap_err();
     {
         // Check results from the sink file!
         let file = File::open(sink_file.path()).expect("no such file");
@@ -241,7 +256,7 @@ fn run_test<SB: StateBackend>() {
     }
 
     PANIC_COUNTDOWN.write().unwrap().insert(t, 100); // won't reach zero
-    run_pipeline::<SB>(&test_dir, &sink_path).unwrap();
+    run_pipeline::<SB>(&test_dir, &sink_path, conf).unwrap();
 
     // Check results from the sink file!
     let file = File::open(sink_file.path()).expect("no such file");

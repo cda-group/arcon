@@ -59,6 +59,7 @@ pub fn node_forward_bench(b: &mut Bencher, messages: usize) {
     }
 
     let node_comp = Node::<i32, i32>::new(
+        String::from("map_node"),
         0.into(),
         vec![1.into()],
         channel_strategy,

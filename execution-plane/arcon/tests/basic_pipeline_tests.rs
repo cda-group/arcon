@@ -44,6 +44,7 @@ fn normalise_pipeline_test() {
     // Create Sink Component
     let node_4 = system.create(move || {
         Node::new(
+            String::from("sink_node"),
             4.into(),
             vec![3.into()],
             ChannelStrategy::Mute,
@@ -71,6 +72,7 @@ fn normalise_pipeline_test() {
 
     let node_3 = system.create(move || {
         Node::<NormaliseElements, i64>::new(
+            String::from("map_node"),
             3.into(),
             vec![2.into()],
             channel_strategy,
@@ -108,6 +110,7 @@ fn normalise_pipeline_test() {
 
     let node_2 = system.create(move || {
         Node::<i64, NormaliseElements>::new(
+            String::from("window_node"),
             2.into(),
             vec![1.into()],
             channel_strategy,
