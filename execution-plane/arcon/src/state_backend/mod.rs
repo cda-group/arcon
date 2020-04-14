@@ -6,12 +6,12 @@ use std::any::{type_name, Any, TypeId};
 
 /// Trait required for all state backend implementations in Arcon
 pub trait StateBackend: Any + Send + Sync {
-    fn new(path: &str) -> ArconResult<Self>
+    fn new(path: &Path) -> ArconResult<Self>
     where
         Self: Sized;
 
-    fn checkpoint(&self, checkpoint_path: &str) -> ArconResult<()>;
-    fn restore(restore_path: &str, checkpoint_path: &str) -> ArconResult<Self>
+    fn checkpoint(&self, checkpoint_path: &Path) -> ArconResult<()>;
+    fn restore(restore_path: &Path, checkpoint_path: &Path) -> ArconResult<Self>
     where
         Self: Sized;
 
@@ -50,6 +50,7 @@ impl dyn StateBackend {
 
 pub mod builders;
 pub use self::builders::*;
+use std::path::Path;
 
 pub mod serialization;
 
@@ -121,7 +122,7 @@ mod test {
             do_backend_ops(dynamic_faster);
         }
 
-        let mut test_in_memory = in_memory::InMemory::new("test_im").unwrap();
+        let mut test_in_memory = in_memory::InMemory::new("test_im".as_ref()).unwrap();
         let dynamic_in_memory: &mut dyn StateBackend = &mut test_in_memory;
         do_backend_ops(dynamic_in_memory);
     }
@@ -212,7 +213,7 @@ mod test {
             do_backend_ops(test_faster);
         }
 
-        let mut test_in_memory = in_memory::InMemory::new("test_im").unwrap();
+        let mut test_in_memory = in_memory::InMemory::new("test_im".as_ref()).unwrap();
         do_backend_ops(&mut test_in_memory);
 
         // but you *still* can plug a dynamic state backend there anyway

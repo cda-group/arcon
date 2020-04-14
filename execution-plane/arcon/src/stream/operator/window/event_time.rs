@@ -328,7 +328,7 @@ mod tests {
             u.len() as u64
         }
 
-        let mut state_backend = Box::new(InMemory::new("test").unwrap());
+        let mut state_backend = Box::new(InMemory::new("test".as_ref()).unwrap());
 
         let window: Box<dyn Window<Item, u64>> =
             Box::new(AppenderWindow::new(&appender_fn, &mut *state_backend));
@@ -349,7 +349,6 @@ mod tests {
                 channel_strategy,
                 Box::new(window_assigner),
                 state_backend,
-                ".".into(),
             )
         });
 

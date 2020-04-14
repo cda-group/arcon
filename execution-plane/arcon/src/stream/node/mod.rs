@@ -365,7 +365,7 @@ where
     }
 
     fn save_state(&mut self) -> ArconResult<()> {
-        if let Some(base_dir) = &self.ctx().config()["checkpoint_dir"].as_string() {
+        if let Some(base_dir) = &self.ctx.config()["checkpoint_dir"].as_string() {
             let checkpoint_dir = format!(
                 "{}/checkpoint_{id}_{epoch}",
                 base_dir,
@@ -377,7 +377,7 @@ where
                     .ok_or_else(|| arcon_err_kind!("current epoch uninitialized"))?
                     .epoch
             );
-            self.state_backend.checkpoint(&checkpoint_dir)?;
+            self.state_backend.checkpoint(checkpoint_dir.as_ref())?;
             debug!(
                 self.ctx.log(),
                 "Completed a Checkpoint to path {}", checkpoint_dir
@@ -533,7 +533,7 @@ mod tests {
                 vec![1.into(), 2.into(), 3.into()],
                 channel_strategy,
                 Box::new(Filter::new(&node_fn)),
-                Box::new(InMemory::new("test").unwrap()),
+                Box::new(InMemory::new("test".as_ref()).unwrap()),
             )
         });
 

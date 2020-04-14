@@ -6,6 +6,7 @@ use std::{
     fs::{File, OpenOptions},
     io::Write,
     marker::PhantomData,
+    path::Path,
 };
 
 pub struct LocalFileSink<IN>
@@ -20,7 +21,7 @@ impl<IN> LocalFileSink<IN>
 where
     IN: ArconType,
 {
-    pub fn new(file_path: &str) -> Self {
+    pub fn new(file_path: impl AsRef<Path>) -> Self {
         let file = OpenOptions::new()
             .write(true)
             .create(true)
@@ -84,8 +85,7 @@ mod tests {
                 vec![node_id],
                 ChannelStrategy::Mute,
                 Box::new(LocalFileSink::new(&file_path)),
-                Box::new(InMemory::new("test").unwrap()),
-                ".".into(),
+                Box::new(InMemory::new("test".as_ref()).unwrap()),
             )
         });
         system.start(&sink_comp);

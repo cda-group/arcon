@@ -125,7 +125,7 @@ pub fn q3(debug_mode: bool, nexmark_config: NEXMarkConfig, pipeline: &mut ArconP
             Box::new(FilterMap::<NEXMarkEvent, PersonOrAuction>::new(
                 &person_or_auction_filter_map,
             )),
-            Box::new(InMemory::new("src").unwrap()),
+            Box::new(InMemory::new("src".as_ref()).unwrap()),
         );
 
         let nexmark_source_comp =
@@ -255,6 +255,6 @@ pub fn q3_node(
         in_channels,
         channel_strategy,
         Box::new(StatefulFlatMap::new(&flatmap_fn)),
-        Box::new(InMemory::new("flatmap").unwrap()),
+        Box::new(InMemory::new("flatmap".as_ref()).unwrap()),
     )
 }

@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     fs::File,
     io::{Read, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
     time::Duration,
 };
@@ -33,13 +33,16 @@ pub struct Faster {
 }
 
 impl StateBackend for Faster {
-    fn new(path: &str) -> ArconResult<Self>
+    fn new(path: &Path) -> ArconResult<Self>
     where
         Self: Sized,
     {
         // TODO: figure the params out
         let db = FasterKvBuilder::new(1 << 15, 1024 * 1024 * 1024)
-            .with_disk(path)
+            .with_disk(
+                path.to_str()
+                    .ok_or_else(|| arcon_err_kind!("Invalid path"))?,
+            )
             .build()
             .ctx("Could not open faster")?;
 
@@ -51,7 +54,7 @@ impl StateBackend for Faster {
         })
     }
 
-    fn checkpoint(&self, checkpoint_path: &str) -> ArconResult<()> {
+    fn checkpoint(&self, checkpoint_path: &Path) -> ArconResult<()> {
         // start completing pending operations and wait till they are done (the `true` param)
         self.db.complete_pending(true);
 
@@ -77,7 +80,7 @@ impl StateBackend for Faster {
         Ok(())
     }
 
-    fn restore(restore_path: &str, checkpoint_path: &str) -> ArconResult<Self>
+    fn restore(restore_path: &Path, checkpoint_path: &Path) -> ArconResult<Self>
     where
         Self: Sized,
     {
@@ -646,7 +649,6 @@ pub mod test {
             let mut dir_path = dir.path().to_path_buf();
             dir_path.push("faster");
             fs::create_dir(&dir_path).unwrap();
-            let dir_path = dir_path.to_string_lossy();
             let faster = Faster::new(&dir_path).unwrap();
             TestDb { faster, dir }
         }
@@ -654,9 +656,7 @@ pub mod test {
         pub fn checkpoint(&mut self) -> PathBuf {
             let mut checkpoint_dir = self.dir.path().to_path_buf();
             checkpoint_dir.push("checkpoint");
-            self.faster
-                .checkpoint(&checkpoint_dir.to_string_lossy())
-                .unwrap();
+            self.faster.checkpoint(&checkpoint_dir).unwrap();
             checkpoint_dir
         }
 
@@ -664,8 +664,7 @@ pub mod test {
             let dir = TempDir::new().unwrap();
             let mut dir_path = dir.path().to_path_buf();
             dir_path.push("faster");
-            let dir_path = dir_path.to_string_lossy();
-            let faster = Faster::restore(checkpoint_dir, &dir_path).unwrap();
+            let faster = Faster::restore(checkpoint_dir.as_ref(), &dir_path).unwrap();
             TestDb { faster, dir }
         }
     }
@@ -704,15 +703,9 @@ pub mod test {
         let chkp_dir = tempfile::TempDir::new().unwrap();
         let restore_dir = tempfile::TempDir::new().unwrap();
 
-        faster
-            .checkpoint(chkp_dir.path().to_string_lossy().as_ref())
-            .unwrap();
+        faster.checkpoint(chkp_dir.path()).unwrap();
 
-        let mut restored = Faster::restore(
-            restore_dir.path().to_string_lossy().as_ref(),
-            chkp_dir.path().to_string_lossy().as_ref(),
-        )
-        .unwrap();
+        let mut restored = Faster::restore(restore_dir.path(), chkp_dir.path()).unwrap();
 
         assert!(!faster.was_restored());
         assert!(restored.was_restored());
@@ -733,15 +726,9 @@ pub mod test {
         let chkp2_dir = tempfile::TempDir::new().unwrap();
         let restore2_dir = tempfile::TempDir::new().unwrap();
 
-        restored
-            .checkpoint(chkp2_dir.path().to_string_lossy().as_ref())
-            .unwrap();
+        restored.checkpoint(chkp2_dir.path()).unwrap();
 
-        let mut restored2 = Faster::restore(
-            restore2_dir.path().to_string_lossy().as_ref(),
-            chkp2_dir.path().to_string_lossy().as_ref(),
-        )
-        .unwrap();
+        let mut restored2 = Faster::restore(restore2_dir.path(), chkp2_dir.path()).unwrap();
 
         restored2.in_session_mut(|r2| {
             let one = r2.get(&b"a".to_vec()).unwrap();

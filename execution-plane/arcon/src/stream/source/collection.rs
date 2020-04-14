@@ -45,8 +45,7 @@ where
         }
     }
     fn process_collection(&mut self) {
-        let drain_to = RESCHEDULE_EVERY
-            .min(self.collection.len());
+        let drain_to = RESCHEDULE_EVERY.min(self.collection.len());
         for record in self.collection.drain(..drain_to) {
             let elem = self.source_ctx.extract_element(record);
             self.source_ctx.process(elem);
@@ -152,7 +151,7 @@ mod tests {
             None, // no timestamp extractor
             channel_strategy,
             operator,
-            Box::new(InMemory::new("test").unwrap()),
+            Box::new(InMemory::new("test".as_ref()).unwrap()),
         );
 
         // Generate collection
@@ -173,7 +172,7 @@ mod tests {
 
         assert_eq!(
             watermark_len as u64,
-            (collection_elements / watermark_interval) + 1// One more is generated after the loop
+            (collection_elements / watermark_interval) + 1 // One more is generated after the loop
         );
         assert_eq!(data_len, 1000);
     }

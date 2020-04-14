@@ -5,13 +5,14 @@ use arcon_error::*;
 use hocon::HoconLoader;
 use kompact::prelude::KompactConfig;
 use serde::Deserialize;
+use std::path::PathBuf;
 
 /// Configuration for an Arcon Pipeline
 #[derive(Deserialize, Clone, Debug)]
 pub struct ArconConf {
     /// Base directory for checkpoints
     #[serde(default = "checkpoint_dir_default")]
-    pub checkpoint_dir: String,
+    pub checkpoint_dir: PathBuf,
     /// Generation interval in milliseconds for Watermarks at sources
     #[serde(default = "watermark_interval_default")]
     pub watermark_interval: u64,
@@ -38,7 +39,7 @@ impl ArconConf {
         let mut cfg = KompactConfig::default();
         // inject checkpoint_dir into Kompact
         let component_cfg = format!(
-            "{{ checkpoint_dir = {}, node_metrics_interval = {} }}",
+            "{{ checkpoint_dir = {:?}, node_metrics_interval = {} }}",
             self.checkpoint_dir, self.node_metrics_interval
         );
         cfg.load_config_str(component_cfg);
@@ -78,8 +79,10 @@ impl ArconConf {
 
 // Default values
 
-fn checkpoint_dir_default() -> String {
-    String::from("/tmp/arcon")
+fn checkpoint_dir_default() -> PathBuf {
+    let mut res = std::env::temp_dir();
+    res.push("arcon");
+    res
 }
 
 fn watermark_interval_default() -> u64 {
@@ -126,7 +129,7 @@ mod tests {
         let conf: ArconConf = ArconConf::from_file(&file_path).unwrap();
 
         // Check custom values
-        assert_eq!(conf.checkpoint_dir, String::from("/dev/null"));
+        assert_eq!(conf.checkpoint_dir, PathBuf::from("/dev/null"));
         assert_eq!(conf.watermark_interval, 1000);
         // Check defaults
         assert_eq!(conf.node_metrics_interval, 250);

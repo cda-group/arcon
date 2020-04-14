@@ -414,14 +414,14 @@ mod test {
 
     #[test]
     fn test_by_value_state_backend() {
-        let mut sb = InMemory::new("test").unwrap();
+        let mut sb = InMemory::new("test".as_ref()).unwrap();
         let value = sb.build("test_state").value();
         value.set(&mut sb, 42).unwrap();
     }
 
     #[test]
     fn test_dynamic_state_backend() {
-        let mut sb: Box<dyn StateBackend> = Box::new(InMemory::new("test").unwrap());
+        let mut sb: Box<dyn StateBackend> = Box::new(InMemory::new("test".as_ref()).unwrap());
         let value = sb.build("test_state").value();
         value.set(&mut *sb, 42).unwrap();
     }

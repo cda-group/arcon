@@ -22,7 +22,7 @@ use std::{
     fs,
     iter::FromIterator,
     mem,
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 pub struct RocksDb {
@@ -282,14 +282,14 @@ impl RocksDb {
 }
 
 impl StateBackend for RocksDb {
-    fn new(path_str: &str) -> ArconResult<RocksDb> {
+    fn new(path: &Path) -> ArconResult<RocksDb> {
         let mut opts = Options::default();
         opts.create_if_missing(true);
 
-        let path: PathBuf = path_str.into();
+        let path: PathBuf = path.into();
         let path = path
             .canonicalize()
-            .map_err(|e| arcon_err_kind!("Cannot canonicalize path '{}': {}", path_str, e))?;
+            .map_err(|e| arcon_err_kind!("Cannot canonicalize path {:?}: {}", path, e))?;
 
         let column_families: HashSet<String> = match DB::list_cf(&opts, &path) {
             Ok(cfs) => cfs.into_iter().filter(|n| n != "default").collect(),
@@ -328,7 +328,7 @@ impl StateBackend for RocksDb {
         })
     }
 
-    fn checkpoint(&self, checkpoint_path: &str) -> ArconResult<()> {
+    fn checkpoint(&self, checkpoint_path: &Path) -> ArconResult<()> {
         let InitializedRocksDb { db, .. } = self.initialized()?;
 
         db.flush()
@@ -343,7 +343,7 @@ impl StateBackend for RocksDb {
         Ok(())
     }
 
-    fn restore(restore_path: &str, checkpoint_path: &str) -> ArconResult<Self>
+    fn restore(restore_path: &Path, checkpoint_path: &Path) -> ArconResult<Self>
     where
         Self: Sized,
     {
@@ -355,14 +355,14 @@ impl StateBackend for RocksDb {
             .next()
             .is_some()
         {
-            return arcon_err!("Restore path '{}' is not empty!", restore_path);
+            return arcon_err!("Restore path '{:?}' is not empty!", restore_path);
         }
 
         let mut target_path: PathBuf = restore_path.into();
         target_path.push("__DUMMY"); // the file name is replaced inside the loop below
         for entry in fs::read_dir(checkpoint_path).map_err(|e| {
             arcon_err_kind!(
-                "Could not read checkpoint directory '{}': {}",
+                "Could not read checkpoint directory '{:?}': {}",
                 checkpoint_path,
                 e
             )
@@ -804,17 +804,14 @@ pub mod test {
             let mut dir_path = dir.path().to_path_buf();
             dir_path.push("rocks");
             fs::create_dir(&dir_path).unwrap();
-            let dir_path = dir_path.to_string_lossy();
             let rocks = RocksDb::new(&dir_path).unwrap();
             TestDb { rocks, dir }
         }
 
         pub fn checkpoint(&mut self) -> PathBuf {
-            let mut checkpoint_dir = self.dir.path().to_path_buf();
+            let mut checkpoint_dir: PathBuf = self.dir.path().into();
             checkpoint_dir.push("checkpoint");
-            self.rocks
-                .checkpoint(&checkpoint_dir.to_string_lossy())
-                .unwrap();
+            self.rocks.checkpoint(&checkpoint_dir).unwrap();
             checkpoint_dir
         }
 
@@ -822,8 +819,7 @@ pub mod test {
             let dir = TempDir::new().unwrap();
             let mut dir_path = dir.path().to_path_buf();
             dir_path.push("rocks");
-            let dir_path = dir_path.to_string_lossy();
-            let rocks = RocksDb::restore(&dir_path, checkpoint_dir).unwrap();
+            let rocks = RocksDb::restore(&dir_path, checkpoint_dir.as_ref()).unwrap();
             TestDb { rocks, dir }
         }
     }
@@ -884,17 +880,13 @@ pub mod test {
         let checkpoints_dir = TempDir::new().unwrap();
         let restore_dir = TempDir::new().unwrap();
 
-        let dir_path = tmp_dir.path().to_string_lossy();
+        let dir_path = tmp_dir.path();
 
         let mut checkpoints_dir_path = checkpoints_dir.path().to_path_buf();
         checkpoints_dir_path.push("chkp0");
-        let checkpoints_dir_path = checkpoints_dir_path.to_string_lossy();
-        let checkpoints_dir_path = checkpoints_dir_path.as_ref();
 
         let mut restore_dir_path = restore_dir.path().to_path_buf();
         restore_dir_path.push("chkp0");
-        let restore_dir_path = restore_dir_path.to_string_lossy();
-        let restore_dir_path = restore_dir_path.as_ref();
 
         let mut db = RocksDb::new(&dir_path).unwrap();
 
@@ -905,7 +897,7 @@ pub mod test {
 
         db.put(column_family, key, initial_value)
             .expect("put failed");
-        db.checkpoint(checkpoints_dir_path.into())
+        db.checkpoint(&checkpoints_dir_path)
             .expect("checkpoint failed");
         db.put(column_family, key, new_value)
             .expect("second put failed");

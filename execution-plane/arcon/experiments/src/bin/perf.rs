@@ -232,8 +232,7 @@ fn exec(
         vec![2.into()],
         channel_strategy,
         Box::new(Map::new(&map_fn)),
-        Box::new(InMemory::new("perf").unwrap()),
-        ".".into(),
+        Box::new(InMemory::new("perf".as_ref()).unwrap()),
     );
 
     let map_node = if dedicated {
@@ -280,7 +279,7 @@ fn exec(
         None, // no timestamp extractor
         channel_strategy,
         source_op,
-        Box::new(InMemory::new("test").unwrap()),
+        Box::new(InMemory::new("test".as_ref()).unwrap()),
     );
 
     // Collection for source

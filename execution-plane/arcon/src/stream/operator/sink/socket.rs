@@ -136,8 +136,7 @@ mod tests {
                         vec![1.into()],
                         ChannelStrategy::Mute,
                         Box::new(SocketSink::udp(addr)),
-                        Box::new(InMemory::new("test").unwrap()),
-                        ".".into(),
+                        Box::new(InMemory::new("test".as_ref()).unwrap()),
                     )
                 });
                 system.start(&socket_sink);

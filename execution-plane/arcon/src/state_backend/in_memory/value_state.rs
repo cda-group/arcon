@@ -68,7 +68,7 @@ mod test {
 
     #[test]
     fn in_memory_value_state_test() {
-        let mut db = InMemory::new("test").unwrap();
+        let mut db = InMemory::new("test".as_ref()).unwrap();
         let value_state = db.new_value_state("test_state", (), (), NativeEndianBytesDump, Prost);
 
         let unset = value_state.get(&db).unwrap();
@@ -85,7 +85,7 @@ mod test {
 
     #[test]
     fn in_memory_value_states_are_independant() {
-        let mut db = InMemory::new("test").unwrap();
+        let mut db = InMemory::new("test".as_ref()).unwrap();
         let v1 = db.new_value_state("test1", (), (), NativeEndianBytesDump, Prost);
         let v2 = db.new_value_state("test2", (), (), NativeEndianBytesDump, Prost);
 
@@ -106,7 +106,7 @@ mod test {
 
     #[test]
     fn in_memory_value_states_handle_state_for_different_keys_and_namespaces() {
-        let mut db = InMemory::new("test").unwrap();
+        let mut db = InMemory::new("test".as_ref()).unwrap();
         let mut value_state = db.new_value_state("test_state", 0, 0, NativeEndianBytesDump, Prost);
 
         value_state.set(&mut db, 0).unwrap();

@@ -21,6 +21,7 @@ use std::{
     fs::{create_dir_all, File},
     io,
     io::{BufReader, Read},
+    path::Path,
 };
 #[cfg(feature = "arcon_sled_checkpoints")]
 use std::{
@@ -34,7 +35,7 @@ pub struct Sled {
 }
 
 impl StateBackend for Sled {
-    fn new(path: &str) -> ArconResult<Self>
+    fn new(path: &Path) -> ArconResult<Self>
     where
         Self: Sized,
     {
@@ -46,7 +47,7 @@ impl StateBackend for Sled {
     }
 
     #[cfg(not(feature = "arcon_sled_checkpoints"))]
-    fn checkpoint(&self, _checkpoint_path: &str) -> ArconResult<()> {
+    fn checkpoint(&self, _checkpoint_path: &Path) -> ArconResult<()> {
         eprintln!(
             "Checkpointing sled state backends is off (compiled without `arcon_sled_checkpoints`)"
         );
@@ -54,7 +55,7 @@ impl StateBackend for Sled {
     }
 
     #[cfg(feature = "arcon_sled_checkpoints")]
-    fn checkpoint(&self, checkpoint_path: &str) -> ArconResult<()> {
+    fn checkpoint(&self, checkpoint_path: &Path) -> ArconResult<()> {
         // TODO: sled doesn't support checkpoints/snapshots, but that and MVCC is planned
         //   for now we'll just dump it via the export/import mechanism WHICH MAY BE VERY SLOW
         let export_data = self.db.export();
@@ -111,7 +112,7 @@ impl StateBackend for Sled {
     }
 
     #[allow(unused_variables)]
-    fn restore(restore_path: &str, checkpoint_path: &str) -> ArconResult<Self>
+    fn restore(restore_path: &Path, checkpoint_path: &Path) -> ArconResult<Self>
     where
         Self: Sized,
     {
@@ -485,7 +486,6 @@ pub mod test {
             let mut dir_path = dir.path().to_path_buf();
             dir_path.push("sled");
             fs::create_dir(&dir_path).unwrap();
-            let dir_path = dir_path.to_string_lossy();
             let sled = Sled::new(&dir_path).unwrap();
             TestDb { sled, dir }
         }
@@ -493,9 +493,7 @@ pub mod test {
         pub fn checkpoint(&mut self) -> PathBuf {
             let mut checkpoint_dir = self.dir.path().to_path_buf();
             checkpoint_dir.push("checkpoint");
-            self.sled
-                .checkpoint(&checkpoint_dir.to_string_lossy())
-                .unwrap();
+            self.sled.checkpoint(&checkpoint_dir).unwrap();
             checkpoint_dir
         }
 
@@ -503,8 +501,7 @@ pub mod test {
             let dir = TempDir::new().unwrap();
             let mut dir_path = dir.path().to_path_buf();
             dir_path.push("sled");
-            let dir_path = dir_path.to_string_lossy();
-            let sled = Sled::restore(checkpoint_dir, &dir_path).unwrap();
+            let sled = Sled::restore(checkpoint_dir.as_ref(), &dir_path).unwrap();
             TestDb { sled, dir }
         }
     }
@@ -527,7 +524,7 @@ pub mod test {
     #[test]
     fn test_sled_checkpoints() {
         let dir = tempfile::TempDir::new().unwrap();
-        let sled = Sled::new(dir.path().to_string_lossy().as_ref()).unwrap();
+        let sled = Sled::new(dir.path()).unwrap();
 
         sled.db.insert(b"a", b"1").unwrap();
         sled.db.insert(b"b", b"2").unwrap();
@@ -539,14 +536,9 @@ pub mod test {
         let chkp_dir = tempfile::TempDir::new().unwrap();
         let restore_dir = tempfile::TempDir::new().unwrap();
 
-        sled.checkpoint(chkp_dir.path().to_string_lossy().as_ref())
-            .unwrap();
+        sled.checkpoint(chkp_dir.path()).unwrap();
 
-        let restored = Sled::restore(
-            restore_dir.path().to_string_lossy().as_ref(),
-            chkp_dir.path().to_string_lossy().as_ref(),
-        )
-        .unwrap();
+        let restored = Sled::restore(restore_dir.path(), chkp_dir.path()).unwrap();
 
         assert!(!sled.was_restored());
         assert!(restored.was_restored());
