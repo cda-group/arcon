@@ -38,7 +38,7 @@ pub fn window_appender_sum(b: &mut Bencher) {
 pub fn window_appender_sum_rocksdb(b: &mut Bencher) {
     let temp_dir = tempfile::TempDir::new().unwrap();
     let test_directory = temp_dir.path();
-    let mut state_backend = RocksDb::new(&test_directory.to_str().unwrap()).unwrap();
+    let mut state_backend = RocksDb::new(test_directory).unwrap();
     b.iter(|| appender_sum(black_box(WINDOW_MSGS), &mut state_backend));
 }
 
@@ -66,7 +66,7 @@ pub fn window_incremental_sum(b: &mut Bencher) {
 pub fn window_incremental_sum_rocksdb(b: &mut Bencher) {
     let temp_dir = tempfile::TempDir::new().unwrap();
     let test_directory = temp_dir.path();
-    let mut state_backend = RocksDb::new(&test_directory.to_str().unwrap()).unwrap();
+    let mut state_backend = RocksDb::new(test_directory).unwrap();
     b.iter(|| incremental_sum(black_box(WINDOW_MSGS), &mut state_backend));
 }
 
