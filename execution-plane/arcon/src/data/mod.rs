@@ -50,9 +50,8 @@ where
         Ok(buf)
     }
     /// Decodes bytes from encoded Protobuf data to `ArconType`
-    fn decode_storage(bytes: &mut [u8]) -> ArconResult<Self> {
-        let mut buf = bytes.into_buf();
-        let res: Self = Self::decode(&mut buf).map_err(|e| {
+    fn decode_storage(bytes: &[u8]) -> ArconResult<Self> {
+        let res: Self = Self::decode(bytes).map_err(|e| {
             arcon_err_kind!("Failed to decode ArconType with err {}", e.to_string())
         })?;
         Ok(res)
@@ -365,6 +364,28 @@ impl Deref for ArconF64 {
 impl PartialEq for ArconF64 {
     fn eq(&self, other: &Self) -> bool {
         self.value == other.value
+    }
+}
+
+/// Variant of [Writer](bytess::buf::ext::Writer) for trait objects
+pub struct BufMutWriter<'a> {
+    buf: &'a mut dyn BufMut,
+}
+impl<'a> BufMutWriter<'a> {
+    pub fn new(buf: &'a mut dyn BufMut) -> Self {
+        BufMutWriter { buf }
+    }
+}
+impl<'a> std::io::Write for BufMutWriter<'a> {
+    fn write(&mut self, src: &[u8]) -> std::io::Result<usize> {
+        let n = std::cmp::min(self.buf.remaining_mut(), src.len());
+
+        self.buf.put_slice(&src[..n]);
+        Ok(n)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
     }
 }
 

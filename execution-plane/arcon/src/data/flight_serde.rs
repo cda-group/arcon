@@ -75,13 +75,13 @@ pub mod reliable_remote {
                 match raw_event.event_type {
                     x if x == EventType::Element as i32 => {
                         let elem: ArconElement<A> =
-                            ArconElement::decode(raw_event.bytes.into_buf()).map_err(|_| {
+                            ArconElement::decode(raw_event.bytes.as_slice()).map_err(|_| {
                                 SerError::InvalidData("Failed to decode Element".to_string())
                             })?;
                         events.push(ArconEvent::Element(elem).into());
                     }
                     x if x == EventType::Watermark as i32 => {
-                        let watermark: Watermark = Watermark::decode(raw_event.bytes.into_buf())
+                        let watermark: Watermark = Watermark::decode(raw_event.bytes.as_slice())
                             .map_err(|_| {
                                 SerError::InvalidData("Failed to decode Watermark".to_string())
                             })?;
@@ -89,14 +89,14 @@ pub mod reliable_remote {
                     }
                     x if x == EventType::Epoch as i32 => {
                         let epoch: Epoch =
-                            Epoch::decode(raw_event.bytes.into_buf()).map_err(|_| {
+                            Epoch::decode(raw_event.bytes.as_slice()).map_err(|_| {
                                 SerError::InvalidData("Failed to decode Epoch".to_string())
                             })?;
                         events.push(ArconEvent::Epoch(epoch).into());
                     }
                     x if x == EventType::Death as i32 => {
                         let death: String =
-                            String::decode(raw_event.bytes.into_buf()).map_err(|_| {
+                            String::decode(raw_event.bytes.as_slice()).map_err(|_| {
                                 SerError::InvalidData("Failed to decode Death".to_string())
                             })?;
                         events.push(ArconEvent::Death(death).into());
@@ -136,7 +136,7 @@ pub mod reliable_remote {
             Some(total_len)
         }
 
-        fn serialise(&self, buf: &mut dyn BufMut) -> Result<(), SerError> {
+        fn serialise(&self, mut buf: &mut dyn BufMut) -> Result<(), SerError> {
             let mut raw_events: Vec<RawEvent> = Vec::with_capacity(self.0.events.len());
 
             for event in &self.0.events {
@@ -193,12 +193,9 @@ pub mod reliable_remote {
                 events: raw_events,
             };
 
-            unsafe {
-                network_msg.encode(&mut buf.bytes_mut()).map_err(|_| {
-                    SerError::InvalidData("Failed to encode network message".to_string())
-                })?;
-                buf.advance_mut(network_msg.encoded_len());
-            }
+            network_msg.encode(&mut buf).map_err(|_| {
+                SerError::InvalidData("Failed to encode network message".to_string())
+            })?;
 
             Ok(())
         }
@@ -211,7 +208,7 @@ pub mod reliable_remote {
 
 /// Module containing the [kompact] serialiser/deserialiser implementation for [FlightSerde::Unsafe]
 pub mod unsafe_remote {
-    use crate::data::{ArconMessage, ArconType};
+    use crate::data::{ArconMessage, ArconType, BufMutWriter};
     use kompact::prelude::*;
 
     #[derive(Clone, Debug)]
@@ -251,10 +248,10 @@ pub mod unsafe_remote {
 
         fn serialise(&self, buf: &mut dyn BufMut) -> Result<(), SerError> {
             unsafe {
-                abomonation::encode(&self.0, &mut buf.bytes_mut()).map_err(|_| {
+                let mut writer = BufMutWriter::new(buf);
+                abomonation::encode(&self.0, &mut writer).map_err(|_| {
                     SerError::InvalidData("Failed to encode flight data".to_string())
                 })?;
-                buf.advance_mut(buf.remaining_mut());
             };
             Ok(())
         }
