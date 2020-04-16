@@ -278,6 +278,48 @@ mod test {
     }
 
     #[test]
+    fn reliable_serde_test() {
+        let (local, remote) = get_systems();
+        let timeout = std::time::Duration::from_millis(150);
+        let comp = remote.create(move || DebugNode::<ArconDataTest>::new());
+        remote
+            .start_notify(&comp)
+            .wait_timeout(timeout)
+            .expect("comp never started");
+
+        let comp_id = format!("comp");
+        let _ = remote.register_by_alias(&comp, comp_id.clone());
+        let remote_path = ActorPath::Named(NamedPath::with_system(remote.system_path(), vec![
+            comp_id.into(),
+        ]));
+
+        let dispatcher_ref = local.dispatcher_ref();
+        let channel = Channel::Remote(remote_path, FlightSerde::Reliable, dispatcher_ref.into());
+        let mut channel_strategy: ChannelStrategy<ArconDataTest> =
+            ChannelStrategy::Forward(Forward::new(channel, 1.into()));
+
+        let items = vec![1, 2, 3, 4, 5, 6, 7];
+        let data = ArconDataTest {
+            id: 1,
+            items: items.clone(),
+        };
+        let element = ArconElement::new(data);
+        channel_strategy.add(ArconEvent::Element(element.clone()));
+        channel_strategy.add(ArconEvent::Element(element.clone()));
+        channel_strategy.flush();
+        channel_strategy.add(ArconEvent::Element(element.clone()));
+        channel_strategy.add(ArconEvent::Element(element));
+        channel_strategy.flush();
+        std::thread::sleep(timeout);
+        {
+            let comp_inspect = &comp.definition().lock().unwrap();
+            assert_eq!(comp_inspect.data.len() as u64, 4);
+        }
+        let _ = local.shutdown();
+        let _ = remote.shutdown();
+    }
+
+    #[test]
     fn unsafe_serde_test() {
         let (local, remote) = get_systems();
         let timeout = std::time::Duration::from_millis(150);
@@ -304,12 +346,16 @@ mod test {
             items: items.clone(),
         };
         let element = ArconElement::new(data);
+        channel_strategy.add(ArconEvent::Element(element.clone()));
+        channel_strategy.add(ArconEvent::Element(element.clone()));
+        channel_strategy.flush();
+        channel_strategy.add(ArconEvent::Element(element.clone()));
         channel_strategy.add(ArconEvent::Element(element));
         channel_strategy.flush();
         std::thread::sleep(timeout);
         {
             let comp_inspect = &comp.definition().lock().unwrap();
-            assert_eq!(comp_inspect.data.len() as u64, 1);
+            assert_eq!(comp_inspect.data.len() as u64, 4);
         }
         let _ = local.shutdown();
         let _ = remote.shutdown();

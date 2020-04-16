@@ -7,12 +7,15 @@ use criterion::{criterion_group, criterion_main, Bencher, Criterion};
 mod common;
 use common::*;
 
-const TOTAL_MSGS: usize = 1024000;
 const BATCH_SIZE: usize = 1024;
+const NUM_BATCHES: usize = 1000;
+const TOTAL_MSGS: usize = BATCH_SIZE * NUM_BATCHES;
 
 fn arcon_flight_serde(c: &mut Criterion) {
     let mut group = c.benchmark_group("arcon_flight_serde");
-    group.bench_function("Arcon Reliable Flight", reliable_serde);
+    // Something is broken in the serialisation there,
+    // but if we are anyway changeing it, no point in fixing this now.
+    //group.bench_function("Arcon Reliable Flight", reliable_serde);
     group.bench_function("Arcon Unsafe Flight", unsafe_serde);
     group.finish()
 }
@@ -55,7 +58,7 @@ pub fn arcon_flight_bench(b: &mut Bencher, serde: FlightSerde) {
 
     let experiment_port = comp.on_definition(|cd| cd.experiment_port.share());
     let mut events: Vec<Vec<ArconEvent<i32>>> = Vec::with_capacity(BATCH_SIZE);
-    for _ in 0..BATCH_SIZE {
+    for _ in 0..NUM_BATCHES {
         let mut batch = Vec::with_capacity(BATCH_SIZE);
         for i in 0..BATCH_SIZE {
             let event = ArconEvent::Element(ArconElement::new(i as i32));
@@ -76,7 +79,8 @@ pub fn arcon_flight_bench(b: &mut Bencher, serde: FlightSerde) {
                 channel_strategy.add(event);
             }
         }
-        channel_strategy.flush();
+        // not needed since batch size exactly the number of sent elements
+        //channel_strategy.flush();
         let res = future.wait();
         res
     });
