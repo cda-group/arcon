@@ -2,11 +2,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use core::time::Duration;
-use kompact::timer::*;
+use hierarchical_hash_wheel_timer::{
+    wheels::{quad_wheel::*, *},
+    *,
+};
 use prost::Message;
 #[cfg(feature = "arcon_serde")]
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, convert::TryInto, fmt, fmt::Debug};
+use std::{collections::HashMap, fmt, fmt::Debug};
 use uuid::Uuid;
 /*
     EventTimer: Abstraction of timer with underlying QuadWheel scheduling
@@ -71,7 +74,8 @@ pub struct EventTimer<E>
 where
     E: Message + Default + PartialEq,
 {
-    timer: QuadWheelWithOverflow,
+    // Since the backing store uses string keys, there's no point in storing Uuids here and converting back and forth
+    timer: QuadWheelWithOverflow<String>,
     pub inner: SerializableEventTimer<E>,
 }
 
@@ -90,41 +94,45 @@ where
 {
     pub fn new() -> EventTimer<E> {
         EventTimer {
-            timer: QuadWheelWithOverflow::new(),
+            timer: QuadWheelWithOverflow::default(),
             inner: SerializableEventTimer {
                 time: 0u64,
                 handles: HashMap::new(),
             },
         }
     }
-    // Basic scheduling function
-    fn schedule_once(&mut self, timeout: Duration, entry: E) {
-        let id = Uuid::new_v4();
-        self.inner.handles.insert(
-            id.to_string(), // alloc :(
-            EventTimerEvent::new(self.inner.time, timeout.as_millis() as u64, entry),
-        );
+    /// Basic scheduling function
+    ///
+    /// Returns Ok if the entry was schedulled successfully
+    /// or `Err(entry)` if it has already expired.
+    pub fn schedule_after(&mut self, delay: u64, entry: E) -> Result<(), E> {
+        // this seems a bit silly, but it is A way to generate a unique string, I suppose^^
+        let id = Uuid::new_v4().to_string();
 
-        let e = TimerEntry::OneShot {
-            id,
-            timeout,
-            action: Box::new(move |_| {}),
-        };
-        match self.timer.insert(e) {
-            Ok(_) => (), // ok
-            Err(TimerError::Expired(e)) => {
-                self.execute(e);
+        match self
+            .timer
+            .insert_with_delay(id.clone(), Duration::from_millis(delay))
+        {
+            Ok(_) => {
+                self.inner
+                    .handles
+                    .insert(id, EventTimerEvent::new(self.inner.time, delay, entry));
+                Ok(())
             }
+            Err(TimerError::Expired(_)) => Err(entry),
             Err(f) => panic!("Could not insert timer entry! {:?}", f),
         }
     }
-    // Schedule at a specific time in the future
-    pub fn schedule_at(&mut self, time: u64, entry: E) {
-        // Check for bad target time
-        if time < self.inner.time {
-            eprintln!("tried to schedule event which has already happened");
+    /// Schedule at a specific time in the future
+    ///
+    /// Returns Ok if the entry was schedulled successfully
+    /// or `Err(entry)` if it has already expired.
+    pub fn schedule_at(&mut self, time: u64, entry: E) -> Result<(), E> {
+        // Check for expired target time
+        if time <= self.inner.time {
+            Err(entry)
         } else {
-            self.schedule_once(Duration::from_millis(time - self.inner.time), entry);
+            self.schedule_after(time - self.inner.time, entry)
         }
     }
     // Should be called before scheduling anything
@@ -135,67 +143,63 @@ where
     pub fn get_time(&mut self) -> u64 {
         self.inner.time
     }
-    //
-    #[inline(always)]
-    pub fn advance_to(&mut self, ts: u64) -> Vec<E> {
-        let mut vec = Vec::new();
-        if ts < self.inner.time {
-            eprintln!("advance_to called with lower timestamp than current time");
-            return vec;
-        }
 
-        // TODO: type conversion mess
-        let mut time_left = ts - self.inner.time;
+    fn tick_and_collect(&mut self, mut time_left: u32, res: &mut Vec<E>) -> () {
         while time_left > 0 {
-            if let Skip::Millis(skip_ms) = self.timer.can_skip() {
-                // Skip forward
-                if skip_ms >= time_left.try_into().unwrap() {
-                    // No more ops to gather, skip the remaining time_left and return
-                    self.timer.skip((time_left).try_into().unwrap());
-                    self.inner.time += time_left;
-                    return vec;
-                } else {
-                    // Skip lower than time-left:
-                    self.timer.skip(skip_ms);
-                    self.inner.time += skip_ms as u64;
-                    time_left -= skip_ms as u64;
+            match self.timer.can_skip() {
+                Skip::Empty => {
+                    // Timer is empty, no point in ticking it
+                    self.inner.time += time_left as u64;
+                    return;
                 }
-            } else {
-                // Can't skip
-                let mut res = self.timer.tick();
-                for e in res.drain(..) {
-                    if let Some(entry) = self.execute(e) {
-                        vec.push(entry)
+                Skip::Millis(skip_ms) => {
+                    // Skip forward
+                    if skip_ms >= time_left {
+                        // No more ops to gather, skip the remaining time_left and return
+                        self.timer.skip(time_left);
+                        self.inner.time += time_left as u64;
+                        return;
+                    } else {
+                        // Skip lower than time-left:
+                        self.timer.skip(skip_ms);
+                        self.inner.time += skip_ms as u64;
+                        time_left -= skip_ms;
                     }
                 }
-                self.inner.time += 1;
-                time_left -= 1;
-            }
-        }
-        vec
-    }
-    // Takes TimerEntry, reschedules it if necessary and returns Executable actions
-    #[inline(always)]
-    fn execute(&mut self, e: TimerEntry) -> Option<E> {
-        let id = e.id();
-        let res = self
-            .inner
-            .handles
-            .remove(&id.to_string()) // alloc :(
-            .map(|x| x.payload);
-
-        // Reschedule the event
-        if let Some(re_e) = e.execute() {
-            match self.timer.insert(re_e) {
-                Ok(_) => (), // great
-                Err(TimerError::Expired(re_e)) => {
-                    // This could happen if someone specifies 0ms period
-                    eprintln!("TimerEntry could not be inserted properly: {:?}", re_e);
+                Skip::None => {
+                    for e in self.timer.tick() {
+                        if let Some(entry) = self.take_entry(e) {
+                            res.push(entry);
+                        }
+                    }
+                    self.inner.time += 1u64;
+                    time_left -= 1u32;
                 }
-                Err(f) => panic!("Could not insert timer entry! {:?}", f),
             }
         }
+    }
+
+    #[inline(always)]
+    pub fn advance_to(&mut self, ts: u64) -> Vec<E> {
+        let mut res = Vec::new();
+        if ts < self.inner.time {
+            eprintln!("advance_to called with lower timestamp than current time");
+            return res;
+        }
+
+        let mut time_left = ts - self.inner.time;
+        while time_left > std::u32::MAX as u64 {
+            self.tick_and_collect(std::u32::MAX, &mut res);
+            time_left -= std::u32::MAX as u64;
+        }
+        // this cast must be safe now
+        self.tick_and_collect(time_left as u32, &mut res);
         res
+    }
+    // Lookup id, remove from storage, and return Executable action
+    #[inline(always)]
+    fn take_entry(&mut self, id: String) -> Option<E> {
+        self.inner.handles.remove(&id).map(|x| x.payload)
     }
 }
 
@@ -209,7 +213,7 @@ where
 }
 
 // Allows the EventTimer to be scheduled on different threads, but should never be used concurrently
-unsafe impl<E> Send for EventTimer<E> where E: Message + Default + PartialEq {}
+//unsafe impl<E> Send for EventTimer<E> where E: Message + Default + PartialEq {}
 
 impl<E> From<SerializableEventTimer<E>> for EventTimer<E>
 where
@@ -230,7 +234,11 @@ where
         ) in handles
         {
             let new_timeout = time_when_scheduled + timeout_millis - time;
-            res.schedule_once(Duration::from_millis(new_timeout), payload)
+            if let Err(e) = res.schedule_after(new_timeout, payload) {
+                // I don't know if this can actually happen with the semantics of our store (i.e. torn writes between the timestamp and the collection)
+                // but if it does, it's probably bad and we need to deal with it at some point. Silently dropping timeouts is not a good idea.
+                panic!("A timeout has expired during replay: {:?}", e);
+            }
         }
 
         res

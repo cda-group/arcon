@@ -1056,7 +1056,7 @@ dependencies = [
 [[package]]
 name = "hierarchical_hash_wheel_timer"
 version = "0.1.0"
-source = "git+https://github.com/Bathtor/rust-hash-wheel-timer#2cf0805d258e23e88f0dfd80e6d24dd7bca6bb6e"
+source = "git+https://github.com/Bathtor/rust-hash-wheel-timer#3d0f483e990b6482da0869d5407b7b2d9c0aa454"
 dependencies = [
  "arr_macro",
  "rustc-hash",

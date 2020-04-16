@@ -123,7 +123,12 @@ where
     }
 
     // Creates the window trigger for a key and "window index"
-    fn new_window_trigger(&mut self, key: Key, index: Index, state_backend: &dyn StateBackend) {
+    fn new_window_trigger(
+        &mut self,
+        key: Key,
+        index: Index,
+        state_backend: &dyn StateBackend,
+    ) -> Result<(), WindowEvent> {
         self.window_start
             .set_current_key(key)
             .expect("window key error");
@@ -140,7 +145,7 @@ where
         self.transient_timer.schedule_at(
             ts + self.late_arrival_time,
             WindowEvent::new(key, index, ts),
-        );
+        )
     }
 
     // Extracts the key from ArconElements
@@ -228,7 +233,10 @@ where
                     .insert(ctx.state_backend, (key, i), ())
                     .expect("active windows insert error");
                 // Create the window trigger
-                self.new_window_trigger(key, i, ctx.state_backend);
+                if let Err(event) = self.new_window_trigger(key, i, ctx.state_backend) {
+                    // I'm pretty sure this shouldn't happen
+                    unreachable!("Window was expired when scheduled: {:?}", event);
+                }
             }
         }
     }
@@ -281,6 +289,8 @@ where
         _epoch: Epoch,
         ctx: OperatorContext<OUT>,
     ) -> Option<ArconResult<Vec<u8>>> {
+        // TODO this seems really expensive.
+        // We should probably only write the diff whenever we persist.
         self.persistent_timer
             .set(ctx.state_backend, self.transient_timer.inner.clone())
             .expect("state error");
