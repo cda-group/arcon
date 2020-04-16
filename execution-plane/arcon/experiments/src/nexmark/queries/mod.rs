@@ -13,6 +13,16 @@ use arcon::prelude::*;
 pub mod q1;
 pub mod q3;
 
+type QueryTimer = Option<KFuture<std::time::Duration>>;
+
+pub trait Query {
+    fn run(
+        debug_mode: bool,
+        nexmark_config: NEXMarkConfig,
+        pipeline: &mut ArconPipeline,
+    ) -> QueryTimer;
+}
+
 pub fn sink<A: ArconType>(
     debug_mode: bool,
     system: &mut KompactSystem,

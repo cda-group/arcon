@@ -11,7 +11,8 @@ extern crate log;
 use anyhow::Result;
 use arcon::prelude::{ArconConf, ArconPipeline};
 use clap::{App, AppSettings, Arg, SubCommand};
-use experiments::nexmark::{config::*, queries};
+use experiments::nexmark::{config::*, queries, queries::Query};
+use queries::{q1::QueryOne, q3::QueryThree};
 use std::fs::metadata;
 
 const DEFAULT_NEXMARK_CONFIG: &str = "nexmark_config.toml";
@@ -161,11 +162,11 @@ fn run(
     let pipeline_timer = match nexmark_config.query {
         NEXMarkQuery::CurrencyConversion => {
             info!("Running CurrencyConversion query");
-            queries::q1::q1(debug_mode, nexmark_config, &mut pipeline)
+            QueryOne::run(debug_mode, nexmark_config, &mut pipeline)
         }
         NEXMarkQuery::LocalItemSuggestion => {
             info!("Running LocalItemSuggestion query");
-            queries::q3::q3(debug_mode, nexmark_config, &mut pipeline)
+            QueryThree::run(debug_mode, nexmark_config, &mut pipeline)
         }
     };
 
