@@ -109,7 +109,6 @@ where
         mut operator: Box<dyn Operator<IN, OUT> + Send>,
         mut state_backend: Box<dyn StateBackend>,
     ) -> Node<IN, OUT> {
-        // TODO: hardcoded Bincode serializers (via state_backend.build API)
         // Initiate our watermarks
 
         // some backends require you to first specify all the states and mess with them later
@@ -296,7 +295,7 @@ where
                         }
 
                         // Set current watermark
-                        self.metrics.watermark = new_watermark.clone();
+                        self.metrics.watermark = new_watermark;
 
                         // Forward the watermark
                         self.channel_strategy
@@ -343,7 +342,7 @@ where
                         self.save_state()?;
 
                         // Set current epoch
-                        self.metrics.epoch = e.clone();
+                        self.metrics.epoch = e;
 
                         // forward the epoch
                         self.channel_strategy.add(ArconEvent::Epoch(e));
@@ -366,7 +365,7 @@ where
     }
 
     fn save_state(&mut self) -> ArconResult<()> {
-        if let Some(base_dir) = &self.ctx().config()["checkpoint_dir"].as_string() {
+        if let Some(base_dir) = &self.ctx.config()["checkpoint_dir"].as_string() {
             let checkpoint_dir = format!(
                 "{}/checkpoint_{id}_{epoch}",
                 base_dir,
@@ -378,7 +377,7 @@ where
                     .ok_or_else(|| arcon_err_kind!("current epoch uninitialized"))?
                     .epoch
             );
-            self.state_backend.checkpoint(&checkpoint_dir)?;
+            self.state_backend.checkpoint(checkpoint_dir.as_ref())?;
             debug!(
                 self.ctx.log(),
                 "Completed a Checkpoint to path {}", checkpoint_dir
@@ -396,7 +395,7 @@ where
             .blocked_channels
             .clear(&mut *self.state_backend)?;
 
-        let ref mut message_buffer = self.state.message_buffer;
+        let message_buffer = &mut self.state.message_buffer;
 
         // Handle the message buffer.
         if !message_buffer.is_empty(&*self.state_backend)? {
@@ -437,7 +436,7 @@ where
                     });
                 }
 
-                if self.state_backend.just_restored() {
+                if self.state_backend.was_restored() {
                     if let Err(e) = self.after_state_save() {
                         error!(self.ctx.log(), "restoration error: {}", e);
                     }
@@ -534,7 +533,7 @@ mod tests {
                 vec![1.into(), 2.into(), 3.into()],
                 channel_strategy,
                 Box::new(Filter::new(&node_fn)),
-                Box::new(InMemory::new("test").unwrap()),
+                Box::new(InMemory::new("test".as_ref()).unwrap()),
             )
         });
 

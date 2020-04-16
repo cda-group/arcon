@@ -154,7 +154,7 @@ mod tests {
             None, // no timestamp extractor
             channel_strategy,
             operator,
-            Box::new(InMemory::new("test").unwrap()),
+            Box::new(InMemory::new("test".as_ref()).unwrap()),
         );
 
         let file_source: LocalFileSource<u64, u64> =
@@ -203,7 +203,7 @@ mod tests {
             None, // no timestamp extractor
             channel_strategy,
             operator,
-            Box::new(InMemory::new("test").unwrap()),
+            Box::new(InMemory::new("test".as_ref()).unwrap()),
         );
 
         let file_source: LocalFileSource<ArconF64, ArconF64> =

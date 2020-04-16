@@ -1,3 +1,6 @@
+// Copyright (c) 2020, KTH Royal Institute of Technology.
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! The arcon_error crate provide error utilities for Arcon related crates.
 
 use std::{error::Error as StdError, fmt};
@@ -62,3 +65,20 @@ impl Error {
 
 /// A Result type for Arcon related crates
 pub type ArconResult<T> = ::std::result::Result<T, crate::Error>;
+
+pub trait ResultExt<T> {
+    fn ctx(self, message: &str) -> ArconResult<T>;
+}
+
+impl<T, E> ResultExt<T> for Result<T, E>
+where
+    E: StdError + Send + 'static,
+{
+    fn ctx(self, message: &str) -> ArconResult<T> {
+        self.map_err(|cause| {
+            let mut err = arcon_err_kind!("{}", message);
+            err.cause = Some(Box::new(cause));
+            err
+        })
+    }
+}

@@ -64,7 +64,7 @@ pub fn node_forward_bench(b: &mut Bencher, messages: usize) {
         vec![1.into()],
         channel_strategy,
         Box::new(Map::new(&map_fn)),
-        Box::new(InMemory::new("bench").unwrap()),
+        Box::new(InMemory::new("bench".as_ref()).unwrap()),
     );
 
     let node = sys.create(|| node_comp);

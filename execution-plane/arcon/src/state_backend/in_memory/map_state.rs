@@ -187,7 +187,7 @@ mod test {
 
     #[test]
     fn map_state_test() {
-        let mut db = InMemory::new("test").unwrap();
+        let mut db = InMemory::new("test".as_ref()).unwrap();
         let map_state = db.new_map_state("test_state", (), (), NativeEndianBytesDump, Prost);
 
         // TODO: &String is weird, maybe look at how it's done with the keys in std hash-map

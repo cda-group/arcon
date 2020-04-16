@@ -4,56 +4,53 @@
 use crate::{
     prelude::ArconResult,
     state_backend::{
-        in_memory::{InMemory, StateCommon},
-        serialization::SerializableFixedSizeWith,
+        serialization::{DeserializableWith, SerializableFixedSizeWith, SerializableWith},
+        sled::{Sled, StateCommon},
         state_types::{State, ValueState},
     },
 };
-use smallbox::SmallBox;
 use std::marker::PhantomData;
 
-pub struct InMemoryValueState<IK, N, T, KS> {
-    pub(crate) common: StateCommon<IK, N, KS>,
+pub struct SledValueState<IK, N, T, KS, TS> {
+    pub(crate) common: StateCommon<IK, N, KS, TS>,
     pub(crate) _phantom: PhantomData<T>,
 }
 
-impl<IK, N, T, KS> State<InMemory, IK, N> for InMemoryValueState<IK, N, T, KS>
+impl<IK, N, T, KS, TS> State<Sled, IK, N> for SledValueState<IK, N, T, KS, TS>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
+    T: SerializableWith<TS>,
 {
-    fn clear(&self, backend: &mut InMemory) -> ArconResult<()> {
+    fn clear(&self, backend: &mut Sled) -> ArconResult<()> {
         let key = self.common.get_db_key_prefix()?;
-        let _value = backend.remove(&key);
+        backend.remove(&self.common.tree_name, &key)?;
         Ok(())
     }
 
     delegate_key_and_namespace!(common);
 }
 
-impl<IK, N, T, KS> ValueState<InMemory, IK, N, T> for InMemoryValueState<IK, N, T, KS>
+impl<IK, N, T, KS, TS> ValueState<Sled, IK, N, T> for SledValueState<IK, N, T, KS, TS>
 where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
-    T: Send + Sync + Clone + 'static,
+    T: SerializableWith<TS> + DeserializableWith<TS>,
 {
-    fn get(&self, backend: &InMemory) -> ArconResult<Option<T>> {
+    fn get(&self, backend: &Sled) -> ArconResult<Option<T>> {
         let key = self.common.get_db_key_prefix()?;
-        if let Some(dynamic) = backend.get(&key) {
-            let value = dynamic
-                .downcast_ref::<T>()
-                .ok_or_else(|| arcon_err_kind!("Dynamic value has a wrong type!"))?
-                .clone();
+        if let Some(serialized) = backend.get(&self.common.tree_name, &key)? {
+            let value = T::deserialize(&self.common.value_serializer, &serialized)?;
             Ok(Some(value))
         } else {
             Ok(None)
         }
     }
 
-    fn set(&self, backend: &mut InMemory, new_value: T) -> ArconResult<()> {
+    fn set(&self, backend: &mut Sled, new_value: T) -> ArconResult<()> {
         let key = self.common.get_db_key_prefix()?;
-        let dynamic = SmallBox::new(new_value);
-        let _old_value = backend.insert(key, dynamic);
+        let serialized = T::serialize(&self.common.value_serializer, &new_value)?;
+        backend.put(&self.common.tree_name, &key, &serialized)?;
         Ok(())
     }
 }
@@ -62,14 +59,19 @@ where
 mod test {
     use super::*;
     use crate::state_backend::{
-        serialization::{NativeEndianBytesDump, Prost},
-        StateBackend, ValueStateBuilder,
+        serialization::NativeEndianBytesDump, sled::test::TestDb, ValueStateBuilder,
     };
 
     #[test]
-    fn in_memory_value_state_test() {
-        let mut db = InMemory::new("test".as_ref()).unwrap();
-        let value_state = db.new_value_state("test_state", (), (), NativeEndianBytesDump, Prost);
+    fn sled_value_state_test() {
+        let mut db = TestDb::new();
+        let value_state = db.new_value_state(
+            "test_state",
+            (),
+            (),
+            NativeEndianBytesDump,
+            NativeEndianBytesDump,
+        );
 
         let unset = value_state.get(&db).unwrap();
         assert!(unset.is_none());
@@ -84,10 +86,22 @@ mod test {
     }
 
     #[test]
-    fn in_memory_value_states_are_independant() {
-        let mut db = InMemory::new("test".as_ref()).unwrap();
-        let v1 = db.new_value_state("test1", (), (), NativeEndianBytesDump, Prost);
-        let v2 = db.new_value_state("test2", (), (), NativeEndianBytesDump, Prost);
+    fn sled_value_states_are_independant() {
+        let mut db = TestDb::new();
+        let v1 = db.new_value_state(
+            "test1",
+            (),
+            (),
+            NativeEndianBytesDump,
+            NativeEndianBytesDump,
+        );
+        let v2 = db.new_value_state(
+            "test2",
+            (),
+            (),
+            NativeEndianBytesDump,
+            NativeEndianBytesDump,
+        );
 
         v1.set(&mut db, 123).unwrap();
         v2.set(&mut db, 456).unwrap();
@@ -105,9 +119,15 @@ mod test {
     }
 
     #[test]
-    fn in_memory_value_states_handle_state_for_different_keys_and_namespaces() {
-        let mut db = InMemory::new("test".as_ref()).unwrap();
-        let mut value_state = db.new_value_state("test_state", 0, 0, NativeEndianBytesDump, Prost);
+    fn sled_value_states_handle_state_for_different_keys_and_namespaces() {
+        let mut db = TestDb::new();
+        let mut value_state = db.new_value_state(
+            "test_state",
+            0,
+            0,
+            NativeEndianBytesDump,
+            NativeEndianBytesDump,
+        );
 
         value_state.set(&mut db, 0).unwrap();
         value_state.set_current_key(1).unwrap();

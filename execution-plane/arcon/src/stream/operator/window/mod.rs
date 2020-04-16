@@ -64,8 +64,8 @@ where
         AppenderWindow {
             buffer: state_backend
                 .build("appender_window_buffer")
-                .with_init_item_key(0)
-                .with_init_namespace(0)
+                .with_item_key(0)
+                .with_namespace(0)
                 .vec(),
             materializer,
         }
@@ -159,8 +159,8 @@ where
 
         let aggregator = state_backend
             .build("incremental_window_aggregating_state")
-            .with_init_item_key(0)
-            .with_init_namespace(0)
+            .with_item_key(0)
+            .with_namespace(0)
             .aggregating(IncrementalWindowAggregator(init, agg));
 
         IncrementalWindow { aggregator }
@@ -202,7 +202,7 @@ mod tests {
 
     #[test]
     fn sum_appender_window_test() {
-        let mut state_backend = InMemory::new("test").unwrap();
+        let mut state_backend = InMemory::new("test".as_ref()).unwrap();
 
         fn materializer(buffer: &[i32]) -> i32 {
             buffer.iter().sum()
@@ -222,7 +222,7 @@ mod tests {
 
     #[test]
     fn sum_incremental_window_test() {
-        let mut state_backend = InMemory::new("test").unwrap();
+        let mut state_backend = InMemory::new("test".as_ref()).unwrap();
 
         fn init(i: i32) -> u64 {
             i as u64

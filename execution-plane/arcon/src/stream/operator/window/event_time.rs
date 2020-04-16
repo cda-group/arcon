@@ -114,10 +114,7 @@ where
             hasher: BuildHasherDefault::<DefaultHasher>::default(),
             keyed,
 
-            window_start: state_backend
-                .build("window_start")
-                .with_init_item_key(0)
-                .value(),
+            window_start: state_backend.build("window_start").with_item_key(0).value(),
             active_windows: state_backend.build("window_active").map(),
 
             transient_timer,
@@ -331,7 +328,7 @@ mod tests {
             u.len() as u64
         }
 
-        let mut state_backend = Box::new(InMemory::new("test").unwrap());
+        let mut state_backend = Box::new(InMemory::new("test".as_ref()).unwrap());
 
         let window: Box<dyn Window<Item, u64>> =
             Box::new(AppenderWindow::new(&appender_fn, &mut *state_backend));

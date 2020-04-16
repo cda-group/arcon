@@ -15,17 +15,38 @@ use crate::state_backend::{
 use arcon_error::*;
 use bytes::BufMut;
 use smallbox::{space, SmallBox};
-use std::{any::Any, collections::HashMap, fmt::Debug};
+use std::{any::Any, collections::HashMap, fmt::Debug, path::Path};
 use uuid::Uuid;
 
 // we'll store values of size up to 8 * size_of::<usize>() inline
 type Value = SmallBox<dyn Any + Send + Sync, space::S8>;
 
 pub struct InMemory {
+    states: HashMap<String, Uuid>,
     db: HashMap<Vec<u8>, Value>,
 }
 
 impl InMemory {
+    fn get_state_common<IK, N, KS>(
+        &mut self,
+        name: &str,
+        item_key: IK,
+        namespace: N,
+        key_serializer: KS,
+    ) -> StateCommon<IK, N, KS>
+    where
+        IK: SerializableFixedSizeWith<KS>,
+        N: SerializableFixedSizeWith<KS>,
+    {
+        if let Some(id) = self.states.get(name) {
+            StateCommon::with_id(*id, item_key, namespace, key_serializer)
+        } else {
+            let c = StateCommon::new(item_key, namespace, key_serializer);
+            self.states.insert(name.to_string(), c.id);
+            c
+        }
+    }
+
     pub fn remove_matching(&mut self, prefix: &[u8]) {
         self.db.retain(|k, _| &k[..prefix.len()] != prefix)
     }
@@ -83,13 +104,13 @@ where
 
     fn new_value_state(
         &mut self,
-        _name: &str,
-        init_item_key: IK,
-        init_namespace: N,
+        name: &str,
+        item_key: IK,
+        namespace: N,
         key_serializer: KS,
         _value_serializer: TS,
     ) -> Self::Type {
-        let common = StateCommon::new(init_item_key, init_namespace, key_serializer);
+        let common = self.get_state_common(name, item_key, namespace, key_serializer);
         InMemoryValueState {
             common,
             _phantom: Default::default(),
@@ -110,13 +131,13 @@ where
 
     fn new_map_state(
         &mut self,
-        _name: &str,
-        init_item_key: IK,
-        init_namespace: N,
+        name: &str,
+        item_key: IK,
+        namespace: N,
         key_serializer: KS,
         _value_serializer: TS,
     ) -> Self::Type {
-        let common = StateCommon::new(init_item_key, init_namespace, key_serializer);
+        let common = self.get_state_common(name, item_key, namespace, key_serializer);
         InMemoryMapState {
             common,
             _phantom: Default::default(),
@@ -134,13 +155,13 @@ where
 
     fn new_vec_state(
         &mut self,
-        _name: &str,
-        init_item_key: IK,
-        init_namespace: N,
+        name: &str,
+        item_key: IK,
+        namespace: N,
         key_serializer: KS,
         _value_serializer: TS,
     ) -> Self::Type {
-        let common = StateCommon::new(init_item_key, init_namespace, key_serializer);
+        let common = self.get_state_common(name, item_key, namespace, key_serializer);
         InMemoryVecState {
             common,
             _phantom: Default::default(),
@@ -159,14 +180,14 @@ where
 
     fn new_reducing_state(
         &mut self,
-        _name: &str,
-        init_item_key: IK,
-        init_namespace: N,
+        name: &str,
+        item_key: IK,
+        namespace: N,
         reduce_fn: F,
         key_serializer: KS,
         _value_serializer: TS,
     ) -> Self::Type {
-        let common = StateCommon::new(init_item_key, init_namespace, key_serializer);
+        let common = self.get_state_common(name, item_key, namespace, key_serializer);
         InMemoryReducingState {
             common,
             reduce_fn,
@@ -186,14 +207,14 @@ where
 
     fn new_aggregating_state(
         &mut self,
-        _name: &str,
-        init_item_key: IK,
-        init_namespace: N,
+        name: &str,
+        item_key: IK,
+        namespace: N,
         aggregator: AGG,
         key_serializer: KS,
         _value_serializer: TS,
     ) -> Self::Type {
-        let common = StateCommon::new(init_item_key, init_namespace, key_serializer);
+        let common = self.get_state_common(name, item_key, namespace, key_serializer);
         InMemoryAggregatingState {
             common,
             aggregator,
@@ -203,17 +224,20 @@ where
 }
 
 impl StateBackend for InMemory {
-    fn new(_path: &str) -> ArconResult<InMemory> {
-        Ok(InMemory { db: HashMap::new() })
+    fn new(_path: &Path) -> ArconResult<InMemory> {
+        Ok(InMemory {
+            states: HashMap::new(),
+            db: HashMap::new(),
+        })
     }
 
-    fn checkpoint(&self, _id: &str) -> ArconResult<()> {
+    fn checkpoint(&self, _id: &Path) -> ArconResult<()> {
         // TODO: proper logging
         eprintln!("InMemory backend snapshotting is not implemented");
         Ok(())
     }
 
-    fn restore(restore_path: &str, _checkpoint_path: &str) -> ArconResult<Self>
+    fn restore(restore_path: &Path, _checkpoint_path: &Path) -> ArconResult<Self>
     where
         Self: Sized,
     {
@@ -222,7 +246,7 @@ impl StateBackend for InMemory {
         Self::new(restore_path)
     }
 
-    fn just_restored(&mut self) -> bool {
+    fn was_restored(&self) -> bool {
         false
     }
 }
@@ -239,6 +263,15 @@ where
     IK: SerializableFixedSizeWith<KS>,
     N: SerializableFixedSizeWith<KS>,
 {
+    fn with_id(id: Uuid, item_key: IK, namespace: N, key_serializer: KS) -> StateCommon<IK, N, KS> {
+        StateCommon {
+            id,
+            item_key,
+            namespace,
+            key_serializer,
+        }
+    }
+
     fn new(item_key: IK, namespace: N, key_serializer: KS) -> StateCommon<IK, N, KS> {
         StateCommon {
             id: Uuid::new_v4(),
@@ -304,7 +337,7 @@ mod test {
 
     #[test]
     fn in_mem_test() {
-        let mut db = InMemory::new("test").unwrap();
+        let mut db = InMemory::new("test".as_ref()).unwrap();
         let key = "key";
         let value = "hej".to_string();
         assert!(db

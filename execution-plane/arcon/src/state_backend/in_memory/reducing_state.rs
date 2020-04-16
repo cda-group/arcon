@@ -101,7 +101,7 @@ mod test {
 
     #[test]
     fn reducing_state_test() {
-        let mut db = InMemory::new("test").unwrap();
+        let mut db = InMemory::new("test".as_ref()).unwrap();
         let reducing_state = db.new_reducing_state(
             "test_state",
             (),

@@ -163,6 +163,10 @@ fn run(
             info!("Running CurrencyConversion query");
             queries::q1::q1(debug_mode, nexmark_config, &mut pipeline)
         }
+        NEXMarkQuery::LocalItemSuggestion => {
+            info!("Running LocalItemSuggestion query");
+            queries::q3::q3(debug_mode, nexmark_config, &mut pipeline)
+        }
     };
 
     if tui {

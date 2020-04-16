@@ -49,7 +49,7 @@ fn normalise_pipeline_test() {
             vec![3.into()],
             ChannelStrategy::Mute,
             Box::new(LocalFileSink::new(&sink_path)),
-            Box::new(InMemory::new("test5").unwrap()),
+            Box::new(InMemory::new("test5".as_ref()).unwrap()),
         )
     });
     system
@@ -76,7 +76,7 @@ fn normalise_pipeline_test() {
             vec![2.into()],
             channel_strategy,
             Box::new(Map::<NormaliseElements, i64>::new(&map_fn)),
-            Box::new(InMemory::new("test4").unwrap()),
+            Box::new(InMemory::new("test4".as_ref()).unwrap()),
         )
     });
 
@@ -95,7 +95,7 @@ fn normalise_pipeline_test() {
         NormaliseElements { data }
     }
 
-    let mut state_backend_2 = Box::new(InMemory::new("test2").unwrap());
+    let mut state_backend_2 = Box::new(InMemory::new("test2".as_ref()).unwrap());
 
     let window: Box<dyn Window<i64, NormaliseElements>> =
         Box::new(AppenderWindow::new(&window_fn, &mut *state_backend_2));
@@ -152,7 +152,7 @@ fn normalise_pipeline_test() {
         Some(&timestamp_extractor),
         channel_strategy,
         operator,
-        Box::new(InMemory::new("test").unwrap()),
+        Box::new(InMemory::new("test".as_ref()).unwrap()),
     );
 
     let mut collection: Vec<SourceData> = Vec::new();

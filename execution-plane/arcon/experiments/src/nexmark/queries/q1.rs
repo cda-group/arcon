@@ -66,7 +66,7 @@ pub fn q1(
             None, // no timestamp extractor
             channel_strategy,
             Box::new(FilterMap::<NEXMarkEvent, Bid>::new(&bid_filter_map)),
-            Box::new(InMemory::new("src").unwrap()),
+            Box::new(InMemory::new("src".as_ref()).unwrap()),
         );
 
         super::source(sink_port_opt, nexmark_config, source_context, &mut system)
@@ -90,6 +90,6 @@ pub fn q1_node(
         in_channels,
         channel_strategy,
         Box::new(MapInPlace::new(&map_fn)),
-        Box::new(InMemory::new("map").unwrap()),
+        Box::new(InMemory::new("map".as_ref()).unwrap()),
     )
 }

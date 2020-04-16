@@ -11,6 +11,7 @@ use crate::nexmark::{
 use arcon::prelude::*;
 
 pub mod q1;
+pub mod q3;
 
 pub fn sink<A: ArconType>(
     debug_mode: bool,
