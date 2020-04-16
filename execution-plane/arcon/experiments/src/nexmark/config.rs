@@ -195,7 +195,7 @@ fn nexmark_query() -> NEXMarkQuery {
 }
 
 fn num_events() -> u32 {
-    10000
+    100000000
 }
 
 fn num_events_generators() -> u32 {

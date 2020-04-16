@@ -1,7 +1,7 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::nexmark::{config::NEXMarkConfig, source::NEXMarkSource, Bid, Event, NEXMarkEvent};
+use crate::nexmark::{config::NEXMarkConfig, Bid, Event, NEXMarkEvent};
 use arcon::prelude::*;
 
 // Filter out events that are bids using a FilterMap operator
@@ -17,37 +17,23 @@ fn bid_filter_map(mut event: NEXMarkEvent) -> Option<Bid> {
 /// Stream of Bids: Convert bid price from U.S dollars to Euros
 ///
 /// Source(FilterMap -> Bid) -> MapInPlace -> Sink
-pub fn q1(debug_mode: bool, nexmark_config: NEXMarkConfig, pipeline: &mut ArconPipeline) {
+pub fn q1(
+    debug_mode: bool,
+    nexmark_config: NEXMarkConfig,
+    pipeline: &mut ArconPipeline,
+) -> Option<KFuture<std::time::Duration>> {
     let channel_batch_size = pipeline.arcon_conf().channel_batch_size;
     let watermark_interval = pipeline.arcon_conf().watermark_interval;
-    let system = pipeline.system();
-    let timeout = std::time::Duration::from_millis(500);
+    let mut system = pipeline.system();
 
-    // If debug mode is enabled, we send the data to a DebugNode.
-    // Otherwise, just discard the elements using a Mute strategy...
-    let channel_strategy = {
-        if debug_mode {
-            let sink = system.create(move || DebugNode::<Bid>::new());
-
-            system
-                .start_notify(&sink)
-                .wait_timeout(timeout)
-                .expect("sink never started!");
-
-            let sink_ref: ActorRefStrong<ArconMessage<Bid>> = sink.actor_ref().hold().expect("no");
-            let sink_channel = Channel::Local(sink_ref);
-
-            let channel_strategy = ChannelStrategy::Forward(Forward::with_batch_size(
-                sink_channel,
-                NodeID::new(1),
-                channel_batch_size,
-            ));
-
-            channel_strategy
-        } else {
-            ChannelStrategy::Mute
-        }
-    };
+    // Define sink
+    let (sink_ref, sink_port_opt) = super::sink::<Bid>(debug_mode, &mut system);
+    let sink_channel = Channel::Local(sink_ref);
+    let channel_strategy = ChannelStrategy::Forward(Forward::with_batch_size(
+        sink_channel,
+        NodeID::new(1),
+        channel_batch_size,
+    ));
 
     // Define Mapper
 
@@ -70,7 +56,7 @@ pub fn q1(debug_mode: bool, nexmark_config: NEXMarkConfig, pipeline: &mut ArconP
     );
 
     {
-        let system = pipeline.system();
+        let mut system = pipeline.system();
         // Define source context
         let mapper_ref = node_comps.get(0).unwrap().actor_ref().hold().expect("fail");
         let channel = Channel::Local(mapper_ref);
@@ -83,10 +69,7 @@ pub fn q1(debug_mode: bool, nexmark_config: NEXMarkConfig, pipeline: &mut ArconP
             Box::new(InMemory::new("src").unwrap()),
         );
 
-        let nexmark_source_comp = system
-            .create_dedicated(move || NEXMarkSource::<Bid>::new(nexmark_config, source_context));
-
-        system.start(&nexmark_source_comp);
+        super::source(sink_port_opt, nexmark_config, source_context, &mut system)
     }
 }
 

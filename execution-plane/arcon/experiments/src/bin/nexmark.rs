@@ -33,8 +33,7 @@ fn main() {
         .short("a")
         .help("Path to Arcon Config");
 
-    let tui_arg = Arg::with_name("t").help("toggle tui mode off").short("t");
-
+    let tui_arg = Arg::with_name("t").help("toggle tui mode on").short("t");
     let debug_arg = Arg::with_name("d").help("toggle debug mode on").short("d");
 
     let query_arg = Arg::with_name("q")
@@ -79,11 +78,14 @@ fn main() {
                 }
             };
 
-            let mut tui = !arg_matches.is_present("t");
-            let debug_mode = arg_matches.is_present("d");
+            let mut tui = arg_matches.is_present("t");
+            let mut debug_mode = arg_matches.is_present("d");
             if debug_mode {
                 // If debug mode enabled, disable tui...
                 tui = false;
+            }
+            if tui {
+                debug_mode = false;
             }
 
             let query = arg_matches
@@ -156,17 +158,23 @@ fn run(
 
     info!("{:?}\n", pipeline.arcon_conf());
 
-    match nexmark_config.query {
+    let pipeline_timer = match nexmark_config.query {
         NEXMarkQuery::CurrencyConversion => {
             info!("Running CurrencyConversion query");
-            queries::q1::q1(debug_mode, nexmark_config, &mut pipeline);
+            queries::q1::q1(debug_mode, nexmark_config, &mut pipeline)
         }
-    }
+    };
 
     if tui {
         pipeline.tui();
     } else {
-        pipeline.await_termination();
+        if let Some(timer_future) = pipeline_timer {
+            // wait for sink to return completion msg.
+            let res = timer_future.wait();
+            println!("Execution took {:?} milliseconds", res.as_millis());
+        } else {
+            pipeline.await_termination();
+        }
     }
 
     Ok(())
