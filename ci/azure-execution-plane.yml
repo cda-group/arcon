@@ -3,7 +3,5 @@ steps:
   - template: azure-install-rust.yml
   - template: azure-rust-deps.yml
   - template: azure-rustfmt.yml
-  - script: cd execution-plane && cargo test --all --all-features
-    displayName: 'cargo test --all --all-features'
-  - script: cd execution-plane && cargo check --benches --all --all-features
-    displayName: 'cargo --benches --all'
+  - script: cd execution-plane && ./run_checks.sh
+    displayName: 'tests and benches'
