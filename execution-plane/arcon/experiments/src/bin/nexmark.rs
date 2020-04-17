@@ -7,6 +7,8 @@
 extern crate clap;
 #[macro_use]
 extern crate log;
+#[macro_use]
+extern crate prettytable;
 
 use anyhow::Result;
 use arcon::prelude::{ArconConf, ArconPipeline};
@@ -176,7 +178,12 @@ fn run(
         if let Some(timer_future) = pipeline_timer {
             // wait for sink to return completion msg.
             let res = timer_future.wait();
-            println!("Execution took {:?} milliseconds", res.as_millis());
+            let execution_ms = res.timer.as_millis();
+            let table = table!(["Runtime (ms)", "Events per sec"], [
+                execution_ms.to_string(),
+                res.events_per_sec.to_string()
+            ]);
+            table.printstd();
         } else {
             pipeline.await_termination();
         }

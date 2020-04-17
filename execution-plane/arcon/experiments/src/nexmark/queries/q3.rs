@@ -1,7 +1,11 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::nexmark::{config::NEXMarkConfig, queries::Query, Auction, Event, NEXMarkEvent, Person};
+use crate::nexmark::{
+    config::NEXMarkConfig,
+    queries::{Query, QueryTimer},
+    Auction, Event, NEXMarkEvent, Person,
+};
 use arcon::{
     macros::*,
     prelude::*,
@@ -64,7 +68,7 @@ impl Query for QueryThree {
         debug_mode: bool,
         nexmark_config: NEXMarkConfig,
         pipeline: &mut ArconPipeline,
-    ) -> Option<KFuture<std::time::Duration>> {
+    ) -> QueryTimer {
         let channel_batch_size = pipeline.arcon_conf().channel_batch_size;
         let watermark_interval = pipeline.arcon_conf().watermark_interval;
         let mut system = pipeline.system();

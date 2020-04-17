@@ -9,11 +9,26 @@ use crate::nexmark::{
 };
 
 use arcon::prelude::*;
+use std::time::Duration;
 
 pub mod q1;
 pub mod q3;
 
-type QueryTimer = Option<KFuture<std::time::Duration>>;
+type QueryTimer = Option<KFuture<QueryResult>>;
+
+#[derive(Debug, Clone)]
+pub struct QueryResult {
+    pub timer: Duration,
+    pub events_per_sec: f64,
+}
+impl QueryResult {
+    pub fn new(timer: Duration, events_per_sec: f64) -> Self {
+        QueryResult {
+            timer,
+            events_per_sec,
+        }
+    }
+}
 
 pub trait Query {
     fn run(
@@ -56,7 +71,7 @@ pub fn source<OUT: ArconType>(
     nexmark_config: NEXMarkConfig,
     source_context: SourceContext<NEXMarkEvent, OUT>,
     system: &mut KompactSystem,
-) -> Option<KFuture<std::time::Duration>> {
+) -> QueryTimer {
     let nexmark_source_comp =
         system.create_dedicated(move || NEXMarkSource::<OUT>::new(nexmark_config, source_context));
 

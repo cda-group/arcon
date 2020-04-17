@@ -1,15 +1,16 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
+use crate::nexmark::queries::QueryResult;
 use arcon::prelude::*;
-use std::time::Duration;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug)]
 pub struct Run {
-    promise: KPromise<Duration>,
+    promise: KPromise<QueryResult>,
 }
 impl Run {
-    pub fn new(promise: KPromise<Duration>) -> Run {
+    pub fn new(promise: KPromise<QueryResult>) -> Run {
         Run { promise }
     }
 }
@@ -35,8 +36,11 @@ where
 {
     ctx: ComponentContext<Self>,
     pub sink_port: ProvidedPort<SinkPort, Self>,
-    done: Option<KPromise<Duration>>,
+    done: Option<KPromise<QueryResult>>,
     start: std::time::Instant,
+    last_total_recv: u64,
+    last_time: u64,
+    total_recv: u64,
 }
 
 impl<IN> NEXMarkSink<IN>
@@ -49,7 +53,19 @@ where
             sink_port: ProvidedPort::new(),
             done: None,
             start: std::time::Instant::now(),
+            last_total_recv: 0,
+            last_time: 0,
+            total_recv: 0,
         }
+    }
+    #[inline(always)]
+    fn get_current_time(&self) -> u64 {
+        let start = SystemTime::now();
+        let since_the_epoch = start
+            .duration_since(UNIX_EPOCH)
+            .expect("Time went backwards");
+
+        since_the_epoch.as_millis() as u64
     }
 }
 
@@ -69,6 +85,7 @@ where
     fn handle(&mut self, event: Run) -> () {
         self.done = Some(event.promise);
         self.start = std::time::Instant::now();
+        self.last_time = self.get_current_time();
     }
 }
 
@@ -78,12 +95,20 @@ where
 {
     type Message = ArconMessage<IN>;
     fn receive_local(&mut self, msg: Self::Message) {
+        let total_events = msg.events.len();
+        self.total_recv += total_events as u64;
         for msg in msg.events {
             match msg.unwrap() {
                 ArconEvent::Death(_) => {
                     let time = self.start.elapsed();
+                    let current_time = self.get_current_time();
+                    let throughput = (self.total_recv - self.last_total_recv)
+                        / (current_time - self.last_time)
+                        * 1000;
                     let promise = self.done.take().expect("No promise to reply to?");
-                    promise.fulfill(time).expect("Promise was dropped");
+                    promise
+                        .fulfill(QueryResult::new(time, throughput as f64))
+                        .expect("Promise was dropped");
                 }
                 _ => {}
             }
