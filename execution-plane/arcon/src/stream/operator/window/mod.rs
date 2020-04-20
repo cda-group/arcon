@@ -30,7 +30,7 @@ impl<'s> WindowContext<'s> {
 ///
 /// IN: Element type sent to the Window
 /// OUT: Expected output type of the Window
-pub trait Window<IN, OUT>: Send + Sync
+pub trait Window<IN, OUT>: Send
 where
     IN: ArconType,
     OUT: ArconType,

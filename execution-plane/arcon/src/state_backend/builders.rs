@@ -21,7 +21,7 @@ macro_rules! impl_dynamic_builder {
         impl<$($builder_params),*> $builder_name<$($builder_params),*> for dyn StateBackend
         where $($bounds)*
         {
-            type Type = Box<dyn $state_name<dyn StateBackend, $($params),*> + Send + Sync + 'static>;
+            type Type = Box<dyn $state_name<dyn StateBackend, $($params),*> + Send + 'static>;
 
             fn $builder_fn(
                 &mut self,

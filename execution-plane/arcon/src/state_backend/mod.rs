@@ -5,7 +5,7 @@ use arcon_error::ArconResult;
 use std::any::{type_name, Any, TypeId};
 
 /// Trait required for all state backend implementations in Arcon
-pub trait StateBackend: Any + Send + Sync {
+pub trait StateBackend: Any + Send {
     fn new(path: &Path) -> ArconResult<Self>
     where
         Self: Sized;
@@ -64,6 +64,9 @@ pub mod in_memory;
 pub mod rocks;
 #[cfg(feature = "arcon_sled")]
 pub mod sled;
+
+#[cfg(feature = "metered_state_backend")]
+pub mod metered;
 
 #[cfg(test)]
 mod test {

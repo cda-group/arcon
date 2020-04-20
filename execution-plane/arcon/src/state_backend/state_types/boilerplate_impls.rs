@@ -39,7 +39,7 @@ where
 
 macro_rules! impl_state_for_boxed_with_dyn_backend {
     ($t: ident < _ $(, $rest: ident)* >) => {
-        impl<$($rest),*> State<dyn StateBackend, IK, N> for Box<dyn $t<dyn StateBackend, $($rest),*> + Send + Sync + 'static> {
+        impl<$($rest),*> State<dyn StateBackend, IK, N> for Box<dyn $t<dyn StateBackend, $($rest),*> + Send + 'static> {
             #[inline]
             fn clear(&self, backend: &mut dyn StateBackend) -> ArconResult<()> {
                 (*self).deref().clear(backend)

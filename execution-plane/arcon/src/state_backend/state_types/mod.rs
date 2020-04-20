@@ -17,9 +17,9 @@ macro_rules! erase_backend_type {
     ($t: ident < _ $(, $rest: ident)* >) => {
         // `s` instead of self, because we don't want the method calling syntax for this,
         // because of ambiguities
-        fn erase_backend_type(s: Self) -> Box<dyn $t <dyn StateBackend $(, $rest)*> + Send + Sync + 'static>
+        fn erase_backend_type(s: Self) -> Box<dyn $t <dyn StateBackend $(, $rest)*> + Send + 'static>
         where
-            Self: Sized + Send + Sync + 'static,
+            Self: Sized + Send + 'static,
             SB: StateBackend + Sized,
         {
             Box::new(WithDynamicBackend(s, Default::default()))
@@ -246,14 +246,14 @@ static_assertions::assert_obj_safe!(
 // TODO: inconsistent type parameter order - maybe move `SB, IK, N` to the end of the list in every
 //  trait?
 pub type BoxedValueState<T, IK = (), N = ()> =
-    Box<dyn ValueState<dyn StateBackend, IK, N, T> + Send + Sync + 'static>;
+    Box<dyn ValueState<dyn StateBackend, IK, N, T> + Send + 'static>;
 pub type BoxedMapState<K, V, IK = (), N = ()> =
-    Box<dyn MapState<dyn StateBackend, IK, N, K, V> + Send + Sync + 'static>;
+    Box<dyn MapState<dyn StateBackend, IK, N, K, V> + Send + 'static>;
 pub type BoxedVecState<T, IK = (), N = ()> =
-    Box<dyn VecState<dyn StateBackend, IK, N, T> + Send + Sync + 'static>;
+    Box<dyn VecState<dyn StateBackend, IK, N, T> + Send + 'static>;
 pub type BoxedReducingState<T, IK = (), N = ()> =
-    Box<dyn ReducingState<dyn StateBackend, IK, N, T> + Send + Sync + 'static>;
+    Box<dyn ReducingState<dyn StateBackend, IK, N, T> + Send + 'static>;
 pub type BoxedAggregatingState<IN, OUT, IK = (), N = ()> =
-    Box<dyn AggregatingState<dyn StateBackend, IK, N, IN, OUT> + Send + Sync + 'static>;
+    Box<dyn AggregatingState<dyn StateBackend, IK, N, IN, OUT> + Send + 'static>;
 
 mod boilerplate_impls;
