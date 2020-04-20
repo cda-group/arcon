@@ -1,7 +1,10 @@
 use self::measure_impl::measure;
 use crate::{
-    prelude::{ArconResult, ValueStateBuilder},
-    state_backend::{metered::value_state::MeteredValueState, StateBackend},
+    prelude::{ArconResult, MapStateBuilder, ValueStateBuilder},
+    state_backend::{
+        metered::{map_state::MeteredMapState, value_state::MeteredValueState},
+        StateBackend,
+    },
 };
 use static_assertions::_core::ops::Deref;
 use std::{any::type_name, cell::RefCell, env, path::Path};
@@ -44,19 +47,21 @@ impl Deref for Metrics {
 }
 
 impl<SB> Metered<SB> {
-    fn measure<T>(&self, operation_name: &'static str, func: impl FnOnce(&SB) -> T) -> T {
+    fn measure<'a, T>(&'a self, operation_name: &'static str, func: impl FnOnce(&'a SB) -> T) -> T {
         let (res, dp) = measure(operation_name, || func(&self.inner));
         self.metrics.borrow_mut().push(dp);
         res
     }
 
-    fn measure_mut<T>(
-        &mut self,
+    fn measure_mut<'a, T>(
+        &'a mut self,
         operation_name: &'static str,
-        func: impl FnOnce(&mut SB) -> T,
+        func: impl FnOnce(&'a mut SB) -> T,
     ) -> T {
-        let (res, dp) = measure(operation_name, || func(&mut self.inner));
-        self.metrics.borrow_mut().push(dp);
+        let inner: &'a mut SB = &mut self.inner;
+        let metrics = &mut self.metrics;
+        let (res, dp) = measure(operation_name, move || func(inner));
+        metrics.get_mut().push(dp);
         res
     }
 }
@@ -177,6 +182,70 @@ mod measure_impl {
     }
 }
 
+macro_rules! impl_metered_state {
+    ($state_name:ident <$param:ident> : $state_type:ident) => {
+        impl<$param, SB, IK, N> State<Metered<SB>, IK, N> for $state_name<$param>
+        where
+            $param: State<SB, IK, N>,
+        {
+            fn clear(&self, backend: &mut Metered<SB>) -> ArconResult<()> {
+                backend.measure_mut(concat!(stringify!($state_type), "::clear"), |backend| {
+                    self.inner.clear(backend)
+                })
+            }
+
+            fn get_current_key(&self) -> ArconResult<&IK> {
+                self.inner.get_current_key()
+            }
+
+            fn set_current_key(&mut self, new_key: IK) -> ArconResult<()> {
+                self.inner.set_current_key(new_key)
+            }
+
+            fn get_current_namespace(&self) -> ArconResult<&N> {
+                self.inner.get_current_namespace()
+            }
+
+            fn set_current_namespace(&mut self, new_namespace: N) -> ArconResult<()> {
+                self.inner.set_current_namespace(new_namespace)
+            }
+        }
+    };
+}
+
+macro_rules! measure_delegated {
+    ($state_type:ident :) => {};
+    ($state_type:ident : fn $fn_name:ident $(<$($generics:tt),*>)? (
+        &self, backend: &Metered<SB> $(, $($rest_name:ident : $rest_ty:ty),*)? $(,)?
+    ) $(-> $return_type:ty)? $(where Self: $self_bound:ident)? $(,)?; $($other_decl:tt)*) => {
+        fn $fn_name $(<$($generics:tt),*>)? (
+            &self, backend: &Metered<SB>, $($($rest_name: $rest_ty),*)?
+        ) $(-> $return_type)? $(where Self: $self_bound)? {
+            backend.measure(
+                concat!(stringify!($state_type), "::", stringify!($fn_name)),
+                move |b| self.inner.$fn_name(b, $($($rest_name),*)?)
+            )
+        }
+
+        measure_delegated!($state_type : $($other_decl)*);
+    };
+    ($state_type:ident : fn $fn_name:ident $(<$($generics:tt),*>)? (
+        &self, backend: &mut Metered<SB> $(, $($rest_name:ident : $rest_ty:ty),*)? $(,)?
+    ) $(-> $return_type:ty)? $(where Self: $self_bound:ident)? $(,)?; $($other_decl:tt)*) => {
+        fn $fn_name $(<$($generics:tt),*>)? (
+            &self, backend: &mut Metered<SB>, $($($rest_name: $rest_ty),*)?
+        ) $(-> $return_type)? $(where Self: $self_bound)? {
+            backend.measure_mut(
+                concat!(stringify!($state_type), "::", stringify!($fn_name)),
+                move |b| self.inner.$fn_name(b, $($($rest_name),*)?)
+            )
+        }
+
+        measure_delegated!($state_type : $($other_decl)*);
+    };
+}
+
+pub mod map_state;
 pub mod value_state;
 
 impl<SB, IK, N, T, KS, TS> ValueStateBuilder<IK, N, T, KS, TS> for Metered<SB>
@@ -198,5 +267,27 @@ where
         });
 
         MeteredValueState { inner }
+    }
+}
+
+impl<SB, IK, N, K, V, KS, TS> MapStateBuilder<IK, N, K, V, KS, TS> for Metered<SB>
+where
+    SB: MapStateBuilder<IK, N, K, V, KS, TS>,
+{
+    type Type = MeteredMapState<SB::Type>;
+
+    fn new_map_state(
+        &mut self,
+        name: &str,
+        item_key: IK,
+        namespace: N,
+        key_serializer: KS,
+        value_serializer: TS,
+    ) -> Self::Type {
+        let inner = self.measure_mut("MapStateBuilder::new_map_state", move |backend| {
+            backend.new_map_state(name, item_key, namespace, key_serializer, value_serializer)
+        });
+
+        MeteredMapState { inner }
     }
 }
