@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::nexmark::{config::NEXMarkConfig, source::NEXMarkSource, Bid, Event, NEXMarkEvent};
-use arcon::prelude::*;
+use arcon::{prelude::*, timer};
 
 // Filter out events that are bids using a FilterMap operator
 #[inline(always)]
@@ -79,12 +79,13 @@ pub fn q1(debug_mode: bool, nexmark_config: NEXMarkConfig, pipeline: &mut ArconP
             watermark_interval,
             None, // no timestamp extractor
             channel_strategy,
-            Box::new(FilterMap::<NEXMarkEvent, Bid>::new(&bid_filter_map)),
+            FilterMap::<NEXMarkEvent, Bid>::new(&bid_filter_map),
             Box::new(InMemory::new("src".as_ref()).unwrap()),
+            timer::none(),
         );
 
-        let nexmark_source_comp = system
-            .create_dedicated(move || NEXMarkSource::<Bid>::new(nexmark_config, source_context));
+        let nexmark_source_comp =
+            system.create_dedicated(move || NEXMarkSource::new(nexmark_config, source_context));
 
         system.start(&nexmark_source_comp);
     }
@@ -95,7 +96,7 @@ pub fn q1_node(
     id: NodeID,
     in_channels: Vec<NodeID>,
     channel_strategy: ChannelStrategy<Bid>,
-) -> Node<Bid, Bid> {
+) -> Node<impl Operator<IN = Bid, OUT = Bid>> {
     #[inline(always)]
     fn map_fn(bid: &mut Bid) {
         bid.price = (bid.price * 89) / 100;
@@ -106,7 +107,8 @@ pub fn q1_node(
         id,
         in_channels,
         channel_strategy,
-        Box::new(MapInPlace::new(&map_fn)),
+        MapInPlace::new(&map_fn),
         Box::new(InMemory::new("map".as_ref()).unwrap()),
+        timer::none(),
     )
 }

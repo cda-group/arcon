@@ -9,6 +9,7 @@ use crate::{
     metrics::{counter::Counter, gauge::Gauge, meter::Meter},
     prelude::*,
     stream::operator::OperatorContext,
+    timer::TimerBackend,
 };
 use std::iter;
 
@@ -50,7 +51,7 @@ impl NodeMetrics {
 }
 
 /// Internal Node State
-pub struct NodeState<IN: ArconType> {
+pub struct NodeState<OP: Operator> {
     /// Mappings from NodeID to current Watermark
     watermarks: BoxedMapState<NodeID, Watermark>,
     /// Current Watermark value
@@ -60,7 +61,7 @@ pub struct NodeState<IN: ArconType> {
     /// Blocked channels during epoch alignment
     blocked_channels: BoxedMapState<NodeID, ()>,
     /// Temporary message buffer used while having blocked channels
-    message_buffer: BoxedVecState<ArconMessage<IN>>,
+    message_buffer: BoxedVecState<ArconMessage<OP::IN>>,
 }
 
 /// A Node is a [kompact] component that drives the execution of streaming operators
@@ -68,13 +69,12 @@ pub struct NodeState<IN: ArconType> {
 /// Nodes receive [ArconMessage] and run some transform on the data
 /// before using a [ChannelStrategy] to send the result to another Node.
 #[derive(ComponentDefinition)]
-pub struct Node<IN, OUT>
+pub struct Node<OP>
 where
-    IN: ArconType,
-    OUT: ArconType,
+    OP: Operator + 'static,
 {
     /// Component context
-    ctx: ComponentContext<Node<IN, OUT>>,
+    ctx: ComponentContext<Self>,
     /// Port for NodeManager
     pub(crate) node_manager_port: RequiredPort<NodeManagerPort, Self>,
     /// Node descriptor
@@ -82,33 +82,46 @@ where
     /// A Node identifier
     id: NodeID,
     /// Strategy used by the Node
-    channel_strategy: ChannelStrategy<OUT>,
+    channel_strategy: ChannelStrategy<OP::OUT>,
     /// Current set of IDs connected to this Node
     in_channels: Vec<NodeID>,
     /// User-defined Operator
-    operator: Box<dyn Operator<IN, OUT> + Send>,
+    operator: OP,
     /// Internal state of the Node
-    state: NodeState<IN>,
+    state: NodeState<OP>,
     /// Metrics collected by the Node
     metrics: NodeMetrics,
     /// State Backend used to persist data
     state_backend: Box<dyn StateBackend>,
+    /// Timer Backend to keep track of event timers
+    timer_backend: Box<dyn TimerBackend<OP::TimerState>>,
 }
 
-impl<IN, OUT> Node<IN, OUT>
+// Just a shorthand to avoid repeating the OperatorContext construction everywhere
+macro_rules! make_context {
+    ($sel:ident) => {
+        OperatorContext::new(
+            &mut $sel.channel_strategy,
+            $sel.state_backend.as_mut(),
+            $sel.timer_backend.as_mut(),
+        )
+    };
+}
+
+impl<OP> Node<OP>
 where
-    IN: ArconType,
-    OUT: ArconType,
+    OP: Operator + 'static,
 {
     /// Creates a new Node
     pub fn new(
         descriptor: NodeDescriptor,
         id: NodeID,
         in_channels: Vec<NodeID>,
-        channel_strategy: ChannelStrategy<OUT>,
-        mut operator: Box<dyn Operator<IN, OUT> + Send>,
+        channel_strategy: ChannelStrategy<OP::OUT>,
+        mut operator: OP,
         mut state_backend: Box<dyn StateBackend>,
-    ) -> Node<IN, OUT> {
+        timer_backend: Box<dyn TimerBackend<OP::TimerState>>,
+    ) -> Self {
         // Initiate our watermarks
 
         // some backends require you to first specify all the states and mess with them later
@@ -151,7 +164,7 @@ where
                 .unwrap();
         }
 
-        operator.init(&mut *state_backend);
+        operator.init(state_backend.as_mut());
 
         let state = NodeState {
             watermarks,
@@ -179,11 +192,12 @@ where
             state,
             metrics,
             state_backend,
+            timer_backend,
         }
     }
 
     #[inline]
-    fn handle_message(&mut self, message: ArconMessage<IN>) -> ArconResult<()> {
+    fn handle_message(&mut self, message: ArconMessage<OP::IN>) -> ArconResult<()> {
         // Check valid sender
         if !self.in_channels.contains(&message.sender) {
             return arcon_err!("Message from invalid sender");
@@ -221,10 +235,7 @@ where
                         continue 'event_loop;
                     }
 
-                    self.operator.handle_element(
-                        e,
-                        OperatorContext::new(&mut self.channel_strategy, &mut *self.state_backend),
-                    );
+                    self.operator.handle_element(e, make_context!(self));
                 }
                 ArconEvent::Watermark(w) => {
                     if w <= self
@@ -282,16 +293,11 @@ where
                             .set(&mut *self.state_backend, new_watermark)?;
 
                         // Handle the watermark
-                        if let Some(wm_output) = self.operator.handle_watermark(
-                            new_watermark,
-                            OperatorContext::new(
-                                &mut self.channel_strategy,
-                                &mut *self.state_backend,
-                            ),
-                        ) {
-                            for event in wm_output {
-                                self.channel_strategy.add(event);
-                            }
+                        self.operator
+                            .handle_watermark(new_watermark, make_context!(self));
+
+                        for timeout in self.timer_backend.advance_to(new_watermark.timestamp) {
+                            self.operator.handle_timeout(timeout, make_context!(self));
                         }
 
                         // Set current watermark
@@ -330,13 +336,8 @@ where
                         self.state.current_epoch.set(&mut *self.state_backend, e)?;
 
                         // call handle_epoch on our operator
-                        let _operator_state = self.operator.handle_epoch(
-                            e,
-                            OperatorContext::new(
-                                &mut self.channel_strategy,
-                                &mut *self.state_backend,
-                            ),
-                        );
+                        // TODO this seems useless?
+                        let _operator_state = self.operator.handle_epoch(e, make_context!(self));
 
                         // store the state
                         self.save_state()?;
@@ -413,10 +414,9 @@ where
     }
 }
 
-impl<IN, OUT> Provide<ControlPort> for Node<IN, OUT>
+impl<OP> Provide<ControlPort> for Node<OP>
 where
-    IN: ArconType,
-    OUT: ArconType,
+    OP: Operator + 'static,
 {
     fn handle(&mut self, event: ControlEvent) {
         match event {
@@ -452,27 +452,28 @@ where
     }
 }
 
-impl<IN, OUT> Require<NodeManagerPort> for Node<IN, OUT>
+impl<OP> Require<NodeManagerPort> for Node<OP>
 where
-    IN: ArconType,
-    OUT: ArconType,
+    OP: Operator + 'static,
 {
-    fn handle(&mut self, _: ()) {}
+    fn handle(&mut self, _: Never) {
+        unreachable!("Never can't be instantiated!");
+    }
 }
-impl<IN, OUT> Provide<NodeManagerPort> for Node<IN, OUT>
+impl<OP> Provide<NodeManagerPort> for Node<OP>
 where
-    IN: ArconType,
-    OUT: ArconType,
+    OP: Operator + 'static,
 {
-    fn handle(&mut self, _: NodeEvent) {}
+    fn handle(&mut self, e: NodeEvent) {
+        trace!(self.log(), "Ignoring node event: {:?}", e)
+    }
 }
 
-impl<IN, OUT> Actor for Node<IN, OUT>
+impl<OP> Actor for Node<OP>
 where
-    IN: ArconType,
-    OUT: ArconType,
+    OP: Operator + 'static,
 {
-    type Message = ArconMessage<IN>;
+    type Message = ArconMessage<OP::IN>;
 
     fn receive_local(&mut self, msg: Self::Message) {
         if let Err(err) = self.handle_message(msg) {
@@ -480,12 +481,12 @@ where
         }
     }
     fn receive_network(&mut self, msg: NetMessage) {
-        let arcon_msg: ArconResult<ArconMessage<IN>> = match *msg.ser_id() {
-            ReliableSerde::<IN>::SER_ID => msg
-                .try_deserialise::<ArconMessage<IN>, ReliableSerde<IN>>()
+        let arcon_msg = match *msg.ser_id() {
+            ReliableSerde::<OP::IN>::SER_ID => msg
+                .try_deserialise::<ArconMessage<OP::IN>, ReliableSerde<OP::IN>>()
                 .map_err(|_| arcon_err_kind!("Failed to unpack reliable ArconMessage")),
-            UnsafeSerde::<IN>::SER_ID => msg
-                .try_deserialise::<ArconMessage<IN>, UnsafeSerde<IN>>()
+            UnsafeSerde::<OP::IN>::SER_ID => msg
+                .try_deserialise::<ArconMessage<OP::IN>, UnsafeSerde<OP::IN>>()
                 .map_err(|_| arcon_err_kind!("Failed to unpack unreliable ArconMessage")),
             _ => panic!("Unexpected deserialiser"),
         };
@@ -505,7 +506,7 @@ where
 mod tests {
     // Tests the message logic of Node.
     use super::*;
-    use crate::pipeline::*;
+    use crate::{pipeline::*, timer};
     use std::{sync::Arc, thread, time};
 
     fn node_test_setup() -> (ActorRef<ArconMessage<i32>>, Arc<Component<DebugNode<i32>>>) {
@@ -527,13 +528,14 @@ mod tests {
         }
 
         let filter_node = system.create(move || {
-            Node::<i32, i32>::new(
+            Node::new(
                 String::from("filter_node"),
                 0.into(),
                 vec![1.into(), 2.into(), 3.into()],
                 channel_strategy,
-                Box::new(Filter::new(&node_fn)),
+                Filter::new(&node_fn),
                 Box::new(InMemory::new("test".as_ref()).unwrap()),
+                timer::none(),
             )
         });
 

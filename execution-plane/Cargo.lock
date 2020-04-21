@@ -1151,7 +1151,7 @@ dependencies = [
 [[package]]
 name = "kompact"
 version = "0.9.0"
-source = "git+https://github.com/kompics/kompact.git#17ac49bb6231a4b2da98877940e3bef01b858dd1"
+source = "git+https://github.com/kompics/kompact.git#93abd6b49e324301c50e8880e28cc5468e045e78"
 dependencies = [
  "arc-swap 0.3.11",
  "as_num",
@@ -1186,7 +1186,7 @@ dependencies = [
 [[package]]
 name = "kompact-actor-derive"
 version = "0.9.0"
-source = "git+https://github.com/kompics/kompact.git#17ac49bb6231a4b2da98877940e3bef01b858dd1"
+source = "git+https://github.com/kompics/kompact.git#93abd6b49e324301c50e8880e28cc5468e045e78"
 dependencies = [
  "proc-macro2 1.0.10",
  "quote 1.0.3",
@@ -1196,7 +1196,7 @@ dependencies = [
 [[package]]
 name = "kompact-component-derive"
 version = "0.9.0"
-source = "git+https://github.com/kompics/kompact.git#17ac49bb6231a4b2da98877940e3bef01b858dd1"
+source = "git+https://github.com/kompics/kompact.git#93abd6b49e324301c50e8880e28cc5468e045e78"
 dependencies = [
  "proc-macro2 1.0.10",
  "quote 1.0.3",
@@ -1964,9 +1964,9 @@ dependencies = [
 
 [[package]]
 name = "regex"
-version = "1.3.6"
+version = "1.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f6946991529684867e47d86474e3a6d0c0ab9b82d5821e314b1ede31fa3a4b3"
+checksum = "a6020f034922e3194c711b82a627453881bc4682166cabb07134a10c26ba7692"
 dependencies = [
  "aho-corasick",
  "memchr",
@@ -2378,12 +2378,11 @@ dependencies = [
 
 [[package]]
 name = "time"
-version = "0.1.42"
+version = "0.1.43"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "db8dcfca086c1143c9270ac42a2bbd8a7ee477b78ac8e45b19abfb0cbede4b6f"
+checksum = "ca8a50ef2360fbd1eeb0ecd46795a87a19024eb4b53c5dc916ca1fd95fe62438"
 dependencies = [
  "libc",
- "redox_syscall",
  "winapi 0.3.8",
 ]
 

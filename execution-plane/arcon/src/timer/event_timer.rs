@@ -1,6 +1,7 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
+use super::*;
 use core::time::Duration;
 use hierarchical_hash_wheel_timer::{
     wheels::{quad_wheel::*, *},
@@ -101,47 +102,11 @@ where
             },
         }
     }
-    /// Basic scheduling function
-    ///
-    /// Returns Ok if the entry was schedulled successfully
-    /// or `Err(entry)` if it has already expired.
-    pub fn schedule_after(&mut self, delay: u64, entry: E) -> Result<(), E> {
-        // this seems a bit silly, but it is A way to generate a unique string, I suppose^^
-        let id = Uuid::new_v4().to_string();
 
-        match self
-            .timer
-            .insert_with_delay(id.clone(), Duration::from_millis(delay))
-        {
-            Ok(_) => {
-                self.inner
-                    .handles
-                    .insert(id, EventTimerEvent::new(self.inner.time, delay, entry));
-                Ok(())
-            }
-            Err(TimerError::Expired(_)) => Err(entry),
-            Err(f) => panic!("Could not insert timer entry! {:?}", f),
-        }
-    }
-    /// Schedule at a specific time in the future
-    ///
-    /// Returns Ok if the entry was schedulled successfully
-    /// or `Err(entry)` if it has already expired.
-    pub fn schedule_at(&mut self, time: u64, entry: E) -> Result<(), E> {
-        // Check for expired target time
-        if time <= self.inner.time {
-            Err(entry)
-        } else {
-            self.schedule_after(time - self.inner.time, entry)
-        }
-    }
     // Should be called before scheduling anything
     #[inline(always)]
     pub fn set_time(&mut self, ts: u64) {
         self.inner.time = ts;
-    }
-    pub fn get_time(&mut self) -> u64 {
-        self.inner.time
     }
 
     fn tick_and_collect(&mut self, mut time_left: u32, res: &mut Vec<E>) -> () {
@@ -179,8 +144,49 @@ where
         }
     }
 
+    // Lookup id, remove from storage, and return Executable action
     #[inline(always)]
-    pub fn advance_to(&mut self, ts: u64) -> Vec<E> {
+    fn take_entry(&mut self, id: String) -> Option<E> {
+        self.inner.handles.remove(&id).map(|x| x.payload)
+    }
+}
+
+impl<E> TimerBackend<E> for EventTimer<E>
+where
+    E: Message + Default + PartialEq,
+{
+    fn schedule_after(&mut self, delay: u64, entry: E) -> Result<(), E> {
+        // this seems a bit silly, but it is A way to generate a unique string, I suppose^^
+        let id = Uuid::new_v4().to_string();
+
+        match self
+            .timer
+            .insert_with_delay(id.clone(), Duration::from_millis(delay))
+        {
+            Ok(_) => {
+                self.inner
+                    .handles
+                    .insert(id, EventTimerEvent::new(self.inner.time, delay, entry));
+                Ok(())
+            }
+            Err(TimerError::Expired(_)) => Err(entry),
+            Err(f) => panic!("Could not insert timer entry! {:?}", f),
+        }
+    }
+    fn schedule_at(&mut self, time: u64, entry: E) -> Result<(), E> {
+        // Check for expired target time
+        if time <= self.inner.time {
+            Err(entry)
+        } else {
+            self.schedule_after(time - self.inner.time, entry)
+        }
+    }
+
+    fn current_time(&self) -> u64 {
+        self.inner.time
+    }
+
+    fn advance_to(&mut self, ts: u64) -> Vec<E> {
         let mut res = Vec::new();
         if ts < self.inner.time {
             eprintln!("advance_to called with lower timestamp than current time");
@@ -195,11 +201,6 @@ where
         // this cast must be safe now
         self.tick_and_collect(time_left as u32, &mut res);
         res
-    }
-    // Lookup id, remove from storage, and return Executable action
-    #[inline(always)]
-    fn take_entry(&mut self, id: String) -> Option<E> {
-        self.inner.handles.remove(&id).map(|x| x.payload)
     }
 }
 

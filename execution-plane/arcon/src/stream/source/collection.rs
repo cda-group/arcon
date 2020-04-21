@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use super::SourceContext;
-use crate::data::ArconType;
+use crate::stream::operator::Operator;
 use kompact::prelude::*;
 
 const RESCHEDULE_EVERY: usize = 500000;
@@ -16,25 +16,23 @@ impl Port for LoopbackPort {
 }
 
 #[derive(ComponentDefinition, Actor)]
-pub struct CollectionSource<IN, OUT>
+pub struct CollectionSource<OP>
 where
-    IN: ArconType,
-    OUT: ArconType,
+    OP: Operator + 'static,
 {
     ctx: ComponentContext<Self>,
     loopback_send: RequiredPort<LoopbackPort, Self>,
     loopback_receive: ProvidedPort<LoopbackPort, Self>,
-    source_ctx: SourceContext<IN, OUT>,
-    collection: Vec<IN>,
+    source_ctx: SourceContext<OP>,
+    collection: Vec<OP::IN>,
     counter: usize,
 }
 
-impl<IN, OUT> CollectionSource<IN, OUT>
+impl<OP> CollectionSource<OP>
 where
-    IN: ArconType,
-    OUT: ArconType,
+    OP: Operator + 'static,
 {
-    pub fn new(collection: Vec<IN>, source_ctx: SourceContext<IN, OUT>) -> Self {
+    pub fn new(collection: Vec<OP::IN>, source_ctx: SourceContext<OP>) -> Self {
         CollectionSource {
             ctx: ComponentContext::new(),
             loopback_send: RequiredPort::new(),
@@ -64,10 +62,9 @@ where
     }
 }
 
-impl<IN, OUT> Provide<ControlPort> for CollectionSource<IN, OUT>
+impl<OP> Provide<ControlPort> for CollectionSource<OP>
 where
-    IN: ArconType,
-    OUT: ArconType,
+    OP: Operator + 'static,
 {
     fn handle(&mut self, event: ControlEvent) {
         if let ControlEvent::Start = event {
@@ -78,20 +75,18 @@ where
     }
 }
 
-impl<IN, OUT> Provide<LoopbackPort> for CollectionSource<IN, OUT>
+impl<OP> Provide<LoopbackPort> for CollectionSource<OP>
 where
-    IN: ArconType,
-    OUT: ArconType,
+    OP: Operator + 'static,
 {
     fn handle(&mut self, _event: ContinueSending) {
         self.process_collection();
     }
 }
 
-impl<IN, OUT> Require<LoopbackPort> for CollectionSource<IN, OUT>
+impl<OP> Require<LoopbackPort> for CollectionSource<OP>
 where
-    IN: ArconType,
-    OUT: ArconType,
+    OP: Operator + 'static,
 {
     fn handle(&mut self, _event: Never) {
         unreachable!("Never type has no instance");
@@ -104,8 +99,10 @@ where
 mod tests {
     use super::*;
     use crate::{
+        data::ArconType,
         prelude::{Channel, ChannelStrategy, DebugNode, Filter, Forward, NodeID},
         state_backend::{in_memory::InMemory, StateBackend},
+        timer,
     };
     use kompact::{default_components::DeadletterBox, prelude::KompactSystem};
     use std::sync::Arc;
@@ -140,8 +137,6 @@ mod tests {
             *x < 1000
         }
 
-        let operator = Box::new(Filter::<u64>::new(&filter_fn));
-
         // Set up SourceContext
         let watermark_interval = 50;
         let collection_elements = 2000;
@@ -150,16 +145,16 @@ mod tests {
             watermark_interval,
             None, // no timestamp extractor
             channel_strategy,
-            operator,
+            Filter::<u64>::new(&filter_fn),
             Box::new(InMemory::new("test".as_ref()).unwrap()),
+            timer::none(),
         );
 
         // Generate collection
         let collection: Vec<u64> = (0..collection_elements).collect();
 
         // Set up CollectionSource component
-        let collection_source: CollectionSource<u64, u64> =
-            CollectionSource::new(collection, source_context);
+        let collection_source = CollectionSource::new(collection, source_context);
         let source = system.create(move || collection_source);
         system.start(&source);
 

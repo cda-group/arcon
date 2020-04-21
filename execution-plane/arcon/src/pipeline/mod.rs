@@ -101,22 +101,21 @@ impl ArconPipeline {
     }
 
     /// Adds a NodeManager to the Arcon Pipeline
-    pub fn create_node_manager<IN, OUT>(
+    pub fn create_node_manager<OP>(
         &mut self,
         node_description: String,
         node_fn: &'static dyn SafelySendableFn(
             NodeDescriptor,
             NodeID,
             Vec<NodeID>,
-            ChannelStrategy<OUT>,
-        ) -> Node<IN, OUT>,
+            ChannelStrategy<OP::OUT>,
+        ) -> Node<OP>,
         in_channels: Vec<NodeID>,
-        channel_strategy: ChannelStrategy<OUT>,
-        nodes: Vec<Node<IN, OUT>>,
-    ) -> Vec<Arc<Component<Node<IN, OUT>>>>
+        channel_strategy: ChannelStrategy<OP::OUT>,
+        nodes: Vec<Node<OP>>,
+    ) -> Vec<Arc<Component<Node<OP>>>>
     where
-        IN: ArconType,
-        OUT: ArconType,
+        OP: Operator + 'static,
     {
         let timeout = std::time::Duration::from_millis(500);
         let mut node_comps = Vec::with_capacity(nodes.len());

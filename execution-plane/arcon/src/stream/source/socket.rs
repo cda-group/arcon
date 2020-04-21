@@ -1,7 +1,10 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::{data::ArconType, stream::source::SourceContext, util::io::*};
+use crate::{
+    stream::{operator::Operator, source::SourceContext},
+    util::io::*,
+};
 use kompact::prelude::*;
 use std::{
     net::SocketAddr,
@@ -15,26 +18,26 @@ pub enum SocketKind {
 }
 
 #[derive(ComponentDefinition)]
-pub struct SocketSource<IN, OUT>
+pub struct SocketSource<OP>
 where
-    IN: ArconType + FromStr,
-    OUT: ArconType,
+    OP: Operator + 'static,
+    OP::IN: FromStr,
 {
     ctx: ComponentContext<Self>,
-    source_ctx: SourceContext<IN, OUT>,
+    source_ctx: SourceContext<OP>,
     sock_addr: SocketAddr,
     sock_kind: SocketKind,
 }
 
-impl<IN, OUT> SocketSource<IN, OUT>
+impl<OP> SocketSource<OP>
 where
-    IN: ArconType + FromStr,
-    OUT: ArconType,
+    OP: Operator + 'static,
+    OP::IN: FromStr,
 {
     pub fn new(
         sock_addr: SocketAddr,
         sock_kind: SocketKind,
-        source_ctx: SourceContext<IN, OUT>,
+        source_ctx: SourceContext<OP>,
     ) -> Self {
         assert!(source_ctx.watermark_interval > 0);
         SocketSource {
@@ -46,10 +49,10 @@ where
     }
 }
 
-impl<IN, OUT> Provide<ControlPort> for SocketSource<IN, OUT>
+impl<OP> Provide<ControlPort> for SocketSource<OP>
 where
-    IN: ArconType + FromStr,
-    OUT: ArconType,
+    OP: Operator + 'static,
+    OP::IN: FromStr,
 {
     fn handle(&mut self, event: ControlEvent) {
         if let ControlEvent::Start = event {
@@ -78,10 +81,10 @@ where
     }
 }
 
-impl<IN, OUT> Actor for SocketSource<IN, OUT>
+impl<OP> Actor for SocketSource<OP>
 where
-    IN: ArconType + FromStr,
-    OUT: ArconType,
+    OP: Operator + 'static,
+    OP::IN: FromStr,
 {
     type Message = IOMessage;
 
@@ -90,7 +93,7 @@ where
             IOMessage::Bytes(bytes) => {
                 debug!(self.ctx.log(), "{:?}", bytes);
                 if let Ok(byte_string) = from_utf8(&bytes) {
-                    if let Ok(in_data) = byte_string.trim().parse::<IN>() {
+                    if let Ok(in_data) = byte_string.trim().parse::<OP::IN>() {
                         let elem = self.source_ctx.extract_element(in_data);
                         self.source_ctx.process(elem);
                     } else {
@@ -112,8 +115,10 @@ where
 mod tests {
     use super::*;
     use crate::{
+        data::ArconType,
         prelude::{Channel, ChannelStrategy, DebugNode, Forward, Map, NodeID},
         state_backend::{in_memory::InMemory, StateBackend},
+        timer,
     };
     use std::{thread, time};
     use tokio::{net::TcpStream, prelude::*, runtime::Runtime};
@@ -142,7 +147,6 @@ mod tests {
         fn map_fn(x: u32) -> u32 {
             x
         }
-        let operator = Box::new(Map::<u32, u32>::new(&map_fn));
 
         // Set up SourceContext
         let watermark_interval = 1; // in seconds currently for SocketSource
@@ -151,12 +155,12 @@ mod tests {
             watermark_interval,
             None, // no timestamp extractor
             channel_strategy,
-            operator,
+            Map::<u32, u32>::new(&map_fn),
             Box::new(InMemory::new("test".as_ref()).unwrap()),
+            timer::none(),
         );
 
-        let socket_source: SocketSource<u32, u32> =
-            SocketSource::new(addr, SocketKind::Tcp, source_context);
+        let socket_source = SocketSource::new(addr, SocketKind::Tcp, source_context);
         let (source, _) = system.create_and_register(move || socket_source);
 
         system.start(&sink);
@@ -208,8 +212,6 @@ mod tests {
             x
         }
 
-        let operator = Box::new(Map::<ExtractorStruct, ExtractorStruct>::new(&map_fn));
-
         // Set up SourceContext
         let watermark_interval = 1; // in seconds currently for SocketSource
 
@@ -221,12 +223,12 @@ mod tests {
             watermark_interval,
             Some(&timestamp_extractor),
             channel_strategy,
-            operator,
+            Map::<ExtractorStruct, ExtractorStruct>::new(&map_fn),
             Box::new(InMemory::new("test".as_ref()).unwrap()),
+            timer::none(),
         );
 
-        let socket_source: SocketSource<ExtractorStruct, ExtractorStruct> =
-            SocketSource::new(addr, SocketKind::Tcp, source_context);
+        let socket_source = SocketSource::new(addr, SocketKind::Tcp, source_context);
         let (source, _) = system.create_and_register(move || socket_source);
 
         system.start(&sink);

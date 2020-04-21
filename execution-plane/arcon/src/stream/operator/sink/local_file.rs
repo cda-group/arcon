@@ -1,7 +1,7 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::{data::ArconEvent, prelude::*, stream::operator::OperatorContext};
+use crate::{prelude::*, stream::operator::OperatorContext};
 use std::{
     fs::{File, OpenOptions},
     io::Write,
@@ -36,37 +36,36 @@ where
     }
 }
 
-impl<IN> Operator<IN, IN> for LocalFileSink<IN>
+impl<IN> Operator for LocalFileSink<IN>
 where
     IN: ArconType,
 {
-    fn handle_element(&mut self, element: ArconElement<IN>, _ctx: OperatorContext<IN>) {
+    type IN = IN;
+    type OUT = ArconNever;
+    type TimerState = ArconNever;
+
+    fn handle_element(&mut self, element: ArconElement<IN>, _ctx: OperatorContext<Self>) {
         if let Some(data) = element.data {
             if let Err(err) = writeln!(self.file, "{:?}", data) {
                 eprintln!("Error while writing to file sink {}", err.to_string());
             }
         }
     }
-    fn handle_watermark(
-        &mut self,
-        _w: Watermark,
-        _ctx: OperatorContext<IN>,
-    ) -> Option<Vec<ArconEvent<IN>>> {
-        None
-    }
+    fn handle_watermark(&mut self, _w: Watermark, _ctx: OperatorContext<Self>) {}
     fn handle_epoch(
         &mut self,
         _epoch: Epoch,
-        _ctx: OperatorContext<IN>,
+        _ctx: OperatorContext<Self>,
     ) -> Option<ArconResult<Vec<u8>>> {
         None
     }
+    fn handle_timeout(&mut self, _timeout: Self::TimerState, _ctx: OperatorContext<Self>) {}
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::prelude::ChannelStrategy;
+    use crate::{prelude::ChannelStrategy, timer};
     use std::io::{BufRead, BufReader};
     use tempfile::NamedTempFile;
 
@@ -84,8 +83,9 @@ mod tests {
                 0.into(),
                 vec![node_id],
                 ChannelStrategy::Mute,
-                Box::new(LocalFileSink::new(&file_path)),
+                LocalFileSink::new(&file_path),
                 Box::new(InMemory::new("test".as_ref()).unwrap()),
+                timer::none(),
             )
         });
         system.start(&sink_comp);

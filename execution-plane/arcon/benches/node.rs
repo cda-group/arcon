@@ -6,7 +6,7 @@
 // NOTE: Most of the code is shamelessly stolen from:
 // https://github.com/kompics/kompact/blob/master/experiments/dynamic-benches/src/network_latency.rs
 
-use arcon::prelude::*;
+use arcon::{prelude::*, timer};
 use criterion::{criterion_group, criterion_main, Bencher, Criterion};
 use std::time::Duration;
 
@@ -58,13 +58,14 @@ pub fn node_forward_bench(b: &mut Bencher, messages: usize) {
         x + 10
     }
 
-    let node_comp = Node::<i32, i32>::new(
+    let node_comp = Node::new(
         String::from("map_node"),
         0.into(),
         vec![1.into()],
         channel_strategy,
-        Box::new(Map::new(&map_fn)),
+        Map::new(&map_fn),
         Box::new(InMemory::new("bench".as_ref()).unwrap()),
+        timer::none(),
     );
 
     let node = sys.create(|| node_comp);
