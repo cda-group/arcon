@@ -3,12 +3,15 @@
 
 use self::measure_impl::measure;
 use crate::{
-    prelude::ArconResult,
+    prelude::{AggregatingStateBuilder, ArconResult},
     state_backend::{
         metered::{
-            map_state::MeteredMapState, value_state::MeteredValueState, vec_state::MeteredVecState,
+            aggregating_state::MeteredAggregatingState, map_state::MeteredMapState,
+            reducing_state::MeteredReducingState, value_state::MeteredValueState,
+            vec_state::MeteredVecState,
         },
-        MapStateBuilder, StateBackend, ValueStateBuilder, VecStateBuilder,
+        state_types::Aggregator,
+        MapStateBuilder, ReducingStateBuilder, StateBackend, ValueStateBuilder, VecStateBuilder,
     },
 };
 use static_assertions::_core::ops::Deref;
@@ -250,7 +253,9 @@ macro_rules! measure_delegated {
     };
 }
 
+pub mod aggregating_state;
 pub mod map_state;
+pub mod reducing_state;
 pub mod value_state;
 pub mod vec_state;
 
@@ -319,5 +324,69 @@ where
         });
 
         MeteredVecState { inner }
+    }
+}
+
+impl<SB, IK, N, T, F, KS, TS> ReducingStateBuilder<IK, N, T, F, KS, TS> for Metered<SB>
+where
+    SB: ReducingStateBuilder<IK, N, T, F, KS, TS>,
+{
+    type Type = MeteredReducingState<SB::Type>;
+
+    fn new_reducing_state(
+        &mut self,
+        name: &str,
+        item_key: IK,
+        namespace: N,
+        reduce_fn: F,
+        key_serializer: KS,
+        value_serializer: TS,
+    ) -> Self::Type {
+        let inner = self.measure_mut("ReducingStateBuilder::new_reducing_state", move |backend| {
+            backend.new_reducing_state(
+                name,
+                item_key,
+                namespace,
+                reduce_fn,
+                key_serializer,
+                value_serializer,
+            )
+        });
+
+        MeteredReducingState { inner }
+    }
+}
+
+impl<SB, IK, N, T, AGG, KS, TS> AggregatingStateBuilder<IK, N, T, AGG, KS, TS> for Metered<SB>
+where
+    SB: AggregatingStateBuilder<IK, N, T, AGG, KS, TS>,
+    AGG: Aggregator<T>,
+{
+    type Type = MeteredAggregatingState<SB::Type>;
+
+    fn new_aggregating_state(
+        &mut self,
+        name: &str,
+        item_key: IK,
+        namespace: N,
+        aggregator: AGG,
+        key_serializer: KS,
+        _value_serializer: TS,
+    ) -> Self::Type {
+        let inner = self.measure_mut(
+            "AggregatingStateBuilder::new_aggregating_state",
+            move |backend| {
+                backend.new_aggregating_state(
+                    name,
+                    item_key,
+                    namespace,
+                    aggregator,
+                    key_serializer,
+                    _value_serializer,
+                )
+            },
+        );
+
+        MeteredAggregatingState { inner }
     }
 }
