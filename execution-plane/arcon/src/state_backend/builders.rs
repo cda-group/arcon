@@ -46,6 +46,21 @@ macro_rules! impl_dynamic_builder {
                                 value_serializer,
                             ));
                          }
+
+                         #[cfg(feature = "metered_state_backend")] {
+                             if let Ok(b) = self.downcast_mut::<
+                                crate::state_backend::metered::Metered<$backend>
+                             >() {
+                                return $state_name::erase_backend_type(b.$builder_fn(
+                                    name,
+                                    item_key,
+                                    namespace,
+                                    $($($arg_name,)*)?
+                                    key_serializer,
+                                    value_serializer,
+                                ));
+                             }
+                         }
                     }};
                 }
 
