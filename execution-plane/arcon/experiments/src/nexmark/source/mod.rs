@@ -1,5 +1,19 @@
+// Copyright (c) 2020, KTH Royal Institute of Technology.
+// SPDX-License-Identifier: AGPL-3.0-only
+
 use crate::nexmark::{config::NEXMarkConfig, NEXMarkEvent};
 use arcon::prelude::*;
+use rand::{rngs::SmallRng, FromEntropy};
+
+const RESCHEDULE_EVERY: usize = 500000;
+
+#[derive(Debug, Clone, Copy)]
+struct ContinueSending;
+struct LoopbackPort;
+impl Port for LoopbackPort {
+    type Indication = Never;
+    type Request = ContinueSending;
+}
 
 #[derive(ComponentDefinition)]
 #[allow(dead_code)]
@@ -8,42 +22,49 @@ where
     OP: Operator<IN = NEXMarkEvent> + 'static,
 {
     ctx: ComponentContext<Self>,
+    loopback_send: RequiredPort<LoopbackPort, Self>,
+    loopback_receive: ProvidedPort<LoopbackPort, Self>,
     source_ctx: SourceContext<OP>,
     nexmark_config: NEXMarkConfig,
-    events_so_far: u64,
+    timer: ::std::time::Instant,
+    events_so_far: u32,
+    watermark_counter: u64,
+    duration_ns: u64,
 }
 
 impl<OP> NEXMarkSource<OP>
 where
     OP: Operator<IN = NEXMarkEvent> + 'static,
 {
-    pub fn new(nexmark_config: NEXMarkConfig, source_ctx: SourceContext<OP>) -> Self {
+    pub fn new(mut nexmark_config: NEXMarkConfig, source_ctx: SourceContext<OP>) -> Self {
+        let timer = ::std::time::Instant::now();
+        // Establish a start of the computation.
+        let elapsed = timer.elapsed();
+        let elapsed_ns =
+            (elapsed.as_secs() * 1_000_000_000 + (elapsed.subsec_nanos() as u64)) as usize;
+        nexmark_config.base_time_ns = elapsed_ns as u32;
+        let duration_ns: u64 = nexmark_config.stream_timeout * 1_000_000_000;
         NEXMarkSource {
             ctx: ComponentContext::new(),
+            loopback_send: RequiredPort::new(),
+            loopback_receive: ProvidedPort::new(),
             source_ctx,
             nexmark_config,
+            timer,
             events_so_far: 0,
+            watermark_counter: 0,
+            duration_ns,
         }
     }
 
     pub fn process(&mut self) {
-        // TODO: create event generation with the stream timeout
-        /*
-        let timer = ::std::time::Instant::now();
-        // Establish a start of the computation.
-        let elapsed_ns: u32 = timer.elapsed().as_nanos() as u32;
-        self.nexmark_config.base_time_ns = elapsed_ns as u32;
-        let duration_ns: u64 = self.nexmark_config.stream_timeout * 1_000_000_000;
-        */
-        use rand::{rngs::SmallRng, FromEntropy};
         let mut rng = SmallRng::from_entropy();
+        let mut iter_counter = 0;
 
-        let mut wm_counter = 0;
-        let mut events_so_far: u32 = 0;
-
-        loop {
+        while iter_counter < RESCHEDULE_EVERY && self.events_so_far < self.nexmark_config.num_events
+        {
             let next_event = crate::nexmark::NEXMarkEvent::create(
-                events_so_far,
+                self.events_so_far,
                 &mut rng,
                 &mut self.nexmark_config,
             );
@@ -51,14 +72,31 @@ where
             let elem = self.source_ctx.extract_element(next_event);
             debug!(self.ctx().log(), "Created elem {:?}", elem);
             self.source_ctx.process(elem);
-            events_so_far += 1;
+            self.events_so_far += 1;
 
-            wm_counter += 1;
-
-            if wm_counter == self.source_ctx.watermark_interval {
+            self.watermark_counter += 1;
+            if self.watermark_counter == self.source_ctx.watermark_interval {
                 self.source_ctx.generate_watermark();
-                wm_counter = 0;
+                self.watermark_counter = 0;
             }
+
+            iter_counter += 1;
+        }
+
+        if iter_counter == RESCHEDULE_EVERY {
+            self.loopback_send.trigger(ContinueSending);
+        } else {
+            // We are finished ...
+            // Set watermark to max value to ensure everything triggers...
+            self.source_ctx.watermark_update(u64::max_value());
+            self.source_ctx.generate_watermark();
+            // send death msg
+            self.source_ctx
+                .generate_death(String::from("nexmark_finished"));
+            info!(
+                self.ctx().log(),
+                "Finished generating {} events", self.nexmark_config.num_events
+            );
         }
     }
 }
@@ -69,8 +107,28 @@ where
 {
     fn handle(&mut self, event: ControlEvent) {
         if let ControlEvent::Start = event {
-            self.process();
+            let shared = self.loopback_receive.share();
+            self.loopback_send.connect(shared);
+            self.loopback_send.trigger(ContinueSending);
         }
+    }
+}
+
+impl<OP> Provide<LoopbackPort> for NEXMarkSource<OP>
+where
+    OP: Operator<IN = NEXMarkEvent> + 'static,
+{
+    fn handle(&mut self, _event: ContinueSending) {
+        self.process();
+    }
+}
+
+impl<OP> Require<LoopbackPort> for NEXMarkSource<OP>
+where
+    OP: Operator<IN = NEXMarkEvent> + 'static,
+{
+    fn handle(&mut self, _event: Never) {
+        unreachable!("Never type has no instance");
     }
 }
 

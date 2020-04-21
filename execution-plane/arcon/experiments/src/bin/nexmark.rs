@@ -7,11 +7,14 @@
 extern crate clap;
 #[macro_use]
 extern crate log;
+#[macro_use]
+extern crate prettytable;
 
 use anyhow::Result;
 use arcon::prelude::{ArconConf, ArconPipeline};
 use clap::{App, AppSettings, Arg, SubCommand};
-use experiments::nexmark::{config::*, queries};
+use experiments::nexmark::{config::*, queries, queries::Query};
+use queries::{q1::QueryOne, q3::QueryThree};
 use std::fs::metadata;
 
 const DEFAULT_NEXMARK_CONFIG: &str = "nexmark_config.toml";
@@ -33,8 +36,7 @@ fn main() {
         .short("a")
         .help("Path to Arcon Config");
 
-    let tui_arg = Arg::with_name("t").help("toggle tui mode off").short("t");
-
+    let tui_arg = Arg::with_name("t").help("toggle tui mode on").short("t");
     let debug_arg = Arg::with_name("d").help("toggle debug mode on").short("d");
 
     let query_arg = Arg::with_name("q")
@@ -79,11 +81,14 @@ fn main() {
                 }
             };
 
-            let mut tui = !arg_matches.is_present("t");
-            let debug_mode = arg_matches.is_present("d");
+            let mut tui = arg_matches.is_present("t");
+            let mut debug_mode = arg_matches.is_present("d");
             if debug_mode {
                 // If debug mode enabled, disable tui...
                 tui = false;
+            }
+            if tui {
+                debug_mode = false;
             }
 
             let query = arg_matches
@@ -156,21 +161,32 @@ fn run(
 
     info!("{:?}\n", pipeline.arcon_conf());
 
-    match nexmark_config.query {
+    let pipeline_timer = match nexmark_config.query {
         NEXMarkQuery::CurrencyConversion => {
             info!("Running CurrencyConversion query");
-            queries::q1::q1(debug_mode, nexmark_config, &mut pipeline);
+            QueryOne::run(debug_mode, nexmark_config, &mut pipeline)
         }
         NEXMarkQuery::LocalItemSuggestion => {
             info!("Running LocalItemSuggestion query");
-            queries::q3::q3(debug_mode, nexmark_config, &mut pipeline);
+            QueryThree::run(debug_mode, nexmark_config, &mut pipeline)
         }
-    }
+    };
 
     if tui {
         pipeline.tui();
     } else {
-        pipeline.await_termination();
+        if let Some(timer_future) = pipeline_timer {
+            // wait for sink to return completion msg.
+            let res = timer_future.wait();
+            let execution_ms = res.timer.as_millis();
+            let table = table!(["Runtime (ms)", "Events per sec"], [
+                execution_ms.to_string(),
+                res.events_per_sec.to_string()
+            ]);
+            table.printstd();
+        } else {
+            pipeline.await_termination();
+        }
     }
 
     Ok(())

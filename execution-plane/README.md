@@ -42,21 +42,6 @@ Depending on what you are compiling, you might need cmake, g++ etc...
 $ cargo build --release
 ```
 
-## Running an Example (NOT WORKING AT THE MOMENT)
-
-Compile and start binary:
-
-```bash
-$ ./target/release/arconc -l compile -s arcon_codegen/tests/specifications/basic_dataflow.json
-$ ./build/target/release/basic_dataflow
-```
-
-Connect to Socket Source and enter valid unsigned integers:
-
-```bash
-$ nc -u localhost 5000
-```
-
 ## Testing
 
 General

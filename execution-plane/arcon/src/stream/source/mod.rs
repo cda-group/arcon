@@ -79,6 +79,12 @@ impl<OP: Operator> SourceContext<OP> {
         self.channel_strategy.add(wm_event);
     }
 
+    /// Generates a Death event and sends it downstream
+    #[inline]
+    pub fn generate_death(&mut self, msg: String) {
+        self.channel_strategy.add(ArconEvent::Death(msg));
+    }
+
     /// Helper to know whether to use SystemTime or EventTime
     #[inline]
     fn has_timestamp_extractor(&self) -> bool {
