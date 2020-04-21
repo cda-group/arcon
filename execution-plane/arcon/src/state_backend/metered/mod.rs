@@ -1,9 +1,14 @@
+// Copyright (c) 2020, KTH Royal Institute of Technology.
+// SPDX-License-Identifier: AGPL-3.0-only
+
 use self::measure_impl::measure;
 use crate::{
-    prelude::{ArconResult, MapStateBuilder, ValueStateBuilder},
+    prelude::ArconResult,
     state_backend::{
-        metered::{map_state::MeteredMapState, value_state::MeteredValueState},
-        StateBackend,
+        metered::{
+            map_state::MeteredMapState, value_state::MeteredValueState, vec_state::MeteredVecState,
+        },
+        MapStateBuilder, StateBackend, ValueStateBuilder, VecStateBuilder,
     },
 };
 use static_assertions::_core::ops::Deref;
@@ -247,6 +252,7 @@ macro_rules! measure_delegated {
 
 pub mod map_state;
 pub mod value_state;
+pub mod vec_state;
 
 impl<SB, IK, N, T, KS, TS> ValueStateBuilder<IK, N, T, KS, TS> for Metered<SB>
 where
@@ -273,6 +279,8 @@ where
 impl<SB, IK, N, K, V, KS, TS> MapStateBuilder<IK, N, K, V, KS, TS> for Metered<SB>
 where
     SB: MapStateBuilder<IK, N, K, V, KS, TS>,
+    K: 'static,
+    V: 'static,
 {
     type Type = MeteredMapState<SB::Type>;
 
@@ -289,5 +297,27 @@ where
         });
 
         MeteredMapState { inner }
+    }
+}
+
+impl<SB, IK, N, T, KS, TS> VecStateBuilder<IK, N, T, KS, TS> for Metered<SB>
+where
+    SB: VecStateBuilder<IK, N, T, KS, TS>,
+{
+    type Type = MeteredVecState<SB::Type>;
+
+    fn new_vec_state(
+        &mut self,
+        name: &str,
+        item_key: IK,
+        namespace: N,
+        key_serializer: KS,
+        value_serializer: TS,
+    ) -> Self::Type {
+        let inner = self.measure_mut("VecStateBuilder::new_vec_state", move |backend| {
+            backend.new_vec_state(name, item_key, namespace, key_serializer, value_serializer)
+        });
+
+        MeteredVecState { inner }
     }
 }

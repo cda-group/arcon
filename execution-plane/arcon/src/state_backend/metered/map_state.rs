@@ -18,6 +18,8 @@ impl_metered_state!(MeteredMapState<MS>: MapState);
 impl<SB, MS, IK, N, K, V> MapState<Metered<SB>, IK, N, K, V> for MeteredMapState<MS>
 where
     MS: MapState<SB, IK, N, K, V>,
+    K: 'static,
+    V: 'static,
 {
     measure_delegated! { MapState:
         fn get(&self, backend: &Metered<SB>, key: &K) -> ArconResult<Option<V>>;
@@ -42,61 +44,32 @@ where
     }
 
     // the macro above doesn't support lifetime annotations
-    // TODO: measure .next() in the iterators below
     fn iter<'a>(
         &self,
         backend: &'a Metered<SB>,
     ) -> ArconResult<BoxedIteratorOfArconResult<'a, (K, V)>> {
-        let iter = backend.measure("MapState::iter", |backend| self.inner.iter(backend))?;
-        // let iter = MapIteratorMetrics {
-        //     iter,
-        //     backend,
-        //     op_name: "MapState::iter::next",
-        // };
-        // Ok(Box::new(iter))
-        Ok(iter)
+        let mut iter = backend.measure("MapState::iter", |backend| self.inner.iter(backend))?;
+        let iter =
+            std::iter::from_fn(move || backend.measure("MapState::iter::next", |_| iter.next()));
+        Ok(Box::new(iter))
     }
 
     fn keys<'a>(&self, backend: &'a Metered<SB>) -> ArconResult<BoxedIteratorOfArconResult<'a, K>> {
-        let iter = backend.measure("MapState::keys", |backend| self.inner.keys(backend))?;
-        // let iter = MapIteratorMetrics {
-        //     iter,
-        //     backend,
-        //     op_name: "MapState::keys::next",
-        // };
-        // Ok(Box::new(iter))
-        Ok(iter)
+        let mut iter = backend.measure("MapState::keys", |backend| self.inner.keys(backend))?;
+        let iter =
+            std::iter::from_fn(move || backend.measure("MapState::keys::next", |_| iter.next()));
+        Ok(Box::new(iter))
     }
 
     fn values<'a>(
         &self,
         backend: &'a Metered<SB>,
     ) -> ArconResult<BoxedIteratorOfArconResult<'a, V>> {
-        let iter = backend.measure("MapState::values", |backend| self.inner.values(backend))?;
-        // let iter = MapIteratorMetrics {
-        //     iter,
-        //     backend,
-        //     op_name: "MapState::values::next",
-        // };
-        // Ok(Box::new(iter))
-        Ok(iter)
-    }
-}
-
-struct MapIteratorMetrics<'a, I, SB> {
-    iter: I,
-    backend: &'a Metered<SB>,
-    op_name: &'static str,
-}
-
-impl<'a, I, SB> Iterator for MapIteratorMetrics<'a, I, SB>
-where
-    I: Iterator,
-{
-    type Item = I::Item;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.backend.measure(self.op_name, |_| self.iter.next())
+        let mut iter: BoxedIteratorOfArconResult<'a, V> =
+            backend.measure("MapState::values", |backend| self.inner.values(backend))?;
+        let iter =
+            std::iter::from_fn(move || backend.measure("MapState::values::next", |_| iter.next()));
+        Ok(Box::new(iter))
     }
 }
 
