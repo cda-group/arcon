@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::nexmark::{
-    config::NEXMarkConfig, source::NEXMarkSource, Auction, Event, NEXMarkEvent, Person,
+    config::NEXMarkConfig,
+    queries::{Query, QueryTimer},
+    Auction, Event, NEXMarkEvent, Person,
 };
 use arcon::{
     macros::*,
@@ -59,79 +61,65 @@ fn person_or_auction_filter_map(mut event: NEXMarkEvent) -> Option<PersonOrAucti
     }
 }
 
-pub fn q3(debug_mode: bool, nexmark_config: NEXMarkConfig, pipeline: &mut ArconPipeline) {
-    let channel_batch_size = pipeline.arcon_conf().channel_batch_size;
-    let watermark_interval = pipeline.arcon_conf().watermark_interval;
-    let system = pipeline.system();
-    let timeout = std::time::Duration::from_millis(500);
+pub struct QueryThree {}
 
-    // If debug mode is enabled, we send the data to a DebugNode.
-    // Otherwise, just discard the elements using a Mute strategy...
-    let channel_strategy = {
-        if debug_mode {
-            let sink = system.create(move || DebugNode::<Q3Result>::new());
+impl Query for QueryThree {
+    fn run(
+        debug_mode: bool,
+        nexmark_config: NEXMarkConfig,
+        pipeline: &mut ArconPipeline,
+    ) -> QueryTimer {
+        let channel_batch_size = pipeline.arcon_conf().channel_batch_size;
+        let watermark_interval = pipeline.arcon_conf().watermark_interval;
+        let mut system = pipeline.system();
 
-            system
-                .start_notify(&sink)
-                .wait_timeout(timeout)
-                .expect("sink never started!");
+        // Define sink
+        let (sink_ref, sink_port_opt) = super::sink::<Q3Result>(debug_mode, &mut system);
+        let sink_channel = Channel::Local(sink_ref);
+        let channel_strategy = ChannelStrategy::Forward(Forward::with_batch_size(
+            sink_channel,
+            NodeID::new(1),
+            channel_batch_size,
+        ));
 
-            let sink_ref: ActorRefStrong<ArconMessage<Q3Result>> =
-                sink.actor_ref().hold().expect("no");
-            let sink_channel = Channel::Local(sink_ref);
+        // Define Mapper
 
-            let channel_strategy = ChannelStrategy::Forward(Forward::with_batch_size(
-                sink_channel,
-                NodeID::new(1),
-                channel_batch_size,
-            ));
+        let in_channels = vec![NodeID::new(1)];
 
-            channel_strategy
-        } else {
-            ChannelStrategy::Mute
-        }
-    };
-
-    // Define Mapper
-
-    let in_channels = vec![NodeID::new(1)];
-
-    let node_description = String::from("stateful_flatmap_node");
-    let node_one = q3_node(
-        node_description.clone(),
-        NodeID::new(0),
-        in_channels.clone(),
-        channel_strategy.clone(),
-    );
-
-    let node_comps = pipeline.create_node_manager(
-        node_description,
-        &q3_node,
-        in_channels,
-        channel_strategy,
-        vec![node_one],
-    );
-
-    {
-        let system = pipeline.system();
-        // Define source context
-        let flatmapper_ref = node_comps.get(0).unwrap().actor_ref().hold().expect("fail");
-        let channel = Channel::Local(flatmapper_ref);
-        let channel_strategy = ChannelStrategy::Forward(Forward::new(channel, NodeID::new(1)));
-        let source_context = SourceContext::new(
-            watermark_interval,
-            None, // no timestamp extractor
-            channel_strategy,
-            Box::new(FilterMap::<NEXMarkEvent, PersonOrAuction>::new(
-                &person_or_auction_filter_map,
-            )),
-            Box::new(InMemory::new("src".as_ref()).unwrap()),
+        let node_description = String::from("stateful_flatmap_node");
+        let node_one = q3_node(
+            node_description.clone(),
+            NodeID::new(0),
+            in_channels.clone(),
+            channel_strategy.clone(),
         );
 
-        let nexmark_source_comp =
-            system.create_dedicated(move || NEXMarkSource::new(nexmark_config, source_context));
+        let node_comps = pipeline.create_node_manager(
+            node_description,
+            &q3_node,
+            in_channels,
+            channel_strategy,
+            vec![node_one],
+        );
 
-        system.start(&nexmark_source_comp);
+        {
+            let mut system = pipeline.system();
+            // Define source context
+            let flatmapper_ref = node_comps.get(0).unwrap().actor_ref().hold().expect("fail");
+            let channel = Channel::Local(flatmapper_ref);
+            let channel_strategy = ChannelStrategy::Forward(Forward::new(channel, NodeID::new(1)));
+            let source_context = SourceContext::new(
+                watermark_interval,
+                None, // no timestamp extractor
+                channel_strategy,
+                Box::new(FilterMap::<NEXMarkEvent, PersonOrAuction>::new(
+                    &person_or_auction_filter_map,
+                )),
+                Box::new(InMemory::new("src".as_ref()).unwrap()),
+            );
+
+            super::source(sink_port_opt, nexmark_config, source_context, &mut system)
+        }
     }
 }
 

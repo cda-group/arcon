@@ -6,6 +6,7 @@
 
 pub mod config;
 pub mod queries;
+pub mod sink;
 pub mod source;
 
 use arcon::macros::*;
