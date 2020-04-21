@@ -337,6 +337,13 @@ impl StateBackend for RocksDb {
         let checkpointer = Checkpoint::new(db)
             .map_err(|e| arcon_err_kind!("Could not create checkpoint object: {}", e))?;
 
+        if checkpoint_path.exists() {
+            // TODO: add a warning log here
+            // warn!(logger, "Checkpoint path {:?} exists, deleting");
+            fs::remove_dir_all(checkpoint_path)
+                .ctx("Could not remove existing checkpoint directory")?
+        }
+
         checkpointer
             .create_checkpoint(checkpoint_path)
             .map_err(|e| arcon_err_kind!("Could not save the checkpoint: {}", e))?;
