@@ -74,7 +74,7 @@ impl Query for QueryOne {
                 channel_strategy,
                 FilterMap::<NEXMarkEvent, Bid>::new(&bid_filter_map),
                 Box::new(InMemory::new("src".as_ref()).unwrap()),
-                timer::none(),
+                timer::none,
             );
 
             super::source(sink_port_opt, nexmark_config, source_context, &mut system)
@@ -100,6 +100,6 @@ pub fn q1_node(
         channel_strategy,
         MapInPlace::new(&map_fn),
         Box::new(InMemory::new("map".as_ref()).unwrap()),
-        timer::none(),
+        timer::none,
     )
 }

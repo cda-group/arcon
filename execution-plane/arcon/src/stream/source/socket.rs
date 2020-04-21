@@ -157,7 +157,7 @@ mod tests {
             channel_strategy,
             Map::<u32, u32>::new(&map_fn),
             Box::new(InMemory::new("test".as_ref()).unwrap()),
-            timer::none(),
+            timer::none,
         );
 
         let socket_source = SocketSource::new(addr, SocketKind::Tcp, source_context);
@@ -225,7 +225,7 @@ mod tests {
             channel_strategy,
             Map::<ExtractorStruct, ExtractorStruct>::new(&map_fn),
             Box::new(InMemory::new("test".as_ref()).unwrap()),
-            timer::none(),
+            timer::none,
         );
 
         let socket_source = SocketSource::new(addr, SocketKind::Tcp, source_context);

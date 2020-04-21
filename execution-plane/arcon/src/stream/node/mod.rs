@@ -113,15 +113,18 @@ where
     OP: Operator + 'static,
 {
     /// Creates a new Node
-    pub fn new(
+    pub fn new<F>(
         descriptor: NodeDescriptor,
         id: NodeID,
         in_channels: Vec<NodeID>,
         channel_strategy: ChannelStrategy<OP::OUT>,
         mut operator: OP,
         mut state_backend: Box<dyn StateBackend>,
-        timer_backend: Box<dyn TimerBackend<OP::TimerState>>,
-    ) -> Self {
+        timer_backend_fn: F,
+    ) -> Self
+    where
+        F: Fn(&mut dyn StateBackend) -> Box<dyn TimerBackend<OP::TimerState>> + Sized + 'static,
+    {
         // Initiate our watermarks
 
         // some backends require you to first specify all the states and mess with them later
@@ -131,6 +134,10 @@ where
         let current_epoch = state_backend.build("__node_current_epoch").value();
         let blocked_channels = state_backend.build("__node_blocked_channels").map();
         let message_buffer = state_backend.build("__node_message_buffer").vec();
+
+        // timer backends may declare their own state
+        // so it must initialised here before the first access
+        let timer_backend = timer_backend_fn(state_backend.as_mut());
 
         // initialize
         for channel in &in_channels {
@@ -296,7 +303,10 @@ where
                         self.operator
                             .handle_watermark(new_watermark, make_context!(self));
 
-                        for timeout in self.timer_backend.advance_to(new_watermark.timestamp) {
+                        for timeout in self
+                            .timer_backend
+                            .advance_to(new_watermark.timestamp, self.state_backend.as_mut())
+                        {
                             self.operator.handle_timeout(timeout, make_context!(self));
                         }
 
@@ -335,9 +345,9 @@ where
                         // update current epoch
                         self.state.current_epoch.set(&mut *self.state_backend, e)?;
 
-                        // call handle_epoch on our operator
-                        // TODO this seems useless?
-                        let _operator_state = self.operator.handle_epoch(e, make_context!(self));
+                        self.operator.handle_epoch(e, make_context!(self));
+                        self.timer_backend
+                            .handle_epoch(e, self.state_backend.as_mut());
 
                         // store the state
                         self.save_state()?;
@@ -535,7 +545,7 @@ mod tests {
                 channel_strategy,
                 Filter::new(&node_fn),
                 Box::new(InMemory::new("test".as_ref()).unwrap()),
-                timer::none(),
+                timer::none,
             )
         });
 

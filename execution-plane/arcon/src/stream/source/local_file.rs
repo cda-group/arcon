@@ -160,7 +160,7 @@ mod tests {
             channel_strategy,
             Map::<u64, u64>::new(&map_fn),
             Box::new(InMemory::new("test".as_ref()).unwrap()),
-            timer::none(),
+            timer::none,
         );
 
         let file_source = LocalFileSource::new(String::from(&file_path), source_context);
@@ -207,7 +207,7 @@ mod tests {
             channel_strategy,
             Map::<ArconF64, ArconF64>::new(&map_fn),
             Box::new(InMemory::new("test".as_ref()).unwrap()),
-            timer::none(),
+            timer::none,
         );
 
         let file_source = LocalFileSource::new(String::from(&file_path), source_context);

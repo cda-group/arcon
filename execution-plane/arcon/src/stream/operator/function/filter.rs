@@ -6,7 +6,6 @@ use crate::{
     stream::operator::{Operator, OperatorContext},
     util::SafelySendableFn,
 };
-use arcon_error::ArconResult;
 
 /// IN: Input Event
 pub struct Filter<IN>
@@ -47,13 +46,7 @@ where
     }
 
     fn handle_watermark(&mut self, _w: Watermark, _ctx: OperatorContext<Self>) -> () {}
-    fn handle_epoch(
-        &mut self,
-        _epoch: Epoch,
-        _ctx: OperatorContext<Self>,
-    ) -> Option<ArconResult<Vec<u8>>> {
-        None
-    }
+    fn handle_epoch(&mut self, _epoch: Epoch, _ctx: OperatorContext<Self>) {}
     fn handle_timeout(&mut self, _timeout: Self::TimerState, _ctx: OperatorContext<Self>) {}
 }
 
@@ -85,7 +78,7 @@ mod tests {
                 channel_strategy,
                 Filter::new(&filter_fn),
                 Box::new(InMemory::new("test".as_ref()).unwrap()),
-                timer::none(),
+                timer::none,
             )
         });
         system.start(&filter_node);

@@ -6,7 +6,6 @@ use crate::{
     stream::operator::{Operator, OperatorContext},
     util::SafelySendableFn,
 };
-use arcon_error::ArconResult;
 
 /// An Arcon operator for performing an in-place map
 ///
@@ -49,12 +48,6 @@ where
     }
 
     fn handle_watermark(&mut self, _w: Watermark, _ctx: OperatorContext<Self>) {}
-    fn handle_epoch(
-        &mut self,
-        _epoch: Epoch,
-        _ctx: OperatorContext<Self>,
-    ) -> Option<ArconResult<Vec<u8>>> {
-        None
-    }
+    fn handle_epoch(&mut self, _epoch: Epoch, _ctx: OperatorContext<Self>) {}
     fn handle_timeout(&mut self, _timeout: Self::TimerState, _ctx: OperatorContext<Self>) {}
 }

@@ -124,7 +124,7 @@ where
 
         let ts = w_start + (index * self.window_slide) + self.window_length;
 
-        ctx.timer_backend.schedule_at(
+        ctx.schedule_at(
             ts + self.late_arrival_time,
             WindowEvent::new(key, index, ts),
         )
@@ -155,7 +155,7 @@ where
     fn handle_element(&mut self, element: ArconElement<IN>, mut ctx: OperatorContext<Self>) {
         let ts = element.timestamp.unwrap_or(1);
 
-        let time = ctx.timer_backend.current_time();
+        let time = ctx.current_time();
 
         let ts_lower_bound = time.saturating_sub(self.late_arrival_time);
 
@@ -216,13 +216,7 @@ where
 
     fn handle_watermark(&mut self, _w: Watermark, _ctx: OperatorContext<Self>) {}
 
-    fn handle_epoch(
-        &mut self,
-        _epoch: Epoch,
-        _ctx: OperatorContext<Self>,
-    ) -> Option<ArconResult<Vec<u8>>> {
-        None
-    }
+    fn handle_epoch(&mut self, _epoch: Epoch, _ctx: OperatorContext<Self>) {}
 
     fn handle_timeout(&mut self, timeout: Self::TimerState, ctx: OperatorContext<Self>) -> () {
         let WindowEvent {
@@ -312,7 +306,7 @@ mod tests {
                 channel_strategy,
                 window_assigner,
                 state_backend,
-                timer::wheel(),
+                timer::wheel,
             )
         });
 

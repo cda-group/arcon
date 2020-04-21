@@ -52,13 +52,7 @@ where
         }
     }
     fn handle_watermark(&mut self, _w: Watermark, _ctx: OperatorContext<Self>) {}
-    fn handle_epoch(
-        &mut self,
-        _epoch: Epoch,
-        _ctx: OperatorContext<Self>,
-    ) -> Option<ArconResult<Vec<u8>>> {
-        None
-    }
+    fn handle_epoch(&mut self, _epoch: Epoch, _ctx: OperatorContext<Self>) {}
     fn handle_timeout(&mut self, _timeout: Self::TimerState, _ctx: OperatorContext<Self>) {}
 }
 
@@ -85,7 +79,7 @@ mod tests {
                 ChannelStrategy::Mute,
                 LocalFileSink::new(&file_path),
                 Box::new(InMemory::new("test".as_ref()).unwrap()),
-                timer::none(),
+                timer::none,
             )
         });
         system.start(&sink_comp);

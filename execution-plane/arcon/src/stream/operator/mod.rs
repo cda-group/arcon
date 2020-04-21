@@ -14,7 +14,6 @@ use crate::{
     stream::channel::strategy::ChannelStrategy,
     timer::TimerBackend,
 };
-use arcon_error::ArconResult;
 use prost::Message;
 
 /// Defines the methods an `Operator` must implement
@@ -38,14 +37,7 @@ pub trait Operator: Send + Sized {
     fn handle_watermark(&mut self, watermark: Watermark, ctx: OperatorContext<Self>);
 
     /// Determines how the `Operator` processes an Epoch marker
-    ///
-    /// The function either returns None signaling it did not attempt to snapshot any state.
-    /// If the `Operator` snapshotted its state, the raw bytes are packed into an `ArconResult`
-    fn handle_epoch(
-        &mut self,
-        epoch: Epoch,
-        ctx: OperatorContext<Self>,
-    ) -> Option<ArconResult<Vec<u8>>>;
+    fn handle_epoch(&mut self, epoch: Epoch, ctx: OperatorContext<Self>);
 
     /// Determines how the `Operator` handles timeouts it registered earlier when they are triggered
     fn handle_timeout(&mut self, timeout: Self::TimerState, ctx: OperatorContext<Self>);
@@ -54,7 +46,7 @@ pub trait Operator: Send + Sized {
 pub struct OperatorContext<'c, 's, 't, OP: Operator> {
     channel_strategy: &'c mut ChannelStrategy<OP::OUT>,
     pub state_backend: &'s mut dyn StateBackend,
-    pub timer_backend: &'t mut dyn TimerBackend<OP::TimerState>,
+    timer_backend: &'t mut dyn TimerBackend<OP::TimerState>,
 }
 
 impl<'c, 's, 't, OP> OperatorContext<'c, 's, 't, OP>
@@ -77,5 +69,26 @@ where
     #[inline]
     pub fn output(&mut self, event: ArconEvent<OP::OUT>) {
         self.channel_strategy.add(event)
+    }
+
+    // These are just simpler versions of the TimerBackend API.
+    // This way we don't have to manage the passing of the state_backend everywhere.
+
+    pub fn current_time(&mut self) -> u64 {
+        self.timer_backend.current_time(self.state_backend)
+    }
+
+    pub fn schedule_after(
+        &mut self,
+        delay: u64,
+        entry: OP::TimerState,
+    ) -> Result<(), OP::TimerState> {
+        self.timer_backend
+            .schedule_after(delay, entry, self.state_backend)
+    }
+
+    pub fn schedule_at(&mut self, time: u64, entry: OP::TimerState) -> Result<(), OP::TimerState> {
+        self.timer_backend
+            .schedule_at(time, entry, self.state_backend)
     }
 }

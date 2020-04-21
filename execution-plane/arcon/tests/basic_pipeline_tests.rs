@@ -50,7 +50,7 @@ fn normalise_pipeline_test() {
             ChannelStrategy::Mute,
             LocalFileSink::new(&sink_path),
             Box::new(InMemory::new("test5".as_ref()).unwrap()),
-            timer::none(),
+            timer::none,
         )
     });
     system
@@ -78,7 +78,7 @@ fn normalise_pipeline_test() {
             channel_strategy,
             Map::<NormaliseElements, i64>::new(&map_fn),
             Box::new(InMemory::new("test4".as_ref()).unwrap()),
-            timer::none(),
+            timer::none,
         )
     });
 
@@ -123,7 +123,7 @@ fn normalise_pipeline_test() {
                 &mut *state_backend_2,
             ),
             state_backend_2,
-            timer::wheel(),
+            timer::wheel,
         )
     });
     system
@@ -155,7 +155,7 @@ fn normalise_pipeline_test() {
         channel_strategy,
         Map::<SourceData, i64>::new(&source_map),
         Box::new(InMemory::new("test".as_ref()).unwrap()),
-        timer::none(),
+        timer::none,
     );
 
     let mut collection: Vec<SourceData> = Vec::new();

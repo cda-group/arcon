@@ -86,13 +86,8 @@ where
         self.buffer.push(element);
     }
     fn handle_watermark(&mut self, _w: Watermark, _ctx: OperatorContext<Self>) {}
-    fn handle_epoch(
-        &mut self,
-        _epoch: Epoch,
-        _ctx: OperatorContext<Self>,
-    ) -> Option<ArconResult<Vec<u8>>> {
+    fn handle_epoch(&mut self, _epoch: Epoch, _ctx: OperatorContext<Self>) {
         self.commit_buffer();
-        None
     }
 
     fn handle_timeout(&mut self, _timeout: Self::TimerState, _ctx: OperatorContext<Self>) {}

@@ -108,6 +108,3 @@ where
         }
     }
 }
-
-// unsafe impl<IN> Send for DebugNode<IN> where IN: ArconType {}
-// unsafe impl<IN> Sync for DebugNode<IN> where IN: ArconType {}

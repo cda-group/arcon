@@ -44,14 +44,18 @@ pub struct SourceContext<OP: Operator> {
 }
 
 impl<OP: Operator> SourceContext<OP> {
-    pub fn new(
+    pub fn new<F>(
         watermark_interval: u64,
         ts_extractor: Option<&'static dyn SafelySendableFn(&OP::IN) -> u64>,
         channel_strategy: ChannelStrategy<OP::OUT>,
         operator: OP,
-        state_backend: Box<dyn StateBackend>,
-        timer_backend: Box<dyn TimerBackend<OP::TimerState>>,
-    ) -> Self {
+        mut state_backend: Box<dyn StateBackend>,
+        timer_backend_fn: F,
+    ) -> Self
+    where
+        F: Fn(&mut dyn StateBackend) -> Box<dyn TimerBackend<OP::TimerState>> + Sized + 'static,
+    {
+        let timer_backend = timer_backend_fn(state_backend.as_mut());
         SourceContext {
             ts_extractor,
             current_watermark: 0,

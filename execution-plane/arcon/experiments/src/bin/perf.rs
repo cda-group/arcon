@@ -233,7 +233,7 @@ fn exec(
         channel_strategy,
         Map::new(&map_fn),
         Box::new(InMemory::new("perf".as_ref()).unwrap()),
-        timer::none(),
+        timer::none,
     );
 
     let map_node = if dedicated {
@@ -280,7 +280,7 @@ fn exec(
         channel_strategy,
         Map::<Item, Item>::new(&mapper),
         Box::new(InMemory::new("test".as_ref()).unwrap()),
-        timer::none(),
+        timer::none,
     );
 
     // Collection for source

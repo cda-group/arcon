@@ -147,7 +147,7 @@ mod tests {
             channel_strategy,
             Filter::<u64>::new(&filter_fn),
             Box::new(InMemory::new("test".as_ref()).unwrap()),
-            timer::none(),
+            timer::none,
         );
 
         // Generate collection

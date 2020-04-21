@@ -6,7 +6,6 @@ use crate::{
     stream::operator::{Operator, OperatorContext},
     util::SafelySendableFn,
 };
-use arcon_error::ArconResult;
 
 /// IN: Input Event
 /// C: Returned collection type (Vec<OUT>, Option<OUT>, ...)
@@ -58,13 +57,7 @@ where
     }
 
     fn handle_watermark(&mut self, _w: Watermark, _ctx: OperatorContext<Self>) {}
-    fn handle_epoch(
-        &mut self,
-        _epoch: Epoch,
-        _ctx: OperatorContext<Self>,
-    ) -> Option<ArconResult<Vec<u8>>> {
-        None
-    }
+    fn handle_epoch(&mut self, _epoch: Epoch, _ctx: OperatorContext<Self>) {}
 
     fn handle_timeout(&mut self, _timeout: Self::TimerState, _ctx: OperatorContext<Self>) {}
 }
@@ -113,7 +106,7 @@ mod tests {
                 channel_strategy,
                 StatefulFlatMap::new(&stateful_flatmap_fn),
                 Box::new(InMemory::new("test".as_ref()).unwrap()),
-                timer::none(),
+                timer::none,
             )
         });
         system.start(&stateful_flatmap_node);

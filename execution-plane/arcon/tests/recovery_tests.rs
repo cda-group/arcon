@@ -94,7 +94,7 @@ fn run_pipeline<SB: StateBackend>(
             ChannelStrategy::Mute,
             LocalFileSink::new(sink_path),
             backend::<SB>(state_dir, &checkpoint_dir, 4),
-            timer::none(),
+            timer::none,
         )
     });
     system
@@ -130,7 +130,7 @@ fn run_pipeline<SB: StateBackend>(
             channel_strategy,
             Map::<NormaliseElements, i64>::new(&map_fn::<SB>),
             backend::<SB>(state_dir, &checkpoint_dir, 3),
-            timer::none(),
+            timer::none,
         )
     });
 
@@ -172,7 +172,7 @@ fn run_pipeline<SB: StateBackend>(
                 &mut *window_state_backend,
             ),
             window_state_backend,
-            timer::wheel(),
+            timer::wheel,
         )
     });
     system
