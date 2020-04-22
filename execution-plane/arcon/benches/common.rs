@@ -50,11 +50,12 @@ impl<A: ArconType> NodeReceiver<A> {
     }
 
     fn handle_msg(&mut self, msg: ArconMessage<A>) {
+        //info!(self.log(), "Expected {} remaining, but got {}", self.remaining_recv, msg.events.len());
         self.remaining_recv -= msg.events.len() as u64;
         if self.remaining_recv <= 0u64 {
             let time = self.start.elapsed();
             let promise = self.done.take().expect("No promise to reply to?");
-            promise.fulfill(time).expect("Promise was dropped");
+            promise.fulfil(time).expect("Promise was dropped");
         }
     }
 }

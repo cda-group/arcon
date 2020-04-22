@@ -72,8 +72,9 @@ impl Query for QueryOne {
                 watermark_interval,
                 None, // no timestamp extractor
                 channel_strategy,
-                Box::new(FilterMap::<NEXMarkEvent, Bid>::new(&bid_filter_map)),
+                FilterMap::<NEXMarkEvent, Bid>::new(&bid_filter_map),
                 Box::new(InMemory::new("src".as_ref()).unwrap()),
+                timer::none,
             );
 
             super::source(sink_port_opt, nexmark_config, source_context, &mut system)
@@ -86,7 +87,7 @@ pub fn q1_node(
     id: NodeID,
     in_channels: Vec<NodeID>,
     channel_strategy: ChannelStrategy<Bid>,
-) -> Node<Bid, Bid> {
+) -> Node<impl Operator<IN = Bid, OUT = Bid>> {
     #[inline(always)]
     fn map_fn(bid: &mut Bid) {
         bid.price = (bid.price * 89) / 100;
@@ -97,7 +98,8 @@ pub fn q1_node(
         id,
         in_channels,
         channel_strategy,
-        Box::new(MapInPlace::new(&map_fn)),
+        MapInPlace::new(&map_fn),
         Box::new(InMemory::new("map".as_ref()).unwrap()),
+        timer::none,
     )
 }

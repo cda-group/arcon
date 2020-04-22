@@ -21,7 +21,7 @@ pub struct KafkaSource<OUT>
 where
     OUT: ArconType + ::serde::Serialize + ::serde::de::DeserializeOwned,
 {
-    ctx: ComponentContext<KafkaSource<OUT>>,
+    ctx: ComponentContext<Self>,
     channel_strategy: ChannelStrategy<OUT>,
     bootstrap_server: String,
     topic: String,

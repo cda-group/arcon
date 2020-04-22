@@ -2,11 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
-    data::{ArconElement, ArconEvent, ArconType, Epoch, Watermark},
+    data::{ArconElement, ArconEvent, ArconNever, ArconType, Epoch, Watermark},
     stream::operator::{Operator, OperatorContext},
     util::SafelySendableFn,
 };
-use arcon_error::ArconResult;
 
 /// An Arcon operator for performing an in-place map
 ///
@@ -32,11 +31,15 @@ where
     }
 }
 
-impl<IN> Operator<IN, IN> for MapInPlace<IN>
+impl<IN> Operator for MapInPlace<IN>
 where
     IN: ArconType,
 {
-    fn handle_element(&mut self, element: ArconElement<IN>, mut ctx: OperatorContext<IN>) {
+    type IN = IN;
+    type OUT = IN;
+    type TimerState = ArconNever;
+
+    fn handle_element(&mut self, element: ArconElement<IN>, mut ctx: OperatorContext<Self>) {
         let mut elem = element;
         if let Some(data) = elem.data.as_mut() {
             self.run_udf(data);
@@ -44,18 +47,7 @@ where
         }
     }
 
-    fn handle_watermark(
-        &mut self,
-        _w: Watermark,
-        _ctx: OperatorContext<IN>,
-    ) -> Option<Vec<ArconEvent<IN>>> {
-        None
-    }
-    fn handle_epoch(
-        &mut self,
-        _epoch: Epoch,
-        _ctx: OperatorContext<IN>,
-    ) -> Option<ArconResult<Vec<u8>>> {
-        None
-    }
+    fn handle_watermark(&mut self, _w: Watermark, _ctx: OperatorContext<Self>) {}
+    fn handle_epoch(&mut self, _epoch: Epoch, _ctx: OperatorContext<Self>) {}
+    fn handle_timeout(&mut self, _timeout: Self::TimerState, _ctx: OperatorContext<Self>) {}
 }

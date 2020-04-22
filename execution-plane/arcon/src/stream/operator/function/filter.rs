@@ -2,11 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
-    data::{ArconElement, ArconEvent, ArconType, Epoch, Watermark},
+    data::{ArconElement, ArconEvent, ArconNever, ArconType, Epoch, Watermark},
     stream::operator::{Operator, OperatorContext},
     util::SafelySendableFn,
 };
-use arcon_error::ArconResult;
 
 /// IN: Input Event
 pub struct Filter<IN>
@@ -30,11 +29,15 @@ where
     }
 }
 
-impl<IN> Operator<IN, IN> for Filter<IN>
+impl<IN> Operator for Filter<IN>
 where
     IN: 'static + ArconType,
 {
-    fn handle_element(&mut self, element: ArconElement<IN>, mut ctx: OperatorContext<IN>) {
+    type IN = IN;
+    type OUT = IN;
+    type TimerState = ArconNever;
+
+    fn handle_element(&mut self, element: ArconElement<IN>, mut ctx: OperatorContext<Self>) {
         if let Some(data) = &element.data {
             if self.run_udf(&data) {
                 ctx.output(ArconEvent::Element(element));
@@ -42,20 +45,9 @@ where
         }
     }
 
-    fn handle_watermark(
-        &mut self,
-        _w: Watermark,
-        _ctx: OperatorContext<IN>,
-    ) -> Option<Vec<ArconEvent<IN>>> {
-        None
-    }
-    fn handle_epoch(
-        &mut self,
-        _epoch: Epoch,
-        _ctx: OperatorContext<IN>,
-    ) -> Option<ArconResult<Vec<u8>>> {
-        None
-    }
+    fn handle_watermark(&mut self, _w: Watermark, _ctx: OperatorContext<Self>) -> () {}
+    fn handle_epoch(&mut self, _epoch: Epoch, _ctx: OperatorContext<Self>) {}
+    fn handle_timeout(&mut self, _timeout: Self::TimerState, _ctx: OperatorContext<Self>) {}
 }
 
 #[cfg(test)]
@@ -79,13 +71,14 @@ mod tests {
         }
 
         let filter_node = system.create(move || {
-            Node::<i32, i32>::new(
+            Node::new(
                 String::from("filter_node"),
                 0.into(),
                 vec![1.into()],
                 channel_strategy,
-                Box::new(Filter::new(&filter_fn)),
+                Filter::new(&filter_fn),
                 Box::new(InMemory::new("test".as_ref()).unwrap()),
+                timer::none,
             )
         });
         system.start(&filter_node);

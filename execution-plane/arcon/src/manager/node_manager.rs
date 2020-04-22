@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
-    data::ArconType,
     prelude::NodeID,
     stream::{
         channel::strategy::ChannelStrategy,
         node::{Node, NodeMetrics},
+        operator::Operator,
     },
     util::SafelySendableFn,
 };
@@ -31,7 +31,7 @@ pub enum NodeEvent {
 /// A [kompact] port for communication
 pub struct NodeManagerPort {}
 impl Port for NodeManagerPort {
-    type Indication = ();
+    type Indication = Never;
     type Request = NodeEvent;
 }
 
@@ -51,10 +51,9 @@ impl Port for NodeManagerPort {
 /// ```
 #[allow(dead_code)]
 #[derive(ComponentDefinition)]
-pub struct NodeManager<IN, OUT>
+pub struct NodeManager<OP>
 where
-    IN: ArconType,
-    OUT: ArconType,
+    OP: Operator + 'static,
 {
     /// Component Context
     ctx: ComponentContext<Self>,
@@ -71,11 +70,11 @@ where
     /// Current Node IDs that are connected to nodes on this manager
     in_channels: Vec<NodeID>,
     /// ChannelStrategy used by the nodes on this manager
-    channel_strategy: ChannelStrategy<OUT>,
+    channel_strategy: ChannelStrategy<OP::OUT>,
     /// Monotonically increasing Node ID index
     node_index: u32,
     /// Nodes this manager controls
-    nodes: FxHashMap<NodeID, Arc<Component<Node<IN, OUT>>>>,
+    nodes: FxHashMap<NodeID, Arc<Component<Node<OP>>>>,
     /// Metrics per Node
     node_metrics: FxHashMap<NodeID, NodeMetrics>,
     /// Port reference to the previous NodeManager in the pipeline stage
@@ -91,16 +90,15 @@ where
         String,
         NodeID,
         Vec<NodeID>,
-        ChannelStrategy<OUT>,
-    ) -> Node<IN, OUT>,
+        ChannelStrategy<OP::OUT>,
+    ) -> Node<OP>,
     #[cfg(feature = "arcon_tui")]
     tui_ref: ActorRefStrong<MetricReport>,
 }
 
-impl<IN, OUT> NodeManager<IN, OUT>
+impl<OP> NodeManager<OP>
 where
-    IN: ArconType,
-    OUT: ArconType,
+    OP: Operator + 'static,
 {
     pub fn new(
         node_description: String,
@@ -108,15 +106,15 @@ where
             String,
             NodeID,
             Vec<NodeID>,
-            ChannelStrategy<OUT>,
-        ) -> Node<IN, OUT>,
-        channel_strategy: ChannelStrategy<OUT>,
+            ChannelStrategy<OP::OUT>,
+        ) -> Node<OP>,
+        channel_strategy: ChannelStrategy<OP::OUT>,
         in_channels: Vec<NodeID>,
-        node_comps: Vec<Arc<Component<Node<IN, OUT>>>>,
+        node_comps: Vec<Arc<Component<Node<OP>>>>,
         prev_manager: Option<RequiredRef<NodeManagerPort>>,
         next_manager: Option<RequiredRef<NodeManagerPort>>,
         #[cfg(feature = "arcon_tui")] tui_ref: ActorRefStrong<MetricReport>,
-    ) -> NodeManager<IN, OUT> {
+    ) -> NodeManager<OP> {
         let total_nodes = node_comps.len() as u32;
         let mut nodes_map = FxHashMap::default();
         for (i, node) in node_comps.into_iter().enumerate() {
@@ -143,10 +141,9 @@ where
     }
 }
 
-impl<IN, OUT> Provide<ControlPort> for NodeManager<IN, OUT>
+impl<OP> Provide<ControlPort> for NodeManager<OP>
 where
-    IN: ArconType,
-    OUT: ArconType,
+    OP: Operator + 'static,
 {
     fn handle(&mut self, event: ControlEvent) {
         match event {
@@ -171,10 +168,9 @@ where
     }
 }
 
-impl<IN, OUT> Provide<NodeManagerPort> for NodeManager<IN, OUT>
+impl<OP> Provide<NodeManagerPort> for NodeManager<OP>
 where
-    IN: ArconType,
-    OUT: ArconType,
+    OP: Operator + 'static,
 {
     fn handle(&mut self, event: NodeEvent) {
         debug!(self.ctx.log(), "Got Event {:?}", event);
@@ -197,18 +193,18 @@ where
     }
 }
 
-impl<IN, OUT> Require<NodeManagerPort> for NodeManager<IN, OUT>
+impl<OP> Require<NodeManagerPort> for NodeManager<OP>
 where
-    IN: ArconType,
-    OUT: ArconType,
+    OP: Operator + 'static,
 {
-    fn handle(&mut self, _: ()) {}
+    fn handle(&mut self, _: Never) {
+        unreachable!(crate::data::ArconNever::IS_UNREACHABLE);
+    }
 }
 
-impl<IN, OUT> Actor for NodeManager<IN, OUT>
+impl<OP> Actor for NodeManager<OP>
 where
-    IN: ArconType,
-    OUT: ArconType,
+    OP: Operator + 'static,
 {
     type Message = NodeEvent;
     fn receive_local(&mut self, _: Self::Message) {}

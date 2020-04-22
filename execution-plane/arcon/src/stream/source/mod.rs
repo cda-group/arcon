@@ -2,12 +2,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
-    data::{ArconElement, ArconEvent, ArconType, Watermark},
+    data::{ArconElement, ArconEvent, Watermark},
     state_backend::StateBackend,
     stream::{
         channel::strategy::ChannelStrategy,
         operator::{Operator, OperatorContext},
     },
+    timer::TimerBackend,
     util::SafelySendableFn,
 };
 
@@ -19,15 +20,11 @@ pub mod local_file;
 pub mod socket;
 
 /// Common Context for all Source implementations
-pub struct SourceContext<IN, OUT>
-where
-    IN: ArconType,
-    OUT: ArconType,
-{
+pub struct SourceContext<OP: Operator> {
     /// Timestamp extractor function
     ///
     /// If set to None, timestamps of ArconElement's will also be None.
-    ts_extractor: Option<&'static dyn SafelySendableFn(&IN) -> u64>,
+    ts_extractor: Option<&'static dyn SafelySendableFn(&OP::IN) -> u64>,
     /// Current Watermark
     current_watermark: u64,
     /// Watermark interval
@@ -37,25 +34,28 @@ where
     /// in an unbounded source type, it may be the timer timeout period.
     pub watermark_interval: u64,
     /// An Operator to enable fusion of computation within the source
-    operator: Box<dyn Operator<IN, OUT> + Send>,
+    operator: OP,
     /// Strategy for outputting events
-    channel_strategy: ChannelStrategy<OUT>,
+    channel_strategy: ChannelStrategy<OP::OUT>,
     /// State backend that a source can keep persistent data in
     state_backend: Box<dyn StateBackend>,
+    /// Timer Backend to keep track of event timers
+    timer_backend: Box<dyn TimerBackend<OP::TimerState>>,
 }
 
-impl<IN, OUT> SourceContext<IN, OUT>
-where
-    IN: ArconType,
-    OUT: ArconType,
-{
-    pub fn new(
+impl<OP: Operator> SourceContext<OP> {
+    pub fn new<F>(
         watermark_interval: u64,
-        ts_extractor: Option<&'static dyn SafelySendableFn(&IN) -> u64>,
-        channel_strategy: ChannelStrategy<OUT>,
-        operator: Box<dyn Operator<IN, OUT> + Send>,
-        state_backend: Box<dyn StateBackend>,
-    ) -> Self {
+        ts_extractor: Option<&'static dyn SafelySendableFn(&OP::IN) -> u64>,
+        channel_strategy: ChannelStrategy<OP::OUT>,
+        operator: OP,
+        mut state_backend: Box<dyn StateBackend>,
+        timer_backend_fn: F,
+    ) -> Self
+    where
+        F: Fn(&mut dyn StateBackend) -> Box<dyn TimerBackend<OP::TimerState>> + Sized + 'static,
+    {
+        let timer_backend = timer_backend_fn(state_backend.as_mut());
         SourceContext {
             ts_extractor,
             current_watermark: 0,
@@ -63,13 +63,14 @@ where
             operator,
             channel_strategy,
             state_backend,
+            timer_backend,
         }
     }
 
     /// Generates a Watermark event and sends it downstream
     #[inline]
     pub fn generate_watermark(&mut self) {
-        let wm_event: ArconEvent<OUT> = {
+        let wm_event: ArconEvent<OP::OUT> = {
             if self.has_timestamp_extractor() {
                 ArconEvent::Watermark(Watermark::new(self.current_watermark))
             } else {
@@ -104,10 +105,14 @@ where
 
     /// Calls a transformation function on the source data to generate outgoing ArconEvent<OUT>
     #[inline]
-    pub fn process(&mut self, data: ArconElement<IN>) {
+    pub fn process(&mut self, data: ArconElement<OP::IN>) {
         self.operator.handle_element(
             data,
-            OperatorContext::new(&mut self.channel_strategy, &mut *self.state_backend),
+            OperatorContext::new(
+                &mut self.channel_strategy,
+                self.state_backend.as_mut(),
+                self.timer_backend.as_mut(),
+            ),
         );
     }
 
@@ -115,7 +120,7 @@ where
     ///
     /// Extracts timestamp if extractor is available
     #[inline]
-    pub fn extract_element(&mut self, data: IN) -> ArconElement<IN> {
+    pub fn extract_element(&mut self, data: OP::IN) -> ArconElement<OP::IN> {
         match &self.ts_extractor {
             Some(ts_fn) => {
                 let ts = (ts_fn)(&data);

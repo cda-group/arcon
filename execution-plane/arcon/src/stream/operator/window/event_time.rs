@@ -4,7 +4,6 @@
 use crate::{
     prelude::*,
     stream::operator::{window::WindowContext, OperatorContext},
-    util::event_timer::{EventTimer, SerializableEventTimer},
 };
 use prost::Message;
 use std::{
@@ -70,10 +69,6 @@ where
     // active windows technically could also use the state backend integration and
     // set IK=Key, N=Index, but I find it clearer this way
     active_windows: BoxedMapState<(Key, Index), ()>,
-
-    // timer is held twice, to avoid serialization overhead - it's a big value
-    transient_timer: EventTimer<WindowEvent>, // Stores key, "index" and timestamp
-    persistent_timer: BoxedValueState<SerializableEventTimer<WindowEvent>>,
 }
 
 impl<IN, OUT> EventTimeWindowAssigner<IN, OUT>
@@ -97,15 +92,6 @@ where
             panic!("Window Length not divisible by slide!");
         }
 
-        let persistent_timer: BoxedValueState<SerializableEventTimer<WindowEvent>> =
-            state_backend.build("timer").value();
-
-        // this will be overwritten in init if state backend contains previous data
-        // we cannot check it now, because the node most likely hasn't registered all the state yet,
-        // and some of the state backends (rocks) are picky about doing stuff without being fully
-        // initialized
-        let transient_timer = EventTimer::new();
-
         EventTimeWindowAssigner {
             window_length: length,
             window_slide: slide,
@@ -116,31 +102,32 @@ where
 
             window_start: state_backend.build("window_start").with_item_key(0).value(),
             active_windows: state_backend.build("window_active").map(),
-
-            transient_timer,
-            persistent_timer,
         }
     }
 
     // Creates the window trigger for a key and "window index"
-    fn new_window_trigger(&mut self, key: Key, index: Index, state_backend: &dyn StateBackend) {
+    fn new_window_trigger(
+        &mut self,
+        key: Key,
+        index: Index,
+        ctx: &mut OperatorContext<Self>,
+    ) -> Result<(), WindowEvent> {
         self.window_start
             .set_current_key(key)
             .expect("window key error");
 
         let w_start = self
             .window_start
-            .get(state_backend)
+            .get(ctx.state_backend)
             .expect("window start state get error")
             .expect("tried to schedule window_trigger for key which hasn't started");
 
         let ts = w_start + (index * self.window_slide) + self.window_length;
 
-        // Put the window identifier in the timer.
-        self.transient_timer.schedule_at(
+        ctx.schedule_at(
             ts + self.late_arrival_time,
             WindowEvent::new(key, index, ts),
-        );
+        )
     }
 
     // Extracts the key from ArconElements
@@ -154,32 +141,23 @@ where
     }
 }
 
-impl<IN, OUT> Operator<IN, OUT> for EventTimeWindowAssigner<IN, OUT>
+impl<IN, OUT> Operator for EventTimeWindowAssigner<IN, OUT>
 where
     IN: ArconType + Hash,
     OUT: ArconType,
 {
-    fn init(&mut self, state_backend: &mut dyn StateBackend) {
-        let mut transient_timer = match self.persistent_timer.get(state_backend) {
-            Ok(Some(v)) => v.into(),
-            Ok(None) => EventTimer::new(),
-            Err(e) => panic!("state error: {}", e),
-        };
+    type IN = IN;
 
-        std::mem::swap(&mut self.transient_timer, &mut transient_timer)
-    }
+    type OUT = OUT;
 
-    fn handle_element(&mut self, element: ArconElement<IN>, ctx: OperatorContext<OUT>) {
+    type TimerState = WindowEvent;
+
+    fn handle_element(&mut self, element: ArconElement<IN>, mut ctx: OperatorContext<Self>) {
         let ts = element.timestamp.unwrap_or(1);
-        if self.transient_timer.get_time() == 0 {
-            // First element received, set the internal timer
-            self.transient_timer.set_time(ts);
-        }
 
-        let ts_lower_bound = self
-            .transient_timer
-            .get_time()
-            .saturating_sub(self.late_arrival_time);
+        let time = ctx.current_time();
+
+        let ts_lower_bound = time.saturating_sub(self.late_arrival_time);
 
         if ts < ts_lower_bound {
             // Late arrival: early return
@@ -228,70 +206,49 @@ where
                     .insert(ctx.state_backend, (key, i), ())
                     .expect("active windows insert error");
                 // Create the window trigger
-                self.new_window_trigger(key, i, ctx.state_backend);
+                if let Err(event) = self.new_window_trigger(key, i, &mut ctx) {
+                    // I'm pretty sure this shouldn't happen
+                    unreachable!("Window was expired when scheduled: {:?}", event);
+                }
             }
         }
     }
 
-    fn handle_watermark(
-        &mut self,
-        w: Watermark,
-        ctx: OperatorContext<OUT>,
-    ) -> Option<Vec<ArconEvent<OUT>>> {
-        if self
-            .active_windows
-            .is_empty(ctx.state_backend)
-            .expect("state error")
-        {
-            return None;
-        }
+    fn handle_watermark(&mut self, _w: Watermark, _ctx: OperatorContext<Self>) {}
 
-        let ts = w.timestamp;
-        let windows_to_close = self.transient_timer.advance_to(ts);
-        let mut result = Vec::with_capacity(windows_to_close.len());
+    fn handle_epoch(&mut self, _epoch: Epoch, _ctx: OperatorContext<Self>) {}
 
-        for WindowEvent {
+    fn handle_timeout(&mut self, timeout: Self::TimerState, ctx: OperatorContext<Self>) -> () {
+        let WindowEvent {
             key,
             index,
             timestamp,
-        } in windows_to_close
-        {
-            let e = self
-                .window
-                .result(WindowContext::new(ctx.state_backend, key, index))
-                .expect("window result error");
+        } = timeout;
 
-            self.window
-                .clear(WindowContext::new(ctx.state_backend, key, index))
-                .expect("window clear error");
-            self.active_windows
-                .remove(ctx.state_backend, &(key, index))
-                .expect("active window remove error");
+        let e = self
+            .window
+            .result(WindowContext::new(ctx.state_backend, key, index))
+            .expect("window result error");
 
-            result.push(ArconEvent::Element(ArconElement::with_timestamp(
-                e, timestamp,
-            )));
-        }
+        self.window
+            .clear(WindowContext::new(ctx.state_backend, key, index))
+            .expect("window clear error");
+        self.active_windows
+            .remove(ctx.state_backend, &(key, index))
+            .expect("active window remove error");
 
-        Some(result)
-    }
-
-    fn handle_epoch(
-        &mut self,
-        _epoch: Epoch,
-        ctx: OperatorContext<OUT>,
-    ) -> Option<ArconResult<Vec<u8>>> {
-        self.persistent_timer
-            .set(ctx.state_backend, self.transient_timer.inner.clone())
-            .expect("state error");
-        None
+        let window_result = ArconEvent::Element(ArconElement::with_timestamp(e, timestamp));
+        ctx.channel_strategy.add(window_result);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::stream::channel::{strategy::forward::*, Channel};
+    use crate::{
+        stream::channel::{strategy::forward::*, Channel},
+        timer,
+    };
     use kompact::prelude::Component;
     use std::{sync::Arc, thread, time, time::UNIX_EPOCH};
 
@@ -338,17 +295,18 @@ mod tests {
             slide,
             late,
             true,
-            &mut *state_backend,
+            state_backend.as_mut(),
         );
 
         let window_node = system.create(move || {
-            Node::<Item, u64>::new(
+            Node::new(
                 String::from("window_node"),
                 1.into(),
                 vec![0.into()],
                 channel_strategy,
-                Box::new(window_assigner),
+                window_assigner,
                 state_backend,
+                timer::wheel,
             )
         });
 

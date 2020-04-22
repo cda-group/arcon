@@ -17,14 +17,14 @@ impl Port for LoopbackPort {
 
 #[derive(ComponentDefinition)]
 #[allow(dead_code)]
-pub struct NEXMarkSource<OUT>
+pub struct NEXMarkSource<OP>
 where
-    OUT: ArconType,
+    OP: Operator<IN = NEXMarkEvent> + 'static,
 {
     ctx: ComponentContext<Self>,
     loopback_send: RequiredPort<LoopbackPort, Self>,
     loopback_receive: ProvidedPort<LoopbackPort, Self>,
-    source_ctx: SourceContext<NEXMarkEvent, OUT>,
+    source_ctx: SourceContext<OP>,
     nexmark_config: NEXMarkConfig,
     timer: ::std::time::Instant,
     events_so_far: u32,
@@ -32,14 +32,11 @@ where
     duration_ns: u64,
 }
 
-impl<OUT> NEXMarkSource<OUT>
+impl<OP> NEXMarkSource<OP>
 where
-    OUT: ArconType,
+    OP: Operator<IN = NEXMarkEvent> + 'static,
 {
-    pub fn new(
-        mut nexmark_config: NEXMarkConfig,
-        source_ctx: SourceContext<NEXMarkEvent, OUT>,
-    ) -> Self {
+    pub fn new(mut nexmark_config: NEXMarkConfig, source_ctx: SourceContext<OP>) -> Self {
         let timer = ::std::time::Instant::now();
         // Establish a start of the computation.
         let elapsed = timer.elapsed();
@@ -47,7 +44,6 @@ where
             (elapsed.as_secs() * 1_000_000_000 + (elapsed.subsec_nanos() as u64)) as usize;
         nexmark_config.base_time_ns = elapsed_ns as u32;
         let duration_ns: u64 = nexmark_config.stream_timeout * 1_000_000_000;
-
         NEXMarkSource {
             ctx: ComponentContext::new(),
             loopback_send: RequiredPort::new(),
@@ -105,9 +101,9 @@ where
     }
 }
 
-impl<OUT> Provide<ControlPort> for NEXMarkSource<OUT>
+impl<OP> Provide<ControlPort> for NEXMarkSource<OP>
 where
-    OUT: ArconType,
+    OP: Operator<IN = NEXMarkEvent> + 'static,
 {
     fn handle(&mut self, event: ControlEvent) {
         if let ControlEvent::Start = event {
@@ -118,27 +114,27 @@ where
     }
 }
 
-impl<OUT> Provide<LoopbackPort> for NEXMarkSource<OUT>
+impl<OP> Provide<LoopbackPort> for NEXMarkSource<OP>
 where
-    OUT: ArconType,
+    OP: Operator<IN = NEXMarkEvent> + 'static,
 {
     fn handle(&mut self, _event: ContinueSending) {
         self.process();
     }
 }
 
-impl<OUT> Require<LoopbackPort> for NEXMarkSource<OUT>
+impl<OP> Require<LoopbackPort> for NEXMarkSource<OP>
 where
-    OUT: ArconType,
+    OP: Operator<IN = NEXMarkEvent> + 'static,
 {
     fn handle(&mut self, _event: Never) {
         unreachable!("Never type has no instance");
     }
 }
 
-impl<OUT> Actor for NEXMarkSource<OUT>
+impl<OP> Actor for NEXMarkSource<OP>
 where
-    OUT: ArconType,
+    OP: Operator<IN = NEXMarkEvent> + 'static,
 {
     type Message = ();
     fn receive_local(&mut self, _msg: Self::Message) {}

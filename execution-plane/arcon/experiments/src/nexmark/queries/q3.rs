@@ -10,6 +10,7 @@ use arcon::{
     macros::*,
     prelude::*,
     stream::operator::{function::StatefulFlatMap, OperatorContext},
+    timer,
 };
 use serde::{Deserialize, Serialize};
 
@@ -112,10 +113,9 @@ impl Query for QueryThree {
                 watermark_interval,
                 None, // no timestamp extractor
                 channel_strategy,
-                Box::new(FilterMap::<NEXMarkEvent, PersonOrAuction>::new(
-                    &person_or_auction_filter_map,
-                )),
+                FilterMap::<NEXMarkEvent, PersonOrAuction>::new(&person_or_auction_filter_map),
                 Box::new(InMemory::new("src".as_ref()).unwrap()),
+                timer::none,
             );
 
             super::source(sink_port_opt, nexmark_config, source_context, &mut system)
@@ -128,7 +128,7 @@ pub fn q3_node(
     id: NodeID,
     in_channels: Vec<NodeID>,
     channel_strategy: ChannelStrategy<Q3Result>,
-) -> Node<PersonOrAuction, Q3Result> {
+) -> Node<impl Operator<IN = PersonOrAuction, OUT = Q3Result>> {
     // SELECT person.name, person.city,
     //      person.state, open_auction.id
     // FROM open_auction, person, item
@@ -139,7 +139,7 @@ pub fn q3_node(
 
     #[inline(always)]
     fn flatmap_fn(
-        ctx: OperatorContext<Q3Result>,
+        ctx: OperatorContext<impl Operator>,
         person_or_auction: PersonOrAuction,
     ) -> Vec<Q3Result> {
         const PERSON: &str = "person_state";
@@ -242,7 +242,8 @@ pub fn q3_node(
         id,
         in_channels,
         channel_strategy,
-        Box::new(StatefulFlatMap::new(&flatmap_fn)),
+        StatefulFlatMap::new(&flatmap_fn),
         Box::new(InMemory::new("flatmap".as_ref()).unwrap()),
+        timer::none,
     )
 }

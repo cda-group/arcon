@@ -74,28 +74,23 @@ where
     }
 }
 
-impl<IN> Operator<IN, IN> for KafkaSink<IN>
+impl<IN> Operator for KafkaSink<IN>
 where
     IN: ArconType + ::serde::Serialize + ::serde::de::DeserializeOwned,
 {
-    fn handle_element(&mut self, element: ArconElement<IN>, _ctx: OperatorContext<IN>) {
+    type IN = IN;
+    type OUT = ArconNever;
+    type TimerState = ArconNever;
+
+    fn handle_element(&mut self, element: ArconElement<IN>, _ctx: OperatorContext<Self>) {
         self.buffer.push(element);
     }
-    fn handle_watermark(
-        &mut self,
-        _w: Watermark,
-        _ctx: OperatorContext<IN>,
-    ) -> Option<Vec<ArconEvent<IN>>> {
-        None
-    }
-    fn handle_epoch(
-        &mut self,
-        _epoch: Epoch,
-        _ctx: OperatorContext<IN>,
-    ) -> Option<ArconResult<Vec<u8>>> {
+    fn handle_watermark(&mut self, _w: Watermark, _ctx: OperatorContext<Self>) {}
+    fn handle_epoch(&mut self, _epoch: Epoch, _ctx: OperatorContext<Self>) {
         self.commit_buffer();
-        None
     }
+
+    fn handle_timeout(&mut self, _timeout: Self::TimerState, _ctx: OperatorContext<Self>) {}
 }
 
 // Tested via kafka_source
