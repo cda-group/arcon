@@ -5,7 +5,7 @@ use arcon_error::ArconResult;
 use std::any::{type_name, Any, TypeId};
 
 /// Trait required for all state backend implementations in Arcon
-pub trait StateBackend: Any + Send + Sync {
+pub trait StateBackend: Any + Send {
     fn new(path: &Path) -> ArconResult<Self>
     where
         Self: Sized;
@@ -60,6 +60,8 @@ pub mod state_types;
 #[cfg(all(feature = "arcon_faster", target_os = "linux"))]
 pub mod faster;
 pub mod in_memory;
+#[cfg(feature = "metered_state_backend")]
+pub mod metered;
 #[cfg(feature = "arcon_rocksdb")]
 pub mod rocks;
 #[cfg(feature = "arcon_sled")]
@@ -120,6 +122,14 @@ mod test {
             let test_faster: &mut faster::Faster = &mut *test_faster;
             let dynamic_faster: &mut dyn StateBackend = test_faster;
             do_backend_ops(dynamic_faster);
+        }
+
+        #[cfg(feature = "metered_state_backend")]
+        {
+            let mut test_metered =
+                metered::Metered::<in_memory::InMemory>::new("test_metered".as_ref()).unwrap();
+            let dynamic_metered: &mut dyn StateBackend = &mut test_metered;
+            do_backend_ops(dynamic_metered);
         }
 
         let mut test_in_memory = in_memory::InMemory::new("test_im".as_ref()).unwrap();
@@ -211,6 +221,13 @@ mod test {
             let mut test_faster = faster::test::TestDb::new();
             let test_faster: &mut faster::Faster = &mut *test_faster;
             do_backend_ops(test_faster);
+        }
+
+        #[cfg(feature = "metered_state_backend")]
+        {
+            let mut test_metered =
+                metered::Metered::<in_memory::InMemory>::new("test_metered".as_ref()).unwrap();
+            do_backend_ops(&mut test_metered);
         }
 
         let mut test_in_memory = in_memory::InMemory::new("test_im".as_ref()).unwrap();
