@@ -1,7 +1,6 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use self::measure_impl::measure;
 use crate::{
     prelude::{AggregatingStateBuilder, ArconResult},
     state_backend::{
@@ -14,8 +13,8 @@ use crate::{
         MapStateBuilder, ReducingStateBuilder, StateBackend, ValueStateBuilder, VecStateBuilder,
     },
 };
-use static_assertions::_core::ops::Deref;
-use std::{any::type_name, cell::RefCell, env, path::Path};
+use cfg_if::cfg_if;
+use std::{any::type_name, cell::RefCell, env, ops::Deref, path::Path};
 
 #[derive(Clone, Debug, Default)]
 pub struct DataPoint {
@@ -145,48 +144,47 @@ where
     }
 }
 
-#[cfg(not(feature = "metered_state_backend_rdtsc"))]
-mod measure_impl {
-    use super::*;
-    use once_cell::sync::Lazy;
-    use std::time::Instant;
+cfg_if! {
+    if #[cfg(all(
+        feature = "metered_state_backend_rdtsc",
+        any(target_arch = "x86", target_arch = "x86_64")
+    ))] {
+        use x86::time::rdtsc;
 
-    static ABSOLUTE_START: Lazy<Instant> = Lazy::new(|| Instant::now());
+        fn measure<T>(operation: &'static str, func: impl FnOnce() -> T) -> (T, DataPoint) {
+            let start = unsafe { rdtsc() };
+            let res = func();
+            let duration = unsafe { rdtsc() } - start;
 
-    fn micros_between(start: Instant, end: Instant) -> u64 {
-        // the truncation here will return bullshit if the Instants are more than around
-        // half a million yrs apart, so this is pretty safe
-        end.duration_since(start).as_micros() as u64
-    }
+            (res, DataPoint {
+                operation,
+                start,
+                duration,
+            })
+        }
+    } else {
+        use once_cell::sync::Lazy;
+        use std::time::Instant;
 
-    pub fn measure<T>(operation: &'static str, func: impl FnOnce() -> T) -> (T, DataPoint) {
-        let start = Instant::now();
-        let res = func();
-        let duration = micros_between(start, Instant::now());
+        static ABSOLUTE_START: Lazy<Instant> = Lazy::new(|| Instant::now());
 
-        (res, DataPoint {
-            operation,
-            start: micros_between(*ABSOLUTE_START, start),
-            duration,
-        })
-    }
-}
+        fn micros_between(start: Instant, end: Instant) -> u64 {
+            // the truncation here will return bullshit if the Instants are more than around
+            // half a million yrs apart, so this is pretty safe
+            end.duration_since(start).as_micros() as u64
+        }
 
-#[cfg(feature = "metered_state_backend_rdtsc")]
-mod measure_impl {
-    use super::*;
-    use x86::time::rdtsc;
+        fn measure<T>(operation: &'static str, func: impl FnOnce() -> T) -> (T, DataPoint) {
+            let start = Instant::now();
+            let res = func();
+            let duration = micros_between(start, Instant::now());
 
-    pub fn measure<T>(operation: &'static str, func: impl FnOnce() -> T) -> (T, DataPoint) {
-        let start = unsafe { rdtsc() };
-        let res = func();
-        let duration = unsafe { rdtsc() } - start;
-
-        (res, DataPoint {
-            operation,
-            start,
-            duration,
-        })
+            (res, DataPoint {
+                operation,
+                start: micros_between(*ABSOLUTE_START, start),
+                duration,
+            })
+        }
     }
 }
 
