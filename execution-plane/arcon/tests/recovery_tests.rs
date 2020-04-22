@@ -5,7 +5,7 @@
 #![allow(bare_trait_objects)]
 extern crate arcon;
 
-use arcon::{macros::*, prelude::*};
+use arcon::{macros::*, prelude::*, timer};
 use once_cell::sync::Lazy;
 use std::{
     any::TypeId,
@@ -92,8 +92,9 @@ fn run_pipeline<SB: StateBackend>(
             4.into(),
             vec![3.into()],
             ChannelStrategy::Mute,
-            Box::new(LocalFileSink::new(sink_path)),
+            LocalFileSink::new(sink_path),
             backend::<SB>(state_dir, &checkpoint_dir, 4),
+            timer::none,
         )
     });
     system
@@ -122,13 +123,14 @@ fn run_pipeline<SB: StateBackend>(
     }
 
     let map_node = system.create(|| {
-        Node::<NormaliseElements, i64>::new(
+        Node::new(
             "map_node".into(),
             3.into(),
             vec![2.into()],
             channel_strategy,
-            Box::new(Map::<NormaliseElements, i64>::new(&map_fn::<SB>)),
+            Map::<NormaliseElements, i64>::new(&map_fn::<SB>),
             backend::<SB>(state_dir, &checkpoint_dir, 3),
+            timer::none,
         )
     });
 
@@ -156,20 +158,21 @@ fn run_pipeline<SB: StateBackend>(
         ChannelStrategy::Forward(Forward::new(Channel::Local(map_node_ref), NodeID::new(2)));
 
     let window_node = system.create(move || {
-        Node::<i64, NormaliseElements>::new(
+        Node::new(
             "window_node".into(),
             2.into(),
             vec![1.into()],
             channel_strategy,
-            Box::new(EventTimeWindowAssigner::<i64, NormaliseElements>::new(
+            EventTimeWindowAssigner::<i64, NormaliseElements>::new(
                 window,
                 2,
                 2,
                 0,
                 false,
                 &mut *window_state_backend,
-            )),
+            ),
             window_state_backend,
+            timer::wheel,
         )
     });
     system

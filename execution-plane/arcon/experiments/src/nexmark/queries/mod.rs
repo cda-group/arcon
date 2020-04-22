@@ -66,14 +66,17 @@ pub fn sink<A: ArconType>(
     }
 }
 
-pub fn source<OUT: ArconType>(
+pub fn source<OP>(
     sink_port_opt: Option<ProvidedRef<SinkPort>>,
     nexmark_config: NEXMarkConfig,
-    source_context: SourceContext<NEXMarkEvent, OUT>,
+    source_context: SourceContext<OP>,
     system: &mut KompactSystem,
-) -> QueryTimer {
+) -> QueryTimer
+where
+    OP: Operator<IN = NEXMarkEvent> + 'static,
+{
     let nexmark_source_comp =
-        system.create_dedicated(move || NEXMarkSource::<OUT>::new(nexmark_config, source_context));
+        system.create_dedicated(move || NEXMarkSource::new(nexmark_config, source_context));
 
     // NOTE: processing starts as soon as source starts,
     // so first start set up execution time at the sink if

@@ -11,18 +11,18 @@ use prost::{Message as PMessage, Oneof as POneof};
 #[cfg(feature = "arcon_serde")]
 use serde::{Deserialize, Serialize};
 use std::{
-    fmt::Debug,
+    fmt,
     hash::{Hash, Hasher},
     ops::Deref,
 };
 
 pub trait ArconTypeBoundsNoSerde:
-    Clone + Debug + Hash + Sync + Send + PMessage + Default + Abomonation + 'static
+    Clone + fmt::Debug + Hash + Sync + Send + PMessage + Default + Abomonation + 'static
 {
 }
 
 impl<T> ArconTypeBoundsNoSerde for T where
-    T: Clone + Debug + Hash + Sync + Send + PMessage + Default + Abomonation + 'static
+    T: Clone + fmt::Debug + Hash + Sync + Send + PMessage + Default + Abomonation + 'static
 {
 }
 
@@ -50,9 +50,8 @@ where
         Ok(buf)
     }
     /// Decodes bytes from encoded Protobuf data to `ArconType`
-    fn decode_storage(bytes: &mut [u8]) -> ArconResult<Self> {
-        let mut buf = bytes.into_buf();
-        let res: Self = Self::decode(&mut buf).map_err(|e| {
+    fn decode_storage(bytes: &[u8]) -> ArconResult<Self> {
+        let res: Self = Self::decode(bytes).map_err(|e| {
             arcon_err_kind!("Failed to decode ArconType with err {}", e.to_string())
         })?;
         Ok(res)
@@ -365,6 +364,81 @@ impl Deref for ArconF64 {
 impl PartialEq for ArconF64 {
     fn eq(&self, other: &Self) -> bool {
         self.value == other.value
+    }
+}
+
+/// Arcon variant of the `Never` (or `!`) type which fulfills `ArconType` requirements
+#[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
+#[derive(Clone, PartialEq, Eq)]
+pub enum ArconNever {}
+impl ArconNever {
+    pub const IS_UNREACHABLE: &'static str = "The Never type cannot be instantiated!";
+}
+impl ArconType for ArconNever {}
+impl fmt::Debug for ArconNever {
+    fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        unreachable!(ArconNever::IS_UNREACHABLE);
+    }
+}
+impl prost::Message for ArconNever {
+    fn encoded_len(&self) -> usize {
+        unreachable!(ArconNever::IS_UNREACHABLE);
+    }
+
+    fn clear(&mut self) {
+        unreachable!(ArconNever::IS_UNREACHABLE);
+    }
+
+    fn encode_raw<B>(&self, _: &mut B)
+    where
+        B: bytes::buf::BufMut,
+    {
+        unreachable!(ArconNever::IS_UNREACHABLE);
+    }
+    fn merge_field<B>(
+        &mut self,
+        _: u32,
+        _: prost::encoding::WireType,
+        _: &mut B,
+        _: prost::encoding::DecodeContext,
+    ) -> std::result::Result<(), prost::DecodeError>
+    where
+        B: bytes::buf::Buf,
+    {
+        unreachable!(ArconNever::IS_UNREACHABLE);
+    }
+}
+impl Abomonation for ArconNever {}
+impl Hash for ArconNever {
+    fn hash<H: Hasher>(&self, _state: &mut H) {
+        unreachable!(ArconNever::IS_UNREACHABLE);
+    }
+}
+impl Default for ArconNever {
+    fn default() -> Self {
+        unreachable!(ArconNever::IS_UNREACHABLE);
+    }
+}
+
+/// Variant of [Writer](bytess::buf::ext::Writer) for trait objects
+pub struct BufMutWriter<'a> {
+    buf: &'a mut dyn BufMut,
+}
+impl<'a> BufMutWriter<'a> {
+    pub fn new(buf: &'a mut dyn BufMut) -> Self {
+        BufMutWriter { buf }
+    }
+}
+impl<'a> std::io::Write for BufMutWriter<'a> {
+    fn write(&mut self, src: &[u8]) -> std::io::Result<usize> {
+        let n = std::cmp::min(self.buf.remaining_mut(), src.len());
+
+        self.buf.put_slice(&src[..n]);
+        Ok(n)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
     }
 }
 

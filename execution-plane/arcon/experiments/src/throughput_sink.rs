@@ -116,7 +116,7 @@ where
             if self.total_recv == self.expected_msgs {
                 let time = self.start.elapsed();
                 let promise = self.done.take().expect("No promise to reply to?");
-                promise.fulfill(time).expect("Promise was dropped");
+                promise.fulfil(time).expect("Promise was dropped");
             }
         }
     }

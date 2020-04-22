@@ -107,7 +107,7 @@ where
                         * 1000;
                     let promise = self.done.take().expect("No promise to reply to?");
                     promise
-                        .fulfill(QueryResult::new(time, throughput as f64))
+                        .fulfil(QueryResult::new(time, throughput as f64))
                         .expect("Promise was dropped");
                 }
                 _ => {}

@@ -1,7 +1,10 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::{data::ArconType, stream::source::SourceContext};
+use crate::{
+    data::ArconNever,
+    stream::{operator::Operator, source::SourceContext},
+};
 use kompact::prelude::*;
 use std::{
     fs::File,
@@ -10,22 +13,22 @@ use std::{
 };
 
 #[derive(ComponentDefinition)]
-pub struct LocalFileSource<IN, OUT>
+pub struct LocalFileSource<OP>
 where
-    IN: ArconType + FromStr,
-    OUT: ArconType,
+    OP: Operator + 'static,
+    OP::IN: FromStr,
 {
     ctx: ComponentContext<Self>,
-    source_ctx: SourceContext<IN, OUT>,
+    source_ctx: SourceContext<OP>,
     file_path: String,
 }
 
-impl<IN, OUT> LocalFileSource<IN, OUT>
+impl<OP> LocalFileSource<OP>
 where
-    IN: ArconType + FromStr,
-    OUT: ArconType,
+    OP: Operator + 'static,
+    OP::IN: FromStr,
 {
-    pub fn new(file_path: String, source_ctx: SourceContext<IN, OUT>) -> Self {
+    pub fn new(file_path: String, source_ctx: SourceContext<OP>) -> Self {
         LocalFileSource {
             ctx: ComponentContext::new(),
             source_ctx,
@@ -40,7 +43,7 @@ where
             for line in reader.lines() {
                 match line {
                     Ok(l) => {
-                        if let Ok(data) = l.parse::<IN>() {
+                        if let Ok(data) = l.parse::<OP::IN>() {
                             let elem = self.source_ctx.extract_element(data);
                             self.source_ctx.process(elem);
                             counter += 1;
@@ -70,10 +73,10 @@ where
     }
 }
 
-impl<IN, OUT> Provide<ControlPort> for LocalFileSource<IN, OUT>
+impl<OP> Provide<ControlPort> for LocalFileSource<OP>
 where
-    IN: ArconType + FromStr,
-    OUT: ArconType,
+    OP: Operator + 'static,
+    OP::IN: FromStr,
 {
     fn handle(&mut self, event: ControlEvent) {
         if let ControlEvent::Start = event {
@@ -82,23 +85,27 @@ where
     }
 }
 
-impl<IN, OUT> Actor for LocalFileSource<IN, OUT>
+impl<OP> NetworkActor for LocalFileSource<OP>
 where
-    IN: ArconType + FromStr,
-    OUT: ArconType,
+    OP: Operator + 'static,
+    OP::IN: FromStr,
 {
-    type Message = ();
-    fn receive_local(&mut self, _msg: Self::Message) {}
-    fn receive_network(&mut self, _msg: NetMessage) {}
+    type Message = Never;
+    type Deserialiser = Never;
+
+    fn receive(&mut self, _sender: Option<ActorPath>, _msg: Self::Message) {
+        unreachable!(ArconNever::IS_UNREACHABLE);
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{
-        data::ArconF64,
+        data::{ArconF64, ArconType},
         prelude::{Channel, ChannelStrategy, DebugNode, Forward, Map, NodeID},
         state_backend::{in_memory::InMemory, StateBackend},
+        timer,
     };
     use kompact::{default_components::DeadletterBox, prelude::KompactSystem};
     use std::{io::prelude::*, sync::Arc, thread, time};
@@ -144,8 +151,6 @@ mod tests {
             x + 5
         }
 
-        let operator = Box::new(Map::<u64, u64>::new(&map_fn));
-
         // Set up SourceContext
         let watermark_interval = 25;
 
@@ -153,12 +158,12 @@ mod tests {
             watermark_interval,
             None, // no timestamp extractor
             channel_strategy,
-            operator,
+            Map::<u64, u64>::new(&map_fn),
             Box::new(InMemory::new("test".as_ref()).unwrap()),
+            timer::none,
         );
 
-        let file_source: LocalFileSource<u64, u64> =
-            LocalFileSource::new(String::from(&file_path), source_context);
+        let file_source = LocalFileSource::new(String::from(&file_path), source_context);
         let (source, _) = system.create_and_register(move || file_source);
         system.start(&source);
         wait(1);
@@ -193,8 +198,6 @@ mod tests {
             x
         }
 
-        let operator = Box::new(Map::<ArconF64, ArconF64>::new(&map_fn));
-
         // Set up SourceContext
         let watermark_interval = 25;
 
@@ -202,12 +205,12 @@ mod tests {
             watermark_interval,
             None, // no timestamp extractor
             channel_strategy,
-            operator,
+            Map::<ArconF64, ArconF64>::new(&map_fn),
             Box::new(InMemory::new("test".as_ref()).unwrap()),
+            timer::none,
         );
 
-        let file_source: LocalFileSource<ArconF64, ArconF64> =
-            LocalFileSource::new(String::from(&file_path), source_context);
+        let file_source = LocalFileSource::new(String::from(&file_path), source_context);
         let (source, _) = system.create_and_register(move || file_source);
         system.start(&source);
         wait(1);

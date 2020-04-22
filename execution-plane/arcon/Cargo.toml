@@ -29,6 +29,7 @@ arcon_macros = { version = "0.1", path = "arcon_macros" }
 arcon_error = { version = "0.1", path = "arcon_error" }
 arcon_extra = { version = "0.1", path = "arcon_extra" }
 kompact = { git = "https://github.com/kompics/kompact.git", branch = "master"}
+hierarchical_hash_wheel_timer = { git = "https://github.com/Bathtor/rust-hash-wheel-timer", branch = "master" }
 uuid = "0.8"
 static_assertions = "1.1.0"
 itertools = "0.8.2"

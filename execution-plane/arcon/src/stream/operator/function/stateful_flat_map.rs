@@ -2,11 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
-    data::{ArconElement, ArconEvent, ArconType, Epoch, Watermark},
+    data::{ArconElement, ArconEvent, ArconNever, ArconType, Epoch, Watermark},
     stream::operator::{Operator, OperatorContext},
     util::SafelySendableFn,
 };
-use arcon_error::ArconResult;
 
 /// IN: Input Event
 /// C: Returned collection type (Vec<OUT>, Option<OUT>, ...)
@@ -17,7 +16,7 @@ where
     OUT: ArconType,
     C: IntoIterator<Item = OUT> + 'static,
 {
-    udf: &'static dyn SafelySendableFn(OperatorContext<OUT>, IN) -> C,
+    udf: &'static dyn SafelySendableFn(OperatorContext<Self>, IN) -> C,
 }
 
 impl<IN, C, OUT> StatefulFlatMap<IN, C, OUT>
@@ -26,22 +25,26 @@ where
     OUT: ArconType,
     C: IntoIterator<Item = OUT> + 'static,
 {
-    pub fn new(udf: &'static dyn SafelySendableFn(OperatorContext<OUT>, IN) -> C) -> Self {
+    pub fn new(udf: &'static dyn SafelySendableFn(OperatorContext<Self>, IN) -> C) -> Self {
         StatefulFlatMap { udf }
     }
 }
 
-impl<IN, C, OUT> Operator<IN, OUT> for StatefulFlatMap<IN, C, OUT>
+impl<IN, C, OUT> Operator for StatefulFlatMap<IN, C, OUT>
 where
     IN: ArconType,
     OUT: ArconType,
     C: IntoIterator<Item = OUT> + 'static,
 {
-    fn handle_element(&mut self, element: ArconElement<IN>, mut ctx: OperatorContext<OUT>) {
+    type IN = IN;
+    type OUT = OUT;
+    type TimerState = ArconNever;
+
+    fn handle_element(&mut self, element: ArconElement<IN>, mut ctx: OperatorContext<Self>) {
         if let Some(data) = element.data {
             let result = (self.udf)(
                 // TODO: annoying manual copy required to satisfy borrowchk
-                OperatorContext::new(ctx.channel_strategy, ctx.state_backend),
+                OperatorContext::new(ctx.channel_strategy, ctx.state_backend, ctx.timer_backend),
                 data,
             );
             for item in result {
@@ -53,26 +56,16 @@ where
         }
     }
 
-    fn handle_watermark(
-        &mut self,
-        _w: Watermark,
-        _ctx: OperatorContext<OUT>,
-    ) -> Option<Vec<ArconEvent<OUT>>> {
-        None
-    }
-    fn handle_epoch(
-        &mut self,
-        _epoch: Epoch,
-        _ctx: OperatorContext<OUT>,
-    ) -> Option<ArconResult<Vec<u8>>> {
-        None
-    }
+    fn handle_watermark(&mut self, _w: Watermark, _ctx: OperatorContext<Self>) {}
+    fn handle_epoch(&mut self, _epoch: Epoch, _ctx: OperatorContext<Self>) {}
+
+    fn handle_timeout(&mut self, _timeout: Self::TimerState, _ctx: OperatorContext<Self>) {}
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::prelude::*;
+    use crate::{prelude::*, timer};
 
     #[test]
     fn stateful_flatmap_test() {
@@ -85,7 +78,10 @@ mod tests {
         let channel_strategy =
             ChannelStrategy::Forward(Forward::new(Channel::Local(actor_ref), 1.into()));
 
-        fn stateful_flatmap_fn(ctx: OperatorContext<i32>, x: i32) -> Option<i32> {
+        fn stateful_flatmap_fn<O>(ctx: OperatorContext<O>, x: i32) -> Option<i32>
+        where
+            O: Operator<OUT = i32>,
+        {
             let state = ctx.state_backend;
             let previous_value = state.build("previous_value").value::<i32>();
 
@@ -103,13 +99,14 @@ mod tests {
         }
 
         let stateful_flatmap_node = system.create(move || {
-            Node::<i32, i32>::new(
+            Node::new(
                 String::from("stateful_flatmap_node"),
                 0.into(),
                 vec![1.into()],
                 channel_strategy,
-                Box::new(StatefulFlatMap::new(&stateful_flatmap_fn)),
+                StatefulFlatMap::new(&stateful_flatmap_fn),
                 Box::new(InMemory::new("test".as_ref()).unwrap()),
+                timer::none,
             )
         });
         system.start(&stateful_flatmap_node);

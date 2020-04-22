@@ -1,9 +1,13 @@
 [workspace]
 members = [
   "arcon",
-  "arcon/experiments",
-  "arcon_codegen",
-  "arcon_compiler",
+  "arcon/experiments"
+]
+
+# TODO fix these later again
+exclude = [
+	"arcon_codegen",
+  	"arcon_compiler"
 ]
 
 [profile.dev.package.grpcio-sys]

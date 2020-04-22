@@ -30,6 +30,8 @@ pub mod pipeline;
 pub mod state_backend;
 /// Contains the core stream logic
 pub mod stream;
+/// Arcon event time facilities
+pub mod timer;
 /// Arcon terminal user interface
 #[cfg(feature = "arcon_tui")]
 mod tui;
@@ -81,6 +83,7 @@ pub mod prelude {
             },
             source::{collection::CollectionSource, local_file::LocalFileSource, SourceContext},
         },
+        timer,
     };
 
     #[cfg(feature = "kafka")]

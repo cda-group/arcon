@@ -2,11 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
-    data::{ArconElement, ArconEvent, ArconType, Epoch, Watermark},
+    data::{ArconElement, ArconEvent, ArconNever, ArconType, Epoch, Watermark},
     stream::operator::{Operator, OperatorContext},
     util::SafelySendableFn,
 };
-use arcon_error::ArconResult;
 
 /// An Arcon operator for filter-mapping
 ///
@@ -35,12 +34,16 @@ where
     }
 }
 
-impl<IN, OUT> Operator<IN, OUT> for FilterMap<IN, OUT>
+impl<IN, OUT> Operator for FilterMap<IN, OUT>
 where
     IN: ArconType,
     OUT: ArconType,
 {
-    fn handle_element(&mut self, element: ArconElement<IN>, mut ctx: OperatorContext<OUT>) {
+    type IN = IN;
+    type OUT = OUT;
+    type TimerState = ArconNever;
+
+    fn handle_element(&mut self, element: ArconElement<IN>, mut ctx: OperatorContext<Self>) {
         if let Some(data) = element.data {
             if let Some(result) = self.run_udf(data) {
                 let out_elem = ArconElement {
@@ -52,26 +55,15 @@ where
         }
     }
 
-    fn handle_watermark(
-        &mut self,
-        _w: Watermark,
-        _ctx: OperatorContext<OUT>,
-    ) -> Option<Vec<ArconEvent<OUT>>> {
-        None
-    }
-    fn handle_epoch(
-        &mut self,
-        _epoch: Epoch,
-        _ctx: OperatorContext<OUT>,
-    ) -> Option<ArconResult<Vec<u8>>> {
-        None
-    }
+    fn handle_watermark(&mut self, _w: Watermark, _ctx: OperatorContext<Self>) {}
+    fn handle_epoch(&mut self, _epoch: Epoch, _ctx: OperatorContext<Self>) {}
+    fn handle_timeout(&mut self, _timeout: Self::TimerState, _ctx: OperatorContext<Self>) {}
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::prelude::*;
+    use crate::{prelude::*, timer};
     use std::str::FromStr;
 
     #[test]
@@ -92,13 +84,14 @@ mod tests {
         }
 
         let filter_map_node = system.create(move || {
-            Node::<String, u32>::new(
+            Node::new(
                 String::from("filter_map_node"),
                 0.into(),
                 vec![1.into()],
                 channel_strategy,
-                Box::new(FilterMap::new(&filter_map_fn)),
+                FilterMap::new(&filter_map_fn),
                 Box::new(InMemory::new("test".as_ref()).unwrap()),
+                timer::none,
             )
         });
         system.start(&filter_map_node);

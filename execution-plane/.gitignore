@@ -17,3 +17,7 @@ shell.nix
 
 # Compile workspace
 build/
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
