@@ -1,11 +1,11 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::data::{ArconElement, ArconEvent, ArconType, Epoch, Watermark};
-use crate::stream::channel::strategy::ChannelStrategy;
-use crate::stream::operator::Operator;
-use crate::util::SafelySendableFn;
-use arcon_error::ArconResult;
+use crate::{
+    data::{ArconElement, ArconEvent, ArconNever, ArconType, Epoch, Watermark},
+    stream::operator::{Operator, OperatorContext},
+    util::SafelySendableFn,
+};
 
 /// IN: Input Event
 /// OUT: Output Event
@@ -14,7 +14,7 @@ where
     IN: ArconType,
     OUT: ArconType,
 {
-    udf: &'static dyn for<'r> SafelySendableFn<(&'r IN,), Vec<OUT>>,
+    udf: &'static dyn SafelySendableFn(&IN) -> Vec<OUT>,
 }
 
 impl<IN, OUT> FlatMap<IN, OUT>
@@ -22,7 +22,7 @@ where
     IN: ArconType,
     OUT: ArconType,
 {
-    pub fn new(udf: &'static dyn for<'r> SafelySendableFn<(&'r IN,), Vec<OUT>>) -> Self {
+    pub fn new(udf: &'static dyn SafelySendableFn(&IN) -> Vec<OUT>) -> Self {
         FlatMap { udf }
     }
 
@@ -32,16 +32,20 @@ where
     }
 }
 
-impl<IN, OUT> Operator<IN, OUT> for FlatMap<IN, OUT>
+impl<IN, OUT> Operator for FlatMap<IN, OUT>
 where
     IN: 'static + ArconType,
     OUT: 'static + ArconType,
 {
-    fn handle_element(&mut self, element: ArconElement<IN>, strategy: &mut ChannelStrategy<OUT>) {
+    type IN = IN;
+    type OUT = OUT;
+    type TimerState = ArconNever;
+
+    fn handle_element(&mut self, element: ArconElement<IN>, mut ctx: OperatorContext<Self>) {
         if let Some(data) = element.data {
             let result = self.run_udf(&(data));
             for item in result {
-                strategy.add(ArconEvent::Element(ArconElement {
+                ctx.output(ArconEvent::Element(ArconElement {
                     data: Some(item),
                     timestamp: element.timestamp,
                 }));
@@ -49,18 +53,15 @@ where
         }
     }
 
-    fn handle_watermark(&mut self, _w: Watermark) -> Option<Vec<ArconEvent<OUT>>> {
-        None
-    }
-    fn handle_epoch(&mut self, _epoch: Epoch) -> Option<ArconResult<Vec<u8>>> {
-        None
-    }
+    fn handle_watermark(&mut self, _w: Watermark, _ctx: OperatorContext<Self>) {}
+    fn handle_epoch(&mut self, _epoch: Epoch, _ctx: OperatorContext<Self>) {}
+    fn handle_timeout(&mut self, _timeout: Self::TimerState, _ctx: OperatorContext<Self>) {}
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::prelude::*;
+    use crate::{prelude::*, timer};
 
     #[test]
     fn flatmap_test() {
@@ -77,18 +78,21 @@ mod tests {
             (0..*x).map(|x| x + 5).collect()
         }
         let flatmap_node = system.create(move || {
-            Node::<i32, i32>::new(
+            Node::new(
+                String::from("flatmap_node"),
                 0.into(),
                 vec![1.into()],
                 channel_strategy,
-                Box::new(FlatMap::new(&flatmap_fn)),
+                FlatMap::new(&flatmap_fn),
+                Box::new(InMemory::new("test".as_ref()).unwrap()),
+                timer::none,
             )
         });
         system.start(&flatmap_node);
 
         let input_one = ArconEvent::Element(ArconElement::new(6 as i32));
         let msg = ArconMessage {
-            events: vec![input_one, ArconEvent::Death("die".into())],
+            events: vec![input_one.into(), ArconEvent::Death("die".into()).into()],
             sender: NodeID::new(1),
         };
         let flatmap_ref: ActorRefStrong<ArconMessage<i32>> =

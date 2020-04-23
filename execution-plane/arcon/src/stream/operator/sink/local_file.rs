@@ -1,12 +1,13 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::data::ArconEvent;
-use crate::prelude::*;
-use std::fs::File;
-use std::fs::OpenOptions;
-use std::io::Write;
-use std::marker::PhantomData;
+use crate::{prelude::*, stream::operator::OperatorContext};
+use std::{
+    fs::{File, OpenOptions},
+    io::Write,
+    marker::PhantomData,
+    path::Path,
+};
 
 pub struct LocalFileSink<IN>
 where
@@ -20,7 +21,7 @@ impl<IN> LocalFileSink<IN>
 where
     IN: ArconType,
 {
-    pub fn new(file_path: &str) -> Self {
+    pub fn new(file_path: impl AsRef<Path>) -> Self {
         let file = OpenOptions::new()
             .write(true)
             .create(true)
@@ -35,29 +36,30 @@ where
     }
 }
 
-impl<IN> Operator<IN, IN> for LocalFileSink<IN>
+impl<IN> Operator for LocalFileSink<IN>
 where
     IN: ArconType,
 {
-    fn handle_element(&mut self, element: ArconElement<IN>, _: &mut ChannelStrategy<IN>) {
+    type IN = IN;
+    type OUT = ArconNever;
+    type TimerState = ArconNever;
+
+    fn handle_element(&mut self, element: ArconElement<IN>, _ctx: OperatorContext<Self>) {
         if let Some(data) = element.data {
             if let Err(err) = writeln!(self.file, "{:?}", data) {
                 eprintln!("Error while writing to file sink {}", err.to_string());
             }
         }
     }
-    fn handle_watermark(&mut self, _w: Watermark) -> Option<Vec<ArconEvent<IN>>> {
-        None
-    }
-    fn handle_epoch(&mut self, _epoch: Epoch) -> Option<ArconResult<Vec<u8>>> {
-        None
-    }
+    fn handle_watermark(&mut self, _w: Watermark, _ctx: OperatorContext<Self>) {}
+    fn handle_epoch(&mut self, _epoch: Epoch, _ctx: OperatorContext<Self>) {}
+    fn handle_timeout(&mut self, _timeout: Self::TimerState, _ctx: OperatorContext<Self>) {}
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::prelude::ChannelStrategy;
+    use crate::{prelude::ChannelStrategy, timer};
     use std::io::{BufRead, BufReader};
     use tempfile::NamedTempFile;
 
@@ -71,18 +73,20 @@ mod tests {
         let node_id = NodeID::new(1);
         let sink_comp = system.create(move || {
             Node::new(
+                String::from("sink_comp"),
                 0.into(),
                 vec![node_id],
                 ChannelStrategy::Mute,
-                Box::new(LocalFileSink::new(&file_path)),
+                LocalFileSink::new(&file_path),
+                Box::new(InMemory::new("test".as_ref()).unwrap()),
+                timer::none,
             )
         });
         system.start(&sink_comp);
-
-        let input_one = ArconMessage::element(6 as i32, None, node_id);
-        let input_two = ArconMessage::element(2 as i32, None, node_id);
-        let input_three = ArconMessage::element(15 as i32, None, node_id);
-        let input_four = ArconMessage::element(30 as i32, None, node_id);
+        let input_one = ArconMessage::element(6i32, None, node_id);
+        let input_two = ArconMessage::element(2i32, None, node_id);
+        let input_three = ArconMessage::element(15i32, None, node_id);
+        let input_four = ArconMessage::element(30i32, None, node_id);
 
         let target_ref: ActorRefStrong<ArconMessage<i32>> =
             sink_comp.actor_ref().hold().expect("Failed to fetch");

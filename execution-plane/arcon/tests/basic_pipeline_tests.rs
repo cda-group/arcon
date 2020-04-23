@@ -7,21 +7,20 @@
 #![allow(bare_trait_objects)]
 extern crate arcon;
 
-use arcon::macros::*;
-use arcon::prelude::*;
-use std::fs::File;
-use std::io::{BufRead, BufReader};
+use arcon::{macros::*, prelude::*, timer};
+use std::{
+    fs::File,
+    io::{BufRead, BufReader},
+};
 use tempfile::NamedTempFile;
 
 #[arcon]
-#[derive(prost::Message)]
 pub struct NormaliseElements {
     #[prost(int64, repeated, tag = "1")]
     pub data: Vec<i64>,
 }
 
 #[arcon]
-#[derive(prost::Message)]
 pub struct SourceData {
     #[prost(int64, tag = "1")]
     pub data: i64,
@@ -45,10 +44,13 @@ fn normalise_pipeline_test() {
     // Create Sink Component
     let node_4 = system.create(move || {
         Node::new(
+            String::from("sink_node"),
             4.into(),
             vec![3.into()],
             ChannelStrategy::Mute,
-            Box::new(LocalFileSink::new(&sink_path)),
+            LocalFileSink::new(&sink_path),
+            Box::new(InMemory::new("test5".as_ref()).unwrap()),
+            timer::none,
         )
     });
     system
@@ -69,11 +71,14 @@ fn normalise_pipeline_test() {
     }
 
     let node_3 = system.create(move || {
-        Node::<NormaliseElements, i64>::new(
+        Node::new(
+            String::from("map_node"),
             3.into(),
             vec![2.into()],
             channel_strategy,
-            Box::new(Map::<NormaliseElements, i64>::new(&map_fn)),
+            Map::<NormaliseElements, i64>::new(&map_fn),
+            Box::new(InMemory::new("test4".as_ref()).unwrap()),
+            timer::none,
         )
     });
 
@@ -92,7 +97,10 @@ fn normalise_pipeline_test() {
         NormaliseElements { data }
     }
 
-    let window: Box<dyn Window<i64, NormaliseElements>> = Box::new(AppenderWindow::new(&window_fn));
+    let mut state_backend_2 = Box::new(InMemory::new("test2".as_ref()).unwrap());
+
+    let window: Box<dyn Window<i64, NormaliseElements>> =
+        Box::new(AppenderWindow::new(&window_fn, &mut *state_backend_2));
 
     let node_3_actor_ref = node_3.actor_ref().hold().expect("Failed to fetch ref");
     let channel_strategy = ChannelStrategy::Forward(Forward::new(
@@ -101,13 +109,21 @@ fn normalise_pipeline_test() {
     ));
 
     let node_2 = system.create(move || {
-        Node::<i64, NormaliseElements>::new(
+        Node::new(
+            String::from("window_node"),
             2.into(),
             vec![1.into()],
             channel_strategy,
-            Box::new(EventTimeWindowAssigner::<i64, NormaliseElements>::new(
-                window, 2, 2, 0, false,
-            )),
+            EventTimeWindowAssigner::<i64, NormaliseElements>::new(
+                window,
+                2,
+                2,
+                0,
+                false,
+                &mut *state_backend_2,
+            ),
+            state_backend_2,
+            timer::wheel,
         )
     });
     system
@@ -119,7 +135,6 @@ fn normalise_pipeline_test() {
     fn source_map(x: SourceData) -> i64 {
         x.data
     }
-    let operator = Box::new(Map::<SourceData, i64>::new(&source_map));
 
     let actor_ref: ActorRefStrong<ArconMessage<i64>> = node_2
         .actor_ref()
@@ -138,7 +153,9 @@ fn normalise_pipeline_test() {
         watermark_interval,
         Some(&timestamp_extractor),
         channel_strategy,
-        operator,
+        Map::<SourceData, i64>::new(&source_map),
+        Box::new(InMemory::new("test".as_ref()).unwrap()),
+        timer::none,
     );
 
     let mut collection: Vec<SourceData> = Vec::new();
@@ -152,8 +169,7 @@ fn normalise_pipeline_test() {
     });
 
     let node_1 = system.create(move || {
-        let collection_source: CollectionSource<SourceData, i64> =
-            CollectionSource::new(collection, source_context);
+        let collection_source = CollectionSource::new(collection, source_context);
         collection_source
     });
 

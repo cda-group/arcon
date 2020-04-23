@@ -1,12 +1,13 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::common::id_to_ident;
-use crate::common::verify_and_start;
-use crate::spec;
-use crate::spec::channel_kind::ChannelKind;
-use crate::types::to_token_stream;
-use crate::GENERATED_FUNCTIONS;
+use crate::{
+    common::{id_to_ident, verify_and_start},
+    spec,
+    spec::channel_kind::ChannelKind,
+    types::to_token_stream,
+    GENERATED_FUNCTIONS,
+};
 use arcon_proto::arcon_spec::{Function, FunctionKind};
 use proc_macro2::{Ident, Span, TokenStream};
 
@@ -76,7 +77,8 @@ pub fn function(
                             #node_id.into(),
                             vec!(#predecessor.into()),
                             channel_strategy,
-                            Box::new(#task_signature)
+                            Box::new(#task_signature),
+                            Box::new(InMemory::new("ignored for InMemory").unwrap()) // TODO: make customizable
                         )
                     });
 

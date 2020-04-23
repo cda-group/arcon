@@ -7,8 +7,10 @@ use arcon_proto::arcon_spec::{get_compile_mode, ArconSpec};
 use failure::Fail;
 use path_clean::PathClean;
 use serde::{Deserialize, Serialize};
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 #[derive(Debug, Fail)]
 #[fail(display = "CompilerEnv: `{}`", msg)]

@@ -1,25 +1,25 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::data::{ArconElement, ArconEvent, ArconType, Epoch, Watermark};
-use crate::stream::channel::strategy::ChannelStrategy;
-use crate::stream::operator::Operator;
-use crate::util::SafelySendableFn;
-use arcon_error::ArconResult;
+use crate::{
+    data::{ArconElement, ArconEvent, ArconNever, ArconType, Epoch, Watermark},
+    stream::operator::{Operator, OperatorContext},
+    util::SafelySendableFn,
+};
 
 /// IN: Input Event
 pub struct Filter<IN>
 where
     IN: 'static + ArconType,
 {
-    udf: &'static dyn for<'r> SafelySendableFn<(&'r IN,), bool>,
+    udf: &'static dyn SafelySendableFn(&IN) -> bool,
 }
 
 impl<IN> Filter<IN>
 where
     IN: 'static + ArconType,
 {
-    pub fn new(udf: &'static dyn for<'r> SafelySendableFn<(&'r IN,), bool>) -> Self {
+    pub fn new(udf: &'static dyn SafelySendableFn(&IN) -> bool) -> Self {
         Filter { udf }
     }
 
@@ -29,24 +29,25 @@ where
     }
 }
 
-impl<IN> Operator<IN, IN> for Filter<IN>
+impl<IN> Operator for Filter<IN>
 where
     IN: 'static + ArconType,
 {
-    fn handle_element(&mut self, element: ArconElement<IN>, strategy: &mut ChannelStrategy<IN>) {
+    type IN = IN;
+    type OUT = IN;
+    type TimerState = ArconNever;
+
+    fn handle_element(&mut self, element: ArconElement<IN>, mut ctx: OperatorContext<Self>) {
         if let Some(data) = &element.data {
-            if self.run_udf(&(data)) {
-                strategy.add(ArconEvent::Element(element));
+            if self.run_udf(&data) {
+                ctx.output(ArconEvent::Element(element));
             }
         }
     }
 
-    fn handle_watermark(&mut self, _w: Watermark) -> Option<Vec<ArconEvent<IN>>> {
-        None
-    }
-    fn handle_epoch(&mut self, _epoch: Epoch) -> Option<ArconResult<Vec<u8>>> {
-        None
-    }
+    fn handle_watermark(&mut self, _w: Watermark, _ctx: OperatorContext<Self>) -> () {}
+    fn handle_epoch(&mut self, _epoch: Epoch, _ctx: OperatorContext<Self>) {}
+    fn handle_timeout(&mut self, _timeout: Self::TimerState, _ctx: OperatorContext<Self>) {}
 }
 
 #[cfg(test)]
@@ -70,11 +71,14 @@ mod tests {
         }
 
         let filter_node = system.create(move || {
-            Node::<i32, i32>::new(
+            Node::new(
+                String::from("filter_node"),
                 0.into(),
                 vec![1.into()],
                 channel_strategy,
-                Box::new(Filter::new(&filter_fn)),
+                Filter::new(&filter_fn),
+                Box::new(InMemory::new("test".as_ref()).unwrap()),
+                timer::none,
             )
         });
         system.start(&filter_node);
@@ -86,11 +90,11 @@ mod tests {
 
         let msg = ArconMessage {
             events: vec![
-                input_one,
-                input_two,
-                input_three,
-                input_four,
-                ArconEvent::Death("die".into()),
+                input_one.into(),
+                input_two.into(),
+                input_three.into(),
+                input_four.into(),
+                ArconEvent::Death("die".into()).into(),
             ],
             sender: NodeID::new(1),
         };

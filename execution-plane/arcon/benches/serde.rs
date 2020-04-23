@@ -4,8 +4,7 @@
 // Benchmarks for serialisation/deserialisation
 
 use arcon::macros::*;
-use criterion::{black_box, criterion_group, criterion_main, Bencher, Criterion};
-use kompact::prelude::IntoBuf;
+use criterion::{black_box, criterion_group, criterion_main, BatchSize, Bencher, Criterion};
 use lz4_compression::prelude::{compress, decompress};
 use prost::Message;
 use serde::{Deserialize, Serialize};
@@ -151,22 +150,32 @@ pub fn protobuf_deser_small_struct(b: &mut Bencher) {
     let small = SmallStruct::new();
     let mut bytes: Vec<u8> = Vec::with_capacity(small.encoded_len());
     small.encode(&mut bytes).unwrap();
-    let buf = bytes.into_buf();
-    b.iter(|| {
-        // prost consumes the whole buffer, hence the clone....
-        assert_eq!(&SmallStruct::decode(&mut buf.clone()).unwrap(), &small);
-    });
+    let buf = bytes.as_slice();
+
+    // prost consumes the whole buffer, hence the clone....
+    b.iter_batched(
+        || buf.clone(),
+        |mut buf| {
+            assert_eq!(&SmallStruct::decode(&mut buf).unwrap(), &small);
+        },
+        BatchSize::PerIteration,
+    );
 }
 
 pub fn protobuf_deser_large_struct(b: &mut Bencher) {
     let large = LargeStruct::new();
     let mut bytes = Vec::with_capacity(large.encoded_len());
     large.encode(&mut bytes).unwrap();
-    let buf = bytes.into_buf();
-    b.iter(|| {
-        // prost consumes the whole buffer, hence the clone....
-        assert_eq!(&LargeStruct::decode(&mut buf.clone()).unwrap(), &large);
-    });
+    let buf = bytes.as_slice();
+
+    // prost consumes the whole buffer, hence the clone....
+    b.iter_batched(
+        || buf.clone(),
+        |mut buf| {
+            assert_eq!(&LargeStruct::decode(&mut buf).unwrap(), &large);
+        },
+        BatchSize::PerIteration,
+    );
 }
 
 pub fn bincode_deser_small_struct(b: &mut Bencher) {

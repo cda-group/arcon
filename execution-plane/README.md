@@ -10,6 +10,7 @@ Requires Rust nightly (See current toolchain [here](rust-toolchain)).
 [`arcon_codegen`]: arcon_codegen
 [`arcon_compiler`]: arcon_compiler
 
+
 ## Ubuntu
 
 Install Protobuf:
@@ -30,25 +31,15 @@ Install Protobuf:
   $ sudo cp /usr/local/opt/protobuf@3.6/include/* /usr/local/include/
 ```
 
+
+## Other Requirements
+
+Depending on what you are compiling, you might need cmake, g++ etc...
+
 ## Building
 
 ```
 $ cargo build --release
-```
-
-## Running an Example
-
-Compile and start binary:
-
-```bash
-$ ./target/release/arconc -l compile -s arcon_codegen/tests/specifications/basic_dataflow.json
-$ ./build/target/release/basic_dataflow
-```
-
-Connect to Socket Source and enter valid unsigned integers:
-
-```bash
-$ nc -u localhost 5000
 ```
 
 ## Testing

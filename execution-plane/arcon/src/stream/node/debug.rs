@@ -35,7 +35,7 @@ where
     }
     fn handle_msg(&mut self, msg: ArconMessage<IN>) {
         for event in msg.events.into_iter() {
-            match event {
+            match event.unwrap() {
                 ArconEvent::Element(e) => {
                     info!(self.ctx.log(), "Sink element: {:?}", e.data);
                     self.data.push(e);
@@ -108,6 +108,3 @@ where
         }
     }
 }
-
-unsafe impl<IN> Send for DebugNode<IN> where IN: ArconType {}
-unsafe impl<IN> Sync for DebugNode<IN> where IN: ArconType {}

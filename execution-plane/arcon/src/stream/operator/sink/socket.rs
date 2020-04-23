@@ -1,15 +1,19 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::prelude::*;
+use crate::{prelude::*, stream::operator::OperatorContext};
 use ::serde::Serialize;
 use bytes::Bytes;
 use futures::{channel, executor::block_on, SinkExt, StreamExt};
-use std::marker::PhantomData;
-use std::net::SocketAddr;
-use std::thread::{Builder, JoinHandle};
-use tokio::net::UdpSocket;
-use tokio::runtime::{Handle, Runtime};
+use std::{
+    marker::PhantomData,
+    net::SocketAddr,
+    thread::{Builder, JoinHandle},
+};
+use tokio::{
+    net::UdpSocket,
+    runtime::{Handle, Runtime},
+};
 
 pub struct SocketSink<IN>
 where
@@ -67,11 +71,15 @@ where
     }
 }
 
-impl<IN> Operator<IN, IN> for SocketSink<IN>
+impl<IN> Operator for SocketSink<IN>
 where
     IN: ArconType + Serialize,
 {
-    fn handle_element(&mut self, e: ArconElement<IN>, _: &mut ChannelStrategy<IN>) {
+    type IN = IN;
+    type OUT = ArconNever;
+    type TimerState = ArconNever;
+
+    fn handle_element(&mut self, e: ArconElement<IN>, _ctx: OperatorContext<Self>) {
         let mut tx = self.tx_channel.clone();
         let fmt_data = {
             if let Ok(mut json) = serde_json::to_string(&e.data) {
@@ -92,18 +100,16 @@ where
         };
         self.runtime_handle.spawn(req_dispatch);
     }
-    fn handle_watermark(&mut self, _w: Watermark) -> Option<Vec<ArconEvent<IN>>> {
-        None
-    }
-    fn handle_epoch(&mut self, _epoch: Epoch) -> Option<ArconResult<Vec<u8>>> {
-        None
-    }
+    fn handle_watermark(&mut self, _w: Watermark, _ctx: OperatorContext<Self>) {}
+    fn handle_epoch(&mut self, _epoch: Epoch, _ctx: OperatorContext<Self>) {}
+
+    fn handle_timeout(&mut self, _timeout: Self::TimerState, _ctx: OperatorContext<Self>) {}
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::prelude::ChannelStrategy;
+    use crate::{prelude::ChannelStrategy, timer};
 
     #[test]
     fn udp_sink_test() {
@@ -119,12 +125,16 @@ mod tests {
 
                 let socket_sink = system.create(move || {
                     Node::new(
+                        String::from("socket_sink"),
                         0.into(),
                         vec![1.into()],
                         ChannelStrategy::Mute,
-                        Box::new(SocketSink::udp(addr)),
+                        SocketSink::udp(addr),
+                        Box::new(InMemory::new("test".as_ref()).unwrap()),
+                        timer::none,
                     )
                 });
+                system.start(&socket_sink);
                 system.start(&socket_sink);
 
                 std::thread::sleep(std::time::Duration::from_millis(100));

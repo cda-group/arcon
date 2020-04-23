@@ -1,3 +1,6 @@
+// Copyright (c) 2020, KTH Royal Institute of Technology.
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! The arcon_macros crate contains macros used by [arcon].
 
 #![recursion_limit = "128"]
@@ -35,9 +38,17 @@ pub fn arcon(metadata: TokenStream, input: TokenStream) -> TokenStream {
             }
         }
 
+        #[allow(unused)]
+        let maybe_serde = quote! {};
+        #[cfg(feature = "arcon_serde")]
+        let maybe_serde = quote! {
+            #[derive(::serde::Serialize, ::serde::Deserialize)]
+        };
+
         let output: proc_macro2::TokenStream = {
             quote! {
-                #[derive(Clone, Abomonation)]
+                #maybe_serde
+                #[derive(Clone, ::abomonation_derive::Abomonation, ::prost::Message)]
                 #item
                 impl #impl_generics ArconType for #name #ty_generics #where_clause {}
                 impl ::std::hash::Hash for #name {
@@ -70,23 +81,31 @@ pub fn arcon_keyed(keys: TokenStream, input: TokenStream) -> TokenStream {
         let keys: Vec<proc_macro2::TokenStream> = keys
             .to_string()
             .trim()
-            .split(",")
+            .split(',')
             .map(|k| {
                 let struct_field = Ident::new(&k.trim(), Span::call_site());
                 quote! { self.#struct_field.hash(state); }
             })
             .collect();
 
+        #[allow(unused)]
+        let maybe_serde = quote! {};
+        #[cfg(feature = "arcon_serde")]
+        let maybe_serde = quote! {
+            #[derive(::serde::Serialize, ::serde::Deserialize)]
+        };
+
         let output: proc_macro2::TokenStream = {
             quote! {
-                #[derive(Clone, Abomonation)]
+                #maybe_serde
+                #[derive(Clone, ::abomonation_derive::Abomonation, ::prost::Message)]
                 #item
                 impl #impl_generics ArconType for #name #ty_generics #where_clause {}
-                    impl ::std::hash::Hash for #name {
-                        fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
-                            #(#keys)*
-                        }
+                impl ::std::hash::Hash for #name {
+                    fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
+                        #(#keys)*
                     }
+                }
             }
         };
 

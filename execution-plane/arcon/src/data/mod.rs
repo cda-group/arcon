@@ -8,17 +8,40 @@ pub mod buffer;
 /// Buffer pool of reusable EventBuffers 
 pub mod buffer_pool;
 
-use crate::error::ArconResult;
-use crate::macros::*;
+use crate::{error::ArconResult, macros::*};
 use abomonation::Abomonation;
 use kompact::prelude::*;
-use std::fmt::Debug;
-use std::hash::{Hash, Hasher};
-use std::ops::Deref;
+use prost::{Message as PMessage, Oneof as POneof};
+#[cfg(feature = "arcon_serde")]
+use serde::{Deserialize, Serialize};
+use std::{
+    fmt,
+    hash::{Hash, Hasher},
+    ops::Deref,
+};
+
+pub trait ArconTypeBoundsNoSerde:
+    Clone + fmt::Debug + Hash + Sync + Send + PMessage + Default + Abomonation + 'static
+{
+}
+
+impl<T> ArconTypeBoundsNoSerde for T where
+    T: Clone + fmt::Debug + Hash + Sync + Send + PMessage + Default + Abomonation + 'static
+{
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "arcon_serde")] {
+        pub trait ArconTypeBounds: ArconTypeBoundsNoSerde + Serialize + for<'de> Deserialize<'de> {}
+        impl<T> ArconTypeBounds for T where T: ArconTypeBoundsNoSerde + Serialize + for<'de> Deserialize<'de> {}
+    } else {
+        pub trait ArconTypeBounds: ArconTypeBoundsNoSerde {}
+        impl<T> ArconTypeBounds for T where T: ArconTypeBoundsNoSerde {}
+    }
+}
 
 /// Type that can be passed through the Arcon runtime
-pub trait ArconType:
-    Clone + Debug + Hash + Sync + Send + prost::Message + Default + Abomonation + 'static
+pub trait ArconType: ArconTypeBounds
 where
     Self: std::marker::Sized,
 {
@@ -31,9 +54,8 @@ where
         Ok(buf)
     }
     /// Decodes bytes from encoded Protobuf data to `ArconType`
-    fn decode_storage(bytes: &mut [u8]) -> ArconResult<Self> {
-        let mut buf = bytes.into_buf();
-        let res: Self = Self::decode(&mut buf).map_err(|e| {
+    fn decode_storage(bytes: &[u8]) -> ArconResult<Self> {
+        let res: Self = Self::decode(bytes).map_err(|e| {
             arcon_err_kind!("Failed to decode ArconType with err {}", e.to_string())
         })?;
         Ok(res)
@@ -41,7 +63,9 @@ where
 }
 
 /// An Enum containing all possible stream events that may occur in an execution
-#[derive(prost::Oneof, Clone, Abomonation)]
+#[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
+#[derive(POneof, Clone, Abomonation)]
+#[cfg_attr(feature = "arcon_serde", serde(bound = "A: ArconType"))]
 pub enum ArconEvent<A: ArconType> {
     /// A stream element containing some data of type [ArconType] and an optional timestamp [u64]
     #[prost(message, tag = "1")]
@@ -57,8 +81,48 @@ pub enum ArconEvent<A: ArconType> {
     Death(String),
 }
 
+// The struct below is required because of the peculiarity of prost/protobuf - you cannot have
+// repeated (like, a Vec<_>) oneof fields, so we wrap ArconEvent in a struct which implements
+// prost::Message. Unfortunately protobuf also doesn't allow for required oneof fields, so the inner
+// value has to be optional. In practice we expect it to always be Some.
+
+#[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
+#[derive(PMessage, Clone, Abomonation)]
+#[cfg_attr(feature = "arcon_serde", serde(bound = "A: ArconType"))]
+pub struct ArconEventWrapper<A: ArconType> {
+    #[prost(oneof = "ArconEvent::<A>", tags = "1, 2, 3, 4")]
+    inner: Option<ArconEvent<A>>,
+}
+
+impl<A: ArconType> ArconEventWrapper<A> {
+    pub fn unwrap(self) -> ArconEvent<A> {
+        self.inner
+            .expect("ArconEventWrapper.inner is None. Prost deserialization error?")
+    }
+
+    pub fn unwrap_ref(&self) -> &ArconEvent<A> {
+        self.inner
+            .as_ref()
+            .expect("ArconEventWrapper.inner is None. Prost deserialization error?")
+    }
+
+    pub fn unwrap_mut(&mut self) -> &mut ArconEvent<A> {
+        self.inner
+            .as_mut()
+            .expect("ArconEventWrapper.inner is None. Prost deserialization error?")
+    }
+}
+
+impl<A: ArconType> From<ArconEvent<A>> for ArconEventWrapper<A> {
+    fn from(inner: ArconEvent<A>) -> Self {
+        ArconEventWrapper { inner: Some(inner) }
+    }
+}
+
 /// A Stream element containing some data and timestamp
-#[derive(prost::Message, Clone, Abomonation)]
+#[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
+#[derive(PMessage, Clone, Abomonation)]
+#[cfg_attr(feature = "arcon_serde", serde(bound = "A: ArconType"))]
 pub struct ArconElement<A: ArconType> {
     #[prost(message, tag = "1")]
     pub data: Option<A>,
@@ -85,7 +149,8 @@ impl<A: ArconType> ArconElement<A> {
 }
 
 /// Watermark message containing a [u64] timestamp
-#[derive(prost::Message, Clone, Copy, Abomonation)]
+#[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
+#[derive(PMessage, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Abomonation)]
 pub struct Watermark {
     #[prost(uint64, tag = "1")]
     pub timestamp: u64,
@@ -98,7 +163,8 @@ impl Watermark {
 }
 
 /// Epoch marker message
-#[derive(prost::Message, Clone, Copy, Abomonation)]
+#[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
+#[derive(PMessage, Clone, Hash, Copy, Ord, PartialOrd, Eq, PartialEq, Abomonation)]
 pub struct Epoch {
     #[prost(uint64, tag = "1")]
     pub epoch: u64,
@@ -111,11 +177,15 @@ impl Epoch {
 }
 
 /// An ArconMessage contains a batch of [ArconEvent] and one [NodeID] identifier
-#[derive(Debug, Clone, Abomonation)]
+#[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
+#[derive(PMessage, Clone, Abomonation)]
+#[cfg_attr(feature = "arcon_serde", serde(bound = "A: ArconType"))]
 pub struct ArconMessage<A: ArconType> {
     /// Buffer of ArconEvents
-    pub events: Vec<ArconEvent<A>>,
+    #[prost(message, repeated, tag = "1")]
+    pub events: Vec<ArconEventWrapper<A>>,
     /// ID identifying where the message is sent from
+    #[prost(message, required, tag = "5")]
     pub sender: NodeID,
 }
 
@@ -126,7 +196,7 @@ impl<A: ArconType> ArconMessage<A> {
     /// This function should only be used for development and test purposes.
     pub fn watermark(timestamp: u64, sender: NodeID) -> ArconMessage<A> {
         ArconMessage {
-            events: vec![ArconEvent::<A>::Watermark(Watermark { timestamp })],
+            events: vec![ArconEvent::<A>::Watermark(Watermark { timestamp }).into()],
             sender,
         }
     }
@@ -135,7 +205,7 @@ impl<A: ArconType> ArconMessage<A> {
     /// This function should only be used for development and test purposes.
     pub fn epoch(epoch: u64, sender: NodeID) -> ArconMessage<A> {
         ArconMessage {
-            events: vec![ArconEvent::<A>::Epoch(Epoch { epoch })],
+            events: vec![ArconEvent::<A>::Epoch(Epoch { epoch }).into()],
             sender,
         }
     }
@@ -144,7 +214,7 @@ impl<A: ArconType> ArconMessage<A> {
     /// This function should only be used for development and test purposes.
     pub fn death(msg: String, sender: NodeID) -> ArconMessage<A> {
         ArconMessage {
-            events: vec![ArconEvent::<A>::Death(msg)],
+            events: vec![ArconEvent::<A>::Death(msg).into()],
             sender,
         }
     }
@@ -156,14 +226,16 @@ impl<A: ArconType> ArconMessage<A> {
             events: vec![ArconEvent::Element(ArconElement {
                 data: Some(data),
                 timestamp,
-            })],
+            })
+            .into()],
             sender,
         }
     }
 }
 
 /// A NodeID is used to identify a message sender
-#[derive(prost::Message, PartialEq, Eq, PartialOrd, Ord, Hash, Copy, Clone, Abomonation)]
+#[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
+#[derive(PMessage, PartialEq, Eq, PartialOrd, Ord, Hash, Copy, Clone, Abomonation)]
 pub struct NodeID {
     #[prost(uint32, tag = "1")]
     pub id: u32,
@@ -181,6 +253,12 @@ impl From<u32> for NodeID {
     }
 }
 
+impl Into<u32> for NodeID {
+    fn into(self) -> u32 {
+        self.id
+    }
+}
+
 // Implement ArconType for all data types that are supported
 impl ArconType for u32 {}
 impl ArconType for u64 {}
@@ -194,7 +272,9 @@ impl ArconType for String {}
 /// Float wrapper for f32 in order to impl Hash [std::hash::Hash]
 ///
 /// The `Hash` impl rounds the floats down to an integer and then hashes it.
-#[derive(Clone, prost::Message, Abomonation)]
+#[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
+#[derive(Clone, PMessage, Abomonation)]
+#[repr(transparent)]
 pub struct ArconF32 {
     #[prost(float, tag = "1")]
     pub value: f32,
@@ -243,7 +323,9 @@ impl PartialEq for ArconF32 {
 /// Float wrapper for f64 in order to impl Hash [std::hash::Hash]
 ///
 /// The `Hash` impl rounds the floats down to an integer and then hashes it.
-#[derive(Clone, prost::Message, Abomonation)]
+#[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
+#[derive(Clone, PMessage, Abomonation)]
+#[repr(transparent)]
 pub struct ArconF64 {
     #[prost(double, tag = "1")]
     pub value: f64,
@@ -289,12 +371,86 @@ impl PartialEq for ArconF64 {
     }
 }
 
+/// Arcon variant of the `Never` (or `!`) type which fulfills `ArconType` requirements
+#[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
+#[derive(Clone, PartialEq, Eq)]
+pub enum ArconNever {}
+impl ArconNever {
+    pub const IS_UNREACHABLE: &'static str = "The Never type cannot be instantiated!";
+}
+impl ArconType for ArconNever {}
+impl fmt::Debug for ArconNever {
+    fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        unreachable!(ArconNever::IS_UNREACHABLE);
+    }
+}
+impl prost::Message for ArconNever {
+    fn encoded_len(&self) -> usize {
+        unreachable!(ArconNever::IS_UNREACHABLE);
+    }
+
+    fn clear(&mut self) {
+        unreachable!(ArconNever::IS_UNREACHABLE);
+    }
+
+    fn encode_raw<B>(&self, _: &mut B)
+    where
+        B: bytes::buf::BufMut,
+    {
+        unreachable!(ArconNever::IS_UNREACHABLE);
+    }
+    fn merge_field<B>(
+        &mut self,
+        _: u32,
+        _: prost::encoding::WireType,
+        _: &mut B,
+        _: prost::encoding::DecodeContext,
+    ) -> std::result::Result<(), prost::DecodeError>
+    where
+        B: bytes::buf::Buf,
+    {
+        unreachable!(ArconNever::IS_UNREACHABLE);
+    }
+}
+impl Abomonation for ArconNever {}
+impl Hash for ArconNever {
+    fn hash<H: Hasher>(&self, _state: &mut H) {
+        unreachable!(ArconNever::IS_UNREACHABLE);
+    }
+}
+impl Default for ArconNever {
+    fn default() -> Self {
+        unreachable!(ArconNever::IS_UNREACHABLE);
+    }
+}
+
+/// Variant of [Writer](bytess::buf::ext::Writer) for trait objects
+pub struct BufMutWriter<'a> {
+    buf: &'a mut dyn BufMut,
+}
+impl<'a> BufMutWriter<'a> {
+    pub fn new(buf: &'a mut dyn BufMut) -> Self {
+        BufMutWriter { buf }
+    }
+}
+impl<'a> std::io::Write for BufMutWriter<'a> {
+    fn write(&mut self, src: &[u8]) -> std::io::Result<usize> {
+        let n = std::cmp::min(self.buf.remaining_mut(), src.len());
+
+        self.buf.put_slice(&src[..n]);
+        Ok(n)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 pub mod test {
     use super::*;
 
     #[arcon]
-    #[derive(prost::Message)]
     pub struct ArconDataTest {
         #[prost(uint32, tag = "1")]
         pub id: u32,

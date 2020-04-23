@@ -1,11 +1,13 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::prelude::*;
+use crate::{prelude::*, stream::operator::OperatorContext};
 use futures::executor::block_on;
-use rdkafka::config::ClientConfig;
-use rdkafka::error::KafkaResult;
-use rdkafka::producer::{FutureProducer, FutureRecord};
+use rdkafka::{
+    config::ClientConfig,
+    error::KafkaResult,
+    producer::{FutureProducer, FutureRecord},
+};
 
 /*
     KafkaSink: Buffers received elements
@@ -72,20 +74,23 @@ where
     }
 }
 
-impl<IN> Operator<IN, IN> for KafkaSink<IN>
+impl<IN> Operator for KafkaSink<IN>
 where
     IN: ArconType + ::serde::Serialize + ::serde::de::DeserializeOwned,
 {
-    fn handle_element(&mut self, element: ArconElement<IN>, _: &mut ChannelStrategy<IN>) {
+    type IN = IN;
+    type OUT = ArconNever;
+    type TimerState = ArconNever;
+
+    fn handle_element(&mut self, element: ArconElement<IN>, _ctx: OperatorContext<Self>) {
         self.buffer.push(element);
     }
-    fn handle_watermark(&mut self, _w: Watermark) -> Option<Vec<ArconEvent<IN>>> {
-        None
-    }
-    fn handle_epoch(&mut self, _epoch: Epoch) -> Option<ArconResult<Vec<u8>>> {
+    fn handle_watermark(&mut self, _w: Watermark, _ctx: OperatorContext<Self>) {}
+    fn handle_epoch(&mut self, _epoch: Epoch, _ctx: OperatorContext<Self>) {
         self.commit_buffer();
-        None
     }
+
+    fn handle_timeout(&mut self, _timeout: Self::TimerState, _ctx: OperatorContext<Self>) {}
 }
 
 // Tested via kafka_source

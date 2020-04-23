@@ -7,10 +7,11 @@
 #[macro_use]
 extern crate clap;
 
-use arcon::prelude::*;
+use arcon::{prelude::*, timer};
 use clap::{App, AppSettings, Arg, SubCommand};
 use experiments::{
-    get_items, square_root_newton, throughput_sink::Run, throughput_sink::ThroughputSink,
+    get_items, square_root_newton,
+    throughput_sink::{Run, ThroughputSink},
     EnrichedItem, Item,
 };
 use std::usize;
@@ -183,7 +184,7 @@ fn exec(
     cfg.threads(kompact_threads);
     if !dedicated {
         cfg.throughput(kompact_throughput as usize);
-        cfg.msg_priority(1.0);
+        cfg.msg_priority(0.5);
     }
 
     let system = cfg.build().expect("KompactSystem");
@@ -225,11 +226,14 @@ fn exec(
         batch_size as usize,
     ));
 
-    let node = Node::<Item, EnrichedItem>::new(
+    let node = Node::new(
+        String::from("map_node"),
         1.into(),
         vec![2.into()],
         channel_strategy,
-        Box::new(Map::new(&map_fn)),
+        Map::new(&map_fn),
+        Box::new(InMemory::new("perf".as_ref()).unwrap()),
+        timer::none,
     );
 
     let map_node = if dedicated {
@@ -259,7 +263,6 @@ fn exec(
     fn mapper(item: Item) -> Item {
         item
     }
-    let source_op = Box::new(Map::<Item, Item>::new(&mapper));
     let watermark_interval = batch_size * 4;
 
     // Set up channel for source to Map node
@@ -271,11 +274,13 @@ fn exec(
         batch_size as usize,
     ));
 
-    let source_context: SourceContext<Item, Item> = SourceContext::new(
+    let source_context = SourceContext::new(
         watermark_interval,
         None, // no timestamp extractor
         channel_strategy,
-        source_op,
+        Map::<Item, Item>::new(&mapper),
+        Box::new(InMemory::new("test".as_ref()).unwrap()),
+        timer::none,
     );
 
     // Collection for source
@@ -283,8 +288,7 @@ fn exec(
     println!("Finished generating items...");
 
     // Set up CollectionSource component
-    let collection_source: CollectionSource<Item, Item> =
-        CollectionSource::new(items, source_context);
+    let collection_source = CollectionSource::new(items, source_context);
 
     let source = {
         if pinned {

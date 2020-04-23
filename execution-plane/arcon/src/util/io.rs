@@ -3,15 +3,19 @@
 
 use kompact::prelude::*;
 
-use bytes::BytesMut;
 use futures::StreamExt;
-use std::net::SocketAddr;
-use std::sync::Arc;
+use std::{net::SocketAddr, sync::Arc};
+use tokio::{
+    net::{TcpListener, UdpSocket},
+    runtime::Runtime,
+};
+use tokio_util::{
+    codec::{BytesCodec, Decoder},
+    udp::UdpFramed,
+};
+
+use bytes::BytesMut;
 use std::thread::{Builder, JoinHandle};
-use tokio::net::{TcpListener, UdpSocket};
-use tokio::runtime::Runtime;
-use tokio_util::codec::{BytesCodec, Decoder};
-use tokio_util::udp::UdpFramed;
 
 /// Enum containing possible IO kinds
 pub enum IOKind {
@@ -142,8 +146,7 @@ impl Actor for IO {
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use tokio::io::AsyncWriteExt;
-    use tokio::net::TcpStream;
+    use tokio::{io::AsyncWriteExt, net::TcpStream};
 
     #[derive(ComponentDefinition)]
     pub struct IOSource {

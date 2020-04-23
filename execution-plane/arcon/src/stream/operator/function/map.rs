@@ -1,11 +1,11 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::data::{ArconElement, ArconEvent, ArconType, Epoch, Watermark};
-use crate::stream::channel::strategy::ChannelStrategy;
-use crate::stream::operator::Operator;
-use crate::util::SafelySendableFn;
-use arcon_error::ArconResult;
+use crate::{
+    data::{ArconElement, ArconEvent, ArconNever, ArconType, Epoch, Watermark},
+    stream::operator::{Operator, OperatorContext},
+    util::SafelySendableFn,
+};
 
 /// IN: Input Event
 /// OUT: Output Event
@@ -14,7 +14,7 @@ where
     IN: ArconType,
     OUT: ArconType,
 {
-    udf: &'static dyn SafelySendableFn<(IN,), OUT>,
+    udf: &'static dyn SafelySendableFn(IN) -> OUT,
 }
 
 impl<IN, OUT> Map<IN, OUT>
@@ -22,7 +22,7 @@ where
     IN: ArconType,
     OUT: ArconType,
 {
-    pub fn new(udf: &'static dyn SafelySendableFn<(IN,), OUT>) -> Self {
+    pub fn new(udf: &'static dyn SafelySendableFn(IN) -> OUT) -> Self {
         Map { udf }
     }
 
@@ -32,34 +32,35 @@ where
     }
 }
 
-impl<IN, OUT> Operator<IN, OUT> for Map<IN, OUT>
+impl<IN, OUT> Operator for Map<IN, OUT>
 where
     IN: ArconType,
     OUT: ArconType,
 {
-    fn handle_element(&mut self, element: ArconElement<IN>, strategy: &mut ChannelStrategy<OUT>) {
+    type IN = IN;
+    type OUT = OUT;
+    type TimerState = ArconNever;
+
+    fn handle_element(&mut self, element: ArconElement<IN>, mut ctx: OperatorContext<Self>) {
         if let Some(data) = element.data {
             let result = self.run_udf(data);
             let out_elem = ArconElement {
                 data: Some(result),
                 timestamp: element.timestamp,
             };
-            strategy.add(ArconEvent::Element(out_elem));
+            ctx.output(ArconEvent::Element(out_elem));
         }
     }
 
-    fn handle_watermark(&mut self, _w: Watermark) -> Option<Vec<ArconEvent<OUT>>> {
-        None
-    }
-    fn handle_epoch(&mut self, _epoch: Epoch) -> Option<ArconResult<Vec<u8>>> {
-        None
-    }
+    fn handle_watermark(&mut self, _w: Watermark, _ctx: OperatorContext<Self>) {}
+    fn handle_epoch(&mut self, _epoch: Epoch, _ctx: OperatorContext<Self>) {}
+    fn handle_timeout(&mut self, _timeout: Self::TimerState, _ctx: OperatorContext<Self>) {}
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::prelude::*;
+    use crate::{prelude::*, timer};
 
     #[test]
     fn map_test() {
@@ -76,11 +77,14 @@ mod tests {
         }
 
         let map_node = system.create(move || {
-            Node::<i32, i32>::new(
+            Node::new(
+                String::from("map_node"),
                 0.into(),
                 vec![1.into()],
                 channel_strategy,
-                Box::new(Map::new(&map_fn)),
+                Map::new(&map_fn),
+                Box::new(InMemory::new("test".as_ref()).unwrap()),
+                timer::none,
             )
         });
         system.start(&map_node);
@@ -88,7 +92,11 @@ mod tests {
         let input_one = ArconEvent::Element(ArconElement::new(6 as i32));
         let input_two = ArconEvent::Element(ArconElement::new(7 as i32));
         let msg = ArconMessage {
-            events: vec![input_one, input_two, ArconEvent::Death("die".into())],
+            events: vec![
+                input_one.into(),
+                input_two.into(),
+                ArconEvent::Death("die".into()).into(),
+            ],
             sender: NodeID::new(1),
         };
         let map_ref: ActorRefStrong<ArconMessage<i32>> =

@@ -2,10 +2,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use super::DEFAULT_BATCH_SIZE;
-use crate::data::{ArconEvent, ArconMessage, ArconType, NodeID};
-use crate::stream::channel::{strategy::send, Channel};
+use crate::{
+    data::{ArconEvent, ArconEventWrapper, ArconMessage, ArconType, NodeID},
+    stream::channel::{strategy::send, Channel},
+};
 
 /// A strategy that sends message downstream in a Round-Robin fashion
+#[derive(Clone)]
 pub struct RoundRobin<A>
 where
     A: ArconType,
@@ -17,7 +20,7 @@ where
     /// Which channel is currently the target
     curr_index: usize,
     /// A buffer holding outgoing events
-    buffer: Vec<ArconEvent<A>>,
+    buffer: Vec<ArconEventWrapper<A>>,
     /// A batch size indicating when the channel should flush data
     batch_size: usize,
 }
@@ -39,7 +42,7 @@ where
     #[inline]
     pub fn add(&mut self, event: ArconEvent<A>) {
         if let ArconEvent::Element(_) = &event {
-            self.buffer.push(event);
+            self.buffer.push(event.into());
 
             if self.buffer.len() == self.batch_size {
                 self.flush();
@@ -47,7 +50,7 @@ where
         } else {
             // Watermark/Epoch.
             // Send downstream as soon as possible
-            self.buffer.push(event);
+            self.buffer.push(event.into());
             self.flush();
         }
     }
@@ -73,14 +76,21 @@ where
             panic!("Bad channel setup");
         }
     }
+
+    #[inline]
+    pub fn num_channels(&self) -> usize {
+        self.channels.len()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::data::ArconElement;
-    use crate::prelude::{ChannelStrategy, DebugNode};
-    use crate::stream::channel::strategy::tests::*;
+    use crate::{
+        data::ArconElement,
+        prelude::{ChannelStrategy, DebugNode},
+        stream::channel::strategy::tests::*,
+    };
     use kompact::prelude::*;
     use std::sync::Arc;
 
