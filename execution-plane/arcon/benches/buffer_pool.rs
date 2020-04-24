@@ -1,12 +1,12 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use arcon::allocator::*;
-use arcon::data::buffer::*;
-use arcon::data::buffer_pool::*;
+use arcon::prelude::{ArconAllocator, BufferReader, BufferPool};
 use criterion::{black_box, criterion_group, criterion_main, Bencher, Criterion};
-use std::sync::mpsc::{channel, Receiver, Sender};
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    mpsc::{channel, Receiver, Sender},
+    Arc, Mutex,
+};
 
 const ALLOCATOR_BYTES: usize = 1073741824; // 1GB
 const SMALL_BUFFER: usize = 248;

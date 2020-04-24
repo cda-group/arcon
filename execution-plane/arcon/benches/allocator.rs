@@ -1,7 +1,7 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use arcon::allocator::*;
+use arcon::prelude::{ArconAllocator, AllocResult};
 use criterion::{black_box, criterion_group, criterion_main, Bencher, Criterion};
 
 const ALLOC_SIZE: usize = 1024;

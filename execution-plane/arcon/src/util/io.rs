@@ -17,11 +17,6 @@ use tokio_util::{
 use bytes::BytesMut;
 use std::thread::{Builder, JoinHandle};
 
-/// Enum containing possible IO kinds
-pub enum IOKind {
-    Tcp,
-    Udp,
-}
 
 /// Events that an IO Component may send to its subscriber
 #[derive(Debug)]
@@ -147,6 +142,11 @@ impl Actor for IO {
 pub mod tests {
     use super::*;
     use tokio::{io::AsyncWriteExt, net::TcpStream};
+
+    pub enum IOKind {
+        Tcp,
+        Udp,
+    }
 
     #[derive(ComponentDefinition)]
     pub struct IOSource {

@@ -4,12 +4,14 @@
 use crate::allocator::{AllocId, AllocResult, ArconAllocator};
 use arcon_error::*;
 use crossbeam_utils::CachePadded;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, Mutex,
+};
 
 /// A reusable buffer allocated through [ArconAllocator]
 ///
-/// Assumes a Single-writer, single-reader setup.
+/// Assumes a single-writer, single-reader setup.
 #[derive(Debug)]
 pub struct EventBuffer<T> {
     /// A raw pointer to our allocated memory block
@@ -51,6 +53,12 @@ impl<T> EventBuffer<T> {
     pub fn as_ptr(&self) -> *const T {
         self.ptr
     }
+
+    /// Returns a mutable pointer to the underlying buffer
+    pub fn as_mut_ptr(&self) -> *mut T {
+        self.ptr
+    }
+
     /// Pushes an item onto the buffer at ptr[len]
     ///
     /// It is up to the writer to keep track of len.
@@ -114,6 +122,7 @@ pub struct BufferWriter<T> {
 
 impl<T> BufferWriter<T> {
     /// Creates a new BufferWriter
+    #[inline]
     pub fn new(buffer: Arc<EventBuffer<T>>, len: usize, capacity: usize) -> BufferWriter<T> {
         BufferWriter {
             buffer,
@@ -123,7 +132,8 @@ impl<T> BufferWriter<T> {
     }
     /// Pushes an item onto the buffer
     ///
-    /// Returns false if it tries to write beyond the buffers capacity
+    /// Returns back the element as Some(value) if it tries to write beyond the buffers capacity
+    #[inline]
     pub fn push(&mut self, value: T) -> Option<T> {
         if let Some(v) = (*self.buffer).push(value, self.len) {
             Some(v)
@@ -132,17 +142,35 @@ impl<T> BufferWriter<T> {
             None
         }
     }
+
+    /// Return a const ptr to the underlying buffer
+    #[inline]
+    pub fn as_ptr(&self) -> *const T {
+        self.buffer.as_ptr()
+    }
+
     /// Generate a reader
-    ///
-    /// Drops the BufferWriter making it no longer accessible
-    pub fn reader(self) -> BufferReader<T> {
+    #[inline]
+    pub fn reader(&self) -> BufferReader<T> {
         BufferReader {
-            buffer: self.buffer,
+            buffer: self.buffer.clone(),
             len: self.len,
         }
     }
 
+    /// Copy data from another BufferWriter
+    pub fn copy_from_writer(&mut self, other: &BufferWriter<T>) {
+        let other_ptr = other.as_ptr();
+        let other_len = other.len();
+
+        unsafe {
+            std::ptr::copy(other_ptr, (*self.buffer).as_mut_ptr(), other_len);
+        };
+        self.len = other_len;
+    }
+
     /// Returns current position in the Buffer
+    #[inline]
     pub fn len(&self) -> usize {
         self.len
     }
@@ -181,6 +209,17 @@ impl<T> BufferReader<T> {
     #[inline]
     pub fn as_slice(&self) -> &[T] {
         unsafe { std::slice::from_raw_parts(self.as_ptr(), self.len) }
+    }
+
+    /// Convert into Vec
+    #[inline]
+    pub fn into_vec(&self) -> Vec<T> {
+        let mut dst = Vec::with_capacity(self.len);
+        unsafe {
+            dst.set_len(self.len);
+            std::ptr::copy(self.as_ptr(), dst.as_mut_ptr(), self.len);
+        };
+        dst
     }
 
     /// Length of buffer
@@ -257,6 +296,123 @@ impl<T> From<Vec<T>> for BufferReader<T> {
         writer.reader()
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct PoolInfo {
+    pub(crate) buffer_size: usize,
+    pub(crate) capacity: usize,
+    pub(crate) limit: usize,
+    pub(crate) allocator: Arc<Mutex<ArconAllocator>>,
+}
+
+impl PoolInfo {
+    pub fn new(
+        buffer_size: usize,
+        capacity: usize,
+        limit: usize,
+        allocator: Arc<Mutex<ArconAllocator>>,
+    ) -> PoolInfo {
+        PoolInfo {
+            buffer_size,
+            capacity,
+            limit,
+            allocator,
+        }
+    }
+}
+
+/// A preallocated pool of EventBuffers
+#[allow(dead_code)]
+pub struct BufferPool<T> {
+    /// Reference to an ArconAllocator
+    allocator: Arc<Mutex<ArconAllocator>>,
+    /// Size per buffer
+    buffer_size: usize,
+    /// Vec of buffers in the pool
+    buffers: Vec<Arc<EventBuffer<T>>>,
+    /// Index of which buffer is next in line.
+    curr_buffer: usize,
+}
+impl<T> BufferPool<T> {
+    /// Create a new BufferPool
+    #[inline]
+    pub fn new(
+        capacity: usize,
+        buffer_size: usize,
+        allocator: Arc<Mutex<ArconAllocator>>,
+    ) -> ArconResult<BufferPool<T>> {
+        let mut buffers: Vec<Arc<EventBuffer<T>>> = Vec::with_capacity(capacity);
+
+        // Allocate and add EventBuffers to our pool
+        for _ in 0..capacity {
+            let buffer: EventBuffer<T> = EventBuffer::new(buffer_size, allocator.clone())?;
+            buffers.push(Arc::new(buffer));
+        }
+
+        Ok(BufferPool {
+            allocator,
+            buffer_size,
+            buffers,
+            curr_buffer: 0,
+        })
+    }
+
+    /// Attempt to fetch a BufferWriter
+    ///
+    /// Returns None if it fails to find Writer for the current index
+    #[inline]
+    pub fn try_get(&mut self) -> Option<BufferWriter<T>> {
+        let buf = &self.buffers[self.curr_buffer];
+        let mut opt = None;
+        if buf.try_reserve() {
+            opt = Some(BufferWriter::new(buf.clone(), 0, buf.capacity()))
+        }
+
+        self.index_incr();
+
+        opt
+    }
+
+    /// Busy waiting for a BufferWriter
+    ///
+    /// Should be used carefully
+    #[inline]
+    pub fn get(&mut self) -> BufferWriter<T> {
+        loop {
+            match self.try_get() {
+                None => {}
+                Some(v) => return v,
+            }
+        }
+    }
+
+    /// Bumps the buffer index
+    ///
+    /// If we have reached the capacity, we simply
+    /// reset to zero again.
+    #[inline]
+    fn index_incr(&mut self) {
+        self.curr_buffer += 1;
+        if self.curr_buffer == self.buffers.capacity() {
+            // Reset
+            self.curr_buffer = 0;
+        }
+    }
+
+    /// Returns the capacity of the BufferPool
+    #[inline]
+    #[allow(dead_code)]
+    pub fn capacity(&self) -> usize {
+        self.buffers.capacity()
+    }
+
+    /// Returns the size each buffer holds
+    #[inline]
+    #[allow(dead_code)]
+    pub fn buffer_size(&self) -> usize {
+        self.buffer_size
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -291,5 +447,41 @@ mod tests {
         let a = allocator.lock().unwrap();
         assert_eq!(a.total_allocations(), 1);
         assert_eq!(a.bytes_remaining(), total_bytes);
+    }
+
+    #[test]
+    fn buffer_pool_test() {
+        let allocator = Arc::new(Mutex::new(ArconAllocator::new(10024)));
+        let buffer_size = 100;
+        let pool_capacity = 2;
+        let mut pool: BufferPool<u64> =
+            BufferPool::new(pool_capacity, buffer_size, allocator.clone()).unwrap();
+
+        let mut buffer = pool.try_get().unwrap();
+
+        for i in 0..buffer_size {
+            buffer.push(i as u64);
+        }
+
+        let reader_one = buffer.reader();
+
+        let data = reader_one.as_slice();
+        assert_eq!(data.len(), buffer_size);
+
+        let buffer = pool.try_get().unwrap();
+
+        {
+            let reader_two = buffer.reader();
+
+            let data = reader_two.as_slice();
+            assert_eq!(data.len(), 0);
+
+            // No available buffers at this point
+            assert_eq!(pool.try_get().is_none(), true);
+        }
+        // reader_two is dropped at this point.
+        // its underlying buffer should be returned to the pool
+
+        assert_eq!(pool.try_get().is_some(), true);
     }
 }

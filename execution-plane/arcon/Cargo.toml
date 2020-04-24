@@ -108,7 +108,3 @@ harness = false
 [[bench]]
 name = "flight_serde"
 harness = false
-
-[[bench]]
-name = "node"
-harness = false

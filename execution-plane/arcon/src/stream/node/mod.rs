@@ -5,6 +5,7 @@
 pub mod debug;
 
 use crate::{
+    data::RawArconMessage,
     manager::node_manager::*,
     metrics::{counter::Counter, gauge::Gauge, meter::Meter},
     prelude::*,
@@ -61,7 +62,7 @@ pub struct NodeState<OP: Operator> {
     /// Blocked channels during epoch alignment
     blocked_channels: BoxedMapState<NodeID, ()>,
     /// Temporary message buffer used while having blocked channels
-    message_buffer: BoxedVecState<ArconMessage<OP::IN>>,
+    message_buffer: BoxedVecState<RawArconMessage<OP::IN>>,
 }
 
 /// A Node is a [kompact] component that drives the execution of streaming operators
@@ -203,17 +204,15 @@ where
         }
     }
 
+    /// Handle a Raw ArconMessage that has either been sent remotely or temporarily stored in the state backend
     #[inline]
-    fn handle_message(&mut self, message: ArconMessage<OP::IN>) -> ArconResult<()> {
+    fn handle_raw_msg(&mut self, message: RawArconMessage<OP::IN>) -> ArconResult<()> {
         // Check valid sender
         if !self.in_channels.contains(&message.sender) {
             return arcon_err!("Message from invalid sender");
         }
 
-        // Mark amount of inbound messages
-        self.metrics
-            .inbound_throughput
-            .mark_n(message.events.len() as u64);
+        self.record_incoming_events(message.events.len() as u64);
 
         // Check if sender is blocked
         if self
@@ -228,14 +227,57 @@ where
             return Ok(());
         }
 
-        'event_loop: for event in message.events {
+        // If sender is not blocked, process events.
+        self.handle_events(message.sender, message.events)
+    }
+
+    /// Handle a local ArconMessage that is backed by the [ArconAllocator]
+    #[inline]
+    fn handle_message(&mut self, message: ArconMessage<OP::IN>) -> ArconResult<()> {
+        // Check valid sender
+        if !self.in_channels.contains(&message.sender) {
+            return arcon_err!("Message from invalid sender");
+        }
+
+        self.record_incoming_events(message.events.len() as u64);
+
+        // Check if sender is blocked
+        if self
+            .state
+            .blocked_channels
+            .contains(&*self.state_backend, &message.sender)?
+        {
+            // Add the message to the back of the queue
+            self.state
+                .message_buffer
+                .append(&mut *self.state_backend, message.into())?;
+            return Ok(());
+        }
+
+        // If sender is not blocked, process events.
+        self.handle_events(message.sender, message.events)
+    }
+
+    /// Mark amount of inbound events
+    #[inline(always)]
+    fn record_incoming_events(&mut self, total: u64) {
+        self.metrics.inbound_throughput.mark_n(total);
+    }
+
+    /// Iterate over a batch of ArconEvent's
+    #[inline]
+    fn handle_events<I>(&mut self, sender: NodeID, events: I) -> ArconResult<()>
+    where
+        I: IntoIterator<Item = ArconEventWrapper<OP::IN>>,
+    {
+        'event_loop: for event in events.into_iter() {
             match event.unwrap() {
                 ArconEvent::Element(e) => {
                     if e.timestamp.unwrap_or(u64::max_value())
                         <= self
                             .state
                             .watermarks
-                            .get(&*self.state_backend, &message.sender)?
+                            .get(&*self.state_backend, &sender)?
                             .ok_or_else(|| arcon_err_kind!("uninitialized watermark"))?
                             .timestamp
                     {
@@ -248,7 +290,7 @@ where
                     if w <= self
                         .state
                         .watermarks
-                        .get(&*self.state_backend, &message.sender)?
+                        .get(&*self.state_backend, &sender)?
                         .ok_or_else(|| arcon_err_kind!("uninitialized watermark"))?
                     {
                         continue 'event_loop;
@@ -264,7 +306,7 @@ where
                     if let Some(old) =
                         self.state
                             .watermarks
-                            .insert(&mut *self.state_backend, message.sender, w)?
+                            .insert(&mut *self.state_backend, sender, w)?
                     {
                         if old > current_watermark {
                             continue 'event_loop;
@@ -334,7 +376,7 @@ where
                     // Add the sender to the blocked set.
                     self.state.blocked_channels.fast_insert(
                         &mut *self.state_backend,
-                        message.sender,
+                        sender,
                         (),
                     )?;
 
@@ -371,7 +413,6 @@ where
                 }
             }
         }
-
         Ok(())
     }
 
@@ -416,7 +457,7 @@ where
 
             // Iterate over the message-buffer until empty
             for message in local_buffer {
-                self.handle_message(message)?;
+                self.handle_events(message.sender, message.events)?;
             }
         }
 
@@ -493,17 +534,17 @@ where
     fn receive_network(&mut self, msg: NetMessage) {
         let arcon_msg = match *msg.ser_id() {
             ReliableSerde::<OP::IN>::SER_ID => msg
-                .try_deserialise::<ArconMessage<OP::IN>, ReliableSerde<OP::IN>>()
+                .try_deserialise::<RawArconMessage<OP::IN>, ReliableSerde<OP::IN>>()
                 .map_err(|_| arcon_err_kind!("Failed to unpack reliable ArconMessage")),
             UnsafeSerde::<OP::IN>::SER_ID => msg
-                .try_deserialise::<ArconMessage<OP::IN>, UnsafeSerde<OP::IN>>()
+                .try_deserialise::<RawArconMessage<OP::IN>, UnsafeSerde<OP::IN>>()
                 .map_err(|_| arcon_err_kind!("Failed to unpack unreliable ArconMessage")),
             _ => panic!("Unexpected deserialiser"),
         };
 
         match arcon_msg {
             Ok(m) => {
-                if let Err(err) = self.handle_message(m) {
+                if let Err(err) = self.handle_raw_msg(m) {
                     error!(self.ctx.log(), "Failed to handle node message: {}", err);
                 }
             }
@@ -523,6 +564,7 @@ mod tests {
         // Returns a filter Node with input channels: sender1..sender3
         // And a debug sink receiving its results
         let mut pipeline = ArconPipeline::new();
+        let pool_info = pipeline.get_pool_info();
         let system = &pipeline.system();
 
         let sink = system.create(move || DebugNode::<i32>::new());
@@ -531,7 +573,7 @@ mod tests {
             sink.actor_ref().hold().expect("Failed to fetch");
         let channel = Channel::Local(actor_ref);
         let channel_strategy: ChannelStrategy<i32> =
-            ChannelStrategy::Forward(Forward::new(channel, NodeID::new(0)));
+            ChannelStrategy::Forward(Forward::new(channel, NodeID::new(0), pool_info));
 
         fn node_fn(x: &i32) -> bool {
             *x >= 0

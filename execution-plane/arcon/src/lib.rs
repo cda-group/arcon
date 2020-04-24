@@ -14,16 +14,14 @@ extern crate arcon_macros;
 #[macro_use]
 extern crate arcon_error as error;
 
-/// Allocator for message buffers, network buffers, state backends
-pub mod allocator;
+// Public Interface
+
 /// Arcon Configuration
 pub mod conf;
 /// Arcon data types, message buffers, serialisers/deserialisers
 pub mod data;
 /// Module containing different runtime managers
 pub mod manager;
-/// Arcon metrics
-pub mod metrics;
 /// Utilities for creating an Arcon pipeline
 pub mod pipeline;
 /// State backend implementations
@@ -32,11 +30,24 @@ pub mod state_backend;
 pub mod stream;
 /// Arcon event time facilities
 pub mod timer;
+
+// Internal modules
+
+/// Allocator for message buffers, network buffers, state backends
+mod allocator;
+/// Arcon buffer implementations
+mod buffer;
+/// Arcon metrics
+mod metrics;
+/// Test module containing some more complex unit tests
+#[cfg(test)]
+mod test;
 /// Arcon terminal user interface
 #[cfg(feature = "arcon_tui")]
 mod tui;
-/// Utilities for Arcon
-pub mod util;
+/// Internal Arcon Utilities
+mod util;
+
 
 /// A module containing test utilities such as a global ArconAllocator
 #[cfg(test)]
@@ -66,12 +77,11 @@ pub mod prelude {
     pub use crate::{
         conf::ArconConf,
         pipeline::ArconPipeline,
+        allocator::{ArconAllocator, AllocResult},
+        buffer::event::{BufferWriter, BufferReader, BufferPool},
         stream::{
             channel::{
-                strategy::{
-                    broadcast::Broadcast, forward::Forward, key_by::KeyBy, round_robin::RoundRobin,
-                    ChannelStrategy,
-                },
+                strategy::{forward::Forward, ChannelStrategy},
                 Channel, DispatcherSource,
             },
             node::{debug::DebugNode, Node, NodeDescriptor},

@@ -116,7 +116,8 @@ mod tests {
     use super::*;
     use crate::{
         data::ArconType,
-        prelude::{Channel, ChannelStrategy, DebugNode, Forward, Map, NodeID},
+        pipeline::ArconPipeline,
+        prelude::{Channel, ChannelStrategy, DebugNode, Forward, Map},
         state_backend::{in_memory::InMemory, StateBackend},
         timer,
     };
@@ -135,13 +136,15 @@ mod tests {
         let addr = "127.0.0.1:4000".parse().unwrap();
 
         // Setup
-        let system = KompactConfig::default().build().expect("KompactSystem");
+        let mut pipeline = ArconPipeline::new();
+        let pool_info = pipeline.get_pool_info();
+        let system = pipeline.system();
 
         let (sink, _) = system.create_and_register(move || DebugNode::<u32>::new());
         let sink_ref = sink.actor_ref().hold().expect("Failed to fetch strong ref");
 
         let channel = Channel::Local(sink_ref);
-        let channel_strategy = ChannelStrategy::Forward(Forward::new(channel, NodeID::new(1)));
+        let channel_strategy = ChannelStrategy::Forward(Forward::new(channel, 1.into(), pool_info));
 
         // just pass it on
         fn map_fn(x: u32) -> u32 {
@@ -199,13 +202,14 @@ mod tests {
         let addr = "127.0.0.1:4001".parse().unwrap();
 
         // Setup
-        let system = KompactConfig::default().build().expect("KompactSystem");
+        let mut pipeline = ArconPipeline::new();
+        let pool_info = pipeline.get_pool_info();
+        let system = pipeline.system();
 
         let (sink, _) = system.create_and_register(DebugNode::<ExtractorStruct>::new);
         let sink_ref = sink.actor_ref().hold().expect("Failed to fetch strong ref");
-
-        let channel = Channel::Local(sink_ref);
-        let channel_strategy = ChannelStrategy::Forward(Forward::new(channel, NodeID::new(1)));
+        let channel_strategy =
+            ChannelStrategy::Forward(Forward::new(Channel::Local(sink_ref), 1.into(), pool_info));
 
         // just pass it on
         fn map_fn(x: ExtractorStruct) -> ExtractorStruct {

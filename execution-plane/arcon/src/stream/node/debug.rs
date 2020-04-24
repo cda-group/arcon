@@ -33,8 +33,12 @@ where
             epochs: Vec::new(),
         }
     }
-    fn handle_msg(&mut self, msg: ArconMessage<IN>) {
-        for event in msg.events.into_iter() {
+    #[inline]
+    fn handle_events<I>(&mut self, events: I)
+    where
+        I: IntoIterator<Item = ArconEventWrapper<IN>>,
+    {
+        for event in events.into_iter() {
             match event.unwrap() {
                 ArconEvent::Element(e) => {
                     info!(self.ctx.log(), "Sink element: {:?}", e.data);
@@ -87,22 +91,22 @@ where
     type Message = ArconMessage<IN>;
 
     fn receive_local(&mut self, msg: Self::Message) {
-        self.handle_msg(msg);
+        self.handle_events(msg.events);
     }
     fn receive_network(&mut self, msg: NetMessage) {
-        let arcon_msg: ArconResult<ArconMessage<IN>> = match *msg.ser_id() {
+        let arcon_msg: ArconResult<RawArconMessage<IN>> = match *msg.ser_id() {
             ReliableSerde::<IN>::SER_ID => msg
-                .try_deserialise::<ArconMessage<IN>, ReliableSerde<IN>>()
+                .try_deserialise::<RawArconMessage<IN>, ReliableSerde<IN>>()
                 .map_err(|_| arcon_err_kind!("Failed to unpack reliable ArconMessage")),
             UnsafeSerde::<IN>::SER_ID => msg
-                .try_deserialise::<ArconMessage<IN>, UnsafeSerde<IN>>()
+                .try_deserialise::<RawArconMessage<IN>, UnsafeSerde<IN>>()
                 .map_err(|_| arcon_err_kind!("Failed to unpack unreliable ArconMessage")),
             _ => panic!("Unexpected deserialiser"),
         };
 
         match arcon_msg {
             Ok(m) => {
-                self.handle_msg(m);
+                self.handle_events(m.events);
             }
             Err(e) => error!(self.ctx.log(), "Error ArconNetworkMessage: {:?}", e),
         }

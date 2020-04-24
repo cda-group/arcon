@@ -180,14 +180,13 @@ fn exec(
     let mut core_counter: usize = kompact_threads;
     let timeout = std::time::Duration::from_millis(500);
 
-    let mut cfg = KompactConfig::default();
-    cfg.threads(kompact_threads);
-    if !dedicated {
-        cfg.throughput(kompact_throughput as usize);
-        cfg.msg_priority(0.5);
-    }
+    let mut conf = ArconConf::default();
+    conf.kompact_threads = kompact_threads;
+    conf.kompact_throughput = kompact_throughput as usize;
 
-    let system = cfg.build().expect("KompactSystem");
+    let mut pipeline = ArconPipeline::with_conf(conf);
+    let pool_info = pipeline.get_pool_info();
+    let system = pipeline.system();
 
     let total_items = collection_size.next_power_of_two();
 
@@ -220,10 +219,10 @@ fn exec(
         }
     }
 
-    let channel_strategy = ChannelStrategy::Forward(Forward::with_batch_size(
+    let channel_strategy = ChannelStrategy::Forward(Forward::new(
         sink_channel,
         NodeID::new(1),
-        batch_size as usize,
+        pool_info.clone(),
     ));
 
     let node = Node::new(
@@ -268,11 +267,8 @@ fn exec(
     // Set up channel for source to Map node
     let node_ref: ActorRefStrong<ArconMessage<Item>> = map_node.actor_ref().hold().expect("no");
     let node_channel = Channel::Local(node_ref);
-    let channel_strategy = ChannelStrategy::Forward(Forward::with_batch_size(
-        node_channel,
-        NodeID::new(2),
-        batch_size as usize,
-    ));
+    let channel_strategy =
+        ChannelStrategy::Forward(Forward::new(node_channel, NodeID::new(2), pool_info));
 
     let source_context = SourceContext::new(
         watermark_interval,
@@ -317,5 +313,5 @@ fn exec(
     let res = future.wait();
     println!("Execution took {:?} milliseconds", res.as_millis());
 
-    let _ = system.shutdown();
+    pipeline.shutdown();
 }

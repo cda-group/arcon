@@ -1,81 +1,109 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use super::DEFAULT_BATCH_SIZE;
 use crate::{
+    buffer::event::{BufferPool, BufferWriter, PoolInfo},
     data::{ArconEvent, ArconEventWrapper, ArconMessage, ArconType, NodeID},
     stream::channel::{strategy::send, Channel},
 };
 
 /// A Broadcast strategy for one-to-many message sending
-#[derive(Clone)]
+#[allow(dead_code)]
 pub struct Broadcast<A>
 where
     A: ArconType,
 {
+    /// A buffer pool of EventBuffer's
+    buffer_pool: BufferPool<ArconEventWrapper<A>>,
     /// Vec of Channels that messages are broadcasted to
     channels: Vec<Channel<A>>,
+    /// A buffer holding outgoing events
+    curr_buffer: BufferWriter<ArconEventWrapper<A>>,
     /// An Identifier that is embedded in each outgoing message
     sender_id: NodeID,
-    /// A buffer holding outgoing events
-    buffer: Vec<ArconEventWrapper<A>>,
-    /// A batch size indicating when the channel should flush data
-    batch_size: usize,
+    /// Struct holding information regarding the BufferPool
+    pool_info: PoolInfo,
 }
 
 impl<A> Broadcast<A>
 where
     A: ArconType,
 {
-    pub fn new(channels: Vec<Channel<A>>, sender_id: NodeID) -> Broadcast<A> {
+    pub fn new(channels: Vec<Channel<A>>, sender_id: NodeID, pool_info: PoolInfo) -> Broadcast<A> {
+        assert!(
+            channels.len() > 1,
+            "Number of Channels must exceed 1 for a Broadcast strategy"
+        );
+        assert!(
+            channels.len() < pool_info.capacity,
+            "Strategy must be initialised with a pool capacity larger than amount of channels"
+        );
+
+        let mut buffer_pool: BufferPool<ArconEventWrapper<A>> = BufferPool::new(
+            pool_info.capacity,
+            pool_info.buffer_size,
+            pool_info.allocator.clone(),
+        )
+        .expect("failed to initialise BufferPool");
+
+        let curr_buffer = buffer_pool
+            .try_get()
+            .expect("failed to fetch initial buffer");
+
         Broadcast {
+            buffer_pool,
             channels,
+            curr_buffer,
             sender_id,
-            buffer: Vec::with_capacity(DEFAULT_BATCH_SIZE),
-            batch_size: DEFAULT_BATCH_SIZE,
-        }
-    }
-    pub fn with_batch_size(
-        channels: Vec<Channel<A>>,
-        sender_id: NodeID,
-        batch_size: usize,
-    ) -> Broadcast<A> {
-        Broadcast {
-            channels,
-            sender_id,
-            buffer: Vec::with_capacity(batch_size),
-            batch_size,
+            pool_info,
         }
     }
 
     #[inline]
     pub fn add(&mut self, event: ArconEvent<A>) {
         if let ArconEvent::Element(_) = &event {
-            self.buffer.push(event.into());
-
-            if self.buffer.len() == self.batch_size {
+            if let Some(e) = self.curr_buffer.push(event.into()) {
+                // buffer is full, flush.
                 self.flush();
+                self.curr_buffer.push(e.into());
             }
         } else {
-            // Watermark/Epoch.
-            // Send downstream as soon as possible
-            self.buffer.push(event.into());
-            self.flush();
+            if let Some(e) = self.curr_buffer.push(event.into()) {
+                self.flush();
+                self.curr_buffer.push(e.into());
+                self.flush();
+            } else {
+                self.flush();
+            }
         }
     }
 
     #[inline]
     pub fn flush(&mut self) {
-        let mut new_vec = Vec::with_capacity(self.batch_size);
-        std::mem::swap(&mut new_vec, &mut self.buffer);
-        let msg = ArconMessage {
-            events: new_vec,
-            sender: self.sender_id,
-        };
-
-        for channel in &self.channels {
-            send(channel, msg.clone());
+        for (i, channel) in self.channels.iter().enumerate() {
+            if i == self.channels.len() - 1 {
+                // This is the last channel, thus we can use curr_buffer
+                let reader = self.curr_buffer.reader();
+                let msg = ArconMessage {
+                    events: reader,
+                    sender: self.sender_id,
+                };
+                send(channel, msg);
+            } else {
+                // Get a new writer
+                let mut writer = self.buffer_pool.get();
+                // Copy data from our current writer into the new writer...
+                writer.copy_from_writer(&self.curr_buffer);
+                let msg = ArconMessage {
+                    events: writer.reader(),
+                    sender: self.sender_id,
+                };
+                send(channel, msg);
+            }
         }
+        // We are finished, set a new BufferWriter to curr_buffer
+        // TODO: Should probably not busy wait here..
+        self.curr_buffer = self.buffer_pool.get();
     }
 
     #[inline]
@@ -89,18 +117,18 @@ mod tests {
     use super::*;
     use crate::{
         data::ArconElement,
+        pipeline::ArconPipeline,
         prelude::DebugNode,
-        stream::channel::{
-            strategy::{tests::*, ChannelStrategy},
-            FlightSerde,
-        },
+        stream::channel::strategy::{tests::*, ChannelStrategy},
     };
     use kompact::prelude::*;
     use std::sync::Arc;
 
     #[test]
     fn broadcast_local_test() {
-        let system = KompactConfig::default().build().expect("KompactSystem");
+        let mut pipeline = ArconPipeline::new();
+        let pool_info = pipeline.get_pool_info();
+        let system = pipeline.system();
 
         let components: u32 = 8;
         let total_msgs: u64 = 10;
@@ -118,7 +146,7 @@ mod tests {
         }
 
         let mut channel_strategy: ChannelStrategy<Input> =
-            ChannelStrategy::Broadcast(Broadcast::new(channels, NodeID::new(1)));
+            ChannelStrategy::Broadcast(Broadcast::new(channels, NodeID::new(1), pool_info));
 
         for _i in 0..total_msgs {
             let elem = ArconElement::new(Input { id: 1 });
@@ -129,78 +157,11 @@ mod tests {
 
         std::thread::sleep(std::time::Duration::from_secs(1));
 
-        // Each of the 8 components should havesame amount of msgs..
+        // Each of the 8 components should have the same amount of msgs..
         for comp in comps {
             let comp_inspect = &comp.definition().lock().unwrap();
             assert_eq!(comp_inspect.data.len() as u64, total_msgs);
         }
-        let _ = system.shutdown();
-    }
-
-    #[test]
-    fn broadcast_local_and_remote() {
-        let (system, remote) = {
-            let system = || {
-                let mut cfg = KompactConfig::new();
-                cfg.system_components(DeadletterBox::new, NetworkConfig::default().build());
-                cfg.build().expect("KompactSystem")
-            };
-            (system(), system())
-        };
-
-        let local_components: u32 = 4;
-        let remote_components: u32 = 4;
-        let total_msgs: u64 = 5;
-
-        let mut channels: Vec<Channel<Input>> = Vec::new();
-        let mut comps: Vec<Arc<crate::prelude::Component<DebugNode<Input>>>> = Vec::new();
-
-        // Create local components
-        for _i in 0..local_components {
-            let comp = system.create(move || DebugNode::<Input>::new());
-            system.start(&comp);
-            let actor_ref: ActorRefStrong<ArconMessage<Input>> =
-                comp.actor_ref().hold().expect("failed to fetch");
-            channels.push(Channel::Local(actor_ref));
-            comps.push(comp);
-        }
-
-        // Create remote components
-        for i in 0..remote_components {
-            let comp = remote.create(move || DebugNode::<Input>::new());
-            let comp_id = format!("comp_{}", i);
-            let _ = remote.register_by_alias(&comp, comp_id.clone());
-            remote.start(&comp);
-
-            let remote_path = ActorPath::Named(NamedPath::with_system(remote.system_path(), vec![
-                comp_id.into(),
-            ]));
-            channels.push(Channel::Remote(
-                remote_path,
-                FlightSerde::Reliable,
-                system.dispatcher_ref().into(),
-            ));
-            comps.push(comp);
-        }
-        std::thread::sleep(std::time::Duration::from_secs(1));
-
-        let mut channel_strategy: ChannelStrategy<Input> =
-            ChannelStrategy::Broadcast(Broadcast::new(channels, NodeID::new(1)));
-
-        for _i in 0..total_msgs {
-            let elem = ArconElement::new(Input { id: 1 });
-            // Just assume it is all sent from same comp
-            channel_strategy.add(ArconEvent::Element(elem));
-        }
-        channel_strategy.flush();
-
-        std::thread::sleep(std::time::Duration::from_secs(1));
-
-        // Each of the 8 components should have same amount of msgs..
-        for comp in comps {
-            let comp_inspect = &comp.definition().lock().unwrap();
-            assert_eq!(comp_inspect.data.len() as u64, total_msgs);
-        }
-        let _ = system.shutdown();
+        pipeline.shutdown();
     }
 }

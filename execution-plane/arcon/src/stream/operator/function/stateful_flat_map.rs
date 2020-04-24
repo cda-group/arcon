@@ -69,14 +69,17 @@ mod tests {
 
     #[test]
     fn stateful_flatmap_test() {
-        let system = KompactConfig::default().build().expect("KompactSystem");
+        let mut pipeline = ArconPipeline::new();
+        let pool_info = pipeline.get_pool_info();
+        let system = pipeline.system();
+
         let comp = system.create(move || DebugNode::<i32>::new());
         system.start(&comp);
 
         let actor_ref: ActorRefStrong<ArconMessage<i32>> =
             comp.actor_ref().hold().expect("failed to fetch");
         let channel_strategy =
-            ChannelStrategy::Forward(Forward::new(Channel::Local(actor_ref), 1.into()));
+            ChannelStrategy::Forward(Forward::new(Channel::Local(actor_ref), 1.into(), pool_info));
 
         fn stateful_flatmap_fn<O>(ctx: OperatorContext<O>, x: i32) -> Option<i32>
         where
@@ -118,8 +121,9 @@ mod tests {
                 elem(2).into(),
                 elem(3).into(),
                 elem(4).into(),
-                ArconEvent::Death("die".into()).into(),
-            ],
+                ArconEvent::Death(String::from("die")).into(),
+            ]
+            .into(),
             sender: NodeID::new(1),
         };
         let stateful_flatmap_ref: ActorRefStrong<ArconMessage<i32>> = stateful_flatmap_node
@@ -141,6 +145,7 @@ mod tests {
                 vec![3, 5, 7]
             );
         }
-        let _ = system.shutdown();
+
+        pipeline.shutdown();
     }
 }
