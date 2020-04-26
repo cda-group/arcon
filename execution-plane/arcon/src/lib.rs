@@ -48,7 +48,6 @@ mod tui;
 /// Internal Arcon Utilities
 mod util;
 
-
 /// A module containing test utilities such as a global ArconAllocator
 #[cfg(test)]
 pub mod test_utils {
@@ -75,13 +74,16 @@ pub mod prelude {
         source::socket::{SocketKind, SocketSource},
     };
     pub use crate::{
+        allocator::{AllocResult, ArconAllocator},
+        buffer::event::{BufferPool, BufferReader, BufferWriter},
         conf::ArconConf,
         pipeline::ArconPipeline,
-        allocator::{ArconAllocator, AllocResult},
-        buffer::event::{BufferWriter, BufferReader, BufferPool},
         stream::{
             channel::{
-                strategy::{forward::Forward, ChannelStrategy},
+                strategy::{
+                    broadcast::Broadcast, forward::Forward, key_by::KeyBy, round_robin::RoundRobin,
+                    ChannelStrategy,
+                },
                 Channel, DispatcherSource,
             },
             node::{debug::DebugNode, Node, NodeDescriptor},

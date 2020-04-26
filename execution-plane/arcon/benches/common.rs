@@ -50,10 +50,12 @@ impl<A: ArconType> NodeReceiver<A> {
     }
 
     fn handle_msg(&mut self, total_events: u64) {
+        /*
         info!(
             self.log(),
             "Expected {} remaining, but got {}", self.remaining_recv, total_events
         );
+        */
         self.remaining_recv -= total_events;
         if self.remaining_recv <= 0u64 {
             let time = self.start.elapsed();

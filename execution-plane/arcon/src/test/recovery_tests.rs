@@ -104,8 +104,11 @@ fn run_pipeline<SB: StateBackend>(
         .actor_ref()
         .hold()
         .expect("failed to fetch strong ref");
-    let channel_strategy =
-        ChannelStrategy::Forward(Forward::new(Channel::Local(file_sink_ref), NodeID::new(3), pool_info.clone()));
+    let channel_strategy = ChannelStrategy::Forward(Forward::new(
+        Channel::Local(file_sink_ref),
+        NodeID::new(3),
+        pool_info.clone(),
+    ));
 
     fn map_fn<SB: 'static>(x: NormaliseElements) -> i64 {
         let t = TypeId::of::<SB>();
@@ -151,8 +154,11 @@ fn run_pipeline<SB: StateBackend>(
         Box::new(AppenderWindow::new(&window_fn, &mut *window_state_backend));
 
     let map_node_ref = map_node.actor_ref().hold().expect("Failed to fetch ref");
-    let channel_strategy =
-        ChannelStrategy::Forward(Forward::new(Channel::Local(map_node_ref), NodeID::new(2), pool_info));
+    let channel_strategy = ChannelStrategy::Forward(Forward::new(
+        Channel::Local(map_node_ref),
+        NodeID::new(2),
+        pool_info,
+    ));
 
     let window_node = system.create(move || {
         Node::new(

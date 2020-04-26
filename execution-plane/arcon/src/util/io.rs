@@ -17,7 +17,6 @@ use tokio_util::{
 use bytes::BytesMut;
 use std::thread::{Builder, JoinHandle};
 
-
 /// Events that an IO Component may send to its subscriber
 #[derive(Debug)]
 pub enum IOMessage {
