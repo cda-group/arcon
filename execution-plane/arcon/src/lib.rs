@@ -99,14 +99,9 @@ pub mod prelude {
     #[cfg(feature = "thread_pinning")]
     pub use kompact::{get_core_ids, CoreId};
 
-    #[cfg(all(feature = "arcon_faster", target_os = "linux"))]
-    pub use crate::state_backend::faster::Faster;
-    #[cfg(feature = "arcon_rocksdb")]
-    pub use crate::state_backend::rocks::RocksDb;
-    #[cfg(feature = "arcon_sled")]
-    pub use crate::state_backend::sled::Sled;
-    pub use crate::state_backend::{
-        builders::*, in_memory::InMemory, state_types::*, StateBackend,
+    pub use crate::{
+        state_backend,
+        state_backend::{builders::*, state_types::*, StateBackend},
     };
     #[cfg(feature = "rayon")]
     pub use rayon::prelude::*;

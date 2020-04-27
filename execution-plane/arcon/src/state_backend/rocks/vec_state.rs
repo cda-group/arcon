@@ -244,7 +244,7 @@ where
 mod test {
     use super::*;
     use crate::state_backend::{
-        rocks::test::TestDb, serialization::NativeEndianBytesDump, VecStateBuilder,
+        builders::VecStateBuilder, rocks::test::TestDb, serialization::NativeEndianBytesDump,
     };
 
     #[test]

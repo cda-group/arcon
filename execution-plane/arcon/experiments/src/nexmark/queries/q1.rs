@@ -6,7 +6,7 @@ use crate::nexmark::{
     queries::{Query, QueryTimer},
     Bid, Event, NEXMarkEvent,
 };
-use arcon::prelude::*;
+use arcon::{prelude::*, state_backend::in_memory::InMemory};
 
 // Filter out events that are bids using a FilterMap operator
 #[inline(always)]

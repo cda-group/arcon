@@ -367,7 +367,7 @@ where
                 ArconEvent::Death(s) => {
                     // We are instructed to shutdown....
                     self.channel_strategy.add(ArconEvent::Death(s));
-                    // TODO: invoke shutdown operations..
+                    // TODO: invoke shutdown operations...
                 }
             }
         }
@@ -516,7 +516,7 @@ where
 mod tests {
     // Tests the message logic of Node.
     use super::*;
-    use crate::{pipeline::*, timer};
+    use crate::{pipeline::*, state_backend::in_memory::InMemory, timer};
     use std::{sync::Arc, thread, time};
 
     fn node_test_setup() -> (ActorRef<ArconMessage<i32>>, Arc<Component<DebugNode<i32>>>) {

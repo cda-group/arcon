@@ -77,9 +77,10 @@ where
 mod test {
     use super::*;
     use crate::state_backend::{
+        builders::MapStateBuilder,
         in_memory::InMemory,
         serialization::{NativeEndianBytesDump, Prost},
-        MapStateBuilder, StateBackend,
+        StateBackend,
     };
 
     #[test]

@@ -39,9 +39,10 @@ impl<SB, RS, IK, N, T> ReducingState<Metered<SB>, IK, N, T> for MeteredReducingS
 mod test {
     use super::*;
     use crate::state_backend::{
+        builders::ReducingStateBuilder,
         in_memory::InMemory,
         serialization::{NativeEndianBytesDump, Prost},
-        ReducingStateBuilder, StateBackend,
+        StateBackend,
     };
 
     #[test]

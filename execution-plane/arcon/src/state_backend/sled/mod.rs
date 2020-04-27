@@ -1,9 +1,7 @@
 use crate::{
-    prelude::{
-        AggregatingStateBuilder, ArconResult, ReducingStateBuilder, ValueStateBuilder,
-        VecStateBuilder,
-    },
+    prelude::ArconResult,
     state_backend::{
+        builders::*,
         serialization::{DeserializableWith, SerializableFixedSizeWith, SerializableWith},
         sled::{
             aggregating_state::SledAggregatingState, map_state::SledMapState,
@@ -11,7 +9,7 @@ use crate::{
             vec_state::SledVecState,
         },
         state_types::Aggregator,
-        MapStateBuilder, StateBackend,
+        StateBackend,
     },
 };
 use ::sled::{open, Db};

@@ -1,8 +1,14 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use arcon_error::ArconResult;
-use std::any::{type_name, Any, TypeId};
+use crate::{conf::ArconConf, data::NodeID};
+use arcon_error::*;
+use std::{
+    any::{type_name, Any, TypeId},
+    collections::HashMap,
+    fs,
+    path::Path,
+};
 
 /// Trait required for all state backend implementations in Arcon
 pub trait StateBackend: Any + Send {
@@ -20,6 +26,50 @@ pub trait StateBackend: Any + Send {
     }
 
     fn was_restored(&self) -> bool;
+
+    fn restore_or_new(cfg: &ArconConf, num_nodes: u64, node_id: NodeID) -> ArconResult<Self>
+    where
+        Self: Sized,
+    {
+        let mut state_path = cfg.state_dir.clone();
+        state_path.push(node_id.id.to_string());
+        if state_path.exists() {
+            fs::remove_dir_all(&state_path).ctx("Could not clear live state directory")?;
+        }
+
+        let dirs: Vec<String> = fs::read_dir(&cfg.checkpoint_dir)
+            .ctx("Cannot read checkpoints directory")?
+            .map(|d| d.map(|d| d.file_name().to_string_lossy().into_owned()))
+            .collect::<Result<Vec<_>, _>>()
+            .ctx("Cannot read checkpoints directory file names")?;
+
+        let latest_complete_checkpoint = dirs
+            .into_iter()
+            .filter(|x| x.starts_with("checkpoint_"))
+            .map(|x| x.split('_').last().unwrap().parse::<u64>().unwrap())
+            .fold(HashMap::new(), |mut acc, el| {
+                *acc.entry(el).or_insert(0) += 1;
+                acc
+            })
+            .into_iter()
+            .filter(|e| e.1 == num_nodes)
+            .map(|e| e.0)
+            .max();
+
+        match latest_complete_checkpoint {
+            Some(epoch) => {
+                let mut latest_checkpoint_path = cfg.checkpoint_dir.clone();
+                latest_checkpoint_path.push(format!(
+                    "checkpoint_{id}_{epoch}",
+                    id = node_id.id,
+                    epoch = epoch
+                ));
+
+                Self::restore(&state_path, &latest_checkpoint_path)
+            }
+            None => Self::new(&state_path),
+        }
+    }
 }
 
 // This is copied from std::any, because rust trait inheritance kinda sucks. Even std::any has
@@ -49,27 +99,73 @@ impl dyn StateBackend {
 }
 
 pub mod builders;
-pub use self::builders::*;
-use std::path::Path;
-
 pub mod serialization;
-
 #[macro_use]
 pub mod state_types;
 
-#[cfg(all(feature = "arcon_faster", target_os = "linux"))]
-pub mod faster;
 pub mod in_memory;
-#[cfg(feature = "metered_state_backend")]
-pub mod metered;
+pub fn in_memory(
+    cfg: &ArconConf,
+    num_nodes: u64,
+    node_id: NodeID,
+) -> ArconResult<Box<dyn StateBackend>> {
+    let sb = in_memory::InMemory::restore_or_new(cfg, num_nodes, node_id)?;
+    Ok(Box::new(sb))
+}
+
 #[cfg(feature = "arcon_rocksdb")]
 pub mod rocks;
+#[cfg(feature = "arcon_rocksdb")]
+pub fn rocks(
+    cfg: &ArconConf,
+    num_nodes: u64,
+    node_id: NodeID,
+) -> ArconResult<Box<dyn StateBackend>> {
+    let sb = rocks::RocksDb::restore_or_new(cfg, num_nodes, node_id)?;
+    Ok(Box::new(sb))
+}
+
 #[cfg(feature = "arcon_sled")]
 pub mod sled;
+#[cfg(feature = "arcon_sled")]
+pub fn sled(
+    cfg: &ArconConf,
+    num_nodes: u64,
+    node_id: NodeID,
+) -> ArconResult<Box<dyn StateBackend>> {
+    let sb = sled::Sled::restore_or_new(cfg, num_nodes, node_id)?;
+    Ok(Box::new(sb))
+}
+
+#[cfg(all(feature = "arcon_faster", target_os = "linux"))]
+pub mod faster;
+#[cfg(all(feature = "arcon_faster", target_os = "linux"))]
+pub fn faster(
+    cfg: &ArconConf,
+    num_nodes: u64,
+    node_id: NodeID,
+) -> ArconResult<Box<dyn StateBackend>> {
+    let sb = faster::Faster::restore_or_new(cfg, num_nodes, node_id)?;
+    Ok(Box::new(sb))
+}
+
+#[cfg(feature = "metered_state_backend")]
+pub mod metered;
+#[cfg(feature = "metered_state_backend")]
+pub fn metered<SB: StateBackend>(
+    // this arg is for nice api & type inference only
+    _builder: impl FnOnce(&Path, &Path) -> ArconResult<SB>,
+) -> impl Fn(&ArconConf, u64, NodeID) -> ArconResult<Box<dyn StateBackend>> {
+    |cfg, num_nodes, node_id| {
+        let sb = metered::Metered::<SB>::restore_or_new(cfg, num_nodes, node_id)?;
+        Ok(Box::new(sb))
+    }
+}
 
 #[cfg(test)]
 mod test {
     use super::{
+        builders::*,
         serialization::{NativeEndianBytesDump, Prost},
         state_types::*,
         *,

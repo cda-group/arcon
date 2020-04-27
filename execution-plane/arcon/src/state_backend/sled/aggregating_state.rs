@@ -164,8 +164,8 @@ where
 mod test {
     use super::*;
     use crate::state_backend::{
-        serialization::NativeEndianBytesDump, sled::test::TestDb, state_types::ClosuresAggregator,
-        AggregatingStateBuilder,
+        builders::AggregatingStateBuilder, serialization::NativeEndianBytesDump,
+        sled::test::TestDb, state_types::ClosuresAggregator,
     };
 
     #[test]

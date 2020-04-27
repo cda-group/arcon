@@ -9,6 +9,7 @@ use crate::nexmark::{
 use arcon::{
     macros::*,
     prelude::*,
+    state_backend::in_memory::InMemory,
     stream::operator::{function::StatefulFlatMap, OperatorContext},
     timer,
 };

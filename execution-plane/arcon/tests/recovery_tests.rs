@@ -270,18 +270,18 @@ fn run_test<SB: StateBackend>() {
 #[cfg(feature = "arcon_rocksdb")]
 #[test]
 fn test_rocks_recovery_pipeline() {
-    run_test::<RocksDb>()
+    run_test::<state_backend::rocks::RocksDb>()
 }
 
 #[cfg(all(feature = "arcon_sled", feature = "arcon_sled_checkpoints"))]
 #[test]
 fn test_sled_recovery_pipeline() {
-    run_test::<Sled>()
+    run_test::<state_backend::sled::Sled>()
 }
 
 #[cfg(all(feature = "arcon_faster", target_os = "linux"))]
 #[test]
-#[ignore]
+// #[ignore]
 fn test_faster_recovery_pipeline() {
-    run_test::<Faster>()
+    run_test::<state_backend::faster::Faster>()
 }

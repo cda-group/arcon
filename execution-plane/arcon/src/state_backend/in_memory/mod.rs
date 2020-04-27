@@ -1,16 +1,20 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::state_backend::{
-    in_memory::{
-        aggregating_state::InMemoryAggregatingState, map_state::InMemoryMapState,
-        reducing_state::InMemoryReducingState, value_state::InMemoryValueState,
-        vec_state::InMemoryVecState,
+use crate::{
+    conf::ArconConf,
+    data::NodeID,
+    state_backend::{
+        builders::*,
+        in_memory::{
+            aggregating_state::InMemoryAggregatingState, map_state::InMemoryMapState,
+            reducing_state::InMemoryReducingState, value_state::InMemoryValueState,
+            vec_state::InMemoryVecState,
+        },
+        serialization::{DeserializableWith, SerializableFixedSizeWith, SerializableWith},
+        state_types::*,
+        StateBackend,
     },
-    serialization::{DeserializableWith, SerializableFixedSizeWith, SerializableWith},
-    state_types::*,
-    AggregatingStateBuilder, MapStateBuilder, ReducingStateBuilder, StateBackend,
-    ValueStateBuilder, VecStateBuilder,
 };
 use arcon_error::*;
 use bytes::BufMut;
@@ -248,6 +252,13 @@ impl StateBackend for InMemory {
 
     fn was_restored(&self) -> bool {
         false
+    }
+
+    fn restore_or_new(cfg: &ArconConf, _num_nodes: u64, _node_id: NodeID) -> ArconResult<Self>
+    where
+        Self: Sized,
+    {
+        Self::new(&cfg.state_dir)
     }
 }
 

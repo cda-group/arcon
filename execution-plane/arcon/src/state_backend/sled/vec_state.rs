@@ -242,7 +242,7 @@ where
 mod test {
     use super::*;
     use crate::state_backend::{
-        serialization::NativeEndianBytesDump, sled::test::TestDb, VecStateBuilder,
+        builders::VecStateBuilder, serialization::NativeEndianBytesDump, sled::test::TestDb,
     };
 
     #[test]

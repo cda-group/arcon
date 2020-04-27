@@ -226,7 +226,7 @@ where
 mod test {
     use super::*;
     use crate::state_backend::{
-        rocks::test::TestDb, serialization::NativeEndianBytesDump, MapStateBuilder,
+        builders::MapStateBuilder, rocks::test::TestDb, serialization::NativeEndianBytesDump,
     };
 
     #[test]

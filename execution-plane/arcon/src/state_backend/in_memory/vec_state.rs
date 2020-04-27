@@ -139,8 +139,9 @@ where
 mod test {
     use super::*;
     use crate::state_backend::{
+        builders::VecStateBuilder,
         serialization::{NativeEndianBytesDump, Prost},
-        StateBackend, VecStateBuilder,
+        StateBackend,
     };
 
     #[test]

@@ -11,6 +11,7 @@ use criterion::{criterion_group, criterion_main, Bencher, Criterion};
 use std::time::Duration;
 
 mod common;
+use arcon::state_backend::in_memory::InMemory;
 use common::*;
 
 const NODE_MSGS: usize = 100000;

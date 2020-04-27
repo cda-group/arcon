@@ -10,6 +10,9 @@ use std::path::PathBuf;
 /// Configuration for an Arcon Pipeline
 #[derive(Deserialize, Clone, Debug)]
 pub struct ArconConf {
+    /// Base directory for live state backend data
+    #[serde(default = "state_dir_default")]
+    pub state_dir: PathBuf,
     /// Base directory for checkpoints
     #[serde(default = "checkpoint_dir_default")]
     pub checkpoint_dir: PathBuf,
@@ -51,6 +54,7 @@ impl ArconConf {
 
     pub fn default() -> ArconConf {
         ArconConf {
+            state_dir: state_dir_default(),
             checkpoint_dir: checkpoint_dir_default(),
             watermark_interval: watermark_interval_default(),
             node_metrics_interval: node_metrics_interval_default(),
@@ -79,9 +83,15 @@ impl ArconConf {
 
 // Default values
 
+fn state_dir_default() -> PathBuf {
+    let mut res = std::env::temp_dir();
+    res.push("arcon/live_states");
+    res
+}
+
 fn checkpoint_dir_default() -> PathBuf {
     let mut res = std::env::temp_dir();
-    res.push("arcon");
+    res.push("arcon/checkpoints");
     res
 }
 
@@ -132,6 +142,7 @@ mod tests {
         assert_eq!(conf.checkpoint_dir, PathBuf::from("/dev/null"));
         assert_eq!(conf.watermark_interval, 1000);
         // Check defaults
+        assert_eq!(conf.state_dir, state_dir_default());
         assert_eq!(conf.node_metrics_interval, 250);
         assert_eq!(conf.channel_batch_size, 248);
         assert_eq!(conf.kompact_threads, kompact_threads_default());

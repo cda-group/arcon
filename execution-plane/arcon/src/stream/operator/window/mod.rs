@@ -199,6 +199,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::state_backend::in_memory::InMemory;
 
     #[test]
     fn sum_appender_window_test() {

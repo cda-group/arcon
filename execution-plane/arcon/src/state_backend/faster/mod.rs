@@ -1,9 +1,7 @@
 use crate::{
-    prelude::{
-        AggregatingStateBuilder, ArconResult, ReducingStateBuilder, ValueStateBuilder,
-        VecStateBuilder,
-    },
+    prelude::ArconResult,
     state_backend::{
+        builders::*,
         faster::{
             aggregating_state::FasterAggregatingState, map_state::FasterMapState,
             reducing_state::FasterReducingState, value_state::FasterValueState,
@@ -11,7 +9,7 @@ use crate::{
         },
         serialization::{DeserializableWith, LittleEndianBytesDump, SerializableWith},
         state_types::Aggregator,
-        MapStateBuilder, StateBackend,
+        StateBackend,
     },
 };
 use error::ResultExt;

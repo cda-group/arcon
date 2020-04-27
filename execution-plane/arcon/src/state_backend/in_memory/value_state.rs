@@ -62,8 +62,9 @@ where
 mod test {
     use super::*;
     use crate::state_backend::{
+        builders::ValueStateBuilder,
         serialization::{NativeEndianBytesDump, Prost},
-        StateBackend, ValueStateBuilder,
+        StateBackend,
     };
 
     #[test]

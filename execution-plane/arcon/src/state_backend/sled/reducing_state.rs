@@ -133,7 +133,7 @@ where
 mod test {
     use super::*;
     use crate::state_backend::{
-        serialization::NativeEndianBytesDump, sled::test::TestDb, ReducingStateBuilder,
+        builders::ReducingStateBuilder, serialization::NativeEndianBytesDump, sled::test::TestDb,
     };
 
     #[test]

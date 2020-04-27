@@ -57,9 +57,10 @@ where
 mod test {
     use super::*;
     use crate::state_backend::{
+        builders::VecStateBuilder,
         in_memory::InMemory,
         serialization::{NativeEndianBytesDump, Prost},
-        StateBackend, VecStateBuilder,
+        StateBackend,
     };
 
     #[test]

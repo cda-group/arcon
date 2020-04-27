@@ -7,7 +7,7 @@
 #[macro_use]
 extern crate clap;
 
-use arcon::{prelude::*, timer};
+use arcon::{prelude::*, state_backend::in_memory::InMemory, timer};
 use clap::{App, AppSettings, Arg, SubCommand};
 use experiments::{
     get_items, square_root_newton,

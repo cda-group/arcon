@@ -65,7 +65,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{prelude::*, timer};
+    use crate::{prelude::*, state_backend::in_memory::InMemory, timer};
 
     #[test]
     fn stateful_flatmap_test() {

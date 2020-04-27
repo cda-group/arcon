@@ -3,7 +3,11 @@
 
 // Benchmarks for different Window types
 
-use arcon::{prelude::*, stream::operator::window::WindowContext};
+use arcon::{
+    prelude::*,
+    state_backend::{in_memory::InMemory, rocks::RocksDb},
+    stream::operator::window::WindowContext,
+};
 use criterion::{black_box, criterion_group, criterion_main, Bencher, Criterion};
 
 const WINDOW_MSGS: usize = 1000;

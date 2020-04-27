@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::state_backend::{
+    builders::*,
     rocks::{
         aggregating_state::RocksDbAggregatingState, map_state::RocksDbMapState,
         reducing_state::RocksDbReducingState, state_common::StateCommon,
@@ -9,8 +10,7 @@ use crate::state_backend::{
     },
     serialization::{DeserializableWith, SerializableFixedSizeWith, SerializableWith},
     state_types::*,
-    AggregatingStateBuilder, MapStateBuilder, ReducingStateBuilder, StateBackend,
-    ValueStateBuilder, VecStateBuilder,
+    StateBackend,
 };
 use arcon_error::*;
 use rocksdb::{

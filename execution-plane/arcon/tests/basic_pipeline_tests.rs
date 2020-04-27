@@ -7,7 +7,7 @@
 #![allow(bare_trait_objects)]
 extern crate arcon;
 
-use arcon::{macros::*, prelude::*, timer};
+use arcon::{macros::*, prelude::*, state_backend::in_memory::InMemory, timer};
 use std::{
     fs::File,
     io::{BufRead, BufReader},

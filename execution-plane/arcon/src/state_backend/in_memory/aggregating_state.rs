@@ -92,9 +92,10 @@ where
 mod test {
     use super::*;
     use crate::state_backend::{
+        builders::AggregatingStateBuilder,
         serialization::{NativeEndianBytesDump, Prost},
         state_types::ClosuresAggregator,
-        AggregatingStateBuilder, StateBackend,
+        StateBackend,
     };
 
     #[test]

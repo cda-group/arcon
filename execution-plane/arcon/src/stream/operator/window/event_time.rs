@@ -246,6 +246,7 @@ where
 mod tests {
     use super::*;
     use crate::{
+        state_backend::in_memory::InMemory,
         stream::channel::{strategy::forward::*, Channel},
         timer,
     };

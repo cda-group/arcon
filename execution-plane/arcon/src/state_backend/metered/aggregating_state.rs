@@ -38,10 +38,11 @@ impl<SB, AS, IK, N, T, R> AggregatingState<Metered<SB>, IK, N, T, R> for Metered
 mod test {
     use super::*;
     use crate::state_backend::{
+        builders::AggregatingStateBuilder,
         in_memory::InMemory,
         serialization::{NativeEndianBytesDump, Prost},
         state_types::ClosuresAggregator,
-        AggregatingStateBuilder, StateBackend,
+        StateBackend,
     };
 
     #[test]

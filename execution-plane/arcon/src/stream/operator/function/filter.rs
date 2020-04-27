@@ -53,7 +53,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::prelude::*;
+    use crate::{prelude::*, state_backend::in_memory::InMemory};
 
     #[test]
     fn filter_test() {

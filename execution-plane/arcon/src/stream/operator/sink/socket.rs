@@ -109,7 +109,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{prelude::ChannelStrategy, timer};
+    use crate::{prelude::ChannelStrategy, state_backend::in_memory::InMemory, timer};
 
     #[test]
     fn udp_sink_test() {

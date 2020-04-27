@@ -168,8 +168,8 @@ where
 mod test {
     use super::*;
     use crate::state_backend::{
-        rocks::test::TestDb, serialization::NativeEndianBytesDump, state_types::ClosuresAggregator,
-        AggregatingStateBuilder,
+        builders::AggregatingStateBuilder, rocks::test::TestDb,
+        serialization::NativeEndianBytesDump, state_types::ClosuresAggregator,
     };
 
     #[test]
