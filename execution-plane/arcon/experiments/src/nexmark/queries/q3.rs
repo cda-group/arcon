@@ -70,17 +70,17 @@ impl Query for QueryThree {
         nexmark_config: NEXMarkConfig,
         pipeline: &mut ArconPipeline,
     ) -> QueryTimer {
-        let channel_batch_size = pipeline.arcon_conf().channel_batch_size;
         let watermark_interval = pipeline.arcon_conf().watermark_interval;
+        let pool_info = pipeline.get_pool_info();
         let mut system = pipeline.system();
 
         // Define sink
         let (sink_ref, sink_port_opt) = super::sink::<Q3Result>(debug_mode, &mut system);
         let sink_channel = Channel::Local(sink_ref);
-        let channel_strategy = ChannelStrategy::Forward(Forward::with_batch_size(
+        let channel_strategy = ChannelStrategy::Forward(Forward::new(
             sink_channel,
             NodeID::new(1),
-            channel_batch_size,
+            pool_info.clone(),
         ));
 
         // Define Mapper
@@ -92,23 +92,19 @@ impl Query for QueryThree {
             node_description.clone(),
             NodeID::new(0),
             in_channels.clone(),
-            channel_strategy.clone(),
+            channel_strategy,
         );
 
-        let node_comps = pipeline.create_node_manager(
-            node_description,
-            &q3_node,
-            in_channels,
-            channel_strategy,
-            vec![node_one],
-        );
+        let node_comps =
+            pipeline.create_node_manager(node_description, &q3_node, in_channels, vec![node_one]);
 
         {
             let mut system = pipeline.system();
             // Define source context
             let flatmapper_ref = node_comps.get(0).unwrap().actor_ref().hold().expect("fail");
             let channel = Channel::Local(flatmapper_ref);
-            let channel_strategy = ChannelStrategy::Forward(Forward::new(channel, NodeID::new(1)));
+            let channel_strategy =
+                ChannelStrategy::Forward(Forward::new(channel, NodeID::new(1), pool_info));
             let source_context = SourceContext::new(
                 watermark_interval,
                 None, // no timestamp extractor

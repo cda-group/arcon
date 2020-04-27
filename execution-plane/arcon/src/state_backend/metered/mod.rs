@@ -27,6 +27,7 @@ pub struct DataPoint {
 
 pub struct Metrics(usize, Box<[DataPoint]>);
 
+#[allow(dead_code)]
 pub struct Metered<SB> {
     inner: SB,
     backend_name: &'static str,

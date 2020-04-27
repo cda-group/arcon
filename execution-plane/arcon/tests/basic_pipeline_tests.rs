@@ -35,7 +35,9 @@ fn normalise_pipeline_test() {
     // TODO: It can use some more love....
 
     let timeout = std::time::Duration::from_millis(500);
-    let system = KompactConfig::default().build().expect("KompactSystem");
+    let mut pipeline = ArconPipeline::new();
+    let pool_info = pipeline.get_pool_info();
+    let system = pipeline.system();
 
     // Define Sink File
     let sink_file = NamedTempFile::new().unwrap();
@@ -64,7 +66,8 @@ fn normalise_pipeline_test() {
         .hold()
         .expect("failed to fetch strong ref");
     let channel = Channel::Local(actor_ref);
-    let channel_strategy = ChannelStrategy::Forward(Forward::new(channel, NodeID::new(3)));
+    let channel_strategy =
+        ChannelStrategy::Forward(Forward::new(channel, NodeID::new(3), pool_info.clone()));
 
     fn map_fn(x: NormaliseElements) -> i64 {
         x.data.iter().map(|x| x + 3).sum()
@@ -106,6 +109,7 @@ fn normalise_pipeline_test() {
     let channel_strategy = ChannelStrategy::Forward(Forward::new(
         Channel::Local(node_3_actor_ref),
         NodeID::new(2),
+        pool_info.clone(),
     ));
 
     let node_2 = system.create(move || {
@@ -141,7 +145,8 @@ fn normalise_pipeline_test() {
         .hold()
         .expect("Failed to fetch strong ref");
     let channel = Channel::Local(actor_ref);
-    let channel_strategy = ChannelStrategy::Forward(Forward::new(channel, NodeID::new(1)));
+    let channel_strategy =
+        ChannelStrategy::Forward(Forward::new(channel, NodeID::new(1), pool_info.clone()));
 
     let watermark_interval = 2;
 
@@ -191,5 +196,5 @@ fn normalise_pipeline_test() {
 
     assert_eq!(result.len(), 1);
     assert_eq!(result[0], 4);
-    let _ = system.shutdown();
+    pipeline.shutdown();
 }

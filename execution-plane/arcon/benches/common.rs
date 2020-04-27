@@ -49,9 +49,14 @@ impl<A: ArconType> NodeReceiver<A> {
         }
     }
 
-    fn handle_msg(&mut self, msg: ArconMessage<A>) {
-        //info!(self.log(), "Expected {} remaining, but got {}", self.remaining_recv, msg.events.len());
-        self.remaining_recv -= msg.events.len() as u64;
+    fn handle_msg(&mut self, total_events: u64) {
+        /*
+        info!(
+            self.log(),
+            "Expected {} remaining, but got {}", self.remaining_recv, total_events
+        );
+        */
+        self.remaining_recv -= total_events;
         if self.remaining_recv <= 0u64 {
             let time = self.start.elapsed();
             let promise = self.done.take().expect("No promise to reply to?");
@@ -68,25 +73,25 @@ impl<A: ArconType> Actor for NodeReceiver<A> {
     type Message = ArconMessage<A>;
 
     fn receive_local(&mut self, msg: Self::Message) -> () {
-        self.handle_msg(msg);
+        self.handle_msg(msg.events.len() as u64);
     }
 
     fn receive_network(&mut self, msg: NetMessage) -> () {
-        let arcon_msg: ArconResult<ArconMessage<A>> = match *msg.ser_id() {
+        let arcon_msg: ArconResult<RawArconMessage<A>> = match *msg.ser_id() {
             ReliableSerde::<A>::SER_ID => msg
-                .try_deserialise::<ArconMessage<A>, ReliableSerde<A>>()
+                .try_deserialise::<RawArconMessage<A>, ReliableSerde<A>>()
                 .map_err(|_| arcon_err_kind!("Failed to unpack reliable ArconMessage")),
             UnsafeSerde::<A>::SER_ID => msg
-                .try_deserialise::<ArconMessage<A>, UnsafeSerde<A>>()
+                .try_deserialise::<RawArconMessage<A>, UnsafeSerde<A>>()
                 .map_err(|_| arcon_err_kind!("Failed to unpack unreliable ArconMessage")),
             _ => panic!("Unexpected deserialiser"),
         };
 
         match arcon_msg {
             Ok(m) => {
-                self.handle_msg(m);
+                self.handle_msg(m.events.len() as u64);
             }
-            Err(e) => error!(self.ctx.log(), "Error NetworkMessage: {:?}", e),
+            Err(e) => error!(self.ctx.log(), "Error ArconNetworkMessage: {:?}", e),
         }
     }
 }

@@ -31,13 +31,14 @@ arcon_macros = { version = "0.1", path = "arcon_macros" }
 arcon_error = { version = "0.1", path = "arcon_error" }
 arcon_extra = { version = "0.1", path = "arcon_extra" }
 kompact = { git = "https://github.com/kompics/kompact.git", branch = "master"}
-hierarchical_hash_wheel_timer = { git = "https://github.com/Bathtor/rust-hash-wheel-timer", branch = "master" }
+hierarchical_hash_wheel_timer = "1.0"
 uuid = "0.8"
 static_assertions = "1.1.0"
 itertools = "0.8.2"
 smallbox = { version = "0.8", features = ["coerce"] }
 cfg-if = "0.1.10"
 fxhash = "0.2.1"
+crossbeam-utils = "0.7"
 num_cpus = "1.0"
 hocon = {version = "0.3", default-features = false, features = ["serde-support"]}
 
@@ -93,6 +94,10 @@ name = "allocator"
 harness = false
 
 [[bench]]
+name = "buffer_pool"
+harness = false
+
+[[bench]]
 name = "window"
 harness = false
 
@@ -102,8 +107,4 @@ harness = false
 
 [[bench]]
 name = "flight_serde"
-harness = false
-
-[[bench]]
-name = "node"
 harness = false

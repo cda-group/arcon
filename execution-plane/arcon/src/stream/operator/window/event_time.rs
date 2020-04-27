@@ -269,16 +269,19 @@ mod tests {
         ActorRefStrong<ArconMessage<Item>>,
         Arc<Component<DebugNode<u64>>>,
     ) {
-        // Kompact set-up
-        let system = KompactConfig::default().build().expect("KompactSystem");
+        let mut pipeline = ArconPipeline::new();
+        let pool_info = pipeline.get_pool_info();
+        let system = pipeline.system();
 
         // Create a sink
         let (sink, _) = system.create_and_register(move || DebugNode::new());
         let sink_ref: ActorRefStrong<ArconMessage<u64>> =
             sink.actor_ref().hold().expect("failed to get strong ref");
+
         let channel_strategy = ChannelStrategy::Forward(Forward::new(
             Channel::Local(sink_ref.clone()),
             NodeID::new(1),
+            pool_info,
         ));
 
         fn appender_fn(u: &[Item]) -> u64 {

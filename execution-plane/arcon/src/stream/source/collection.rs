@@ -99,38 +99,27 @@ where
 mod tests {
     use super::*;
     use crate::{
-        data::ArconType,
-        prelude::{Channel, ChannelStrategy, DebugNode, Filter, Forward, NodeID},
+        data::ArconMessage,
+        pipeline::ArconPipeline,
+        prelude::{Channel, ChannelStrategy, DebugNode, Filter, Forward},
         state_backend::{in_memory::InMemory, StateBackend},
         timer,
     };
-    use kompact::{default_components::DeadletterBox, prelude::KompactSystem};
-    use std::sync::Arc;
-
-    // Perhaps move this to some common place?
-    fn test_setup<A: ArconType>() -> (KompactSystem, Arc<Component<DebugNode<A>>>) {
-        // Kompact set-up
-        let mut cfg = KompactConfig::new();
-        cfg.system_components(DeadletterBox::new, NetworkConfig::default().build());
-        let system = cfg.build().expect("KompactSystem");
-
-        let (sink, _) = system.create_and_register(move || {
-            let s: DebugNode<A> = DebugNode::new();
-            s
-        });
-
-        system.start(&sink);
-
-        return (system, sink);
-    }
 
     #[test]
     fn collection_source_test() {
-        let (system, sink) = test_setup::<u64>();
+        let mut pipeline = ArconPipeline::new();
+        let pool_info = pipeline.get_pool_info();
+        let system = pipeline.system();
+
+        let sink = system.create(move || DebugNode::<u64>::new());
+        system.start(&sink);
+
         // Configure channel strategy for sink
-        let actor_ref = sink.actor_ref().hold().expect("fail");
-        let channel = Channel::Local(actor_ref);
-        let channel_strategy = ChannelStrategy::Forward(Forward::new(channel, NodeID::new(1)));
+        let actor_ref: ActorRefStrong<ArconMessage<u64>> =
+            sink.actor_ref().hold().expect("failed to fetch");
+        let channel_strategy =
+            ChannelStrategy::Forward(Forward::new(Channel::Local(actor_ref), 1.into(), pool_info));
 
         // Our operator function
         fn filter_fn(x: &u64) -> bool {
@@ -161,14 +150,18 @@ mod tests {
         // Wait a bit in order for all results to come in...
         std::thread::sleep(std::time::Duration::from_secs(1));
 
-        let sink_inspect = sink.definition().lock().unwrap();
-        let data_len = sink_inspect.data.len();
-        let watermark_len = sink_inspect.watermarks.len();
+        {
+            let sink_inspect = sink.definition().lock().unwrap();
+            let data_len = sink_inspect.data.len();
+            let watermark_len = sink_inspect.watermarks.len();
 
-        assert_eq!(
-            watermark_len as u64,
-            (collection_elements / watermark_interval) + 1 // One more is generated after the loop
-        );
-        assert_eq!(data_len, 1000);
+            assert_eq!(
+                watermark_len as u64,
+                (collection_elements / watermark_interval) + 1 // One more is generated after the loop
+            );
+            assert_eq!(data_len, 1000);
+        }
+
+        pipeline.shutdown();
     }
 }

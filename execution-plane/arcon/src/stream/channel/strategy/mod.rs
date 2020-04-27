@@ -14,13 +14,9 @@ pub mod forward;
 pub mod key_by;
 pub mod round_robin;
 
-/// Default batch size if none is explicitly defined
-const DEFAULT_BATCH_SIZE: usize = 1024;
-
 /// A `ChannelStrategy` defines a strategy of how messages are sent downstream
 ///
 /// Common strategies include (one-to-one)[forward::Forward] and (one-to-many)[broadcast::Broadcast]
-#[derive(Clone)]
 pub enum ChannelStrategy<A>
 where
     A: ArconType,
@@ -89,11 +85,11 @@ where
             actor_ref.tell(message);
         }
         Channel::Remote(actor_path, FlightSerde::Unsafe, dispatcher_source) => {
-            let unsafe_msg = UnsafeSerde(message);
+            let unsafe_msg = UnsafeSerde(message.into());
             actor_path.tell(unsafe_msg, dispatcher_source);
         }
         Channel::Remote(actor_path, FlightSerde::Reliable, dispatcher_source) => {
-            let reliable_msg = ReliableSerde(message);
+            let reliable_msg = ReliableSerde(message.into());
             actor_path.tell(reliable_msg, dispatcher_source);
         }
     }
