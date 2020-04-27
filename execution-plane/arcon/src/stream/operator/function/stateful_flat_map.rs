@@ -41,18 +41,16 @@ where
     type TimerState = ArconNever;
 
     fn handle_element(&mut self, element: ArconElement<IN>, mut ctx: OperatorContext<Self>) {
-        if let Some(data) = element.data {
-            let result = (self.udf)(
-                // TODO: annoying manual copy required to satisfy borrowchk
-                OperatorContext::new(ctx.channel_strategy, ctx.state_backend, ctx.timer_backend),
-                data,
-            );
-            for item in result {
-                ctx.output(ArconEvent::Element(ArconElement {
-                    data: Some(item),
-                    timestamp: element.timestamp,
-                }));
-            }
+        let result = (self.udf)(
+            // TODO: annoying manual copy required to satisfy borrowchk
+            OperatorContext::new(ctx.channel_strategy, ctx.state_backend, ctx.timer_backend),
+            element.data,
+        );
+        for item in result {
+            ctx.output(ArconEvent::Element(ArconElement {
+                data: item,
+                timestamp: element.timestamp,
+            }));
         }
     }
 
@@ -137,11 +135,7 @@ mod tests {
         {
             let comp_inspect = &comp.definition().lock().unwrap();
             assert_eq!(
-                comp_inspect
-                    .data
-                    .iter()
-                    .map(|x| x.data.unwrap())
-                    .collect::<Vec<_>>(),
+                comp_inspect.data.iter().map(|x| x.data).collect::<Vec<_>>(),
                 vec![3, 5, 7]
             );
         }

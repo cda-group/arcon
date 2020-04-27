@@ -116,27 +116,25 @@ where
     pub fn add(&mut self, event: ArconEvent<A>) {
         match &event {
             ArconEvent::Element(element) => {
-                if let Some(data) = &element.data {
-                    let mut h = self.builder.build_hasher();
-                    data.hash(&mut h);
-                    let hash = h.finish() as u32;
-                    let index = (hash % self.parallelism) as usize;
-                    if let Some((chan, buffer)) = self.buffer_map.get_mut(&index) {
-                        if let Some(e) = buffer.push(event.into()) {
-                            // buffer is full, flush.
-                            // NOTE: we are just flushing a single buffer
-                            let msg = ArconMessage {
-                                events: buffer.reader(),
-                                sender: self.sender_id,
-                            };
-                            send(chan, msg);
-                            // set new writer
-                            *buffer = self.buffer_pool.get();
-                            let _ = buffer.push(e.into());
-                        }
-                    } else {
-                        panic!("Bad KeyBy setup");
+                let mut h = self.builder.build_hasher();
+                element.data.hash(&mut h);
+                let hash = h.finish() as u32;
+                let index = (hash % self.parallelism) as usize;
+                if let Some((chan, buffer)) = self.buffer_map.get_mut(&index) {
+                    if let Some(e) = buffer.push(event.into()) {
+                        // buffer is full, flush.
+                        // NOTE: we are just flushing a single buffer
+                        let msg = ArconMessage {
+                            events: buffer.reader(),
+                            sender: self.sender_id,
+                        };
+                        send(chan, msg);
+                        // set new writer
+                        *buffer = self.buffer_pool.get();
+                        let _ = buffer.push(e.into());
                     }
+                } else {
+                    panic!("Bad KeyBy setup");
                 }
             }
             _ => {
