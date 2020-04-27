@@ -41,10 +41,8 @@ where
 
     fn handle_element(&mut self, element: ArconElement<IN>, mut ctx: OperatorContext<Self>) {
         let mut elem = element;
-        if let Some(data) = elem.data.as_mut() {
-            self.run_udf(data);
-            ctx.output(ArconEvent::Element(elem));
-        }
+        self.run_udf(&mut elem.data);
+        ctx.output(ArconEvent::Element(elem));
     }
 
     fn handle_watermark(&mut self, _w: Watermark, _ctx: OperatorContext<Self>) {}

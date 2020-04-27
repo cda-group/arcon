@@ -182,7 +182,7 @@ mod tests {
         let sink_inspect = sink.definition().lock().unwrap();
         assert_eq!(sink_inspect.data.len(), (1 as usize));
         let r0 = &sink_inspect.data[0];
-        assert_eq!(r0.data, Some(77));
+        assert_eq!(r0.data, 77);
     }
 
     #[test]

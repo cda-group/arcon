@@ -192,10 +192,10 @@ mod test {
             let comp_inspect = &comp.definition().lock().unwrap();
             assert_eq!(comp_inspect.data.len() as u64, 4);
             // Verify that the data is correct..
-            assert_eq!(comp_inspect.data[0].data.as_ref().unwrap().items, items);
-            assert_eq!(comp_inspect.data[1].data.as_ref().unwrap().items, items);
-            assert_eq!(comp_inspect.data[2].data.as_ref().unwrap().items, items);
-            assert_eq!(comp_inspect.data[3].data.as_ref().unwrap().items, items);
+            assert_eq!(comp_inspect.data[0].data.items, items);
+            assert_eq!(comp_inspect.data[1].data.items, items);
+            assert_eq!(comp_inspect.data[2].data.items, items);
+            assert_eq!(comp_inspect.data[3].data.items, items);
         }
         let _ = local.shutdown();
         let _ = remote.shutdown();

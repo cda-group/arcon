@@ -38,10 +38,8 @@ where
     type TimerState = ArconNever;
 
     fn handle_element(&mut self, element: ArconElement<IN>, mut ctx: OperatorContext<Self>) {
-        if let Some(data) = &element.data {
-            if self.run_udf(&data) {
-                ctx.output(ArconEvent::Element(element));
-            }
+        if self.run_udf(&element.data) {
+            ctx.output(ArconEvent::Element(element));
         }
     }
 

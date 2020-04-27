@@ -18,7 +18,7 @@ extern crate arcon_error as error;
 
 /// Arcon Configuration
 pub mod conf;
-/// Arcon data types, message buffers, serialisers/deserialisers
+/// Arcon data types, serialisers/deserialisers
 pub mod data;
 /// Module containing different runtime managers
 pub mod manager;
