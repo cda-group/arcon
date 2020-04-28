@@ -98,8 +98,10 @@ where
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    use crate::data::VersionId;
+    use kompact::prelude::SerId;
 
-    #[arcon_keyed(id)]
+    #[arcon(unsafe_ser_id = 12, reliable_ser_id = 13, version = 1, keys = id)]
     pub struct Input {
         #[prost(uint32, tag = "1")]
         pub id: u32,

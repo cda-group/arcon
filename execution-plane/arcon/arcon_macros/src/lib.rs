@@ -13,30 +13,110 @@ use proc_macro::TokenStream;
 use proc_macro2::{Ident, Span};
 use syn::{parse_macro_input, DeriveInput};
 
-/// arcon is a macro that helps define a Arcon supported struct
+const VERSION_ID: &str = "version";
+const UNSAFE_SER_ID: &str = "unsafe_ser_id";
+const RELIABLE_SER_ID: &str = "reliable_ser_id";
+const KEYS: &str = "keys";
+
+/// arcon is a proc macro for defining an ArconType struct
 ///
-/// By default, the macro will implement [std::hash::Hasher] that hashes on all fields of the
-/// struct. Use [arcon_keyed] instead if the struct needs to be hashed on specific fields.
+/// #[arcon(reliable_ser_id = 1, unsafe_ser_id = 2, version = 1)]
+/// or
+/// #[arcon(reliable_ser_id = 1, unsafe_ser_id = 2, version = 1, keys = id)]
 #[proc_macro_attribute]
-pub fn arcon(metadata: TokenStream, input: TokenStream) -> TokenStream {
+pub fn arcon(args: TokenStream, input: TokenStream) -> TokenStream {
     let item = parse_macro_input!(input as DeriveInput);
     let name = &item.ident;
-    let _ = proc_macro2::TokenStream::from(metadata);
+    let arcon_args: Vec<(String, String)> = args
+        .to_string()
+        .trim()
+        .split(',')
+        .map(|s| {
+            let a: Vec<String> = s
+                .trim()
+                .to_string()
+                .split(" ")
+                .map(|s| s.to_string())
+                .collect();
+            assert_eq!(a.len(), 3, "Expecting the following arg setup: unsafe_ser_id = 1, reliable_ser_id = 2, version = 1");
+            assert_eq!(a[1], "=");
+            (a[0].to_string(), a[2].to_string())
+        })
+        .filter(|(arg_name, _)| {
+            arg_name == VERSION_ID
+                || arg_name == UNSAFE_SER_ID
+                || arg_name == RELIABLE_SER_ID
+                || arg_name == KEYS
+        })
+        .collect();
+
+    assert!(
+        arcon_args.len() >= 3 && arcon_args.len() <= 4,
+        "arcon requires at least 3 args: unsafe_ser_id, reliable_ser_id, version"
+    );
+
+    let raw_ids: Vec<u64> = arcon_args
+        .iter()
+        .filter(|(arg_name, _)| arg_name != KEYS && arg_name != VERSION_ID)
+        .map(|(_, arg_value)| arg_value.parse::<u64>().unwrap())
+        .collect();
+
+    assert_eq!(raw_ids.len(), 2);
+    assert_ne!(raw_ids[0], raw_ids[1], "UNSAFE_SER_ID and RELIABLE_SER_ID must have different values");
+
+    let ids: Vec<proc_macro2::TokenStream> = arcon_args
+        .iter()
+        .filter(|(arg_name, _)| arg_name != KEYS)
+        .map(|(arg_name, arg_value)| {
+            if arg_name == RELIABLE_SER_ID {
+                let value = arg_value.parse::<u64>().unwrap();
+                quote! { const RELIABLE_SER_ID: SerId  = #value; }
+            } else if arg_name == UNSAFE_SER_ID {
+                let value = arg_value.parse::<u64>().unwrap();
+                quote! { const UNSAFE_SER_ID: SerId = #value; }
+            } else {
+                let value = arg_value.parse::<u32>().unwrap();
+                quote! { const VERSION_ID: VersionId = #value; }
+            }
+        })
+        .collect();
+
+    let keys: Option<String> = arcon_args
+        .iter()
+        .find(|(arg_name, _)| arg_name == KEYS)
+        .map(|(_, value)| value.to_owned());
 
     if let syn::Data::Struct(ref s) = item.data {
         let generics = &item.generics;
         let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
-        let mut field_hashes = Vec::new();
-        for field in s.fields.iter() {
-            match field.ident {
-                Some(ref ident) => {
-                    let field_hash = quote! { self.#ident.hash(state); };
-                    field_hashes.push(field_hash);
+        // If keys are specified "keys = ..", we hash on just those fields.
+        // Otherwise, the struct will be hashed using all fields..
+        let field_hashes = {
+            if let Some(keys) = keys {
+                let keys: Vec<proc_macro2::TokenStream> = keys
+                    .trim()
+                    .split(',')
+                    .map(|k| {
+                        let struct_field = Ident::new(&k.trim(), Span::call_site());
+                        quote! { self.#struct_field.hash(state); }
+                    })
+                    .collect();
+                keys
+            } else {
+                let mut field_hashes = Vec::new();
+                for field in s.fields.iter() {
+                    match field.ident {
+                        Some(ref ident) => {
+                            let field_hash = quote! { self.#ident.hash(state); };
+                            field_hashes.push(field_hash);
+                        }
+                        None => panic!("Struct missing identiy"),
+                    }
                 }
-                None => panic!("Struct missing identiy"),
+                field_hashes
             }
-        }
+        };
 
         #[allow(unused)]
         let maybe_serde = quote! {};
@@ -50,10 +130,11 @@ pub fn arcon(metadata: TokenStream, input: TokenStream) -> TokenStream {
                 #maybe_serde
                 #[derive(Clone, ::abomonation_derive::Abomonation, ::prost::Message)]
                 #item
-                impl #impl_generics ArconType for #name #ty_generics #where_clause {}
+                impl #impl_generics ArconType for #name #ty_generics #where_clause {
+                    #(#ids)*
+                }
                 impl ::std::hash::Hash for #name {
                     fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
-                        // will make it hash on all fields of the struct...
                         #(#field_hashes)*
                     }
                 }
@@ -63,55 +144,6 @@ pub fn arcon(metadata: TokenStream, input: TokenStream) -> TokenStream {
         proc_macro::TokenStream::from(output)
     } else {
         panic!("#[arcon] is only defined for structs!");
-    }
-}
-
-/// arcon_keyed constructs an Arcon defined struct with custom hasher
-///
-/// `#[arcon_keyed(id)]` will attempt to hash the struct using only the `id` field
-#[proc_macro_attribute]
-pub fn arcon_keyed(keys: TokenStream, input: TokenStream) -> TokenStream {
-    let item = parse_macro_input!(input as DeriveInput);
-    let name = &item.ident;
-
-    if let syn::Data::Struct(_) = item.data {
-        let generics = &item.generics;
-        let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
-
-        let keys: Vec<proc_macro2::TokenStream> = keys
-            .to_string()
-            .trim()
-            .split(',')
-            .map(|k| {
-                let struct_field = Ident::new(&k.trim(), Span::call_site());
-                quote! { self.#struct_field.hash(state); }
-            })
-            .collect();
-
-        #[allow(unused)]
-        let maybe_serde = quote! {};
-        #[cfg(feature = "arcon_serde")]
-        let maybe_serde = quote! {
-            #[derive(::serde::Serialize, ::serde::Deserialize)]
-        };
-
-        let output: proc_macro2::TokenStream = {
-            quote! {
-                #maybe_serde
-                #[derive(Clone, ::abomonation_derive::Abomonation, ::prost::Message)]
-                #item
-                impl #impl_generics ArconType for #name #ty_generics #where_clause {}
-                impl ::std::hash::Hash for #name {
-                    fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
-                        #(#keys)*
-                    }
-                }
-            }
-        };
-
-        proc_macro::TokenStream::from(output)
-    } else {
-        panic!("#[arcon_keyed] is only defined for structs!");
     }
 }
 

@@ -77,6 +77,7 @@ pub mod prelude {
         allocator::{AllocResult, ArconAllocator},
         buffer::event::{BufferPool, BufferReader, BufferWriter},
         conf::ArconConf,
+        data::VersionId,
         pipeline::ArconPipeline,
         stream::{
             channel::{
@@ -97,6 +98,7 @@ pub mod prelude {
         },
         timer,
     };
+    pub use kompact::prelude::SerId;
 
     #[cfg(feature = "kafka")]
     pub use crate::stream::{operator::sink::kafka::KafkaSink, source::kafka::KafkaSource};
@@ -126,10 +128,11 @@ pub mod prelude {
 
 #[cfg(test)]
 mod tests {
-    use crate::macros::*;
+    use crate::{data::VersionId, macros::*};
+    use kompact::prelude::SerId;
     use std::collections::hash_map::DefaultHasher;
 
-    #[arcon_keyed(id)]
+    #[arcon(unsafe_ser_id = 104, reliable_ser_id = 105, version = 1, keys = id)]
     pub struct Item {
         #[prost(uint64, tag = "1")]
         id: u64,

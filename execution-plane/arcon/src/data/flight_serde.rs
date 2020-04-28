@@ -24,21 +24,27 @@ impl Default for FlightSerde {
 
 /// Module containing the [kompact] serialiser/deserialiser implementation for [FlightSerde::Reliable]
 pub mod reliable_remote {
-    use crate::data::{ArconType, RawArconMessage};
+    use crate::data::{ArconType, RawArconMessage, VersionId};
     use kompact::prelude::*;
     use prost::*;
 
     #[derive(Clone, Debug)]
     pub struct ReliableSerde<A: ArconType>(pub RawArconMessage<A>);
 
-    impl<A: ArconType> ReliableSerde<A> {
-        const SID: kompact::prelude::SerId = 25;
-    }
-
     impl<A: ArconType> Deserialiser<RawArconMessage<A>> for ReliableSerde<A> {
-        const SER_ID: SerId = Self::SID;
+        const SER_ID: SerId = A::RELIABLE_SER_ID;
 
         fn deserialise(buf: &mut dyn Buf) -> Result<RawArconMessage<A>, SerError> {
+            let version_id = buf.get_u32();
+            if version_id != A::VERSION_ID {
+                let err = format!(
+                    "Mismatch on ArconType version. Got {} while expecting {}",
+                    version_id,
+                    A::VERSION_ID
+                );
+                return Err(SerError::InvalidData(err));
+            }
+
             let arcon_message = RawArconMessage::decode(buf.bytes()).map_err(|_| {
                 SerError::InvalidData("Failed to decode RawArconMessage".to_string())
             })?;
@@ -47,13 +53,16 @@ pub mod reliable_remote {
     }
     impl<A: ArconType> Serialisable for ReliableSerde<A> {
         fn ser_id(&self) -> u64 {
-            Self::SID
+            A::RELIABLE_SER_ID
         }
         fn size_hint(&self) -> Option<usize> {
-            Some(self.0.encoded_len())
+            let size = std::mem::size_of::<VersionId>() + self.0.encoded_len();
+            Some(size)
         }
 
         fn serialise(&self, mut buf: &mut dyn BufMut) -> Result<(), SerError> {
+            buf.put_u32(A::VERSION_ID);
+
             self.0.encode(&mut buf).map_err(|_| {
                 SerError::InvalidData("Failed to encode RawArconMessage".to_string())
             })?;
@@ -69,20 +78,26 @@ pub mod reliable_remote {
 
 /// Module containing the [kompact] serialiser/deserialiser implementation for [FlightSerde::Unsafe]
 pub mod unsafe_remote {
-    use crate::data::{ArconType, BufMutWriter, RawArconMessage};
+    use crate::data::{ArconType, BufMutWriter, RawArconMessage, VersionId};
     use kompact::prelude::*;
 
     #[derive(Clone, Debug)]
     pub struct UnsafeSerde<A: ArconType>(pub RawArconMessage<A>);
 
-    impl<A: ArconType> UnsafeSerde<A> {
-        const SID: kompact::prelude::SerId = 26;
-    }
-
     impl<A: ArconType> Deserialiser<RawArconMessage<A>> for UnsafeSerde<A> {
-        const SER_ID: SerId = Self::SID;
+        const SER_ID: SerId = A::UNSAFE_SER_ID;
 
         fn deserialise(buf: &mut dyn Buf) -> Result<RawArconMessage<A>, SerError> {
+            let version_id = buf.get_u32();
+            if version_id != A::VERSION_ID {
+                let err = format!(
+                    "Mismatch on ArconType version. Got {} while expecting {}",
+                    version_id,
+                    A::VERSION_ID
+                );
+                return Err(SerError::InvalidData(err));
+            }
+
             // TODO: improve
             // But might need a BufMut rather than a Buf...
             let bytes = buf.bytes();
@@ -102,13 +117,16 @@ pub mod unsafe_remote {
 
     impl<A: ArconType> Serialisable for UnsafeSerde<A> {
         fn ser_id(&self) -> u64 {
-            Self::SID
+            A::UNSAFE_SER_ID
         }
         fn size_hint(&self) -> Option<usize> {
-            Some(abomonation::measure(&self.0))
+            let size = std::mem::size_of::<VersionId>() + abomonation::measure(&self.0);
+            Some(size)
         }
 
         fn serialise(&self, buf: &mut dyn BufMut) -> Result<(), SerError> {
+            buf.put_u32(A::VERSION_ID);
+
             unsafe {
                 let mut writer = BufMutWriter::new(buf);
                 abomonation::encode(&self.0, &mut writer).map_err(|_| {

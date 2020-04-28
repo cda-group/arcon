@@ -14,13 +14,13 @@ use std::{
 };
 use tempfile::NamedTempFile;
 
-#[arcon]
+#[arcon(unsafe_ser_id = 100, reliable_ser_id = 101, version = 1)]
 pub struct NormaliseElements {
     #[prost(int64, repeated, tag = "1")]
     pub data: Vec<i64>,
 }
 
-#[arcon]
+#[arcon(unsafe_ser_id = 98, reliable_ser_id = 99, version = 1)]
 pub struct SourceData {
     #[prost(int64, tag = "1")]
     pub data: i64,
