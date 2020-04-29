@@ -103,11 +103,11 @@ mod tests {
     use super::*;
     use crate::{
         data::{ArconF64, ArconType},
+        pipeline::ArconPipeline,
         prelude::{Channel, ChannelStrategy, DebugNode, Forward, Map, NodeID},
         state_backend::{in_memory::InMemory, StateBackend},
         timer,
     };
-    use kompact::{default_components::DeadletterBox, prelude::KompactSystem};
     use std::{io::prelude::*, sync::Arc, thread, time};
     use tempfile::NamedTempFile;
 
@@ -116,12 +116,9 @@ mod tests {
         thread::sleep(time::Duration::from_secs(time));
     }
 
-    fn test_setup<A: ArconType>() -> (KompactSystem, Arc<Component<DebugNode<A>>>) {
-        // Kompact set-up
-        let mut cfg = KompactConfig::new();
-        cfg.system_components(DeadletterBox::new, NetworkConfig::default().build());
-        let system = cfg.build().expect("KompactSystem");
-
+    fn test_setup<A: ArconType>() -> (ArconPipeline, Arc<Component<DebugNode<A>>>) {
+        let mut pipeline = ArconPipeline::new();
+        let system = pipeline.system();
         let (sink, _) = system.create_and_register(move || {
             let s: DebugNode<A> = DebugNode::new();
             s
@@ -129,12 +126,14 @@ mod tests {
 
         system.start(&sink);
 
-        return (system, sink);
+        return (pipeline, sink);
     }
     // Test cases
     #[test]
     fn local_file_u64_test() {
-        let (system, sink) = test_setup::<u64>();
+        let (mut pipeline, sink) = test_setup::<u64>();
+        let pool_info = pipeline.get_pool_info();
+        let system = pipeline.system();
         let mut file = NamedTempFile::new().unwrap();
         let file_path = file.path().to_string_lossy().into_owned();
 
@@ -144,7 +143,8 @@ mod tests {
 
         let actor_ref = sink.actor_ref().hold().expect("fail");
         let channel = Channel::Local(actor_ref);
-        let channel_strategy = ChannelStrategy::Forward(Forward::new(channel, NodeID::new(1)));
+        let channel_strategy =
+            ChannelStrategy::Forward(Forward::new(channel, NodeID::new(1), pool_info));
 
         // Our map function
         fn map_fn(x: u64) -> u64 {
@@ -172,13 +172,15 @@ mod tests {
         assert_eq!(&sink_inspect.data.len(), &(50 as usize));
         for item in &sink_inspect.data {
             // all elements should have been mapped + 5
-            assert_eq!(item.data, Some(128));
+            assert_eq!(item.data, 128);
         }
     }
 
     #[test]
     fn local_file_f64_test() {
-        let (system, sink) = test_setup::<ArconF64>();
+        let (mut pipeline, sink) = test_setup::<ArconF64>();
+        let pool_info = pipeline.get_pool_info();
+        let system = pipeline.system();
         let mut file = NamedTempFile::new().unwrap();
         let file_path = file.path().to_string_lossy().into_owned();
 
@@ -191,7 +193,8 @@ mod tests {
 
         let actor_ref = sink.actor_ref().hold().expect("fail");
         let channel = Channel::Local(actor_ref);
-        let channel_strategy = ChannelStrategy::Forward(Forward::new(channel, NodeID::new(1)));
+        let channel_strategy =
+            ChannelStrategy::Forward(Forward::new(channel, NodeID::new(1), pool_info));
 
         // just pass it on
         fn map_fn(x: ArconF64) -> ArconF64 {
@@ -219,7 +222,7 @@ mod tests {
         assert_eq!(&sink_inspect.data.len(), &(source_elements as usize));
         for i in 0..source_elements {
             let expected: ArconF64 = ArconF64::new(i as f64 + 0.5);
-            assert_eq!(sink_inspect.data[i].data, Some(expected));
+            assert_eq!(sink_inspect.data[i].data, expected);
         }
     }
 }

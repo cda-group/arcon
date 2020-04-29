@@ -69,8 +69,6 @@ where
     max_node_parallelism: usize,
     /// Current Node IDs that are connected to nodes on this manager
     in_channels: Vec<NodeID>,
-    /// ChannelStrategy used by the nodes on this manager
-    channel_strategy: ChannelStrategy<OP::OUT>,
     /// Monotonically increasing Node ID index
     node_index: u32,
     /// Nodes this manager controls
@@ -108,7 +106,6 @@ where
             Vec<NodeID>,
             ChannelStrategy<OP::OUT>,
         ) -> Node<OP>,
-        channel_strategy: ChannelStrategy<OP::OUT>,
         in_channels: Vec<NodeID>,
         node_comps: Vec<Arc<Component<Node<OP>>>>,
         prev_manager: Option<RequiredRef<NodeManagerPort>>,
@@ -128,7 +125,6 @@ where
             node_parallelism: total_nodes as usize,
             max_node_parallelism: (num_cpus::get() * 2) as usize,
             in_channels,
-            channel_strategy,
             nodes: nodes_map,
             node_metrics: FxHashMap::default(),
             node_index: total_nodes,

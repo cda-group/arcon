@@ -24,93 +24,25 @@ impl Default for FlightSerde {
 
 /// Module containing the [kompact] serialiser/deserialiser implementation for [FlightSerde::Reliable]
 pub mod reliable_remote {
-    use crate::data::{
-        ArconElement, ArconEvent, ArconEventWrapper, ArconMessage, ArconType, Epoch, NodeID,
-        Watermark,
-    };
+    use crate::data::{ArconType, RawArconMessage};
     use kompact::prelude::*;
     use prost::*;
 
-    #[derive(prost::Message, Clone)]
-    pub struct NetworkMessage {
-        #[prost(message, tag = "1")]
-        pub sender: Option<NodeID>,
-        #[prost(message, repeated, tag = "2")]
-        pub events: Vec<RawEvent>,
-    }
-
-    #[derive(prost::Message, Clone)]
-    pub struct RawEvent {
-        #[prost(bytes, tag = "1")]
-        pub bytes: Vec<u8>,
-        #[prost(enumeration = "EventType", tag = "2")]
-        pub event_type: i32,
-    }
-
-    #[derive(Clone, Copy, Debug, PartialEq, Eq, Enumeration)]
-    pub enum EventType {
-        Element = 0,
-        Watermark = 1,
-        Epoch = 2,
-        Death = 3,
-    }
-
     #[derive(Clone, Debug)]
-    pub struct ReliableSerde<A: ArconType>(pub ArconMessage<A>);
+    pub struct ReliableSerde<A: ArconType>(pub RawArconMessage<A>);
 
     impl<A: ArconType> ReliableSerde<A> {
         const SID: kompact::prelude::SerId = 25;
     }
 
-    impl<A: ArconType> Deserialiser<ArconMessage<A>> for ReliableSerde<A> {
+    impl<A: ArconType> Deserialiser<RawArconMessage<A>> for ReliableSerde<A> {
         const SER_ID: SerId = Self::SID;
 
-        fn deserialise(buf: &mut dyn Buf) -> Result<ArconMessage<A>, SerError> {
-            let network_msg = NetworkMessage::decode(buf.bytes()).map_err(|_| {
-                SerError::InvalidData("Failed to decode NetworkMessage".to_string())
+        fn deserialise(buf: &mut dyn Buf) -> Result<RawArconMessage<A>, SerError> {
+            let arcon_message = RawArconMessage::decode(buf.bytes()).map_err(|_| {
+                SerError::InvalidData("Failed to decode RawArconMessage".to_string())
             })?;
-            let mut events: Vec<ArconEventWrapper<A>> =
-                Vec::with_capacity(network_msg.events.len());
-            for raw_event in network_msg.events {
-                match raw_event.event_type {
-                    x if x == EventType::Element as i32 => {
-                        let elem: ArconElement<A> =
-                            ArconElement::decode(raw_event.bytes.as_slice()).map_err(|_| {
-                                SerError::InvalidData("Failed to decode Element".to_string())
-                            })?;
-                        events.push(ArconEvent::Element(elem).into());
-                    }
-                    x if x == EventType::Watermark as i32 => {
-                        let watermark: Watermark = Watermark::decode(raw_event.bytes.as_slice())
-                            .map_err(|_| {
-                                SerError::InvalidData("Failed to decode Watermark".to_string())
-                            })?;
-                        events.push(ArconEvent::Watermark(watermark).into());
-                    }
-                    x if x == EventType::Epoch as i32 => {
-                        let epoch: Epoch =
-                            Epoch::decode(raw_event.bytes.as_slice()).map_err(|_| {
-                                SerError::InvalidData("Failed to decode Epoch".to_string())
-                            })?;
-                        events.push(ArconEvent::Epoch(epoch).into());
-                    }
-                    x if x == EventType::Death as i32 => {
-                        let death: String =
-                            String::decode(raw_event.bytes.as_slice()).map_err(|_| {
-                                SerError::InvalidData("Failed to decode Death".to_string())
-                            })?;
-                        events.push(ArconEvent::Death(death).into());
-                    }
-                    _ => {
-                        panic!("Matched unknown EventType");
-                    }
-                }
-            }
-            if let Some(sender) = network_msg.sender {
-                Ok(ArconMessage { events, sender })
-            } else {
-                Err(SerError::InvalidData("Failed to decode NodeID".to_string()))
-            }
+            Ok(arcon_message)
         }
     }
     impl<A: ArconType> Serialisable for ReliableSerde<A> {
@@ -118,83 +50,12 @@ pub mod reliable_remote {
             Self::SID
         }
         fn size_hint(&self) -> Option<usize> {
-            let mut total_len = 0;
-            for event in &self.0.events {
-                let event_len = match event
-                    .inner
-                    .as_ref()
-                    .expect("this should always be some, prost deserialization error")
-                {
-                    ArconEvent::Element(e) => e.data.as_ref().unwrap().encoded_len(),
-                    ArconEvent::Watermark(w) => w.encoded_len(),
-                    ArconEvent::Epoch(epoch) => epoch.encoded_len(),
-                    ArconEvent::Death(death) => death.encoded_len(),
-                };
-                total_len += event_len + 6; // RawEvent
-            }
-            total_len += 4; // size of NetworkMessage
-            Some(total_len)
+            Some(self.0.encoded_len())
         }
 
         fn serialise(&self, mut buf: &mut dyn BufMut) -> Result<(), SerError> {
-            let mut raw_events: Vec<RawEvent> = Vec::with_capacity(self.0.events.len());
-
-            for event in &self.0.events {
-                match event
-                    .inner
-                    .as_ref()
-                    .expect("this should always be some, prost deserialization error")
-                {
-                    ArconEvent::Element(elem) => {
-                        let mut bytes = Vec::with_capacity(elem.encoded_len());
-                        elem.encode(&mut bytes).map_err(|_| {
-                            SerError::InvalidData("Failed to encode element".to_string())
-                        })?;
-                        raw_events.push(RawEvent {
-                            bytes,
-                            event_type: EventType::Element as i32,
-                        });
-                    }
-                    ArconEvent::Watermark(watermark) => {
-                        let mut bytes = Vec::with_capacity(watermark.encoded_len());
-                        watermark.encode(&mut bytes).map_err(|_| {
-                            SerError::InvalidData("Failed to encode watermark".to_string())
-                        })?;
-                        raw_events.push(RawEvent {
-                            bytes,
-                            event_type: EventType::Watermark as i32,
-                        });
-                    }
-                    ArconEvent::Epoch(epoch) => {
-                        let mut bytes = Vec::with_capacity(epoch.encoded_len());
-                        epoch.encode(&mut bytes).map_err(|_| {
-                            SerError::InvalidData("Failed to encode epoch".to_string())
-                        })?;
-                        raw_events.push(RawEvent {
-                            bytes,
-                            event_type: EventType::Epoch as i32,
-                        });
-                    }
-                    ArconEvent::Death(death) => {
-                        let mut bytes = Vec::with_capacity(death.encoded_len());
-                        death.encode(&mut bytes).map_err(|_| {
-                            SerError::InvalidData("Failed to encode death".to_string())
-                        })?;
-                        raw_events.push(RawEvent {
-                            bytes,
-                            event_type: EventType::Death as i32,
-                        });
-                    }
-                }
-            }
-
-            let network_msg = NetworkMessage {
-                sender: Some(self.0.sender),
-                events: raw_events,
-            };
-
-            network_msg.encode(&mut buf).map_err(|_| {
-                SerError::InvalidData("Failed to encode network message".to_string())
+            self.0.encode(&mut buf).map_err(|_| {
+                SerError::InvalidData("Failed to encode RawArconMessage".to_string())
             })?;
 
             Ok(())
@@ -208,26 +69,27 @@ pub mod reliable_remote {
 
 /// Module containing the [kompact] serialiser/deserialiser implementation for [FlightSerde::Unsafe]
 pub mod unsafe_remote {
-    use crate::data::{ArconMessage, ArconType, BufMutWriter};
+    use crate::data::{ArconType, BufMutWriter, RawArconMessage};
     use kompact::prelude::*;
 
     #[derive(Clone, Debug)]
-    pub struct UnsafeSerde<A: ArconType>(pub ArconMessage<A>);
+    pub struct UnsafeSerde<A: ArconType>(pub RawArconMessage<A>);
 
     impl<A: ArconType> UnsafeSerde<A> {
         const SID: kompact::prelude::SerId = 26;
     }
 
-    impl<A: ArconType> Deserialiser<ArconMessage<A>> for UnsafeSerde<A> {
+    impl<A: ArconType> Deserialiser<RawArconMessage<A>> for UnsafeSerde<A> {
         const SER_ID: SerId = Self::SID;
 
-        fn deserialise(buf: &mut dyn Buf) -> Result<ArconMessage<A>, SerError> {
+        fn deserialise(buf: &mut dyn Buf) -> Result<RawArconMessage<A>, SerError> {
             // TODO: improve
             // But might need a BufMut rather than a Buf...
             let bytes = buf.bytes();
             let mut tmp_buf: Vec<u8> = Vec::with_capacity(bytes.len());
             tmp_buf.put_slice(&bytes);
-            if let Some((msg, _)) = unsafe { abomonation::decode::<ArconMessage<A>>(&mut tmp_buf) }
+            if let Some((msg, _)) =
+                unsafe { abomonation::decode::<RawArconMessage<A>>(&mut tmp_buf) }
             {
                 Ok(msg.clone())
             } else {
@@ -267,7 +129,7 @@ mod test {
     use super::*;
     use crate::{data::test::ArconDataTest, prelude::*};
     use kompact::prelude::*;
-
+    use std::time::Duration;
     fn get_systems() -> (KompactSystem, KompactSystem) {
         let system = || {
             let mut cfg = KompactConfig::new();
@@ -279,50 +141,19 @@ mod test {
 
     #[test]
     fn reliable_serde_test() {
-        let (local, remote) = get_systems();
-        let timeout = std::time::Duration::from_millis(150);
-        let comp = remote.create(move || DebugNode::<ArconDataTest>::new());
-        remote
-            .start_notify(&comp)
-            .wait_timeout(timeout)
-            .expect("comp never started");
-
-        let comp_id = format!("comp");
-        let _ = remote.register_by_alias(&comp, comp_id.clone());
-        let remote_path = ActorPath::Named(NamedPath::with_system(remote.system_path(), vec![
-            comp_id.into(),
-        ]));
-
-        let dispatcher_ref = local.dispatcher_ref();
-        let channel = Channel::Remote(remote_path, FlightSerde::Reliable, dispatcher_ref.into());
-        let mut channel_strategy: ChannelStrategy<ArconDataTest> =
-            ChannelStrategy::Forward(Forward::new(channel, 1.into()));
-
-        let items = vec![1, 2, 3, 4, 5, 6, 7];
-        let data = ArconDataTest {
-            id: 1,
-            items: items.clone(),
-        };
-        let element = ArconElement::new(data);
-        channel_strategy.add(ArconEvent::Element(element.clone()));
-        channel_strategy.add(ArconEvent::Element(element.clone()));
-        channel_strategy.flush();
-        channel_strategy.add(ArconEvent::Element(element.clone()));
-        channel_strategy.add(ArconEvent::Element(element));
-        channel_strategy.flush();
-        std::thread::sleep(timeout);
-        {
-            let comp_inspect = &comp.definition().lock().unwrap();
-            assert_eq!(comp_inspect.data.len() as u64, 4);
-        }
-        let _ = local.shutdown();
-        let _ = remote.shutdown();
+        serde_test(FlightSerde::Reliable);
     }
 
     #[test]
     fn unsafe_serde_test() {
+        serde_test(FlightSerde::Unsafe)
+    }
+
+    fn serde_test(serde: FlightSerde) {
+        let pipeline = ArconPipeline::new();
+        let pool_info = pipeline.get_pool_info();
         let (local, remote) = get_systems();
-        let timeout = std::time::Duration::from_millis(150);
+        let timeout = Duration::from_millis(150);
         let comp = remote.create(move || DebugNode::<ArconDataTest>::new());
         remote
             .start_notify(&comp)
@@ -330,22 +161,26 @@ mod test {
             .expect("comp never started");
 
         let comp_id = format!("comp");
-        let _ = remote.register_by_alias(&comp, comp_id.clone());
+        let reg = remote.register_by_alias(&comp, comp_id.clone());
+        reg.wait_expect(
+            Duration::from_millis(1000),
+            "Failed to register alias for DebugNode",
+        );
         let remote_path = ActorPath::Named(NamedPath::with_system(remote.system_path(), vec![
             comp_id.into(),
         ]));
 
         let dispatcher_ref = local.dispatcher_ref();
-        let channel = Channel::Remote(remote_path, FlightSerde::Unsafe, dispatcher_ref.into());
+        let channel = Channel::Remote(remote_path, serde, dispatcher_ref.into());
         let mut channel_strategy: ChannelStrategy<ArconDataTest> =
-            ChannelStrategy::Forward(Forward::new(channel, 1.into()));
+            ChannelStrategy::Forward(Forward::new(channel, 1.into(), pool_info));
 
         let items = vec![1, 2, 3, 4, 5, 6, 7];
         let data = ArconDataTest {
             id: 1,
             items: items.clone(),
         };
-        let element = ArconElement::new(data);
+        let element = ArconElement::new(data.clone());
         channel_strategy.add(ArconEvent::Element(element.clone()));
         channel_strategy.add(ArconEvent::Element(element.clone()));
         channel_strategy.flush();
@@ -356,6 +191,11 @@ mod test {
         {
             let comp_inspect = &comp.definition().lock().unwrap();
             assert_eq!(comp_inspect.data.len() as u64, 4);
+            // Verify that the data is correct..
+            assert_eq!(comp_inspect.data[0].data.items, items);
+            assert_eq!(comp_inspect.data[1].data.items, items);
+            assert_eq!(comp_inspect.data[2].data.items, items);
+            assert_eq!(comp_inspect.data[3].data.items, items);
         }
         let _ = local.shutdown();
         let _ = remote.shutdown();

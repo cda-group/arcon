@@ -42,14 +42,12 @@ where
     type TimerState = ArconNever;
 
     fn handle_element(&mut self, element: ArconElement<IN>, mut ctx: OperatorContext<Self>) {
-        if let Some(data) = element.data {
-            let result = self.run_udf(data);
-            let out_elem = ArconElement {
-                data: Some(result),
-                timestamp: element.timestamp,
-            };
-            ctx.output(ArconEvent::Element(out_elem));
-        }
+        let result = self.run_udf(element.data);
+        let out_elem = ArconElement {
+            data: result,
+            timestamp: element.timestamp,
+        };
+        ctx.output(ArconEvent::Element(out_elem));
     }
 
     fn handle_watermark(&mut self, _w: Watermark, _ctx: OperatorContext<Self>) {}
@@ -64,14 +62,17 @@ mod tests {
 
     #[test]
     fn map_test() {
-        let system = KompactConfig::default().build().expect("KompactSystem");
+        let mut pipeline = ArconPipeline::new();
+        let pool_info = pipeline.get_pool_info();
+        let system = pipeline.system();
+
         let comp = system.create(move || DebugNode::<i32>::new());
         system.start(&comp);
 
         let actor_ref: ActorRefStrong<ArconMessage<i32>> =
             comp.actor_ref().hold().expect("failed to fetch");
         let channel_strategy =
-            ChannelStrategy::Forward(Forward::new(Channel::Local(actor_ref), 1.into()));
+            ChannelStrategy::Forward(Forward::new(Channel::Local(actor_ref), 1.into(), pool_info));
         fn map_fn(x: i32) -> i32 {
             x + 10
         }
@@ -96,7 +97,8 @@ mod tests {
                 input_one.into(),
                 input_two.into(),
                 ArconEvent::Death("die".into()).into(),
-            ],
+            ]
+            .into(),
             sender: NodeID::new(1),
         };
         let map_ref: ActorRefStrong<ArconMessage<i32>> =
@@ -108,9 +110,9 @@ mod tests {
         {
             let comp_inspect = &comp.definition().lock().unwrap();
             assert_eq!(comp_inspect.data.len(), 2);
-            assert_eq!(comp_inspect.data[0].data, Some(16));
-            assert_eq!(comp_inspect.data[1].data, Some(17));
+            assert_eq!(comp_inspect.data[0].data, 16);
+            assert_eq!(comp_inspect.data[1].data, 17);
         }
-        let _ = system.shutdown();
+        pipeline.shutdown();
     }
 }

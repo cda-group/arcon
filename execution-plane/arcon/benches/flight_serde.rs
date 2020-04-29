@@ -3,20 +3,19 @@
 
 use arcon::prelude::*;
 use criterion::{criterion_group, criterion_main, Bencher, Criterion};
+use std::time::Duration;
 
 mod common;
 use common::*;
 
-const BATCH_SIZE: usize = 1024;
 const NUM_BATCHES: usize = 1000;
-const TOTAL_MSGS: usize = BATCH_SIZE * NUM_BATCHES;
 
 fn arcon_flight_serde(c: &mut Criterion) {
-    let mut group = c.benchmark_group("arcon_flight_serde");
+    let group = c.benchmark_group("arcon_flight_serde");
     // Something is broken in the serialisation there,
     // but if we are anyway changeing it, no point in fixing this now.
     //group.bench_function("Arcon Reliable Flight", reliable_serde);
-    group.bench_function("Arcon Unsafe Flight", unsafe_serde);
+    //group.bench_function("Arcon Unsafe Flight", unsafe_serde);
     group.finish()
 }
 
@@ -38,8 +37,14 @@ pub fn unsafe_serde(b: &mut Bencher) {
 }
 
 pub fn arcon_flight_bench(b: &mut Bencher, serde: FlightSerde) {
+    let pipeline = ArconPipeline::new();
+    let pool_info = pipeline.get_pool_info();
+
+    let batch_size = pipeline.arcon_conf().channel_batch_size;
+    let total_msgs = batch_size * NUM_BATCHES;
+
     let (local, remote) = setup_system();
-    let timeout = std::time::Duration::from_millis(150);
+    let timeout = Duration::from_millis(150);
     let comp = remote.create(move || NodeReceiver::<i32>::new());
     remote
         .start_notify(&comp)
@@ -47,20 +52,24 @@ pub fn arcon_flight_bench(b: &mut Bencher, serde: FlightSerde) {
         .expect("comp never started");
 
     let comp_id = format!("remote_comp");
-    let _ = remote.register_by_alias(&comp, comp_id.clone());
+    let reg = remote.register_by_alias(&comp, comp_id.clone());
+    reg.wait_expect(
+        Duration::from_millis(1000),
+        "Failed to register alias for Component",
+    );
     let remote_path = ActorPath::Named(NamedPath::with_system(remote.system_path(), vec![
         comp_id.into()
     ]));
 
     let channel = Channel::Remote(remote_path, serde, local.dispatcher_ref().into());
     let mut channel_strategy: ChannelStrategy<i32> =
-        ChannelStrategy::Forward(Forward::with_batch_size(channel, 1.into(), BATCH_SIZE));
+        ChannelStrategy::Forward(Forward::new(channel, 1.into(), pool_info));
 
     let experiment_port = comp.on_definition(|cd| cd.experiment_port.share());
-    let mut events: Vec<Vec<ArconEvent<i32>>> = Vec::with_capacity(BATCH_SIZE);
+    let mut events: Vec<Vec<ArconEvent<i32>>> = Vec::with_capacity(NUM_BATCHES);
     for _ in 0..NUM_BATCHES {
-        let mut batch = Vec::with_capacity(BATCH_SIZE);
-        for i in 0..BATCH_SIZE {
+        let mut batch = Vec::with_capacity(batch_size);
+        for i in 0..batch_size {
             let event = ArconEvent::Element(ArconElement::new(i as i32));
             batch.push(event);
         }
@@ -70,7 +79,7 @@ pub fn arcon_flight_bench(b: &mut Bencher, serde: FlightSerde) {
     b.iter(|| {
         let (promise, future) = kpromise();
         remote.trigger_r(
-            crate::Run::new(TOTAL_MSGS as u64, promise),
+            crate::Run::new(total_msgs as u64, promise),
             &experiment_port,
         );
 
@@ -79,8 +88,7 @@ pub fn arcon_flight_bench(b: &mut Bencher, serde: FlightSerde) {
                 channel_strategy.add(event);
             }
         }
-        // not needed since batch size exactly the number of sent elements
-        //channel_strategy.flush();
+
         let res = future.wait();
         res
     });

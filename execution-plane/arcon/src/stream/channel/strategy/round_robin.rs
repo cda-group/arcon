@@ -1,70 +1,93 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use super::DEFAULT_BATCH_SIZE;
 use crate::{
+    buffer::event::{BufferPool, BufferWriter, PoolInfo},
     data::{ArconEvent, ArconEventWrapper, ArconMessage, ArconType, NodeID},
     stream::channel::{strategy::send, Channel},
 };
 
 /// A strategy that sends message downstream in a Round-Robin fashion
-#[derive(Clone)]
 pub struct RoundRobin<A>
 where
     A: ArconType,
 {
-    /// Vec of Channels used by the Strategy
+    /// A buffer pool of EventBuffer's
+    buffer_pool: BufferPool<ArconEventWrapper<A>>,
+    /// A buffer holding outgoing events
+    curr_buffer: BufferWriter<ArconEventWrapper<A>>,
+    /// Vec of Channels
     channels: Vec<Channel<A>>,
-    /// An Identifier that is embedded with outgoing messages
+    /// An identifier that is embedded with outgoing messages
     sender_id: NodeID,
+    /// Struct holding information regarding the BufferPool
+    _pool_info: PoolInfo,
     /// Which channel is currently the target
     curr_index: usize,
-    /// A buffer holding outgoing events
-    buffer: Vec<ArconEventWrapper<A>>,
-    /// A batch size indicating when the channel should flush data
-    batch_size: usize,
 }
 
 impl<A> RoundRobin<A>
 where
     A: ArconType,
 {
-    pub fn new(channels: Vec<Channel<A>>, sender_id: NodeID) -> RoundRobin<A> {
+    /// Creates a RoundRobin strategy
+    pub fn new(channels: Vec<Channel<A>>, sender_id: NodeID, pool_info: PoolInfo) -> RoundRobin<A> {
+        assert!(
+            channels.len() > 1,
+            "Number of Channels must exceed 1 for a RoundRobin strategy"
+        );
+
+        let mut buffer_pool: BufferPool<ArconEventWrapper<A>> = BufferPool::new(
+            pool_info.capacity,
+            pool_info.buffer_size,
+            pool_info.allocator.clone(),
+        )
+        .expect("failed to initialise buffer pool");
+
+        let curr_buffer = buffer_pool
+            .try_get()
+            .expect("failed to fetch initial buffer");
+
         RoundRobin {
+            buffer_pool,
+            curr_buffer,
             channels,
             sender_id,
+            _pool_info: pool_info,
             curr_index: 0,
-            buffer: Vec::with_capacity(DEFAULT_BATCH_SIZE),
-            batch_size: DEFAULT_BATCH_SIZE,
         }
     }
 
     #[inline]
     pub fn add(&mut self, event: ArconEvent<A>) {
         if let ArconEvent::Element(_) = &event {
-            self.buffer.push(event.into());
-
-            if self.buffer.len() == self.batch_size {
+            if let Some(e) = self.curr_buffer.push(event.into()) {
+                // buffer is full, flush.
                 self.flush();
+                self.curr_buffer.push(e.into());
             }
         } else {
             // Watermark/Epoch.
             // Send downstream as soon as possible
-            self.buffer.push(event.into());
-            self.flush();
+
+            if let Some(e) = self.curr_buffer.push(event.into()) {
+                self.flush();
+                self.curr_buffer.push(e.into());
+                self.flush();
+            } else {
+                self.flush();
+            }
         }
     }
 
     #[inline]
     pub fn flush(&mut self) {
         if let Some(channel) = self.channels.get(self.curr_index) {
-            let mut new_vec = Vec::with_capacity(self.batch_size);
-            std::mem::swap(&mut new_vec, &mut self.buffer);
+            let reader = self.curr_buffer.reader();
             let msg = ArconMessage {
-                events: new_vec,
+                events: reader,
                 sender: self.sender_id,
             };
-
             send(&channel, msg);
 
             self.curr_index += 1;
@@ -72,6 +95,9 @@ where
             if self.curr_index >= self.channels.len() {
                 self.curr_index = 0;
             }
+
+            // TODO: Should probably not busy wait here..
+            self.curr_buffer = self.buffer_pool.get();
         } else {
             panic!("Bad channel setup");
         }
@@ -88,6 +114,7 @@ mod tests {
     use super::*;
     use crate::{
         data::ArconElement,
+        pipeline::ArconPipeline,
         prelude::{ChannelStrategy, DebugNode},
         stream::channel::strategy::tests::*,
     };
@@ -96,7 +123,9 @@ mod tests {
 
     #[test]
     fn round_robin_local_test() {
-        let system = KompactConfig::default().build().expect("KompactSystem");
+        let mut pipeline = ArconPipeline::new();
+        let pool_info = pipeline.get_pool_info();
+        let system = pipeline.system();
 
         let components: u64 = 8;
         let total_msgs: u64 = components * 4;
@@ -104,7 +133,6 @@ mod tests {
         let mut channels: Vec<Channel<Input>> = Vec::new();
         let mut comps: Vec<Arc<crate::prelude::Component<DebugNode<Input>>>> = Vec::new();
 
-        // Create half of the channels using ActorRefs
         for _i in 0..components {
             let comp = system.create(move || DebugNode::<Input>::new());
             system.start(&comp);
@@ -115,7 +143,7 @@ mod tests {
         }
 
         let mut channel_strategy: ChannelStrategy<Input> =
-            ChannelStrategy::RoundRobin(RoundRobin::new(channels, NodeID::new(1)));
+            ChannelStrategy::RoundRobin(RoundRobin::new(channels, NodeID::new(1), pool_info));
 
         for _i in 0..total_msgs {
             let elem = ArconElement::new(Input { id: 1 });
@@ -129,6 +157,7 @@ mod tests {
             let comp_inspect = &comp.definition().lock().unwrap();
             assert_eq!(comp_inspect.data.len() as u64, total_msgs / components);
         }
-        let _ = system.shutdown();
+
+        pipeline.shutdown();
     }
 }

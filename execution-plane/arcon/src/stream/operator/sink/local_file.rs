@@ -45,10 +45,8 @@ where
     type TimerState = ArconNever;
 
     fn handle_element(&mut self, element: ArconElement<IN>, _ctx: OperatorContext<Self>) {
-        if let Some(data) = element.data {
-            if let Err(err) = writeln!(self.file, "{:?}", data) {
-                eprintln!("Error while writing to file sink {}", err.to_string());
-            }
+        if let Err(err) = writeln!(self.file, "{:?}", element.data) {
+            eprintln!("Error while writing to file sink {}", err.to_string());
         }
     }
     fn handle_watermark(&mut self, _w: Watermark, _ctx: OperatorContext<Self>) {}

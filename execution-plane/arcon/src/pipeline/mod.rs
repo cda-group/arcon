@@ -3,10 +3,13 @@
 
 #[cfg(feature = "arcon_tui")]
 use crate::tui::{component::TuiComponent, widgets::node::Node as TuiNode};
-use crate::{conf::ArconConf, manager::node_manager::*, prelude::*, util::SafelySendableFn};
+use crate::{
+    allocator::ArconAllocator, buffer::event::PoolInfo, conf::ArconConf, manager::node_manager::*,
+    prelude::*, util::SafelySendableFn,
+};
 use fxhash::FxHashMap;
 use kompact::prelude::KompactSystem;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 /// A struct meant to simplify the creation of an Arcon Pipeline
 #[derive(Clone)]
@@ -15,6 +18,8 @@ pub struct ArconPipeline {
     system: KompactSystem,
     /// Arcon configuration for this pipeline
     conf: ArconConf,
+    /// Arcon allocator for this pipeline
+    allocator: Arc<Mutex<ArconAllocator>>,
     /// NodeManagers launched on top of this ArconPipeline
     node_managers: FxHashMap<String, ActorRefStrong<NodeEvent>>,
     #[cfg(feature = "arcon_tui")]
@@ -27,6 +32,7 @@ impl ArconPipeline {
     /// Creates a new ArconPipeline using the default ArconConf
     pub fn new() -> ArconPipeline {
         let conf = ArconConf::default();
+        let allocator = Arc::new(Mutex::new(ArconAllocator::new(conf.allocator_capacity)));
         #[cfg(feature = "arcon_tui")]
         let (system, tui_component, arcon_receiver) = ArconPipeline::setup(&conf);
         #[cfg(not(feature = "arcon_tui"))]
@@ -35,6 +41,7 @@ impl ArconPipeline {
         ArconPipeline {
             system,
             conf,
+            allocator,
             node_managers: FxHashMap::default(),
             #[cfg(feature = "arcon_tui")]
             tui_component,
@@ -45,6 +52,7 @@ impl ArconPipeline {
 
     /// Creates a new ArconPipeline using the given ArconConf
     pub fn with_conf(conf: ArconConf) -> ArconPipeline {
+        let allocator = Arc::new(Mutex::new(ArconAllocator::new(conf.allocator_capacity)));
         #[cfg(feature = "arcon_tui")]
         let (system, tui_component, arcon_receiver) = ArconPipeline::setup(&conf);
         #[cfg(not(feature = "arcon_tui"))]
@@ -53,6 +61,7 @@ impl ArconPipeline {
         ArconPipeline {
             system,
             conf,
+            allocator,
             node_managers: FxHashMap::default(),
             #[cfg(feature = "arcon_tui")]
             tui_component,
@@ -60,6 +69,17 @@ impl ArconPipeline {
             arcon_event_receiver: Arc::new(arcon_receiver),
         }
     }
+
+    /// Creates a PoolInfo struct to be used by a ChannelStrategy
+    pub fn get_pool_info(&self) -> PoolInfo {
+        PoolInfo::new(
+            self.conf.channel_batch_size,
+            self.conf.buffer_pool_size,
+            self.conf.buffer_pool_limit,
+            self.allocator.clone(),
+        )
+    }
+
     /// Helper function to set up internals of the pipeline
     #[cfg(not(feature = "arcon_tui"))]
     fn setup(arcon_conf: &ArconConf) -> KompactSystem {
@@ -111,7 +131,6 @@ impl ArconPipeline {
             ChannelStrategy<OP::OUT>,
         ) -> Node<OP>,
         in_channels: Vec<NodeID>,
-        channel_strategy: ChannelStrategy<OP::OUT>,
         nodes: Vec<Node<OP>>,
     ) -> Vec<Arc<Component<Node<OP>>>>
     where
@@ -132,7 +151,6 @@ impl ArconPipeline {
         let node_manager = NodeManager::new(
             node_description.clone(),
             node_fn,
-            channel_strategy,
             in_channels,
             node_comps.clone(),
             None,

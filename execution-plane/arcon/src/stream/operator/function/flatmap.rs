@@ -42,14 +42,12 @@ where
     type TimerState = ArconNever;
 
     fn handle_element(&mut self, element: ArconElement<IN>, mut ctx: OperatorContext<Self>) {
-        if let Some(data) = element.data {
-            let result = self.run_udf(&(data));
-            for item in result {
-                ctx.output(ArconEvent::Element(ArconElement {
-                    data: Some(item),
-                    timestamp: element.timestamp,
-                }));
-            }
+        let result = self.run_udf(&element.data);
+        for item in result {
+            ctx.output(ArconEvent::Element(ArconElement {
+                data: item,
+                timestamp: element.timestamp,
+            }));
         }
     }
 
@@ -65,14 +63,17 @@ mod tests {
 
     #[test]
     fn flatmap_test() {
-        let system = KompactConfig::default().build().expect("KompactSystem");
+        let mut pipeline = ArconPipeline::new();
+        let pool_info = pipeline.get_pool_info();
+        let system = pipeline.system();
+
         let comp = system.create(move || DebugNode::<i32>::new());
         system.start(&comp);
 
         let actor_ref: ActorRefStrong<ArconMessage<i32>> =
             comp.actor_ref().hold().expect("failed to fetch");
         let channel_strategy =
-            ChannelStrategy::Forward(Forward::new(Channel::Local(actor_ref), 1.into()));
+            ChannelStrategy::Forward(Forward::new(Channel::Local(actor_ref), 1.into(), pool_info));
 
         fn flatmap_fn(x: &i32) -> Vec<i32> {
             (0..*x).map(|x| x + 5).collect()
@@ -92,7 +93,11 @@ mod tests {
 
         let input_one = ArconEvent::Element(ArconElement::new(6 as i32));
         let msg = ArconMessage {
-            events: vec![input_one.into(), ArconEvent::Death("die".into()).into()],
+            events: vec![
+                input_one.into(),
+                ArconEvent::Death(String::from("die")).into(),
+            ]
+            .into(),
             sender: NodeID::new(1),
         };
         let flatmap_ref: ActorRefStrong<ArconMessage<i32>> =
@@ -105,6 +110,6 @@ mod tests {
             let comp_inspect = &comp.definition().lock().unwrap();
             assert_eq!(comp_inspect.data.len(), 6);
         }
-        let _ = system.shutdown();
+        pipeline.shutdown();
     }
 }

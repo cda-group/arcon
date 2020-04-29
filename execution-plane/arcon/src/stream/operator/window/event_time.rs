@@ -191,11 +191,12 @@ where
 
         // Insert the element into all windows and create new where necessary
         for i in floor..=ceil {
-            if let Some(data) = element.data.clone() {
-                self.window
-                    .on_element(data, WindowContext::new(ctx.state_backend, key, i))
-                    .expect("window error");
-            }
+            self.window
+                .on_element(
+                    element.data.clone(),
+                    WindowContext::new(ctx.state_backend, key, i),
+                )
+                .expect("window error");
 
             if !self
                 .active_windows
@@ -270,16 +271,19 @@ mod tests {
         ActorRefStrong<ArconMessage<Item>>,
         Arc<Component<DebugNode<u64>>>,
     ) {
-        // Kompact set-up
-        let system = KompactConfig::default().build().expect("KompactSystem");
+        let mut pipeline = ArconPipeline::new();
+        let pool_info = pipeline.get_pool_info();
+        let system = pipeline.system();
 
         // Create a sink
         let (sink, _) = system.create_and_register(move || DebugNode::new());
         let sink_ref: ActorRefStrong<ArconMessage<u64>> =
             sink.actor_ref().hold().expect("failed to get strong ref");
+
         let channel_strategy = ChannelStrategy::Forward(Forward::new(
             Channel::Local(sink_ref.clone()),
             NodeID::new(1),
+            pool_info,
         ));
 
         fn appender_fn(u: &[Item]) -> u64 {
@@ -361,11 +365,11 @@ mod tests {
         let r1 = &sink_inspect.data.len();
         assert_eq!(r1, &3); // 3 windows received
         let r2 = &sink_inspect.data[0].data;
-        assert_eq!(r2, &Some(2)); // 1st window for key 1 has 2 elements
+        assert_eq!(r2, &2); // 1st window for key 1 has 2 elements
         let r3 = &sink_inspect.data[1].data;
-        assert_eq!(r3, &Some(3)); // 2nd window receieved, key 2, has 3 elements
+        assert_eq!(r3, &3); // 2nd window receieved, key 2, has 3 elements
         let r4 = &sink_inspect.data[2].data;
-        assert_eq!(r4, &Some(1)); // 3rd window receieved, for key 3, has 1 elements
+        assert_eq!(r4, &1); // 3rd window receieved, for key 3, has 1 elements
     }
 
     #[test]
@@ -385,7 +389,7 @@ mod tests {
         // Inspect and assert
         let sink_inspect = sink.definition().lock().unwrap();
         let r1 = &sink_inspect.data[0].data;
-        assert_eq!(r1, &Some(2));
+        assert_eq!(r1, &2);
         let r2 = &sink_inspect.data.len();
         assert_eq!(r2, &1);
     }
@@ -406,7 +410,7 @@ mod tests {
         let sink_inspect = sink.definition().lock().unwrap();
         let r0 = &sink_inspect.data[0].data;
         assert_eq!(&sink_inspect.data.len(), &(1 as usize));
-        assert_eq!(r0, &Some(2));
+        assert_eq!(r0, &2);
     }
     #[test]
     fn window_very_long_windows_1() {
@@ -426,7 +430,7 @@ mod tests {
         wait(1);
         let sink_inspect = sink.definition().lock().unwrap();
         let r0 = &sink_inspect.data[0].data;
-        assert_eq!(r0, &Some(1));
+        assert_eq!(r0, &1);
         assert_eq!(&sink_inspect.data.len(), &(1 as usize));
     }
     #[test]
@@ -447,10 +451,10 @@ mod tests {
         wait(1);
         let sink_inspect = sink.definition().lock().unwrap();
         let r0 = &sink_inspect.data[0].data;
-        assert_eq!(r0, &Some(1));
+        assert_eq!(r0, &1);
         assert_eq!(&sink_inspect.data.len(), &(2 as usize));
         let r1 = &sink_inspect.data[1].data;
-        assert_eq!(r1, &Some(1));
+        assert_eq!(r1, &1);
     }
     #[test]
     fn window_overlapping() {
@@ -470,9 +474,9 @@ mod tests {
         let r2 = &sink_inspect.data.len();
         assert_eq!(r2, &2);
         let r0 = &sink_inspect.data[0].data;
-        assert_eq!(r0, &Some(3));
+        assert_eq!(r0, &3);
         let r1 = &sink_inspect.data[1].data;
-        assert_eq!(r1, &Some(2));
+        assert_eq!(r1, &2);
     }
     #[test]
     fn window_empty() {

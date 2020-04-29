@@ -38,10 +38,8 @@ where
     type TimerState = ArconNever;
 
     fn handle_element(&mut self, element: ArconElement<IN>, mut ctx: OperatorContext<Self>) {
-        if let Some(data) = &element.data {
-            if self.run_udf(&data) {
-                ctx.output(ArconEvent::Element(element));
-            }
+        if self.run_udf(&element.data) {
+            ctx.output(ArconEvent::Element(element));
         }
     }
 
@@ -57,14 +55,17 @@ mod tests {
 
     #[test]
     fn filter_test() {
-        let system = KompactConfig::default().build().expect("KompactSystem");
+        let mut pipeline = ArconPipeline::new();
+        let pool_info = pipeline.get_pool_info();
+        let system = pipeline.system();
+
         let comp = system.create(move || DebugNode::<i32>::new());
         system.start(&comp);
 
         let actor_ref: ActorRefStrong<ArconMessage<i32>> =
             comp.actor_ref().hold().expect("failed to fetch");
         let channel_strategy =
-            ChannelStrategy::Forward(Forward::new(Channel::Local(actor_ref), 1.into()));
+            ChannelStrategy::Forward(Forward::new(Channel::Local(actor_ref), 1.into(), pool_info));
 
         fn filter_fn(x: &i32) -> bool {
             x < &8
@@ -94,8 +95,9 @@ mod tests {
                 input_two.into(),
                 input_three.into(),
                 input_four.into(),
-                ArconEvent::Death("die".into()).into(),
-            ],
+                ArconEvent::Death(String::from("die")).into(),
+            ]
+            .into(),
             sender: NodeID::new(1),
         };
 
@@ -109,6 +111,6 @@ mod tests {
             let comp_inspect = &comp.definition().lock().unwrap();
             assert_eq!(comp_inspect.data.len(), 2);
         }
-        let _ = system.shutdown();
+        pipeline.shutdown();
     }
 }

@@ -22,9 +22,18 @@ pub struct ArconConf {
     /// Interval in milliseconds for sending off metrics from nodes
     #[serde(default = "node_metrics_interval_default")]
     pub node_metrics_interval: u64,
+    /// Amount of buffers pre-allocated to a BufferPool
+    #[serde(default = "buffer_pool_size_default")]
+    pub buffer_pool_size: usize,
+    /// A limit for amount of buffers in a BufferPool
+    #[serde(default = "buffer_pool_limit_default")]
+    pub buffer_pool_limit: usize,
     /// Batch size for channels
     #[serde(default = "channel_batch_size_default")]
     pub channel_batch_size: usize,
+    /// Max amount of bytes allowed to be allocated by the ArconAllocator
+    #[serde(default = "allocator_capacity_default")]
+    pub allocator_capacity: usize,
     /// Amount of threads for Kompact's threadpool
     #[serde(default = "kompact_threads_default")]
     pub kompact_threads: usize,
@@ -58,7 +67,10 @@ impl ArconConf {
             checkpoint_dir: checkpoint_dir_default(),
             watermark_interval: watermark_interval_default(),
             node_metrics_interval: node_metrics_interval_default(),
+            buffer_pool_size: buffer_pool_size_default(),
+            buffer_pool_limit: buffer_pool_limit_default(),
             channel_batch_size: channel_batch_size_default(),
+            allocator_capacity: allocator_capacity_default(),
             kompact_threads: kompact_threads_default(),
             kompact_throughput: kompact_throughput_default(),
             kompact_msg_priority: kompact_msg_priority_default(),
@@ -105,8 +117,21 @@ fn node_metrics_interval_default() -> u64 {
     250
 }
 
+fn buffer_pool_size_default() -> usize {
+    1024
+}
+
+fn buffer_pool_limit_default() -> usize {
+    buffer_pool_size_default() * 2
+}
+
 fn channel_batch_size_default() -> usize {
     248
+}
+
+fn allocator_capacity_default() -> usize {
+    // 500 MB
+    524288000
 }
 
 fn kompact_threads_default() -> usize {
@@ -143,8 +168,10 @@ mod tests {
         assert_eq!(conf.watermark_interval, 1000);
         // Check defaults
         assert_eq!(conf.state_dir, state_dir_default());
-        assert_eq!(conf.node_metrics_interval, 250);
-        assert_eq!(conf.channel_batch_size, 248);
+        assert_eq!(conf.node_metrics_interval, node_metrics_interval_default());
+        assert_eq!(conf.channel_batch_size, channel_batch_size_default());
+        assert_eq!(conf.buffer_pool_size, buffer_pool_size_default());
+        assert_eq!(conf.allocator_capacity, allocator_capacity_default());
         assert_eq!(conf.kompact_threads, kompact_threads_default());
         assert_eq!(conf.kompact_throughput, kompact_throughput_default());
         assert_eq!(conf.kompact_msg_priority, kompact_msg_priority_default());

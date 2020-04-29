@@ -4,7 +4,7 @@
 /// Serialisers and Deserialiser for in-flight data
 pub mod flight_serde;
 
-use crate::{error::ArconResult, macros::*};
+use crate::{buffer::event::BufferReader, error::ArconResult, macros::*};
 use abomonation::Abomonation;
 use kompact::prelude::*;
 use prost::{Message as PMessage, Oneof as POneof};
@@ -120,8 +120,8 @@ impl<A: ArconType> From<ArconEvent<A>> for ArconEventWrapper<A> {
 #[derive(PMessage, Clone, Abomonation)]
 #[cfg_attr(feature = "arcon_serde", serde(bound = "A: ArconType"))]
 pub struct ArconElement<A: ArconType> {
-    #[prost(message, tag = "1")]
-    pub data: Option<A>,
+    #[prost(message, required, tag = "1")]
+    pub data: A,
     #[prost(message, tag = "2")]
     pub timestamp: Option<u64>,
 }
@@ -130,7 +130,7 @@ impl<A: ArconType> ArconElement<A> {
     /// Creates an ArconElement without a timestamp
     pub fn new(data: A) -> Self {
         ArconElement {
-            data: Some(data),
+            data,
             timestamp: None,
         }
     }
@@ -138,7 +138,7 @@ impl<A: ArconType> ArconElement<A> {
     /// Creates an ArconElement with a timestamp
     pub fn with_timestamp(data: A, ts: u64) -> Self {
         ArconElement {
-            data: Some(data),
+            data,
             timestamp: Some(ts),
         }
     }
@@ -172,27 +172,46 @@ impl Epoch {
     }
 }
 
-/// An ArconMessage contains a batch of [ArconEvent] and one [NodeID] identifier
-#[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
-#[derive(PMessage, Clone, Abomonation)]
-#[cfg_attr(feature = "arcon_serde", serde(bound = "A: ArconType"))]
+/// An ArconMessage backed by a reusable EventBuffer
+#[derive(Debug, Clone)]
 pub struct ArconMessage<A: ArconType> {
-    /// Buffer of ArconEvents
-    #[prost(message, repeated, tag = "1")]
-    pub events: Vec<ArconEventWrapper<A>>,
+    /// Batch of ArconEvents backed by an [EventBuffer]
+    pub events: BufferReader<ArconEventWrapper<A>>,
     /// ID identifying where the message is sent from
-    #[prost(message, required, tag = "5")]
     pub sender: NodeID,
 }
 
+/// A raw ArconMessage for serialisation
+#[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
+#[derive(PMessage, Clone, Abomonation)]
+#[cfg_attr(feature = "arcon_serde", serde(bound = "A: ArconType"))]
+pub struct RawArconMessage<A: ArconType> {
+    /// Batch of ArconEvents
+    #[prost(message, repeated, tag = "1")]
+    pub events: Vec<ArconEventWrapper<A>>,
+    /// ID identifying where the message is sent from
+    #[prost(message, required, tag = "2")]
+    pub sender: NodeID,
+}
+
+impl<A: ArconType> From<ArconMessage<A>> for RawArconMessage<A> {
+    fn from(msg: ArconMessage<A>) -> Self {
+        RawArconMessage {
+            events: msg.events.into_vec(),
+            sender: msg.sender,
+        }
+    }
+}
+
 /// Convenience methods
+#[cfg(test)]
 impl<A: ArconType> ArconMessage<A> {
     /// Creates an ArconMessage with a single [ArconEvent::Watermark] event
     ///
     /// This function should only be used for development and test purposes.
     pub fn watermark(timestamp: u64, sender: NodeID) -> ArconMessage<A> {
         ArconMessage {
-            events: vec![ArconEvent::<A>::Watermark(Watermark { timestamp }).into()],
+            events: vec![ArconEvent::<A>::Watermark(Watermark { timestamp }).into()].into(),
             sender,
         }
     }
@@ -201,7 +220,7 @@ impl<A: ArconType> ArconMessage<A> {
     /// This function should only be used for development and test purposes.
     pub fn epoch(epoch: u64, sender: NodeID) -> ArconMessage<A> {
         ArconMessage {
-            events: vec![ArconEvent::<A>::Epoch(Epoch { epoch }).into()],
+            events: vec![ArconEvent::<A>::Epoch(Epoch { epoch }).into()].into(),
             sender,
         }
     }
@@ -210,7 +229,7 @@ impl<A: ArconType> ArconMessage<A> {
     /// This function should only be used for development and test purposes.
     pub fn death(msg: String, sender: NodeID) -> ArconMessage<A> {
         ArconMessage {
-            events: vec![ArconEvent::<A>::Death(msg).into()],
+            events: vec![ArconEvent::<A>::Death(msg).into()].into(),
             sender,
         }
     }
@@ -219,11 +238,7 @@ impl<A: ArconType> ArconMessage<A> {
     /// This function should only be used for development and test purposes.
     pub fn element(data: A, timestamp: Option<u64>, sender: NodeID) -> ArconMessage<A> {
         ArconMessage {
-            events: vec![ArconEvent::Element(ArconElement {
-                data: Some(data),
-                timestamp,
-            })
-            .into()],
+            events: vec![ArconEvent::Element(ArconElement { data, timestamp }).into()].into(),
             sender,
         }
     }
