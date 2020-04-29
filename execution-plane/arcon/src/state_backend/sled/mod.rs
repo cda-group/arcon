@@ -16,7 +16,7 @@ use ::sled::{open, Db};
 use error::ResultExt;
 use sled::{Batch, IVec, Tree};
 use std::{
-    fs::{create_dir_all, File},
+    fs::File,
     io,
     io::{BufReader, Read},
     path::Path,
@@ -54,6 +54,7 @@ impl StateBackend for Sled {
 
     #[cfg(feature = "arcon_sled_checkpoints")]
     fn checkpoint(&self, checkpoint_path: &Path) -> ArconResult<()> {
+        use std::fs::create_dir_all;
         // TODO: sled doesn't support checkpoints/snapshots, but that and MVCC is planned
         //   for now we'll just dump it via the export/import mechanism WHICH MAY BE VERY SLOW
         let export_data = self.db.export();

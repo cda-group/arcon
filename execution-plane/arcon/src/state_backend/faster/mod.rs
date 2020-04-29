@@ -9,23 +9,24 @@ use crate::{
         },
         serialization::{DeserializableWith, LittleEndianBytesDump, SerializableWith},
         state_types::Aggregator,
-        StateBackend,
+        Session, SessionImpl, StateBackend,
     },
 };
 use error::ResultExt;
 use faster_rs::{status, FasterKv, FasterKvBuilder, FasterRmw};
 use serde::{Deserialize, Serialize};
 use std::{
+    cell::Cell,
     fs::File,
     io::{Read, Write},
     path::{Path, PathBuf},
-    sync::atomic::{AtomicU64, Ordering},
     time::Duration,
 };
 
 pub struct Faster {
     db: FasterKv,
-    monotonic_serial_number: AtomicU64,
+    monotonic_serial_number: Cell<u64>,
+    recursive_session_count: Cell<u64>,
     dir: PathBuf,
     restored: bool,
 }
@@ -46,7 +47,8 @@ impl StateBackend for Faster {
 
         Ok(Faster {
             db,
-            monotonic_serial_number: AtomicU64::new(0),
+            monotonic_serial_number: Cell::new(0),
+            recursive_session_count: Cell::new(0),
             dir: path.into(),
             restored: false,
         })
@@ -115,7 +117,23 @@ impl StateBackend for Faster {
     fn was_restored(&self) -> bool {
         self.restored
     }
+
+    // this is kinda unsafe because the Session must outlive Self - but we don't really care about
+    // mutability
+    fn new_session(&self) -> Session {
+        self.start_session();
+        Session(Box::new(FasterSession(self as *const _)))
+    }
 }
+
+struct FasterSession(*const Faster);
+impl Drop for FasterSession {
+    fn drop(&mut self) {
+        let faster = unsafe { &*self.0 };
+        faster.stop_session()
+    }
+}
+impl SessionImpl for FasterSession {}
 
 fn copy_checkpoint(
     token: &str,
@@ -191,21 +209,43 @@ fn copy_checkpoint(
 
 // NOTE: weird types (&Vec<u8>, which should be &[u8]) are due to the design of the faster-rs lib
 impl Faster {
+    #[inline(always)]
     fn next_serial_number(&self) -> u64 {
-        self.monotonic_serial_number.fetch_add(1, Ordering::SeqCst)
-    }
-
-    pub fn in_session<T>(&self, f: impl FnOnce(&Self) -> T) -> T {
-        self.db.start_session();
-        let res = f(self);
-        self.db.stop_session();
+        let res = self.monotonic_serial_number.get();
+        self.monotonic_serial_number.set(res + 1);
         res
     }
 
-    pub fn in_session_mut<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
-        self.db.start_session();
+    fn start_session(&self) {
+        if self.recursive_session_count.get() == 0 {
+            self.db.start_session();
+        }
+        self.recursive_session_count
+            .set(self.recursive_session_count.get() + 1);
+    }
+
+    fn stop_session(&self) {
+        self.recursive_session_count
+            .set(self.recursive_session_count.get() - 1);
+
+        if self.recursive_session_count.get() == 0 {
+            self.db.stop_session()
+        }
+    }
+
+    #[inline(always)]
+    pub fn in_session<T>(&self, f: impl FnOnce(&Self) -> T) -> T {
+        self.start_session();
         let res = f(self);
-        self.db.stop_session();
+        self.stop_session();
+        res
+    }
+
+    #[inline(always)]
+    pub fn in_session_mut<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
+        self.start_session();
+        let res = f(self);
+        self.stop_session();
         res
     }
 

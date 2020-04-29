@@ -38,7 +38,7 @@ pub struct SourceContext<OP: Operator> {
     /// Strategy for outputting events
     channel_strategy: ChannelStrategy<OP::OUT>,
     /// State backend that a source can keep persistent data in
-    state_backend: Box<dyn StateBackend>,
+    pub state_backend: Box<dyn StateBackend>,
     /// Timer Backend to keep track of event timers
     timer_backend: Box<dyn TimerBackend<OP::TimerState>>,
 }

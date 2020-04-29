@@ -92,7 +92,7 @@ where
     /// Metrics collected by the Node
     metrics: NodeMetrics,
     /// State Backend used to persist data
-    state_backend: Box<dyn StateBackend>,
+    pub state_backend: Box<dyn StateBackend>,
     /// Timer Backend to keep track of event timers
     timer_backend: Box<dyn TimerBackend<OP::TimerState>>,
 }
@@ -125,6 +125,7 @@ where
     where
         F: Fn(&mut dyn StateBackend) -> Box<dyn TimerBackend<OP::TimerState>> + Sized + 'static,
     {
+        let sb_session = state_backend.new_session();
         // Initiate our watermarks
 
         // some backends require you to first specify all the states and mess with them later
@@ -188,6 +189,8 @@ where
             .outbound_channels
             .inc_n(channel_strategy.num_channels());
 
+        drop(sb_session);
+
         Node {
             ctx: ComponentContext::new(),
             node_manager_port: RequiredPort::new(),
@@ -205,6 +208,8 @@ where
 
     #[inline]
     fn handle_message(&mut self, message: ArconMessage<OP::IN>) -> ArconResult<()> {
+        let sb_session = self.state_backend.new_session();
+
         // Check valid sender
         if !self.in_channels.contains(&message.sender) {
             return arcon_err!("Message from invalid sender");
@@ -371,6 +376,8 @@ where
                 }
             }
         }
+
+        drop(sb_session);
 
         Ok(())
     }

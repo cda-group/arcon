@@ -11,11 +11,11 @@ use crate::{
             vec_state::MeteredVecState,
         },
         state_types::Aggregator,
-        StateBackend,
+        Session, StateBackend,
     },
 };
 use cfg_if::cfg_if;
-use std::{any::type_name, cell::RefCell, env, ops::Deref, path::Path};
+use std::{any::type_name, cell::RefCell, collections::HashMap, env, ops::Deref, path::Path};
 
 #[derive(Clone, Debug, Default)]
 pub struct DataPoint {
@@ -26,23 +26,79 @@ pub struct DataPoint {
     duration: u64,
 }
 
-pub struct Metrics(usize, Box<[DataPoint]>);
-
-pub struct Metered<SB> {
-    inner: SB,
-    backend_name: &'static str,
-    metrics: RefCell<Metrics>,
+/// Collection of datapoints. When full it'll start overwriting the oldest entries
+pub struct Metrics {
+    num_pushed: usize,
+    storage: Box<[DataPoint]>,
 }
 
 impl Metrics {
     fn new(cap: usize) -> Metrics {
-        Metrics(0, vec![DataPoint::default(); cap].into_boxed_slice())
+        Metrics {
+            num_pushed: 0,
+            storage: vec![DataPoint::default(); cap].into_boxed_slice(),
+        }
     }
 
     fn push(&mut self, dp: DataPoint) {
-        assert!(self.0 < self.1.len());
-        self.1[self.0] = dp;
-        self.0 += 1;
+        self.storage[self.num_pushed % self.storage.len()] = dp;
+        self.num_pushed += 1;
+    }
+
+    pub fn summary(&self) -> String {
+        struct Summary {
+            count: u64,
+            min: u64,
+            avg: u64,
+            max: u64,
+        }
+
+        let map = self.iter().fold(HashMap::new(), |mut acc, dp| {
+            let Summary {
+                count,
+                min,
+                avg,
+                max,
+            } = acc.entry(dp.operation).or_insert_with(|| Summary {
+                count: 0,
+                min: u64::max_value(),
+                avg: 0,
+                max: 0,
+            });
+
+            *min = (*min).min(dp.duration);
+            *max = (*max).max(dp.duration);
+            *avg = (*avg * *count + dp.duration) / (*count + 1);
+            *count += 1;
+
+            acc
+        });
+
+        let mut res = format!("{:20}\tcount\tmin\tavg\tmax", "operation");
+        for (
+            operation,
+            Summary {
+                count,
+                min,
+                avg,
+                max,
+            },
+        ) in map
+        {
+            use std::fmt::Write;
+            write!(
+                res,
+                "\n{operation:20}\t{count}\t{min}\t{avg}\t{max}",
+                operation = operation,
+                count = count,
+                min = min,
+                avg = avg,
+                max = max
+            )
+            .expect("Could not write to the result String")
+        }
+
+        res
     }
 }
 
@@ -50,8 +106,18 @@ impl Deref for Metrics {
     type Target = [DataPoint];
 
     fn deref(&self) -> &Self::Target {
-        &self.1[0..self.0]
+        if self.num_pushed > self.storage.len() {
+            &self.storage
+        } else {
+            &self.storage[0..self.num_pushed]
+        }
     }
+}
+
+pub struct Metered<SB> {
+    inner: SB,
+    pub backend_name: &'static str,
+    pub metrics: RefCell<Metrics>,
 }
 
 impl<SB> Metered<SB> {
@@ -77,7 +143,7 @@ impl<SB> Metered<SB> {
 // four megs worth of data points - DataPoint is 32 bytes, so this is around 130k DPs
 const DEFAULT_METRICS_CAP: usize = {
     const MB: usize = 2usize << 20;
-    4 * MB / std::mem::size_of::<DataPoint>()
+    10 * MB / std::mem::size_of::<DataPoint>()
 };
 
 impl<SB> StateBackend for Metered<SB>
@@ -143,6 +209,10 @@ where
     fn was_restored(&self) -> bool {
         self.inner.was_restored()
     }
+
+    fn new_session(&self) -> Session {
+        self.inner.new_session()
+    }
 }
 
 cfg_if! {
@@ -169,20 +239,23 @@ cfg_if! {
 
         static ABSOLUTE_START: Lazy<Instant> = Lazy::new(|| Instant::now());
 
-        fn micros_between(start: Instant, end: Instant) -> u64 {
+        fn nanos_between(start: Instant, end: Instant) -> u64 {
             // the truncation here will return bullshit if the Instants are more than around
             // half a million yrs apart, so this is pretty safe
-            end.duration_since(start).as_micros() as u64
+            end.duration_since(start).as_nanos() as u64
         }
 
         fn measure<T>(operation: &'static str, func: impl FnOnce() -> T) -> (T, DataPoint) {
+            // this is so ABSOLUTE_START isn't after start
+            Lazy::force(&ABSOLUTE_START);
+
             let start = Instant::now();
             let res = func();
-            let duration = micros_between(start, Instant::now());
+            let duration = nanos_between(start, Instant::now());
 
             (res, DataPoint {
                 operation,
-                start: micros_between(*ABSOLUTE_START, start),
+                start: nanos_between(*ABSOLUTE_START, start),
                 duration,
             })
         }

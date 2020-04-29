@@ -287,6 +287,9 @@ impl StateBackend for RocksDb {
         opts.create_if_missing(true);
 
         let path: PathBuf = path.into();
+        if !path.exists() {
+            fs::create_dir_all(&path).ctx("Could not create directory for rocks state backend")?;
+        }
         let path = path
             .canonicalize()
             .map_err(|e| arcon_err_kind!("Cannot canonicalize path {:?}: {}", path, e))?;

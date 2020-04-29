@@ -70,6 +70,12 @@ pub trait StateBackend: Any + Send {
             None => Self::new(&state_path),
         }
     }
+
+    // NB: Self HAS TO outlive the session - Session should actually probably be a Session<'a>, but
+    // right now this is ignored to make prototyping faster
+    fn new_session(&self) -> Session {
+        Session(Box::new(NoOpSession))
+    }
 }
 
 // This is copied from std::any, because rust trait inheritance kinda sucks. Even std::any has
@@ -81,7 +87,7 @@ impl dyn StateBackend {
         t == concrete
     }
 
-    fn downcast_ref<SB: StateBackend>(&self) -> ArconResult<&SB> {
+    pub fn downcast_ref<SB: StateBackend>(&self) -> ArconResult<&SB> {
         if self.is::<SB>() {
             unsafe { Ok(&*(self as *const dyn StateBackend as *const SB)) }
         } else {
@@ -89,7 +95,7 @@ impl dyn StateBackend {
         }
     }
 
-    fn downcast_mut<SB: StateBackend>(&mut self) -> ArconResult<&mut SB> {
+    pub fn downcast_mut<SB: StateBackend>(&mut self) -> ArconResult<&mut SB> {
         if self.is::<SB>() {
             unsafe { Ok(&mut *(self as *mut dyn StateBackend as *mut SB)) }
         } else {
@@ -98,12 +104,18 @@ impl dyn StateBackend {
     }
 }
 
+pub struct Session(Box<dyn SessionImpl>);
+trait SessionImpl {}
+struct NoOpSession;
+impl SessionImpl for NoOpSession {}
+
 pub mod builders;
 pub mod serialization;
 #[macro_use]
 pub mod state_types;
 
 pub mod in_memory;
+pub use in_memory::InMemory;
 pub fn in_memory(
     cfg: &ArconConf,
     num_nodes: u64,
@@ -115,6 +127,8 @@ pub fn in_memory(
 
 #[cfg(feature = "arcon_rocksdb")]
 pub mod rocks;
+#[cfg(feature = "arcon_rocksdb")]
+pub use rocks::RocksDb;
 #[cfg(feature = "arcon_rocksdb")]
 pub fn rocks(
     cfg: &ArconConf,
@@ -128,6 +142,8 @@ pub fn rocks(
 #[cfg(feature = "arcon_sled")]
 pub mod sled;
 #[cfg(feature = "arcon_sled")]
+pub use self::sled::Sled;
+#[cfg(feature = "arcon_sled")]
 pub fn sled(
     cfg: &ArconConf,
     num_nodes: u64,
@@ -139,6 +155,8 @@ pub fn sled(
 
 #[cfg(all(feature = "arcon_faster", target_os = "linux"))]
 pub mod faster;
+#[cfg(all(feature = "arcon_faster", target_os = "linux"))]
+pub use faster::Faster;
 #[cfg(all(feature = "arcon_faster", target_os = "linux"))]
 pub fn faster(
     cfg: &ArconConf,
@@ -152,14 +170,42 @@ pub fn faster(
 #[cfg(feature = "metered_state_backend")]
 pub mod metered;
 #[cfg(feature = "metered_state_backend")]
-pub fn metered<SB: StateBackend>(
-    // this arg is for nice api & type inference only
-    _builder: impl FnOnce(&Path, &Path) -> ArconResult<SB>,
-) -> impl Fn(&ArconConf, u64, NodeID) -> ArconResult<Box<dyn StateBackend>> {
-    |cfg, num_nodes, node_id| {
-        let sb = metered::Metered::<SB>::restore_or_new(cfg, num_nodes, node_id)?;
-        Ok(Box::new(sb))
-    }
+pub use metered::Metered;
+#[cfg(feature = "metered_state_backend")]
+pub fn metered_in_memory(
+    cfg: &ArconConf,
+    num_nodes: u64,
+    node_id: NodeID,
+) -> ArconResult<Box<dyn StateBackend>> {
+    let sb = metered::Metered::<InMemory>::restore_or_new(cfg, num_nodes, node_id)?;
+    Ok(Box::new(sb))
+}
+#[cfg(all(feature = "metered_state_backend", feature = "arcon_rocksdb"))]
+pub fn metered_rocks(
+    cfg: &ArconConf,
+    num_nodes: u64,
+    node_id: NodeID,
+) -> ArconResult<Box<dyn StateBackend>> {
+    let sb = metered::Metered::<rocks::RocksDb>::restore_or_new(cfg, num_nodes, node_id)?;
+    Ok(Box::new(sb))
+}
+#[cfg(all(feature = "metered_state_backend", feature = "arcon_faster"))]
+pub fn metered_faster(
+    cfg: &ArconConf,
+    num_nodes: u64,
+    node_id: NodeID,
+) -> ArconResult<Box<dyn StateBackend>> {
+    let sb = metered::Metered::<faster::Faster>::restore_or_new(cfg, num_nodes, node_id)?;
+    Ok(Box::new(sb))
+}
+#[cfg(all(feature = "metered_state_backend", feature = "arcon_sled"))]
+pub fn metered_sled(
+    cfg: &ArconConf,
+    num_nodes: u64,
+    node_id: NodeID,
+) -> ArconResult<Box<dyn StateBackend>> {
+    let sb = metered::Metered::<sled::Sled>::restore_or_new(cfg, num_nodes, node_id)?;
+    Ok(Box::new(sb))
 }
 
 #[cfg(test)]

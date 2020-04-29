@@ -23,7 +23,7 @@ where
     ctx: ComponentContext<Self>,
     loopback_send: RequiredPort<LoopbackPort, Self>,
     loopback_receive: ProvidedPort<LoopbackPort, Self>,
-    source_ctx: SourceContext<OP>,
+    pub source_ctx: SourceContext<OP>,
     collection: Vec<OP::IN>,
     counter: usize,
 }
