@@ -539,10 +539,10 @@ where
         let arcon_msg = {
             if ser_id == reliable_id {
                 msg.try_deserialise::<RawArconMessage<OP::IN>, ReliableSerde<OP::IN>>()
-                    .map_err(|_| arcon_err_kind!("Failed to unpack reliable ArconMessage"))
+                    .map_err(|e| arcon_err_kind!("Failed to unpack reliable ArconMessage with err {:?}", e))
             } else if ser_id == unsafe_id {
                 msg.try_deserialise::<RawArconMessage<OP::IN>, UnsafeSerde<OP::IN>>()
-                    .map_err(|_| arcon_err_kind!("Failed to unpack unreliable ArconMessage"))
+                    .map_err(|e| arcon_err_kind!("Failed to unpack unreliable ArconMessage with err {:?}", e))
             } else {
                 panic!("Unexpected deserialiser")
             }

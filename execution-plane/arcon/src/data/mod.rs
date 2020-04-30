@@ -488,16 +488,3 @@ impl<'a> std::io::Write for BufMutWriter<'a> {
         Ok(())
     }
 }
-
-#[cfg(test)]
-pub mod test {
-    use super::*;
-
-    #[arcon(unsafe_ser_id = 104, reliable_ser_id = 105, version = 1)]
-    pub struct ArconDataTest {
-        #[prost(uint32, tag = "1")]
-        pub id: u32,
-        #[prost(uint32, repeated, tag = "2")]
-        pub items: Vec<u32>,
-    }
-}
