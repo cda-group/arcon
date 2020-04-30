@@ -10,7 +10,7 @@ pub mod throughput_sink;
 
 use arcon::{macros::*, prelude::*};
 
-#[arcon_keyed(id)]
+#[arcon(unsafe_ser_id = 200, reliable_ser_id = 201, version = 1, keys = id)]
 pub struct Item {
     #[prost(int32, tag = "1")]
     pub id: i32,
@@ -20,7 +20,7 @@ pub struct Item {
     pub scaling_factor: u64,
 }
 
-#[arcon]
+#[arcon(unsafe_ser_id = 203, reliable_ser_id = 205, version = 1)]
 pub struct EnrichedItem {
     #[prost(int32, tag = "1")]
     pub id: i32,

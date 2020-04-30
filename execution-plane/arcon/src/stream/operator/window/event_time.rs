@@ -253,7 +253,7 @@ mod tests {
     use kompact::prelude::Component;
     use std::{sync::Arc, thread, time, time::UNIX_EPOCH};
 
-    #[arcon_keyed(id)]
+    #[arcon(unsafe_ser_id = 12, reliable_ser_id = 13, version = 1, keys = id)]
     pub struct Item {
         #[prost(uint64, tag = "1")]
         id: u64,

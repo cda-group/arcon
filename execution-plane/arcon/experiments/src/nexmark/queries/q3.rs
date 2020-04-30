@@ -30,13 +30,13 @@ enum PersonOrAuctionInner {
     Auction(Auction),
 }
 
-#[arcon]
+#[arcon(unsafe_ser_id = 500, reliable_ser_id = 501, version = 1)]
 pub struct PersonOrAuction {
     #[prost(oneof = "PersonOrAuctionInner", tags = "1, 2")]
     inner: Option<PersonOrAuctionInner>,
 }
 
-#[arcon]
+#[arcon(unsafe_ser_id = 400, reliable_ser_id = 401, version = 1)]
 pub struct Q3Result {
     #[prost(string, tag = "1")]
     seller_name: String,
