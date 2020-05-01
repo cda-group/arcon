@@ -128,14 +128,16 @@ mod test {
     use super::*;
     use crate::prelude::*;
     use kompact::prelude::*;
-    use std::time::Duration;
     use once_cell::sync::Lazy;
+    use std::time::Duration;
 
     static ITEMS: Lazy<Vec<u32>> = Lazy::new(|| vec![1, 2, 3, 4, 5, 6, 7]);
     const PRICE: u32 = 10;
     const ID: u32 = 1;
 
     // The flight_serde pipeline will always send data of ArconDataTest
+    #[cfg_attr(feature = "arcon_serde", derive(serde::Serialize, serde::Deserialize))]
+    #[derive(Arcon, prost::Message, Clone, abomonation_derive::Abomonation)]
     #[arcon(unsafe_ser_id = 104, reliable_ser_id = 105, version = 1)]
     pub struct ArconDataTest {
         #[prost(uint32, tag = "1")]
@@ -148,6 +150,8 @@ mod test {
 
     // Down below are different structs the unit tests may attempt to deserialise into
 
+    #[cfg_attr(feature = "arcon_serde", derive(serde::Serialize, serde::Deserialize))]
+    #[derive(Arcon, prost::Message, Clone, abomonation_derive::Abomonation)]
     #[arcon(unsafe_ser_id = 104, reliable_ser_id = 105, version = 2)]
     pub struct UpdatedVer {
         #[prost(uint32, tag = "1")]
@@ -158,6 +162,8 @@ mod test {
         pub price: u32,
     }
 
+    #[cfg_attr(feature = "arcon_serde", derive(serde::Serialize, serde::Deserialize))]
+    #[derive(Arcon, prost::Message, Clone, abomonation_derive::Abomonation)]
     #[arcon(unsafe_ser_id = 204, reliable_ser_id = 205, version = 2)]
     pub struct UpdatedSerId {
         #[prost(uint32, tag = "1")]
@@ -168,6 +174,8 @@ mod test {
         pub price: u32,
     }
 
+    #[cfg_attr(feature = "arcon_serde", derive(serde::Serialize, serde::Deserialize))]
+    #[derive(Arcon, prost::Message, Clone, abomonation_derive::Abomonation)]
     #[arcon(unsafe_ser_id = 104, reliable_ser_id = 105, version = 1)]
     pub struct RemovedField {
         #[prost(uint32, tag = "1")]
@@ -176,6 +184,8 @@ mod test {
         pub items: Vec<u32>,
     }
 
+    #[cfg_attr(feature = "arcon_serde", derive(serde::Serialize, serde::Deserialize))]
+    #[derive(Arcon, prost::Message, Clone, abomonation_derive::Abomonation)]
     #[arcon(unsafe_ser_id = 104, reliable_ser_id = 105, version = 1)]
     pub struct AddedField {
         #[prost(uint32, tag = "1")]
@@ -188,6 +198,8 @@ mod test {
         pub bytes: Vec<u8>,
     }
 
+    #[cfg_attr(feature = "arcon_serde", derive(serde::Serialize, serde::Deserialize))]
+    #[derive(Arcon, prost::Message, Clone, abomonation_derive::Abomonation)]
     #[arcon(unsafe_ser_id = 104, reliable_ser_id = 105, version = 1)]
     pub struct RearrangedFieldOrder {
         #[prost(bytes, tag = "1")]

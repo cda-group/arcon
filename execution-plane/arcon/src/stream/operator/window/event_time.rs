@@ -248,18 +248,11 @@ mod tests {
     use super::*;
     use crate::{
         stream::channel::{strategy::forward::*, Channel},
+        tests::Item,
         timer,
     };
     use kompact::prelude::Component;
     use std::{sync::Arc, thread, time, time::UNIX_EPOCH};
-
-    #[arcon(unsafe_ser_id = 12, reliable_ser_id = 13, version = 1, keys = id)]
-    pub struct Item {
-        #[prost(uint64, tag = "1")]
-        id: u64,
-        #[prost(uint32, tag = "2")]
-        price: u32,
-    }
 
     // helper functions
     fn window_assigner_test_setup(

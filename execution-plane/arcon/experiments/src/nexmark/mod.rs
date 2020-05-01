@@ -9,8 +9,7 @@ pub mod queries;
 pub mod sink;
 pub mod source;
 
-use arcon::macros::*;
-use arcon::prelude::*;
+use arcon::{macros::*, prelude::*};
 use config::NEXMarkConfig;
 use rand::{rngs::SmallRng, seq::SliceRandom, Rng};
 use serde::{Deserialize, Serialize};
@@ -30,6 +29,14 @@ impl NEXMarkRNG for SmallRng {
     }
 }
 
+#[derive(
+    arcon::Arcon,
+    serde::Serialize,
+    serde::Deserialize,
+    prost::Message,
+    Clone,
+    abomonation_derive::Abomonation,
+)]
 #[arcon(unsafe_ser_id = 104, reliable_ser_id = 105, version = 1)]
 pub struct Person {
     #[prost(uint32, tag = "1")]
@@ -78,6 +85,14 @@ impl Person {
     }
 }
 
+#[derive(
+    arcon::Arcon,
+    serde::Serialize,
+    serde::Deserialize,
+    prost::Message,
+    Clone,
+    abomonation_derive::Abomonation,
+)]
 #[arcon(unsafe_ser_id = 106, reliable_ser_id = 107, version = 1)]
 pub struct Auction {
     #[prost(uint32, tag = "1")]
@@ -169,6 +184,14 @@ impl Auction {
     }
 }
 
+#[derive(
+    arcon::Arcon,
+    serde::Serialize,
+    serde::Deserialize,
+    prost::Message,
+    Clone,
+    abomonation_derive::Abomonation,
+)]
 #[arcon(unsafe_ser_id = 108, reliable_ser_id = 109, version = 1)]
 pub struct Bid {
     #[prost(uint32, tag = "1")]
@@ -203,6 +226,14 @@ impl Bid {
     }
 }
 
+#[derive(
+    arcon::Arcon,
+    serde::Serialize,
+    serde::Deserialize,
+    prost::Message,
+    Clone,
+    abomonation_derive::Abomonation,
+)]
 #[arcon(unsafe_ser_id = 600, reliable_ser_id = 601, version = 1)]
 pub struct NEXMarkEvent {
     #[prost(oneof = "Event", tags = "1, 2, 3")]

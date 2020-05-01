@@ -30,12 +30,18 @@ enum PersonOrAuctionInner {
     Auction(Auction),
 }
 
+#[derive(
+    arcon::Arcon, Serialize, Deserialize, prost::Message, Clone, abomonation_derive::Abomonation,
+)]
 #[arcon(unsafe_ser_id = 500, reliable_ser_id = 501, version = 1)]
 pub struct PersonOrAuction {
     #[prost(oneof = "PersonOrAuctionInner", tags = "1, 2")]
     inner: Option<PersonOrAuctionInner>,
 }
 
+#[derive(
+    arcon::Arcon, Serialize, Deserialize, prost::Message, Clone, abomonation_derive::Abomonation,
+)]
 #[arcon(unsafe_ser_id = 400, reliable_ser_id = 401, version = 1)]
 pub struct Q3Result {
     #[prost(string, tag = "1")]

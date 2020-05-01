@@ -9,8 +9,18 @@
 
 #![feature(unboxed_closures)]
 
+#[allow(unused_imports)]
 #[cfg_attr(test, macro_use)]
 extern crate arcon_macros;
+#[doc(hidden)]
+pub use abomonation;
+#[doc(hidden)]
+pub use abomonation_derive::*;
+#[doc(hidden)]
+pub use arcon_macros::*;
+#[doc(hidden)]
+pub use prost;
+
 #[macro_use]
 extern crate arcon_error as error;
 
@@ -63,7 +73,7 @@ pub mod test_utils {
 pub mod macros {
     pub use crate::data::ArconType;
     pub use abomonation_derive::*;
-    pub use arcon_macros::*;
+    //pub use arcon_macros::*;
 }
 
 /// Helper module that imports everything related to arcon into scope
@@ -127,21 +137,23 @@ pub mod prelude {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use crate::{data::VersionId, macros::*};
     use kompact::prelude::SerId;
     use std::collections::hash_map::DefaultHasher;
 
-    #[arcon(unsafe_ser_id = 104, reliable_ser_id = 105, version = 1, keys = id)]
+    #[cfg_attr(feature = "arcon_serde", derive(serde::Serialize, serde::Deserialize))]
+    #[derive(Arcon, prost::Message, Clone, abomonation_derive::Abomonation)]
+    #[arcon(unsafe_ser_id = 104, reliable_ser_id = 105, version = 1, keys = "id")]
     pub struct Item {
         #[prost(uint64, tag = "1")]
-        id: u64,
+        pub id: u64,
         #[prost(uint32, tag = "2")]
-        price: u32,
+        pub price: u32,
     }
 
     #[test]
-    fn key_by_macro_test() {
+    fn arcon_key_test() {
         let i1 = Item { id: 1, price: 20 };
         let i2 = Item { id: 2, price: 150 };
         let i3 = Item { id: 1, price: 50 };
