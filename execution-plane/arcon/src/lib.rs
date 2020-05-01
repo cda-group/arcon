@@ -9,17 +9,14 @@
 
 #![feature(unboxed_closures)]
 
-#[allow(unused_imports)]
 #[cfg_attr(test, macro_use)]
 extern crate arcon_macros;
 #[doc(hidden)]
-pub use abomonation;
-#[doc(hidden)]
-pub use abomonation_derive::*;
-#[doc(hidden)]
 pub use arcon_macros::*;
-#[doc(hidden)]
-pub use prost;
+
+// Imports below are exposed for #[derive(Arcon)]
+pub use crate::data::{ArconType, VersionId};
+pub use kompact::prelude::SerId;
 
 #[macro_use]
 extern crate arcon_error as error;
@@ -67,13 +64,6 @@ pub mod test_utils {
 
     pub static ALLOCATOR: Lazy<Arc<Mutex<ArconAllocator>>> =
         Lazy::new(|| Arc::new(Mutex::new(ArconAllocator::new(1073741824))));
-}
-
-/// Helper module to fetch all macros related to arcon
-pub mod macros {
-    pub use crate::data::ArconType;
-    pub use abomonation_derive::*;
-    //pub use arcon_macros::*;
 }
 
 /// Helper module that imports everything related to arcon into scope
@@ -138,8 +128,7 @@ pub mod prelude {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use crate::{data::VersionId, macros::*};
-    use kompact::prelude::SerId;
+    use super::*;
     use std::collections::hash_map::DefaultHasher;
 
     #[cfg_attr(feature = "arcon_serde", derive(serde::Serialize, serde::Deserialize))]

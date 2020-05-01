@@ -7,7 +7,6 @@ use crate::nexmark::{
     Auction, Event, NEXMarkEvent, Person,
 };
 use arcon::{
-    macros::*,
     prelude::*,
     stream::operator::{function::StatefulFlatMap, OperatorContext},
     timer,
@@ -22,7 +21,7 @@ use serde::{Deserialize, Serialize};
 //      AND open_auction.itemid = item.id
 //      AND item.categoryId = 10;
 
-#[derive(prost::Oneof, Serialize, Deserialize, Clone, Abomonation, Hash)]
+#[derive(prost::Oneof, Serialize, Deserialize, Clone, abomonation_derive::Abomonation, Hash)]
 enum PersonOrAuctionInner {
     #[prost(message, tag = "1")]
     Person(Person),

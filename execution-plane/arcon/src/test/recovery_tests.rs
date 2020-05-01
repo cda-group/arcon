@@ -1,7 +1,7 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::{macros::*, prelude::*, timer};
+use crate::{prelude::*, timer};
 use once_cell::sync::Lazy;
 use std::{
     any::TypeId,

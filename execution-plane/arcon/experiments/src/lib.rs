@@ -8,7 +8,7 @@ extern crate anyhow;
 pub mod nexmark;
 pub mod throughput_sink;
 
-use arcon::{macros::*, prelude::*};
+use arcon::prelude::*;
 
 #[derive(
     arcon::Arcon,
