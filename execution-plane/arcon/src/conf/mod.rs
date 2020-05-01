@@ -31,6 +31,9 @@ pub struct ArconConf {
     /// Max amount of bytes allowed to be allocated by the ArconAllocator
     #[serde(default = "allocator_capacity_default")]
     pub allocator_capacity: usize,
+    /// Size of Network Buffers
+    #[serde(default = "network_buffer_size_default")]
+    pub network_buffer_size: usize,
     /// Amount of threads for Kompact's threadpool
     #[serde(default = "kompact_threads_default")]
     pub kompact_threads: usize,
@@ -64,6 +67,7 @@ impl ArconConf {
             watermark_interval: watermark_interval_default(),
             node_metrics_interval: node_metrics_interval_default(),
             buffer_pool_size: buffer_pool_size_default(),
+            network_buffer_size: network_buffer_size_default(),
             buffer_pool_limit: buffer_pool_limit_default(),
             channel_batch_size: channel_batch_size_default(),
             allocator_capacity: allocator_capacity_default(),
@@ -119,6 +123,10 @@ fn channel_batch_size_default() -> usize {
     248
 }
 
+fn network_buffer_size_default() -> usize {
+    64000
+}
+
 fn allocator_capacity_default() -> usize {
     // 500 MB
     524288000
@@ -160,6 +168,7 @@ mod tests {
         assert_eq!(conf.node_metrics_interval, node_metrics_interval_default());
         assert_eq!(conf.channel_batch_size, channel_batch_size_default());
         assert_eq!(conf.buffer_pool_size, buffer_pool_size_default());
+        assert_eq!(conf.network_buffer_size, network_buffer_size_default());
         assert_eq!(conf.allocator_capacity, allocator_capacity_default());
         assert_eq!(conf.kompact_threads, kompact_threads_default());
         assert_eq!(conf.kompact_throughput, kompact_throughput_default());
