@@ -1,7 +1,8 @@
 [workspace]
 members = [
   "arcon",
-  "arcon/experiments"
+  "arcon/experiments",
+  "arcon/arcon_state"
 ]
 
 # TODO fix these later again

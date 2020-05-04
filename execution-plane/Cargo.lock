@@ -122,6 +122,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "arcon_state"
+version = "0.1.1"
+dependencies = [
+ "bytes",
+ "faster-rs",
+ "prost 0.6.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rocksdb",
+ "serde",
+ "sled",
+ "smallbox",
+ "snafu",
+]
+
+[[package]]
 name = "arr_macro"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2309,9 +2323,9 @@ checksum = "c7cb5678e1615754284ec264d9bb5b4c27d2018577fd90ac0ceb578591ed5ee4"
 
 [[package]]
 name = "snafu"
-version = "0.6.6"
+version = "0.6.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1ec0ae2ed980f26e1ad62e717feb01df90731df56887b5391a2c79f9f6805be"
+checksum = "a46f872f9a2ee1ad10a6d18003ab012a235c8f5bb90fa986202231a62e570575"
 dependencies = [
  "doc-comment",
  "snafu-derive",
@@ -2319,9 +2333,9 @@ dependencies = [
 
 [[package]]
 name = "snafu-derive"
-version = "0.6.6"
+version = "0.6.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ec32ba84a7a86aeb0bc32fd0c46d31b0285599f68ea72e87eff6127889d99e1"
+checksum = "d107ea16557fc819e8f9165ce4f5586b40449ba4a30a25814f71b442c7ddbe9e"
 dependencies = [
  "proc-macro2 1.0.10",
  "quote 1.0.3",
