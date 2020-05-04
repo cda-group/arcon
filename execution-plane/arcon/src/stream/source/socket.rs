@@ -190,6 +190,8 @@ mod tests {
         // Our example data struct for this test case.
         // add arcon_decoder to decode from String
         #[arcon_decoder(,)]
+        #[cfg_attr(feature = "arcon_serde", derive(serde::Serialize, serde::Deserialize))]
+        #[derive(Arcon, prost::Message, Clone, abomonation_derive::Abomonation)]
         #[arcon(unsafe_ser_id = 500, reliable_ser_id = 501, version = 1)]
         pub struct ExtractorStruct {
             #[prost(uint32, tag = "1")]

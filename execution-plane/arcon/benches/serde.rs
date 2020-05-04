@@ -3,7 +3,7 @@
 
 // Benchmarks for serialisation/deserialisation
 
-use arcon::macros::*;
+use abomonation_derive::*;
 use criterion::{black_box, criterion_group, criterion_main, BatchSize, Bencher, Criterion};
 use lz4_compression::prelude::{compress, decompress};
 use prost::Message;

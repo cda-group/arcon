@@ -11,83 +11,108 @@ extern crate quote;
 
 use proc_macro::TokenStream;
 use proc_macro2::{Ident, Span};
+use quote::ToTokens;
 use syn::{parse_macro_input, DeriveInput};
 
-const VERSION_ID: &str = "version";
-const UNSAFE_SER_ID: &str = "unsafe_ser_id";
-const RELIABLE_SER_ID: &str = "reliable_ser_id";
-const KEYS: &str = "keys";
-
-/// arcon is a proc macro for defining an ArconType struct
+/// Derive macro for defining an Arcon supported struct
 ///
-/// #[arcon(reliable_ser_id = 1, unsafe_ser_id = 2, version = 1)]
-/// or
-/// #[arcon(reliable_ser_id = 1, unsafe_ser_id = 2, version = 1, keys = id)]
-#[proc_macro_attribute]
-pub fn arcon(args: TokenStream, input: TokenStream) -> TokenStream {
-    let item = parse_macro_input!(input as DeriveInput);
-    let name = &item.ident;
-    let arcon_args: Vec<(String, String)> = args
-        .to_string()
-        .trim()
-        .split(',')
-        .map(|s| {
-            let a: Vec<String> = s
-                .trim()
-                .to_string()
-                .split(" ")
-                .map(|s| s.to_string())
-                .collect();
-            assert_eq!(a.len(), 3, "Expecting the following arg setup: unsafe_ser_id = 1, reliable_ser_id = 2, version = 1");
-            assert_eq!(a[1], "=");
-            (a[0].to_string(), a[2].to_string())
-        })
-        .filter(|(arg_name, _)| {
-            arg_name == VERSION_ID
-                || arg_name == UNSAFE_SER_ID
-                || arg_name == RELIABLE_SER_ID
-                || arg_name == KEYS
-        })
-        .collect();
+/// ```rust,ignore
+/// #[derive(Arcon)]
+/// #[arcon(unsafe_ser_id = 104, reliable_ser_id = 105, version = 1)]
+/// struct ArconStruct {}
+/// ```
+#[proc_macro_derive(Arcon, attributes(arcon))]
+pub fn arcon(input: TokenStream) -> TokenStream {
+    let input: DeriveInput = syn::parse(input).unwrap();
+    let name = &input.ident;
 
-    assert!(
-        arcon_args.len() >= 3 && arcon_args.len() <= 4,
-        "arcon requires at least 3 args: unsafe_ser_id, reliable_ser_id, version"
+    let meta = input
+        .attrs
+        .iter()
+        .find_map(|attr| match attr.parse_meta() {
+            Ok(m) => {
+                if m.path().is_ident("arcon") {
+                    Some(m)
+                } else {
+                    None
+                }
+            }
+            Err(e) => panic!("unable to parse attribute: {}", e),
+        })
+        .expect("no attribute 'arcon' found");
+
+    let meta_list = match meta {
+        syn::Meta::List(inner) => inner,
+        _ => panic!("attribute 'arcon' has incorrect type"),
+    };
+
+    let mut unsafe_ser_id = None;
+    let mut reliable_ser_id = None;
+    let mut version = None;
+    let mut keys = None;
+
+    for item in meta_list.nested {
+        let pair = match item {
+            syn::NestedMeta::Meta(syn::Meta::NameValue(ref pair)) => pair,
+            _ => panic!(
+                "unsupported attribute argument {:?}",
+                item.to_token_stream()
+            ),
+        };
+
+        if pair.path.is_ident("unsafe_ser_id") {
+            if let syn::Lit::Int(ref s) = pair.lit {
+                unsafe_ser_id = Some(s.base10_parse::<u64>().unwrap());
+            } else {
+                panic!("unsafe_ser_id must be an Int literal");
+            }
+        } else if pair.path.is_ident("reliable_ser_id") {
+            if let syn::Lit::Int(ref s) = pair.lit {
+                reliable_ser_id = Some(s.base10_parse::<u64>().unwrap());
+            } else {
+                panic!("reliable_ser_id must be an Int literal");
+            }
+        } else if pair.path.is_ident("version") {
+            if let syn::Lit::Int(ref s) = pair.lit {
+                version = Some(s.base10_parse::<u32>().unwrap());
+            } else {
+                panic!("version must be an Int literal");
+            }
+        } else if pair.path.is_ident("keys") {
+            if let syn::Lit::Str(ref s) = pair.lit {
+                keys = Some(s.value())
+            } else {
+                panic!("keys must be string literal");
+            }
+        } else {
+            panic!(
+                "unsupported attribute key '{}' found",
+                pair.path.to_token_stream()
+            )
+        }
+    }
+
+    if unsafe_ser_id.is_none() || reliable_ser_id.is_none() || version.is_none() {
+        panic!("arcon attr expects unsafe_ser_id, reliable_ser_id, version args");
+    }
+
+    let unsafe_ser_id = unsafe_ser_id.unwrap();
+    let reliable_ser_id = reliable_ser_id.unwrap();
+    let version = version.unwrap();
+
+    // Id check
+    assert_ne!(
+        unsafe_ser_id, reliable_ser_id,
+        "UNSAFE_SER_ID and RELIABLE_SER_ID must have different values"
     );
 
-    let raw_ids: Vec<u64> = arcon_args
-        .iter()
-        .filter(|(arg_name, _)| arg_name != KEYS && arg_name != VERSION_ID)
-        .map(|(_, arg_value)| arg_value.parse::<u64>().unwrap())
-        .collect();
+    let mut ids: Vec<proc_macro2::TokenStream> = Vec::with_capacity(3);
+    ids.push(quote! { const RELIABLE_SER_ID: SerId  = #reliable_ser_id; });
+    ids.push(quote! { const UNSAFE_SER_ID: SerId = #unsafe_ser_id; });
+    ids.push(quote! { const VERSION_ID: VersionId = #version; });
 
-    assert_eq!(raw_ids.len(), 2);
-    assert_ne!(raw_ids[0], raw_ids[1], "UNSAFE_SER_ID and RELIABLE_SER_ID must have different values");
-
-    let ids: Vec<proc_macro2::TokenStream> = arcon_args
-        .iter()
-        .filter(|(arg_name, _)| arg_name != KEYS)
-        .map(|(arg_name, arg_value)| {
-            if arg_name == RELIABLE_SER_ID {
-                let value = arg_value.parse::<u64>().unwrap();
-                quote! { const RELIABLE_SER_ID: SerId  = #value; }
-            } else if arg_name == UNSAFE_SER_ID {
-                let value = arg_value.parse::<u64>().unwrap();
-                quote! { const UNSAFE_SER_ID: SerId = #value; }
-            } else {
-                let value = arg_value.parse::<u32>().unwrap();
-                quote! { const VERSION_ID: VersionId = #value; }
-            }
-        })
-        .collect();
-
-    let keys: Option<String> = arcon_args
-        .iter()
-        .find(|(arg_name, _)| arg_name == KEYS)
-        .map(|(_, value)| value.to_owned());
-
-    if let syn::Data::Struct(ref s) = item.data {
-        let generics = &item.generics;
+    if let syn::Data::Struct(ref s) = input.data {
+        let generics = &input.generics;
         let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
         // If keys are specified "keys = ..", we hash on just those fields.
@@ -118,18 +143,8 @@ pub fn arcon(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         };
 
-        #[allow(unused)]
-        let maybe_serde = quote! {};
-        #[cfg(feature = "arcon_serde")]
-        let maybe_serde = quote! {
-            #[derive(::serde::Serialize, ::serde::Deserialize)]
-        };
-
         let output: proc_macro2::TokenStream = {
             quote! {
-                #maybe_serde
-                #[derive(Clone, ::abomonation_derive::Abomonation, ::prost::Message)]
-                #item
                 impl #impl_generics ArconType for #name #ty_generics #where_clause {
                     #(#ids)*
                 }
@@ -143,7 +158,7 @@ pub fn arcon(args: TokenStream, input: TokenStream) -> TokenStream {
 
         proc_macro::TokenStream::from(output)
     } else {
-        panic!("#[arcon] is only defined for structs!");
+        panic!("#[derive(Arcon)] can only be derived for Structs");
     }
 }
 

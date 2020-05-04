@@ -1,7 +1,7 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::{macros::*, prelude::*, timer};
+use crate::{prelude::*, timer};
 use once_cell::sync::Lazy;
 use std::{
     any::TypeId,
@@ -14,6 +14,8 @@ use std::{
 };
 use tempfile::NamedTempFile;
 
+#[cfg_attr(feature = "arcon_serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Arcon, prost::Message, Clone, abomonation_derive::Abomonation)]
 #[arcon(unsafe_ser_id = 12, reliable_ser_id = 13, version = 1)]
 pub struct NormaliseElements {
     #[prost(int64, repeated, tag = "1")]

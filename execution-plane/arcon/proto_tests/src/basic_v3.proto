@@ -1,0 +1,24 @@
+// Copyright (c) 2020, KTH Royal Institute of Technology.
+// SPDX-License-Identifier: AGPL-3.0-only
+
+syntax = "proto3";
+
+package arcon_basic_v3;
+
+message SearchRequest {
+  string query = 1;
+  int32 page_number = 2;
+  int32 result_per_page = 3;
+}
+
+message SearchBatch {
+  repeated SearchRequest requests = 1;
+  string id = 2;
+}
+
+message NestedMessage {
+  repeated SearchBatch batches = 1;
+  bytes raw_bytes = 2;
+}
+
+// TODO: add more with oneof etc..

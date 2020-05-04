@@ -6,8 +6,9 @@ pub mod flight_serde;
 /// Known Serialisation IDs for Arcon Types
 mod ser_id;
 
-use crate::{buffer::event::BufferReader, macros::*};
+use crate::buffer::event::BufferReader;
 use abomonation::Abomonation;
+use abomonation_derive::*;
 use kompact::prelude::*;
 use prost::{Message as PMessage, Oneof as POneof};
 #[cfg(feature = "arcon_serde")]
