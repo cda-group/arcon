@@ -12,8 +12,7 @@ const NUM_BATCHES: usize = 1000;
 
 fn arcon_flight_serde(c: &mut Criterion) {
     let group = c.benchmark_group("arcon_flight_serde");
-    // Something is broken in the serialisation there,
-    // but if we are anyway changeing it, no point in fixing this now.
+    // NOTE: Leave this commented until issue #103 is fixed.
     //group.bench_function("Arcon Reliable Flight", reliable_serde);
     //group.bench_function("Arcon Unsafe Flight", unsafe_serde);
     group.finish()

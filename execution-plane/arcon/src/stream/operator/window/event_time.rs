@@ -249,18 +249,11 @@ mod tests {
     use crate::{
         state_backend::in_memory::InMemory,
         stream::channel::{strategy::forward::*, Channel},
+        tests::Item,
         timer,
     };
     use kompact::prelude::Component;
     use std::{sync::Arc, thread, time, time::UNIX_EPOCH};
-
-    #[arcon_keyed(id)]
-    pub struct Item {
-        #[prost(uint64, tag = "1")]
-        id: u64,
-        #[prost(uint32, tag = "2")]
-        price: u32,
-    }
 
     // helper functions
     fn window_assigner_test_setup(

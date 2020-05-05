@@ -7,20 +7,24 @@
 #![allow(bare_trait_objects)]
 extern crate arcon;
 
-use arcon::{macros::*, prelude::*, state_backend::in_memory::InMemory, timer};
+use arcon::{prelude::*, state_backend::in_memory::InMemory, timer};
 use std::{
     fs::File,
     io::{BufRead, BufReader},
 };
 use tempfile::NamedTempFile;
 
-#[arcon]
+#[cfg_attr(feature = "arcon_serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(arcon::Arcon, prost::Message, Clone, abomonation_derive::Abomonation)]
+#[arcon(unsafe_ser_id = 100, reliable_ser_id = 101, version = 1)]
 pub struct NormaliseElements {
     #[prost(int64, repeated, tag = "1")]
     pub data: Vec<i64>,
 }
 
-#[arcon]
+#[cfg_attr(feature = "arcon_serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(arcon::Arcon, prost::Message, Clone, abomonation_derive::Abomonation)]
+#[arcon(unsafe_ser_id = 98, reliable_ser_id = 99, version = 1)]
 pub struct SourceData {
     #[prost(int64, tag = "1")]
     pub data: i64,

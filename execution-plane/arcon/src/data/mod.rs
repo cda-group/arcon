@@ -3,9 +3,12 @@
 
 /// Serialisers and Deserialiser for in-flight data
 pub mod flight_serde;
+/// Known Serialisation IDs for Arcon Types
+mod ser_id;
 
-use crate::{buffer::event::BufferReader, error::ArconResult, macros::*};
+use crate::buffer::event::BufferReader;
 use abomonation::Abomonation;
+use abomonation_derive::*;
 use kompact::prelude::*;
 use prost::{Message as PMessage, Oneof as POneof};
 #[cfg(feature = "arcon_serde")]
@@ -36,26 +39,20 @@ cfg_if::cfg_if! {
     }
 }
 
+/// A type alias for an ArconType version id
+pub type VersionId = u32;
+
 /// Type that can be passed through the Arcon runtime
 pub trait ArconType: ArconTypeBounds
 where
     Self: std::marker::Sized,
 {
-    /// Encodes `ArconType` into serialised Protobuf data.
-    fn encode_storage(&self) -> ArconResult<Vec<u8>> {
-        let mut buf = Vec::with_capacity(self.encoded_len());
-        self.encode(&mut buf).map_err(|e| {
-            arcon_err_kind!("Failed to encode ArconType with err {}", e.to_string())
-        })?;
-        Ok(buf)
-    }
-    /// Decodes bytes from encoded Protobuf data to `ArconType`
-    fn decode_storage(bytes: &[u8]) -> ArconResult<Self> {
-        let res: Self = Self::decode(bytes).map_err(|e| {
-            arcon_err_kind!("Failed to decode ArconType with err {}", e.to_string())
-        })?;
-        Ok(res)
-    }
+    /// Serialisation ID for Arcon's Unsafe In-flight serde
+    const UNSAFE_SER_ID: SerId;
+    /// Serialisation ID for Arcon's Reliable In-flight serde
+    const RELIABLE_SER_ID: SerId;
+    /// Current version of this ArconType
+    const VERSION_ID: VersionId;
 }
 
 /// An Enum containing all possible stream events that may occur in an execution
@@ -271,14 +268,46 @@ impl Into<u32> for NodeID {
 }
 
 // Implement ArconType for all data types that are supported
-impl ArconType for u32 {}
-impl ArconType for u64 {}
-impl ArconType for i32 {}
-impl ArconType for i64 {}
-impl ArconType for ArconF32 {}
-impl ArconType for ArconF64 {}
-impl ArconType for bool {}
-impl ArconType for String {}
+impl ArconType for u32 {
+    const UNSAFE_SER_ID: SerId = ser_id::UNSAFE_U32_ID;
+    const RELIABLE_SER_ID: SerId = ser_id::RELIABLE_U32_ID;
+    const VERSION_ID: VersionId = 1;
+}
+impl ArconType for u64 {
+    const UNSAFE_SER_ID: SerId = ser_id::UNSAFE_U64_ID;
+    const RELIABLE_SER_ID: SerId = ser_id::RELIABLE_U64_ID;
+    const VERSION_ID: VersionId = 1;
+}
+impl ArconType for i32 {
+    const UNSAFE_SER_ID: SerId = ser_id::UNSAFE_I32_ID;
+    const RELIABLE_SER_ID: SerId = ser_id::RELIABLE_I32_ID;
+    const VERSION_ID: VersionId = 1;
+}
+impl ArconType for i64 {
+    const UNSAFE_SER_ID: SerId = ser_id::UNSAFE_I64_ID;
+    const RELIABLE_SER_ID: SerId = ser_id::RELIABLE_I64_ID;
+    const VERSION_ID: VersionId = 1;
+}
+impl ArconType for ArconF32 {
+    const UNSAFE_SER_ID: SerId = ser_id::UNSAFE_F32_ID;
+    const RELIABLE_SER_ID: SerId = ser_id::RELIABLE_F32_ID;
+    const VERSION_ID: VersionId = 1;
+}
+impl ArconType for ArconF64 {
+    const UNSAFE_SER_ID: SerId = ser_id::UNSAFE_F64_ID;
+    const RELIABLE_SER_ID: SerId = ser_id::RELIABLE_F64_ID;
+    const VERSION_ID: VersionId = 1;
+}
+impl ArconType for bool {
+    const UNSAFE_SER_ID: SerId = ser_id::UNSAFE_BOOLEAN_ID;
+    const RELIABLE_SER_ID: SerId = ser_id::RELIABLE_BOOLEAN_ID;
+    const VERSION_ID: VersionId = 1;
+}
+impl ArconType for String {
+    const UNSAFE_SER_ID: SerId = ser_id::UNSAFE_STRING_ID;
+    const RELIABLE_SER_ID: SerId = ser_id::RELIABLE_STRING_ID;
+    const VERSION_ID: VersionId = 1;
+}
 
 /// Float wrapper for f32 in order to impl Hash [std::hash::Hash]
 ///
@@ -389,7 +418,11 @@ pub enum ArconNever {}
 impl ArconNever {
     pub const IS_UNREACHABLE: &'static str = "The Never type cannot be instantiated!";
 }
-impl ArconType for ArconNever {}
+impl ArconType for ArconNever {
+    const UNSAFE_SER_ID: SerId = ser_id::NEVER_ID;
+    const RELIABLE_SER_ID: SerId = ser_id::NEVER_ID;
+    const VERSION_ID: VersionId = 1;
+}
 impl fmt::Debug for ArconNever {
     fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
         unreachable!(ArconNever::IS_UNREACHABLE);
@@ -454,30 +487,5 @@ impl<'a> std::io::Write for BufMutWriter<'a> {
 
     fn flush(&mut self) -> std::io::Result<()> {
         Ok(())
-    }
-}
-
-#[cfg(test)]
-pub mod test {
-    use super::*;
-
-    #[arcon]
-    pub struct ArconDataTest {
-        #[prost(uint32, tag = "1")]
-        pub id: u32,
-        #[prost(uint32, repeated, tag = "2")]
-        pub items: Vec<u32>,
-    }
-
-    #[test]
-    fn arcon_type_serde_test() {
-        let items = vec![1, 2, 3, 4, 5, 6, 7];
-        let data = ArconDataTest {
-            id: 1,
-            items: items.clone(),
-        };
-        let mut bytes = data.encode_storage().unwrap();
-        let decoded = ArconDataTest::decode_storage(&mut bytes).unwrap();
-        assert_eq!(decoded.items, items);
     }
 }

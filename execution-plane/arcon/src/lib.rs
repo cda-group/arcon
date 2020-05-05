@@ -11,6 +11,13 @@
 
 #[cfg_attr(test, macro_use)]
 extern crate arcon_macros;
+#[doc(hidden)]
+pub use arcon_macros::*;
+
+// Imports below are exposed for #[derive(Arcon)]
+pub use crate::data::{ArconType, VersionId};
+pub use kompact::prelude::SerId;
+
 #[macro_use]
 extern crate arcon_error as error;
 
@@ -59,13 +66,6 @@ pub mod test_utils {
         Lazy::new(|| Arc::new(Mutex::new(ArconAllocator::new(1073741824))));
 }
 
-/// Helper module to fetch all macros related to arcon
-pub mod macros {
-    pub use crate::data::ArconType;
-    pub use abomonation_derive::*;
-    pub use arcon_macros::*;
-}
-
 /// Helper module that imports everything related to arcon into scope
 pub mod prelude {
     #[cfg(feature = "socket")]
@@ -77,6 +77,7 @@ pub mod prelude {
         allocator::{AllocResult, ArconAllocator},
         buffer::event::{BufferPool, BufferReader, BufferWriter},
         conf::ArconConf,
+        data::VersionId,
         pipeline::ArconPipeline,
         stream::{
             channel::{
@@ -97,6 +98,7 @@ pub mod prelude {
         },
         timer,
     };
+    pub use kompact::prelude::SerId;
 
     #[cfg(feature = "kafka")]
     pub use crate::stream::{operator::sink::kafka::KafkaSink, source::kafka::KafkaSource};
@@ -120,20 +122,22 @@ pub mod prelude {
 }
 
 #[cfg(test)]
-mod tests {
-    use crate::macros::*;
+pub(crate) mod tests {
+    use super::*;
     use std::collections::hash_map::DefaultHasher;
 
-    #[arcon_keyed(id)]
+    #[cfg_attr(feature = "arcon_serde", derive(serde::Serialize, serde::Deserialize))]
+    #[derive(Arcon, prost::Message, Clone, abomonation_derive::Abomonation)]
+    #[arcon(unsafe_ser_id = 104, reliable_ser_id = 105, version = 1, keys = "id")]
     pub struct Item {
         #[prost(uint64, tag = "1")]
-        id: u64,
+        pub id: u64,
         #[prost(uint32, tag = "2")]
-        price: u32,
+        pub price: u32,
     }
 
     #[test]
-    fn key_by_macro_test() {
+    fn arcon_key_test() {
         let i1 = Item { id: 1, price: 20 };
         let i2 = Item { id: 2, price: 150 };
         let i3 = Item { id: 1, price: 50 };
