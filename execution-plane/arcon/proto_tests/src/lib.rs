@@ -6,6 +6,5 @@
 //! NOTE: Only Protobuf version 3 is being tested at the moment.
 
 pub mod basic_v3 {
-    use arcon::*;
     include!(concat!(env!("OUT_DIR"), "/arcon_basic_v3.rs"));
 }

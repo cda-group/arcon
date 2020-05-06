@@ -9,17 +9,23 @@
 
 #![feature(unboxed_closures)]
 
+// Enable use of arcon_macros within this crate
+extern crate self as arcon;
 #[cfg_attr(test, macro_use)]
 extern crate arcon_macros;
 #[doc(hidden)]
 pub use arcon_macros::*;
 
+
 // Imports below are exposed for #[derive(Arcon)]
 pub use crate::data::{ArconType, VersionId};
 pub use kompact::prelude::SerId;
+pub use fxhash::FxHasher;
+pub use twox_hash::XxHash64;
 
 #[macro_use]
 extern crate arcon_error as error;
+
 
 // Public Interface
 

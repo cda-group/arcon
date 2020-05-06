@@ -9,7 +9,6 @@ pub mod queries;
 pub mod sink;
 pub mod source;
 
-use arcon::prelude::*;
 use config::NEXMarkConfig;
 use rand::{rngs::SmallRng, seq::SliceRandom, Rng};
 use serde::{Deserialize, Serialize};
