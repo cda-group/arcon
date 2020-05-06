@@ -291,7 +291,7 @@ impl NEXMarkEvent {
     }
 }
 
-#[derive(prost::Oneof, Serialize, Deserialize, Clone, abomonation_derive::Abomonation, Hash)]
+#[derive(prost::Oneof, Serialize, Deserialize, Clone, abomonation_derive::Abomonation)]
 pub enum Event {
     #[prost(message, tag = "1")]
     Person(Person),

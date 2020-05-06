@@ -26,10 +26,8 @@ pub fn arcon(input: TokenStream) -> TokenStream {
     let input: DeriveInput = syn::parse(input).unwrap();
     let name = &input.ident;
 
-    let meta = input
-        .attrs
-        .iter()
-        .find_map(|attr| match attr.parse_meta() {
+    let (unsafe_ser_id, reliable_ser_id, version, keys) = {
+        let arcon_attr = input.attrs.iter().find_map(|attr| match attr.parse_meta() {
             Ok(m) => {
                 if m.path().is_ident("arcon") {
                     Some(m)
@@ -38,14 +36,146 @@ pub fn arcon(input: TokenStream) -> TokenStream {
                 }
             }
             Err(e) => panic!("unable to parse attribute: {}", e),
-        })
-        .expect("no attribute 'arcon' found");
+        });
 
-    let meta_list = match meta {
-        syn::Meta::List(inner) => inner,
-        _ => panic!("attribute 'arcon' has incorrect type"),
+        if let Some(meta) = arcon_attr {
+            // If there exists a #[arcon(..)], then handle the meta list
+            let meta_list = match meta {
+                syn::Meta::List(inner) => inner,
+                _ => panic!("attribute 'arcon' has incorrect type"),
+            };
+
+            arcon_attr_meta(meta_list)
+        } else {
+            // If no arcon attr is defined, then attempt to parse attrs from doc comments
+            let mut doc_attrs = Vec::new();
+            for i in input.attrs.iter() {
+                let attr = i.parse_meta().expect("failed to parse meta");
+                if attr.path().is_ident("doc") {
+                    doc_attrs.push(attr.clone());
+                }
+            }
+            arcon_doc_attr(doc_attrs)
+        }
     };
 
+    if unsafe_ser_id.is_none() {
+        panic!("missing unsafe_ser_id attr");
+    }
+
+    if reliable_ser_id.is_none() {
+        panic!("missing reliable_ser_id attr");
+    }
+
+    if version.is_none() {
+        panic!("missing version attr");
+    }
+
+    let unsafe_ser_id = unsafe_ser_id.unwrap();
+    let reliable_ser_id = reliable_ser_id.unwrap();
+    let version = version.unwrap();
+
+    // Id check
+    assert_ne!(
+        unsafe_ser_id, reliable_ser_id,
+        "UNSAFE_SER_ID and RELIABLE_SER_ID must have different values"
+    );
+
+    let mut ids: Vec<proc_macro2::TokenStream> = Vec::with_capacity(3);
+    ids.push(quote! { const RELIABLE_SER_ID: SerId  = #reliable_ser_id; });
+    ids.push(quote! { const UNSAFE_SER_ID: SerId = #unsafe_ser_id; });
+    ids.push(quote! { const VERSION_ID: VersionId = #version; });
+
+    let generics = &input.generics;
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+
+    let mut key_quote = {
+        if let Some(keys) = keys {
+            let keys_vec = keys.trim().split(',').map(|s| s.to_string()).collect();
+            Some(hash_fields(keys_vec))
+        } else {
+            None
+        }
+    };
+
+    if let syn::Data::Struct(ref s) = input.data {
+        // If no keys attr was given, use all valid fields of the struct instead..
+        if key_quote.is_none() {
+            let mut fields = Vec::new();
+            for field in s.fields.iter() {
+                match field.ident {
+                    Some(ref ident) => {
+                        let mut ignore = false;
+                        // NOTE: ignore attempting to hash on Vec and Option values
+                        // 
+                        // Generated Option's may not have Hash implemented
+                        if let syn::Type::Path(p) = &field.ty {
+                            for segment in &p.path.segments {
+                                let ref ident = segment.ident;
+                                let cleaned = ident.to_string().to_lowercase();
+                                if cleaned == "option" || cleaned == "vec" {
+                                    ignore = true;
+                                }
+                            }
+                        }
+
+                        if !ignore {
+                            fields.push(ident.to_string());
+                        }
+                    }
+                    None => panic!("Struct missing identiy"),
+                }
+            }
+            key_quote = Some(hash_fields(fields));
+        }
+    } else if let syn::Data::Enum(..) = input.data {
+        if key_quote.is_some() {
+            panic!("Hashing keys only work for structs");
+        }
+        key_quote = Some(quote! { 0 }); // make get_key return 0
+    } else {
+        panic!("#[derive(Arcon)] only works for structs/enums");
+    }
+
+    let output: proc_macro2::TokenStream = {
+        quote! {
+            impl #impl_generics ArconType for #name #ty_generics #where_clause {
+                #(#ids)*
+
+                fn get_key(&self) -> u64 {
+                    #key_quote
+                }
+            }
+        }
+    };
+
+    proc_macro::TokenStream::from(output)
+}
+
+/// Return the body of a function that hashes on a number of fields
+///
+/// The output of the function is a key in the form of a [u64].
+fn hash_fields(keys: Vec<String>) -> proc_macro2::TokenStream {
+    let keys: Vec<proc_macro2::TokenStream> = keys
+        .into_iter()
+        .map(|k| {
+            let struct_field = Ident::new(&k.trim(), Span::call_site());
+            quote! { self.#struct_field.hash(&mut state); }
+        })
+        .collect();
+
+    quote! {
+        use ::std::hash::{Hash, Hasher};
+        let mut state = ::std::collections::hash_map::DefaultHasher::new();
+        #(#keys)*
+        state.finish()
+    }
+}
+
+/// Collect arcon attrs #[arcon(..)] meta list
+fn arcon_attr_meta(
+    meta_list: syn::MetaList,
+) -> (Option<u64>, Option<u64>, Option<u32>, Option<String>) {
     let mut unsafe_ser_id = None;
     let mut reliable_ser_id = None;
     let mut version = None;
@@ -91,75 +221,53 @@ pub fn arcon(input: TokenStream) -> TokenStream {
             )
         }
     }
+    (unsafe_ser_id, reliable_ser_id, version, keys)
+}
 
-    if unsafe_ser_id.is_none() || reliable_ser_id.is_none() || version.is_none() {
-        panic!("arcon attr expects unsafe_ser_id, reliable_ser_id, version args");
-    }
+/// Collect arcon attrs from doc comments
+fn arcon_doc_attr(
+    name_values: Vec<syn::Meta>,
+) -> (Option<u64>, Option<u64>, Option<u32>, Option<String>) {
+    let mut unsafe_ser_id = None;
+    let mut reliable_ser_id = None;
+    let mut version = None;
+    let mut keys = None;
 
-    let unsafe_ser_id = unsafe_ser_id.unwrap();
-    let reliable_ser_id = reliable_ser_id.unwrap();
-    let version = version.unwrap();
-
-    // Id check
-    assert_ne!(
-        unsafe_ser_id, reliable_ser_id,
-        "UNSAFE_SER_ID and RELIABLE_SER_ID must have different values"
-    );
-
-    let mut ids: Vec<proc_macro2::TokenStream> = Vec::with_capacity(3);
-    ids.push(quote! { const RELIABLE_SER_ID: SerId  = #reliable_ser_id; });
-    ids.push(quote! { const UNSAFE_SER_ID: SerId = #unsafe_ser_id; });
-    ids.push(quote! { const VERSION_ID: VersionId = #version; });
-
-    if let syn::Data::Struct(ref s) = input.data {
-        let generics = &input.generics;
-        let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
-
-        // If keys are specified "keys = ..", we hash on just those fields.
-        // Otherwise, the struct will be hashed using all fields..
-        let field_hashes = {
-            if let Some(keys) = keys {
-                let keys: Vec<proc_macro2::TokenStream> = keys
-                    .trim()
-                    .split(',')
-                    .map(|k| {
-                        let struct_field = Ident::new(&k.trim(), Span::call_site());
-                        quote! { self.#struct_field.hash(state); }
-                    })
-                    .collect();
-                keys
-            } else {
-                let mut field_hashes = Vec::new();
-                for field in s.fields.iter() {
-                    match field.ident {
-                        Some(ref ident) => {
-                            let field_hash = quote! { self.#ident.hash(state); };
-                            field_hashes.push(field_hash);
-                        }
-                        None => panic!("Struct missing identiy"),
-                    }
-                }
-                field_hashes
-            }
+    for attr in name_values {
+        let lit = match attr {
+            syn::Meta::NameValue(v) => v.lit,
+            _ => panic!("expected NameValue"),
         };
 
-        let output: proc_macro2::TokenStream = {
-            quote! {
-                impl #impl_generics ArconType for #name #ty_generics #where_clause {
-                    #(#ids)*
-                }
-                impl ::std::hash::Hash for #name {
-                    fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
-                        #(#field_hashes)*
+        if let syn::Lit::Str(s) = lit {
+            let value = s.value();
+            let attr_str = value.trim();
+            let str_parts: Vec<String> = attr_str
+                .clone()
+                .trim()
+                .to_string()
+                .split(" ")
+                .map(|s| s.to_string())
+                .collect();
+
+            if str_parts.len() == 3 {
+                if str_parts[1] == "=" {
+                    if str_parts[0] == "unsafe_ser_id" {
+                        unsafe_ser_id = Some(str_parts[2].parse::<u64>().unwrap());
+                    } else if str_parts[0] == "reliable_ser_id" {
+                        reliable_ser_id = Some(str_parts[2].parse::<u64>().unwrap());
+                    } else if str_parts[0] == "version" {
+                        version = Some(str_parts[2].parse::<u32>().unwrap());
+                    } else if str_parts[0] == "keys" {
+                        keys = Some(str_parts[2].to_string())
                     }
                 }
             }
-        };
-
-        proc_macro::TokenStream::from(output)
-    } else {
-        panic!("#[derive(Arcon)] can only be derived for Structs");
+        } else {
+            panic!("unsafe_ser_id must be an Str literal");
+        }
     }
+    (unsafe_ser_id, reliable_ser_id, version, keys)
 }
 
 /// Implements [std::str::FromStr] for a struct using a delimiter

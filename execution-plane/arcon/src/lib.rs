@@ -129,7 +129,6 @@ pub mod prelude {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use std::collections::hash_map::DefaultHasher;
 
     #[cfg_attr(feature = "arcon_serde", derive(serde::Serialize, serde::Deserialize))]
     #[derive(Arcon, prost::Message, Clone, abomonation_derive::Abomonation)]
@@ -139,22 +138,5 @@ pub(crate) mod tests {
         pub id: u64,
         #[prost(uint32, tag = "2")]
         pub price: u32,
-    }
-
-    #[test]
-    fn arcon_key_test() {
-        let i1 = Item { id: 1, price: 20 };
-        let i2 = Item { id: 2, price: 150 };
-        let i3 = Item { id: 1, price: 50 };
-
-        assert_eq!(calc_hash(&i1), calc_hash(&i3));
-        assert_ne!(calc_hash(&i1), calc_hash(&i2));
-    }
-
-    fn calc_hash<T: std::hash::Hash>(t: &T) -> u64 {
-        use std::hash::Hasher;
-        let mut s = DefaultHasher::new();
-        t.hash(&mut s);
-        s.finish()
     }
 }

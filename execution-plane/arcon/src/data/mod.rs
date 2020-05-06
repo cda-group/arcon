@@ -20,12 +20,12 @@ use std::{
 };
 
 pub trait ArconTypeBoundsNoSerde:
-    Clone + fmt::Debug + Hash + Sync + Send + PMessage + Default + Abomonation + 'static
+    Clone + fmt::Debug + Sync + Send + PMessage + Default + Abomonation + 'static
 {
 }
 
 impl<T> ArconTypeBoundsNoSerde for T where
-    T: Clone + fmt::Debug + Hash + Sync + Send + PMessage + Default + Abomonation + 'static
+    T: Clone + fmt::Debug + Sync + Send + PMessage + Default + Abomonation + 'static
 {
 }
 
@@ -53,6 +53,9 @@ where
     const RELIABLE_SER_ID: SerId;
     /// Current version of this ArconType
     const VERSION_ID: VersionId;
+
+    /// Return the key of this ArconType
+    fn get_key(&self) -> u64;
 }
 
 /// An Enum containing all possible stream events that may occur in an execution
@@ -267,46 +270,81 @@ impl Into<u32> for NodeID {
     }
 }
 
-// Implement ArconType for all data types that are supported
+// Implement ArconType for primitives.
+// NOTE: This is mainly for testing and development. In practice,
+// an ArconType is always a struct or enum.
+
 impl ArconType for u32 {
     const UNSAFE_SER_ID: SerId = ser_id::UNSAFE_U32_ID;
     const RELIABLE_SER_ID: SerId = ser_id::RELIABLE_U32_ID;
     const VERSION_ID: VersionId = 1;
+    fn get_key(&self) -> u64 {
+        calc_hash(self)
+    }
 }
 impl ArconType for u64 {
     const UNSAFE_SER_ID: SerId = ser_id::UNSAFE_U64_ID;
     const RELIABLE_SER_ID: SerId = ser_id::RELIABLE_U64_ID;
     const VERSION_ID: VersionId = 1;
+    fn get_key(&self) -> u64 {
+        calc_hash(self)
+    }
 }
 impl ArconType for i32 {
     const UNSAFE_SER_ID: SerId = ser_id::UNSAFE_I32_ID;
     const RELIABLE_SER_ID: SerId = ser_id::RELIABLE_I32_ID;
     const VERSION_ID: VersionId = 1;
+    fn get_key(&self) -> u64 {
+        calc_hash(self)
+    }
 }
 impl ArconType for i64 {
     const UNSAFE_SER_ID: SerId = ser_id::UNSAFE_I64_ID;
     const RELIABLE_SER_ID: SerId = ser_id::RELIABLE_I64_ID;
     const VERSION_ID: VersionId = 1;
+    fn get_key(&self) -> u64 {
+        calc_hash(self)
+    }
 }
 impl ArconType for ArconF32 {
     const UNSAFE_SER_ID: SerId = ser_id::UNSAFE_F32_ID;
     const RELIABLE_SER_ID: SerId = ser_id::RELIABLE_F32_ID;
     const VERSION_ID: VersionId = 1;
+    fn get_key(&self) -> u64 {
+        calc_hash(self)
+    }
 }
 impl ArconType for ArconF64 {
     const UNSAFE_SER_ID: SerId = ser_id::UNSAFE_F64_ID;
     const RELIABLE_SER_ID: SerId = ser_id::RELIABLE_F64_ID;
     const VERSION_ID: VersionId = 1;
+    fn get_key(&self) -> u64 {
+        calc_hash(self)
+    }
 }
 impl ArconType for bool {
     const UNSAFE_SER_ID: SerId = ser_id::UNSAFE_BOOLEAN_ID;
     const RELIABLE_SER_ID: SerId = ser_id::RELIABLE_BOOLEAN_ID;
     const VERSION_ID: VersionId = 1;
+    fn get_key(&self) -> u64 {
+        calc_hash(self)
+    }
 }
 impl ArconType for String {
     const UNSAFE_SER_ID: SerId = ser_id::UNSAFE_STRING_ID;
     const RELIABLE_SER_ID: SerId = ser_id::RELIABLE_STRING_ID;
     const VERSION_ID: VersionId = 1;
+
+    fn get_key(&self) -> u64 {
+        calc_hash(self)
+    }
+}
+
+fn calc_hash<T: std::hash::Hash>(t: &T) -> u64 {
+    use std::collections::hash_map::DefaultHasher;
+    let mut s = DefaultHasher::new();
+    t.hash(&mut s);
+    s.finish()
 }
 
 /// Float wrapper for f32 in order to impl Hash [std::hash::Hash]
@@ -422,6 +460,9 @@ impl ArconType for ArconNever {
     const UNSAFE_SER_ID: SerId = ser_id::NEVER_ID;
     const RELIABLE_SER_ID: SerId = ser_id::NEVER_ID;
     const VERSION_ID: VersionId = 1;
+    fn get_key(&self) -> u64 {
+        0
+    }
 }
 impl fmt::Debug for ArconNever {
     fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
