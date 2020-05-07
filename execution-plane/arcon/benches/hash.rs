@@ -69,6 +69,7 @@ impl LargerKey {
 
 impl Hash for LargerKey {
     fn hash<H: Hasher>(&self, state: &mut H) {
+        self.id.hash(state);
         self.date.hash(state);
         self.name.hash(state);
         self.some_bytes.hash(state);

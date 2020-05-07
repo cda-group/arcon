@@ -73,21 +73,9 @@ pub fn arcon(input: TokenStream) -> TokenStream {
         }
     };
 
-    if unsafe_ser_id.is_none() {
-        panic!("missing unsafe_ser_id attr");
-    }
-
-    if reliable_ser_id.is_none() {
-        panic!("missing reliable_ser_id attr");
-    }
-
-    if version.is_none() {
-        panic!("missing version attr");
-    }
-
-    let unsafe_ser_id = unsafe_ser_id.unwrap();
-    let reliable_ser_id = reliable_ser_id.unwrap();
-    let version = version.unwrap();
+    let unsafe_ser_id = unsafe_ser_id.expect("missing unsafe_ser_id attr");
+    let reliable_ser_id = reliable_ser_id.expect("missing reliable_ser_id attr");
+    let version = version.expect("missing version attr");
 
     // Id check
     assert_ne!(
@@ -114,32 +102,7 @@ pub fn arcon(input: TokenStream) -> TokenStream {
             key_quote = hash_fields_stream(fields, hasher_quote);
         } else {
             // If no keys attr was given, use all valid fields of the struct instead..
-            let mut fields = Vec::new();
-            for field in s.fields.iter() {
-                match field.ident {
-                    Some(ref ident) => {
-                        let mut ignore = false;
-                        // NOTE: ignore attempting to hash on Vec and Option values
-                        //
-                        // Generated Option's may not have Hash implemented
-                        if let syn::Type::Path(p) = &field.ty {
-                            for segment in &p.path.segments {
-                                let ref ident = segment.ident;
-                                let cleaned = ident.to_string().to_lowercase();
-                                if cleaned == "option" || cleaned == "vec" {
-                                    ignore = true;
-                                }
-                            }
-                        }
-
-                        if !ignore {
-                            fields.push(ident.to_string());
-                        }
-                    }
-                    None => panic!("Struct missing identiy"),
-                }
-            }
-
+            let fields = hashable_fields(s);
             let estimated_bytes = bytes_estimation(s, fields.clone());
             let hasher_quote = hasher_stream(estimated_bytes);
             key_quote = hash_fields_stream(fields, hasher_quote);
@@ -167,6 +130,53 @@ pub fn arcon(input: TokenStream) -> TokenStream {
     };
 
     proc_macro::TokenStream::from(output)
+}
+
+/// Return a Vec of field names that may be hashed
+fn hashable_fields(s: &syn::DataStruct) -> Vec<String> {
+    let mut fields: Vec<String> = Vec::new();
+    for field in s.fields.iter() {
+        match field.ident {
+            Some(ref ident) => {
+                if let syn::Type::Path(p) = &field.ty {
+                    for segment in &p.path.segments {
+                        let ref inner_ident = segment.ident;
+                        let cleaned = inner_ident.to_string();
+                        if cleaned == STRING_IDENT {
+                            fields.push(ident.to_string());
+                        } else if cleaned == U32_IDENT {
+                            fields.push(ident.to_string());
+                        } else if cleaned == U64_IDENT {
+                            fields.push(ident.to_string());
+                        } else if cleaned == I32_IDENT {
+                            fields.push(ident.to_string());
+                        } else if cleaned == I64_IDENT {
+                            fields.push(ident.to_string());
+                        } else if cleaned == BOOL_IDENT {
+                            fields.push(ident.to_string());
+                        } else if cleaned == VEC_IDENT {
+                            if let syn::PathArguments::AngleBracketed(ag) = &segment.arguments {
+                                for a in ag.args.iter() {
+                                    if let syn::GenericArgument::Type(t) = a {
+                                        if let syn::Type::Path(tp) = t {
+                                            for s in &tp.path.segments {
+                                                if s.ident == U8_IDENT {
+                                                    fields.push(ident.to_string());
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            None => panic!("Struct missing identiy"),
+        }
+    }
+
+    fields
 }
 
 /// Estimate the required bytes for hashing a struct given the selected `fields`
