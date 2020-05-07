@@ -140,34 +140,28 @@ fn hashable_fields(s: &syn::DataStruct) -> Vec<String> {
             Some(ref ident) => {
                 if let syn::Type::Path(p) = &field.ty {
                     for segment in &p.path.segments {
-                        let ref inner_ident = segment.ident;
-                        let cleaned = inner_ident.to_string();
-                        if cleaned == STRING_IDENT {
-                            fields.push(ident.to_string());
-                        } else if cleaned == U32_IDENT {
-                            fields.push(ident.to_string());
-                        } else if cleaned == U64_IDENT {
-                            fields.push(ident.to_string());
-                        } else if cleaned == I32_IDENT {
-                            fields.push(ident.to_string());
-                        } else if cleaned == I64_IDENT {
-                            fields.push(ident.to_string());
-                        } else if cleaned == BOOL_IDENT {
-                            fields.push(ident.to_string());
-                        } else if cleaned == VEC_IDENT {
-                            if let syn::PathArguments::AngleBracketed(ag) = &segment.arguments {
-                                for a in ag.args.iter() {
-                                    if let syn::GenericArgument::Type(t) = a {
-                                        if let syn::Type::Path(tp) = t {
-                                            for s in &tp.path.segments {
-                                                if s.ident == U8_IDENT {
-                                                    fields.push(ident.to_string());
+                        let ref inner_ident = segment.ident.to_string();
+                        match inner_ident.as_str() {
+                            STRING_IDENT | U32_IDENT | U64_IDENT | I32_IDENT | I64_IDENT
+                            | BOOL_IDENT => {
+                                fields.push(ident.to_string());
+                            }
+                            VEC_IDENT => {
+                                if let syn::PathArguments::AngleBracketed(ag) = &segment.arguments {
+                                    for a in ag.args.iter() {
+                                        if let syn::GenericArgument::Type(t) = a {
+                                            if let syn::Type::Path(tp) = t {
+                                                for s in &tp.path.segments {
+                                                    if s.ident == U8_IDENT {
+                                                        fields.push(ident.to_string());
+                                                    }
                                                 }
                                             }
                                         }
                                     }
                                 }
                             }
+                            _ => (),
                         }
                     }
                 }
@@ -188,34 +182,44 @@ fn bytes_estimation(s: &syn::DataStruct, fields: Vec<String>) -> usize {
                 if fields.contains(&ident.to_string()) {
                     if let syn::Type::Path(p) = &field.ty {
                         for segment in &p.path.segments {
-                            let ref ident = segment.ident;
-                            let cleaned = ident.to_string();
-                            if cleaned == STRING_IDENT {
-                                bytes += STRING_BYTES_ESTIMATION;
-                            } else if cleaned == U32_IDENT {
-                                bytes += std::mem::size_of::<u32>();
-                            } else if cleaned == U64_IDENT {
-                                bytes += std::mem::size_of::<u64>();
-                            } else if cleaned == I32_IDENT {
-                                bytes += std::mem::size_of::<i32>();
-                            } else if cleaned == I64_IDENT {
-                                bytes += std::mem::size_of::<i64>();
-                            } else if cleaned == BOOL_IDENT {
-                                bytes += std::mem::size_of::<bool>();
-                            } else if cleaned == VEC_IDENT {
-                                if let syn::PathArguments::AngleBracketed(ag) = &segment.arguments {
-                                    for a in ag.args.iter() {
-                                        if let syn::GenericArgument::Type(t) = a {
-                                            if let syn::Type::Path(tp) = t {
-                                                for s in &tp.path.segments {
-                                                    if s.ident == U8_IDENT {
-                                                        bytes += BYTE_ARRAY_ESTIMATION;
+                            let ref inner_ident = segment.ident.to_string();
+                            match inner_ident.as_str() {
+                                STRING_IDENT => {
+                                    bytes += STRING_BYTES_ESTIMATION;
+                                }
+                                U32_IDENT => {
+                                    bytes += std::mem::size_of::<u32>();
+                                }
+                                U64_IDENT => {
+                                    bytes += std::mem::size_of::<u64>();
+                                }
+                                I32_IDENT => {
+                                    bytes += std::mem::size_of::<i32>();
+                                }
+                                I64_IDENT => {
+                                    bytes += std::mem::size_of::<i64>();
+                                }
+                                BOOL_IDENT => {
+                                    bytes += std::mem::size_of::<bool>();
+                                }
+                                VEC_IDENT => {
+                                    if let syn::PathArguments::AngleBracketed(ag) =
+                                        &segment.arguments
+                                    {
+                                        for a in ag.args.iter() {
+                                            if let syn::GenericArgument::Type(t) = a {
+                                                if let syn::Type::Path(tp) = t {
+                                                    for s in &tp.path.segments {
+                                                        if s.ident == U8_IDENT {
+                                                            bytes += BYTE_ARRAY_ESTIMATION;
+                                                        }
                                                     }
                                                 }
                                             }
                                         }
                                     }
                                 }
+                                _ => (),
                             }
                         }
                     }
