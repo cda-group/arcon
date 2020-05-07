@@ -14,6 +14,7 @@ where
     pub namespace: N,
     pub extra_data: S::ExtraData,
     pub state_type: S,
+    pub registered: bool,
 }
 
 impl<S, IK, N> Debug for Handle<S, IK, N>
@@ -65,6 +66,7 @@ impl<S: StateType<ExtraData = ()>> Handle<S, (), ()> {
             namespace: (),
             extra_data: (),
             state_type: Default::default(),
+            registered: false,
         }
     }
 }
@@ -92,6 +94,7 @@ impl<T: Value, F: Reducer<T>> Handle<ReducerState<T, F>> {
             namespace: (),
             extra_data: reducer,
             state_type: ReducerState::default(),
+            registered: false,
         }
     }
 }
@@ -103,6 +106,7 @@ impl<A: Aggregator> Handle<AggregatorState<A>> {
             namespace: (),
             extra_data: aggregator,
             state_type: AggregatorState::default(),
+            registered: false,
         }
     }
 }
@@ -115,6 +119,7 @@ impl<S: StateType, IK: Metakey, N: Metakey> Handle<S, IK, N> {
             namespace: self.namespace,
             extra_data: self.extra_data,
             state_type: self.state_type,
+            registered: self.registered,
         }
     }
     pub fn with_namespace<NN: Metakey>(self, namespace: NN) -> Handle<S, IK, NN> {
@@ -124,6 +129,7 @@ impl<S: StateType, IK: Metakey, N: Metakey> Handle<S, IK, N> {
             namespace,
             extra_data: self.extra_data,
             state_type: self.state_type,
+            registered: self.registered,
         }
     }
 
@@ -167,50 +173,72 @@ impl<S: StateType, IK: Metakey, N: Metakey> Handle<S, IK, N> {
 }
 //endregion
 
-// region handle activators
-impl<T: Value, IK: Metakey, N: Metakey> Handle<ValueState<T>, IK, N> {
+impl<S: StateType, IK: Metakey, N: Metakey> Handle<S, IK, N> {
     #[doc(hidden)]
+    #[inline]
     pub fn activate<'s, B: Backend>(
         &'s mut self,
         backend: &'s mut B,
-    ) -> ActiveHandle<'s, B, ValueState<T>, IK, N> {
-        backend.build_active_value_handle(self)
+    ) -> ActiveHandle<'s, B, S, IK, N> {
+        if !self.registered {
+            panic!("State handles should be registered before activation!")
+        }
+        ActiveHandle {
+            backend,
+            inner: self,
+        }
+    }
+}
+
+// region handle activators
+impl<T: Value, IK: Metakey, N: Metakey> Handle<ValueState<T>, IK, N> {
+    #[doc(hidden)]
+    pub fn register<'s, B: Backend>(
+        &'s mut self,
+        session: &'s mut Session<B>,
+        _registration_token: &RegistrationToken,
+    ) {
+        session.backend.register_value_handle(self)
     }
 }
 impl<K: Key, V: Value, IK: Metakey, N: Metakey> Handle<MapState<K, V>, IK, N> {
     #[doc(hidden)]
-    pub fn activate<'s, B: Backend>(
+    pub fn register<'s, B: Backend>(
         &'s mut self,
-        backend: &'s mut B,
-    ) -> ActiveHandle<'s, B, MapState<K, V>, IK, N> {
-        backend.build_active_map_handle(self)
+        session: &'s mut Session<B>,
+        _registration_token: &RegistrationToken,
+    ) {
+        session.backend.register_map_handle(self)
     }
 }
 impl<T: Value, IK: Metakey, N: Metakey> Handle<VecState<T>, IK, N> {
     #[doc(hidden)]
-    pub fn activate<'s, B: Backend>(
+    pub fn register<'s, B: Backend>(
         &'s mut self,
-        backend: &'s mut B,
-    ) -> ActiveHandle<'s, B, VecState<T>, IK, N> {
-        backend.build_active_vec_handle(self)
+        session: &'s mut Session<B>,
+        _registration_token: &RegistrationToken,
+    ) {
+        session.backend.register_vec_handle(self)
     }
 }
 impl<T: Value, F: Reducer<T>, IK: Metakey, N: Metakey> Handle<ReducerState<T, F>, IK, N> {
     #[doc(hidden)]
-    pub fn activate<'s, B: Backend>(
+    pub fn register<'s, B: Backend>(
         &'s mut self,
-        backend: &'s mut B,
-    ) -> ActiveHandle<'s, B, ReducerState<T, F>, IK, N> {
-        backend.build_active_reducer_handle(self)
+        session: &'s mut Session<B>,
+        _registration_token: &RegistrationToken,
+    ) {
+        session.backend.register_reducer_handle(self)
     }
 }
 impl<A: Aggregator, IK: Metakey, N: Metakey> Handle<AggregatorState<A>, IK, N> {
     #[doc(hidden)]
-    pub fn activate<'s, B: Backend>(
+    pub fn register<'s, B: Backend>(
         &'s mut self,
-        backend: &'s mut B,
-    ) -> ActiveHandle<'s, B, AggregatorState<A>, IK, N> {
-        backend.build_active_aggregator_handle(self)
+        session: &'s mut Session<B>,
+        _registration_token: &RegistrationToken,
+    ) {
+        session.backend.register_aggregator_handle(self)
     }
 }
 // endregion

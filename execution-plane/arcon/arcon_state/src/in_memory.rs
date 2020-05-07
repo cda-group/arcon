@@ -6,7 +6,7 @@ use crate::{
     handles::{ActiveHandle, BoxedIteratorOfResult},
     serialization::*,
     Aggregator, AggregatorState, Backend, Config, Handle, Key, MapState, Metakey, Reducer,
-    ReducerState, StateType, Value, ValueState, VecState,
+    ReducerState, RegistrationToken, StateType, Value, ValueState, VecState,
 };
 use smallbox::{space, SmallBox};
 use std::{any::Any, collections::HashMap, iter};
@@ -46,64 +46,44 @@ impl Backend for InMemory {
     }
 
     // region handle activators
-    fn build_active_value_handle<'s, T: Value, IK: Metakey, N: Metakey>(
+    fn register_value_handle<'s, T: Value, IK: Metakey, N: Metakey>(
         &'s mut self,
         inner: &'s mut Handle<ValueState<T>, IK, N>,
-    ) -> ActiveHandle<'s, Self, ValueState<T>, IK, N> {
+    ) {
         self.data.entry(inner.id).or_default();
-
-        ActiveHandle {
-            backend: self,
-            inner,
-        }
+        inner.registered = true;
     }
 
-    fn build_active_map_handle<'s, K: Key, V: Value, IK: Metakey, N: Metakey>(
+    fn register_map_handle<'s, K: Key, V: Value, IK: Metakey, N: Metakey>(
         &'s mut self,
         inner: &'s mut Handle<MapState<K, V>, IK, N>,
-    ) -> ActiveHandle<'s, Self, MapState<K, V>, IK, N> {
+    ) {
         self.data.entry(inner.id).or_default();
-
-        ActiveHandle {
-            backend: self,
-            inner,
-        }
+        inner.registered = true;
     }
 
-    fn build_active_vec_handle<'s, T: Value, IK: Metakey, N: Metakey>(
+    fn register_vec_handle<'s, T: Value, IK: Metakey, N: Metakey>(
         &'s mut self,
         inner: &'s mut Handle<VecState<T>, IK, N>,
-    ) -> ActiveHandle<'s, Self, VecState<T>, IK, N> {
+    ) {
         self.data.entry(inner.id).or_default();
-
-        ActiveHandle {
-            backend: self,
-            inner,
-        }
+        inner.registered = true;
     }
 
-    fn build_active_reducer_handle<'s, T: Value, F: Reducer<T>, IK: Metakey, N: Metakey>(
+    fn register_reducer_handle<'s, T: Value, F: Reducer<T>, IK: Metakey, N: Metakey>(
         &'s mut self,
         inner: &'s mut Handle<ReducerState<T, F>, IK, N>,
-    ) -> ActiveHandle<'s, Self, ReducerState<T, F>, IK, N> {
+    ) {
         self.data.entry(inner.id).or_default();
-
-        ActiveHandle {
-            backend: self,
-            inner,
-        }
+        inner.registered = true;
     }
 
-    fn build_active_aggregator_handle<'s, A: Aggregator, IK: Metakey, N: Metakey>(
+    fn register_aggregator_handle<'s, A: Aggregator, IK: Metakey, N: Metakey>(
         &'s mut self,
         inner: &'s mut Handle<AggregatorState<A>, IK, N>,
-    ) -> ActiveHandle<'s, Self, AggregatorState<A>, IK, N> {
+    ) {
         self.data.entry(inner.id).or_default();
-
-        ActiveHandle {
-            backend: self,
-            inner,
-        }
+        inner.registered = true;
     }
     // endregion
 
@@ -654,7 +634,7 @@ mod tests {
         let mut db = InMemory::restore_or_create(&Default::default(), Default::default()).unwrap();
         let mut session = db.session();
         let mut bundle = bundle();
-        bundle.register_states(&mut session);
+        bundle.register_states(&mut session, unsafe { &RegistrationToken::new() });
         let mut bundle = bundle.activate(&mut session);
 
         let unset = bundle.value().get().unwrap();
@@ -674,7 +654,7 @@ mod tests {
         let mut db = InMemory::restore_or_create(&Default::default(), Default::default()).unwrap();
         let mut session = db.session();
         let mut bundle = bundle();
-        bundle.register_states(&mut session);
+        bundle.register_states(&mut session, unsafe { &RegistrationToken::new() });
         let mut bundle = bundle.activate(&mut session);
 
         bundle.value().set(123).unwrap();
@@ -697,7 +677,7 @@ mod tests {
         let mut db = InMemory::restore_or_create(&Default::default(), Default::default()).unwrap();
         let mut session = db.session();
         let mut bundle = bundle();
-        bundle.register_states(&mut session);
+        bundle.register_states(&mut session, unsafe { &RegistrationToken::new() });
         let mut bundle = bundle.activate(&mut session);
 
         bundle.value().set(0).unwrap();
@@ -731,7 +711,7 @@ mod tests {
         let mut db = InMemory::restore_or_create(&Default::default(), Default::default()).unwrap();
         let mut session = db.session();
         let mut bundle = bundle();
-        bundle.register_states(&mut session);
+        bundle.register_states(&mut session, unsafe { &RegistrationToken::new() });
         let mut bundle = bundle.activate(&mut session);
 
         // TODO: &String is weird, maybe look at how it's done with the keys in std hash-map
@@ -780,7 +760,7 @@ mod tests {
         let mut db = InMemory::restore_or_create(&Default::default(), Default::default()).unwrap();
         let mut session = db.session();
         let mut bundle = bundle();
-        bundle.register_states(&mut session);
+        bundle.register_states(&mut session, unsafe { &RegistrationToken::new() });
         let mut bundle = bundle.activate(&mut session);
 
         assert!(bundle.vec().is_empty().unwrap());
@@ -800,7 +780,7 @@ mod tests {
         let mut db = InMemory::restore_or_create(&Default::default(), Default::default()).unwrap();
         let mut session = db.session();
         let mut bundle = bundle();
-        bundle.register_states(&mut session);
+        bundle.register_states(&mut session, unsafe { &RegistrationToken::new() });
         let mut bundle = bundle.activate(&mut session);
 
         bundle.reducer().reduce(7).unwrap();
@@ -815,7 +795,7 @@ mod tests {
         let mut db = InMemory::restore_or_create(&Default::default(), Default::default()).unwrap();
         let mut session = db.session();
         let mut bundle = bundle();
-        bundle.register_states(&mut session);
+        bundle.register_states(&mut session, unsafe { &RegistrationToken::new() });
         let mut bundle = bundle.activate(&mut session);
 
         bundle.aggregator().aggregate(1).unwrap();

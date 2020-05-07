@@ -45,27 +45,27 @@ pub trait Backend: Send {
         }
     }
 
-    // region active handle builders
-    fn build_active_value_handle<'s, T: Value, IK: Metakey, N: Metakey>(
+    // region handle registration
+    fn register_value_handle<'s, T: Value, IK: Metakey, N: Metakey>(
         &'s mut self,
         inner: &'s mut Handle<ValueState<T>, IK, N>,
-    ) -> ActiveHandle<'s, Self, ValueState<T>, IK, N>;
-    fn build_active_map_handle<'s, K: Key, V: Value, IK: Metakey, N: Metakey>(
+    );
+    fn register_map_handle<'s, K: Key, V: Value, IK: Metakey, N: Metakey>(
         &'s mut self,
         inner: &'s mut Handle<MapState<K, V>, IK, N>,
-    ) -> ActiveHandle<'s, Self, MapState<K, V>, IK, N>;
-    fn build_active_vec_handle<'s, T: Value, IK: Metakey, N: Metakey>(
+    );
+    fn register_vec_handle<'s, T: Value, IK: Metakey, N: Metakey>(
         &'s mut self,
         inner: &'s mut Handle<VecState<T>, IK, N>,
-    ) -> ActiveHandle<'s, Self, VecState<T>, IK, N>;
-    fn build_active_reducer_handle<'s, T: Value, F: Reducer<T>, IK: Metakey, N: Metakey>(
+    );
+    fn register_reducer_handle<'s, T: Value, F: Reducer<T>, IK: Metakey, N: Metakey>(
         &'s mut self,
         inner: &'s mut Handle<ReducerState<T, F>, IK, N>,
-    ) -> ActiveHandle<'s, Self, ReducerState<T, F>, IK, N>;
-    fn build_active_aggregator_handle<'s, A: Aggregator, IK: Metakey, N: Metakey>(
+    );
+    fn register_aggregator_handle<'s, A: Aggregator, IK: Metakey, N: Metakey>(
         &'s mut self,
         inner: &'s mut Handle<AggregatorState<A>, IK, N>,
-    ) -> ActiveHandle<'s, Self, AggregatorState<A>, IK, N>;
+    );
     // endregion
 
     // region value ops
@@ -260,9 +260,30 @@ impl<'b, B: ?Sized> Drop for Session<'b, B> {
     }
 }
 
+mod reg_token {
+    #[derive(Debug)]
+    pub struct RegistrationToken {
+        _private_constructor: (),
+    }
+    impl RegistrationToken {
+        /// This is only safe to call by an Arcon Node. The registration token has to be used
+        /// before any state backend operations happen
+        pub unsafe fn new() -> RegistrationToken {
+            RegistrationToken {
+                _private_constructor: (),
+            }
+        }
+    }
+}
+pub use reg_token::RegistrationToken;
+
 pub trait Bundle<'this, 'b, B: Backend> {
     type Active;
-    fn register_states<'s>(&mut self, session: &'b mut Session<'s, B>);
+    fn register_states<'s>(
+        &mut self,
+        session: &'b mut Session<'s, B>,
+        registration_token: &RegistrationToken,
+    );
     fn activate<'s>(&'this mut self, session: &'b mut Session<'s, B>) -> Self::Active;
 }
 
@@ -346,8 +367,8 @@ impl<A: Aggregator> Default for AggregatorState<A> {
 /// ```
 /// # #[macro_use] extern crate arcon_state;
 /// # use arcon_state::*;
-/// # use arcon_state::dummy::*;
-/// # let mut backend = DummyBackend;
+/// # use arcon_state::in_memory::*;
+/// # let mut backend = InMemory::restore_or_create(&Default::default(), Default::default()).unwrap();
 /// # let mut backend_session = backend.session();
 /// bundle! {
 ///     /// My test bundle
@@ -369,12 +390,16 @@ impl<A: Aggregator> Default for AggregatorState<A> {
 /// }
 ///
 /// let mut bundle = MyTestBundle::<u32>::new();
-/// // Bundle should be registered before usage, but we'll skip this in this example.
-/// // Registration is normally done by an arcon Node early on, so you shouldn't create
-/// // new instances of your bundles after that.
+/// // Usually a bundle should be registered by an arcon node, but we'll do it manually here
+/// bundle.register_states(&mut backend_session, unsafe { &RegistrationToken::new() });
+///
 /// let mut active_bundle = bundle.activate(&mut backend_session);
-/// let value_handle = active_bundle.value();
-/// let map_handle = active_bundle.map();
+/// let mut value_handle = active_bundle.value();
+/// value_handle.set(3).unwrap();
+/// println!("value is {:?}", value_handle.get().unwrap());
+/// let mut map_handle = active_bundle.map();
+/// map_handle.insert("foo".into(), 0.5).unwrap();
+/// println!("map[foo] is {:?}", map_handle.get(&"foo".into()).unwrap())
 /// ```
 /// Note that if you want to have more bounds on your generic parameter, you'll have to use slightly
 /// different syntax than what you're used to from regular Rust:
@@ -429,6 +454,7 @@ macro_rules! bundle {
                 __B, $($($generic_param,)*)?
             > {$(
                 $(#[$state_meta])*
+                #[inline]
                 fn $state_name(&mut self) -> $crate::handles::ActiveHandle<__B,
                     $state_type $(, $item_key_type $(, $namespace_type)?)?
                 > {
@@ -448,9 +474,12 @@ macro_rules! bundle {
                     __B, $($($generic_param,)*)?
                 >;
 
-                fn register_states<'s>(&mut self, session: &'__backend mut $crate::Session<'s, __B>) {
-                    let mut active = self.activate(session);
-                    $(active.$state_name();)*
+                fn register_states<'s>(
+                    &mut self,
+                    session: &'__backend mut $crate::Session<'s, __B>,
+                    registration_token: &$crate::RegistrationToken
+                ) {
+                    $(self.$state_name.register(session, registration_token);)*
                 }
 
                 fn activate<'s>(
@@ -501,6 +530,7 @@ mod tests {
         let mut backend = dummy::DummyBackend;
         let mut session = backend.session();
         let mut bundle = MyBundle::new(|a: &i32, b: &i32| a + b);
+        bundle.register_states(&mut session, unsafe { &RegistrationToken::new() });
         {
             let mut bundle = bundle.activate(&mut session);
             let value = bundle.value();

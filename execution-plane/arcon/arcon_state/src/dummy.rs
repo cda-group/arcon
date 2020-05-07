@@ -15,54 +15,39 @@ impl Backend for DummyBackend {
         Ok(())
     }
 
-    fn build_active_value_handle<'s, T: Value, IK: Metakey, N: Metakey>(
+    fn register_value_handle<'s, T: Value, IK: Metakey, N: Metakey>(
         &'s mut self,
         inner: &'s mut Handle<ValueState<T>, IK, N>,
-    ) -> ActiveHandle<'s, Self, ValueState<T>, IK, N> {
-        ActiveHandle {
-            backend: self,
-            inner,
-        }
+    ) {
+        inner.registered = true;
     }
 
-    fn build_active_map_handle<'s, K: Key, V: Value, IK: Metakey, N: Metakey>(
+    fn register_map_handle<'s, K: Key, V: Value, IK: Metakey, N: Metakey>(
         &'s mut self,
         inner: &'s mut Handle<MapState<K, V>, IK, N>,
-    ) -> ActiveHandle<'s, Self, MapState<K, V>, IK, N> {
-        ActiveHandle {
-            backend: self,
-            inner,
-        }
+    ) {
+        inner.registered = true;
     }
 
-    fn build_active_vec_handle<'s, T: Value, IK: Metakey, N: Metakey>(
+    fn register_vec_handle<'s, T: Value, IK: Metakey, N: Metakey>(
         &'s mut self,
         inner: &'s mut Handle<VecState<T>, IK, N>,
-    ) -> ActiveHandle<'s, Self, VecState<T>, IK, N> {
-        ActiveHandle {
-            backend: self,
-            inner,
-        }
+    ) {
+        inner.registered = true;
     }
 
-    fn build_active_reducer_handle<'s, T: Value, F: Reducer<T>, IK: Metakey, N: Metakey>(
+    fn register_reducer_handle<'s, T: Value, F: Reducer<T>, IK: Metakey, N: Metakey>(
         &'s mut self,
         inner: &'s mut Handle<ReducerState<T, F>, IK, N>,
-    ) -> ActiveHandle<'s, Self, ReducerState<T, F>, IK, N> {
-        ActiveHandle {
-            backend: self,
-            inner,
-        }
+    ) {
+        inner.registered = true;
     }
 
-    fn build_active_aggregator_handle<'s, A: Aggregator, IK: Metakey, N: Metakey>(
+    fn register_aggregator_handle<'s, A: Aggregator, IK: Metakey, N: Metakey>(
         &'s mut self,
         inner: &'s mut Handle<AggregatorState<A>, IK, N>,
-    ) -> ActiveHandle<'s, Self, AggregatorState<A>, IK, N> {
-        ActiveHandle {
-            backend: self,
-            inner,
-        }
+    ) {
+        inner.registered = true;
     }
 
     fn value_clear<T: Value, IK: Metakey, N: Metakey>(
