@@ -5,20 +5,38 @@ syntax = "proto3";
 
 package arcon_basic_v3;
 
+// unsafe_ser_id = 100
+// reliable_ser_id = 101
+// version = 1
+message Hello {
+  string id = 1;
+}
+
+// unsafe_ser_id = 102
+// reliable_ser_id = 103
+// version = 1
+// keys = query,page_number
 message SearchRequest {
   string query = 1;
   int32 page_number = 2;
   int32 result_per_page = 3;
+  Hello hello = 4;
+  repeated string msgs = 5;
 }
 
+// unsafe_ser_id = 104
+// reliable_ser_id = 105
+// version = 1
 message SearchBatch {
   repeated SearchRequest requests = 1;
   string id = 2;
 }
 
+// unsafe_ser_id = 106
+// reliable_ser_id = 107
+// version = 1
 message NestedMessage {
   repeated SearchBatch batches = 1;
   bytes raw_bytes = 2;
+  string id = 3;
 }
-
-// TODO: add more with oneof etc..

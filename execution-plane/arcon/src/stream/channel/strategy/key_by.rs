@@ -7,26 +7,15 @@ use crate::{
     prelude::*,
     stream::channel::strategy::send,
 };
-use std::{
-    collections::{hash_map::DefaultHasher, HashMap},
-    default::Default,
-    hash::{BuildHasher, BuildHasherDefault, Hasher},
-};
-
-type DefaultHashBuilder = BuildHasherDefault<DefaultHasher>;
+use std::collections::HashMap;
 
 /// A hash based partitioner
-///
-/// KeyBy may be constructed with
-/// either a custom hasher or the default [DefaultHasher]
-pub struct KeyBy<A, H = DefaultHashBuilder>
+pub struct KeyBy<A>
 where
     A: ArconType,
 {
     /// A buffer pool of EventBuffer's
     buffer_pool: BufferPool<ArconEventWrapper<A>>,
-    /// The HashBuilder
-    builder: H,
     /// Used to hash % modulo
     parallelism: u32,
     /// An identifier that is embedded with outgoing messages
@@ -65,46 +54,6 @@ where
 
         KeyBy {
             buffer_pool,
-            builder: Default::default(),
-            parallelism: channels_len,
-            sender_id,
-            buffer_map,
-            _pool_info: pool_info,
-        }
-    }
-
-    /// Creates a KeyBy strategy with a custom built [Hasher]
-    pub fn with_hasher<B>(
-        channels: Vec<Channel<A>>,
-        sender_id: NodeID,
-        pool_info: PoolInfo,
-    ) -> KeyBy<A, BuildHasherDefault<B>>
-    where
-        B: Hasher + Default,
-    {
-        let channels_len: u32 = channels.len() as u32;
-        assert!(
-            channels.len() < pool_info.capacity,
-            "Strategy must be initialised with a pool capacity larger than amount of channels"
-        );
-        let mut buffer_pool: BufferPool<ArconEventWrapper<A>> = BufferPool::new(
-            pool_info.capacity,
-            pool_info.buffer_size,
-            pool_info.allocator.clone(),
-        )
-        .expect("failed to initialise BufferPool");
-
-        let mut buffer_map = HashMap::new();
-        for (i, channel) in channels.into_iter().enumerate() {
-            let writer = buffer_pool
-                .try_get()
-                .expect("failed to fetch initial buffer");
-            buffer_map.insert(i, (channel, writer));
-        }
-
-        KeyBy {
-            buffer_pool,
-            builder: BuildHasherDefault::<B>::default(),
             parallelism: channels_len,
             sender_id,
             buffer_map,
@@ -116,9 +65,7 @@ where
     pub fn add(&mut self, event: ArconEvent<A>) {
         match &event {
             ArconEvent::Element(element) => {
-                let mut h = self.builder.build_hasher();
-                element.data.hash(&mut h);
-                let hash = h.finish() as u32;
+                let hash = element.data.get_key() as u32;
                 let index = (hash % self.parallelism) as usize;
                 if let Some((chan, buffer)) = self.buffer_map.get_mut(&index) {
                     if let Some(e) = buffer.push(event.into()) {

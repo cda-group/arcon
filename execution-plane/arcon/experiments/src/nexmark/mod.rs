@@ -9,7 +9,6 @@ pub mod queries;
 pub mod sink;
 pub mod source;
 
-use arcon::prelude::*;
 use config::NEXMarkConfig;
 use rand::{rngs::SmallRng, seq::SliceRandom, Rng};
 use serde::{Deserialize, Serialize};
@@ -291,7 +290,7 @@ impl NEXMarkEvent {
     }
 }
 
-#[derive(prost::Oneof, Serialize, Deserialize, Clone, abomonation_derive::Abomonation, Hash)]
+#[derive(prost::Oneof, Serialize, Deserialize, Clone, abomonation_derive::Abomonation)]
 pub enum Event {
     #[prost(message, tag = "1")]
     Person(Person),

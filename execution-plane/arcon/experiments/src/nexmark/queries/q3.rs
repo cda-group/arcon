@@ -21,7 +21,7 @@ use serde::{Deserialize, Serialize};
 //      AND open_auction.itemid = item.id
 //      AND item.categoryId = 10;
 
-#[derive(prost::Oneof, Serialize, Deserialize, Clone, abomonation_derive::Abomonation, Hash)]
+#[derive(prost::Oneof, Serialize, Deserialize, Clone, abomonation_derive::Abomonation)]
 enum PersonOrAuctionInner {
     #[prost(message, tag = "1")]
     Person(Person),

@@ -97,10 +97,6 @@ where
 
 #[cfg(test)]
 pub mod tests {
-    use super::*;
-    use crate::data::VersionId;
-    use kompact::prelude::SerId;
-
     #[cfg_attr(feature = "arcon_serde", derive(serde::Serialize, serde::Deserialize))]
     #[derive(Arcon, prost::Message, Clone, abomonation_derive::Abomonation)]
     #[arcon(unsafe_ser_id = 12, reliable_ser_id = 13, version = 1)]

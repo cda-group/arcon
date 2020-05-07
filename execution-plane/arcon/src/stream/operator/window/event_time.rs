@@ -6,10 +6,6 @@ use crate::{
     stream::operator::{window::WindowContext, OperatorContext},
 };
 use prost::Message;
-use std::{
-    collections::hash_map::DefaultHasher,
-    hash::{BuildHasher, BuildHasherDefault, Hash, Hasher},
-};
 
 /*
     EventTimeWindowAssigner
@@ -50,14 +46,13 @@ impl WindowEvent {
 /// OUT: Output of Window
 pub struct EventTimeWindowAssigner<IN, OUT>
 where
-    IN: ArconType + Hash,
+    IN: ArconType,
     OUT: ArconType,
 {
     // effectively immutable, so no reason to persist
     window_length: u64,
     window_slide: u64,
     late_arrival_time: u64,
-    hasher: BuildHasherDefault<DefaultHasher>,
     keyed: bool,
 
     // window keeps its own state per key and index (via state backend api)
@@ -73,7 +68,7 @@ where
 
 impl<IN, OUT> EventTimeWindowAssigner<IN, OUT>
 where
-    IN: 'static + ArconType + Hash,
+    IN: 'static + ArconType,
     OUT: 'static + ArconType,
 {
     pub fn new(
@@ -97,9 +92,7 @@ where
             window_slide: slide,
             late_arrival_time: late,
             window,
-            hasher: BuildHasherDefault::<DefaultHasher>::default(),
             keyed,
-
             window_start: state_backend.build("window_start").with_item_key(0).value(),
             active_windows: state_backend.build("window_active").map(),
         }
@@ -135,15 +128,13 @@ where
         if !self.keyed {
             return 0;
         }
-        let mut h = self.hasher.build_hasher();
-        e.data.hash(&mut h);
-        h.finish()
+        e.data.get_key()
     }
 }
 
 impl<IN, OUT> Operator for EventTimeWindowAssigner<IN, OUT>
 where
-    IN: ArconType + Hash,
+    IN: ArconType,
     OUT: ArconType,
 {
     type IN = IN;
