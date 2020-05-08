@@ -3,19 +3,25 @@
 #![feature(associated_type_defaults)]
 #![feature(const_generics)]
 #![warn(missing_debug_implementations)]
-use crate::{error::*, handles::ActiveHandle, serialization::fixed_bytes::FixedBytes};
+use crate::{error::*, serialization::fixed_bytes::FixedBytes};
 use std::{
-    any, fmt,
+    any,
+    collections::{BTreeSet, HashMap},
+    fmt,
     fmt::{Debug, Formatter},
+    fs,
     marker::PhantomData,
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 pub mod error;
 pub mod handles;
+pub mod ops;
 pub mod serialization;
-use crate::handles::BoxedIteratorOfResult;
-pub use handles::Handle;
+pub use crate::{
+    handles::Handle,
+    ops::{AggregatorOps, MapOps, ReducerOps, ValueOps, VecOps},
+};
 
 pub trait Value: prost::Message + Default + Clone + 'static {}
 impl<T> Value for T where T: prost::Message + Default + Clone + 'static {}
@@ -33,11 +39,102 @@ pub struct Config {
     backend_ids: Vec<String>,
 }
 
-pub trait Backend: Send {
+pub trait Backend: ValueOps + MapOps + VecOps + ReducerOps + AggregatorOps + Send {
     fn restore_or_create(config: &Config, id: String) -> Result<Self>
     where
+        Self: Sized,
+    {
+        // TODO: make IO errors have more context
+        let mut state_path = config.live_state_base_path.clone();
+        state_path.push(&id);
+        if state_path.exists() {
+            fs::remove_dir_all(&state_path)?;
+        }
+
+        let mut checkpoints: HashMap<&str, BTreeSet<u64>> = config
+            .backend_ids
+            .iter()
+            .map(|id| (id.as_str(), BTreeSet::new()))
+            .collect();
+
+        for directory in fs::read_dir(&config.checkpoints_base_path)? {
+            let directory = directory?;
+
+            let invalid_path = || InvalidPath {
+                path: directory.path(),
+            };
+
+            let dir_name = directory.file_name();
+            let dir_name = dir_name.to_str().with_context(invalid_path)?;
+
+            const CHECKPOINT_PREFIX: &str = "checkpoint_";
+
+            ensure!(
+                dir_name.starts_with(CHECKPOINT_PREFIX)
+                    && directory.metadata().map(|m| m.is_dir()).unwrap_or(false),
+                InvalidPath {
+                    path: directory.path()
+                }
+            );
+
+            let dir_name = &dir_name[CHECKPOINT_PREFIX.len()..];
+            let mut dir_name_parts = dir_name.split('_');
+            let id = dir_name_parts.next().with_context(invalid_path)?;
+            let epoch: u64 = dir_name_parts
+                .next()
+                .with_context(invalid_path)?
+                .parse()
+                .ok()
+                .with_context(invalid_path)?;
+
+            ensure!(dir_name_parts.next().is_none(), InvalidPath {
+                path: directory.path(),
+            });
+
+            let checkpoints_for_id = checkpoints.get_mut(id).with_context(|| UnknownNode {
+                unknown_node: id.to_string(),
+                known_nodes: config.backend_ids.clone(),
+            })?;
+
+            checkpoints_for_id.insert(epoch);
+        }
+
+        let mut checkpoints = checkpoints.into_iter();
+        let mut complete_checkpoints = checkpoints.next().map(|x| x.1);
+        // complete checkpoints are the ones that are in in every checkpoint set,
+        // so we just intersect all the sets
+        if let Some(complete) = &mut complete_checkpoints {
+            for (_, other) in checkpoints {
+                *complete = complete.intersection(&other).copied().collect();
+            }
+        }
+
+        let last_complete_checkpoint =
+            complete_checkpoints.and_then(|ce| ce.iter().last().copied());
+
+        match last_complete_checkpoint {
+            Some(epoch) => {
+                let mut latest_checkpoint_path = config.checkpoints_base_path.clone();
+                latest_checkpoint_path.push(format!(
+                    "checkpoint_{id}_{epoch}",
+                    id = id,
+                    epoch = epoch
+                ));
+
+                Self::restore(&state_path, &latest_checkpoint_path)
+            }
+            None => Self::create(&state_path),
+        }
+    }
+
+    fn create(live_path: &Path) -> Result<Self>
+    where
         Self: Sized;
-    fn checkpoint(&self, config: &Config) -> Result<()>;
+    fn restore(live_path: &Path, checkpoint_path: &Path) -> Result<Self>
+    where
+        Self: Sized;
+
+    fn checkpoint(&self, checkpoint_path: &Path) -> Result<()>;
     fn session(&mut self) -> Session<Self> {
         Session {
             backend: self,
@@ -48,194 +145,24 @@ pub trait Backend: Send {
     // region handle registration
     fn register_value_handle<'s, T: Value, IK: Metakey, N: Metakey>(
         &'s mut self,
-        inner: &'s mut Handle<ValueState<T>, IK, N>,
+        handle: &'s mut Handle<ValueState<T>, IK, N>,
     );
     fn register_map_handle<'s, K: Key, V: Value, IK: Metakey, N: Metakey>(
         &'s mut self,
-        inner: &'s mut Handle<MapState<K, V>, IK, N>,
+        handle: &'s mut Handle<MapState<K, V>, IK, N>,
     );
     fn register_vec_handle<'s, T: Value, IK: Metakey, N: Metakey>(
         &'s mut self,
-        inner: &'s mut Handle<VecState<T>, IK, N>,
+        handle: &'s mut Handle<VecState<T>, IK, N>,
     );
     fn register_reducer_handle<'s, T: Value, F: Reducer<T>, IK: Metakey, N: Metakey>(
         &'s mut self,
-        inner: &'s mut Handle<ReducerState<T, F>, IK, N>,
+        handle: &'s mut Handle<ReducerState<T, F>, IK, N>,
     );
     fn register_aggregator_handle<'s, A: Aggregator, IK: Metakey, N: Metakey>(
         &'s mut self,
-        inner: &'s mut Handle<AggregatorState<A>, IK, N>,
+        handle: &'s mut Handle<AggregatorState<A>, IK, N>,
     );
-    // endregion
-
-    // region value ops
-    fn value_clear<T: Value, IK: Metakey, N: Metakey>(
-        &mut self,
-        handle: &mut Handle<ValueState<T>, IK, N>,
-    ) -> Result<()>;
-
-    fn value_get<T: Value, IK: Metakey, N: Metakey>(
-        &self,
-        handle: &Handle<ValueState<T>, IK, N>,
-    ) -> Result<Option<T>>;
-
-    fn value_set<T: Value, IK: Metakey, N: Metakey>(
-        &mut self,
-        handle: &mut Handle<ValueState<T>, IK, N>,
-        value: T,
-    ) -> Result<Option<T>>;
-
-    fn value_fast_set<T: Value, IK: Metakey, N: Metakey>(
-        &mut self,
-        handle: &mut Handle<ValueState<T>, IK, N>,
-        value: T,
-    ) -> Result<()>;
-    // endregion
-
-    // region map ops
-    fn map_clear<K: Key, V: Value, IK: Metakey, N: Metakey>(
-        &mut self,
-        handle: &mut Handle<MapState<K, V>, IK, N>,
-    ) -> Result<()>;
-
-    fn map_get<K: Key, V: Value, IK: Metakey, N: Metakey>(
-        &self,
-        handle: &Handle<MapState<K, V>, IK, N>,
-        key: &K,
-    ) -> Result<Option<V>>;
-
-    fn map_fast_insert<K: Key, V: Value, IK: Metakey, N: Metakey>(
-        &mut self,
-        handle: &mut Handle<MapState<K, V>, IK, N>,
-        key: K,
-        value: V,
-    ) -> Result<()>;
-
-    fn map_insert<K: Key, V: Value, IK: Metakey, N: Metakey>(
-        &mut self,
-        handle: &mut Handle<MapState<K, V>, IK, N>,
-        key: K,
-        value: V,
-    ) -> Result<Option<V>>;
-
-    fn map_insert_all<K: Key, V: Value, IK: Metakey, N: Metakey>(
-        &mut self,
-        handle: &mut Handle<MapState<K, V>, IK, N>,
-        key_value_pairs: impl IntoIterator<Item = (K, V)>,
-    ) -> Result<()>;
-
-    fn map_remove<K: Key, V: Value, IK: Metakey, N: Metakey>(
-        &mut self,
-        handle: &mut Handle<MapState<K, V>, IK, N>,
-        key: &K,
-    ) -> Result<Option<V>>;
-
-    fn map_fast_remove<K: Key, V: Value, IK: Metakey, N: Metakey>(
-        &mut self,
-        handle: &mut Handle<MapState<K, V>, IK, N>,
-        key: &K,
-    ) -> Result<()>;
-
-    fn map_contains<K: Key, V: Value, IK: Metakey, N: Metakey>(
-        &self,
-        handle: &Handle<MapState<K, V>, IK, N>,
-        key: &K,
-    ) -> Result<bool>;
-
-    fn map_iter<K: Key, V: Value, IK: Metakey, N: Metakey>(
-        &self,
-        handle: &Handle<MapState<K, V>, IK, N>,
-    ) -> Result<BoxedIteratorOfResult<(K, V)>>;
-
-    fn map_keys<K: Key, V: Value, IK: Metakey, N: Metakey>(
-        &self,
-        handle: &Handle<MapState<K, V>, IK, N>,
-    ) -> Result<BoxedIteratorOfResult<K>>;
-
-    fn map_values<K: Key, V: Value, IK: Metakey, N: Metakey>(
-        &self,
-        handle: &Handle<MapState<K, V>, IK, N>,
-    ) -> Result<BoxedIteratorOfResult<V>>;
-
-    fn map_len<K: Key, V: Value, IK: Metakey, N: Metakey>(
-        &self,
-        handle: &Handle<MapState<K, V>, IK, N>,
-    ) -> Result<usize>;
-
-    fn map_is_empty<K: Key, V: Value, IK: Metakey, N: Metakey>(
-        &self,
-        handle: &Handle<MapState<K, V>, IK, N>,
-    ) -> Result<bool>;
-    // endregion
-
-    // region vec ops
-    fn vec_clear<T: Value, IK: Metakey, N: Metakey>(
-        &mut self,
-        handle: &mut Handle<VecState<T>, IK, N>,
-    ) -> Result<()>;
-    fn vec_append<T: Value, IK: Metakey, N: Metakey>(
-        &mut self,
-        handle: &mut Handle<VecState<T>, IK, N>,
-        value: T,
-    ) -> Result<()>;
-    fn vec_get<T: Value, IK: Metakey, N: Metakey>(
-        &self,
-        handle: &Handle<VecState<T>, IK, N>,
-    ) -> Result<Vec<T>>;
-    fn vec_iter<T: Value, IK: Metakey, N: Metakey>(
-        &self,
-        handle: &Handle<VecState<T>, IK, N>,
-    ) -> Result<BoxedIteratorOfResult<T>>;
-    fn vec_set<T: Value, IK: Metakey, N: Metakey>(
-        &mut self,
-        handle: &mut Handle<VecState<T>, IK, N>,
-        value: Vec<T>,
-    ) -> Result<()>;
-    fn vec_add_all<T: Value, IK: Metakey, N: Metakey>(
-        &mut self,
-        handle: &mut Handle<VecState<T>, IK, N>,
-        value: impl IntoIterator<Item = T>,
-    ) -> Result<()>;
-    fn vec_len<T: Value, IK: Metakey, N: Metakey>(
-        &self,
-        handle: &Handle<VecState<T>, IK, N>,
-    ) -> Result<usize>;
-    fn vec_is_empty<T: Value, IK: Metakey, N: Metakey>(
-        &self,
-        handle: &Handle<VecState<T>, IK, N>,
-    ) -> Result<bool>;
-    // endregion
-
-    // region reducer ops
-    fn reducer_clear<T: Value, F: Reducer<T>, IK: Metakey, N: Metakey>(
-        &mut self,
-        handle: &mut Handle<ReducerState<T, F>, IK, N>,
-    ) -> Result<()>;
-    fn reducer_get<T: Value, F: Reducer<T>, IK: Metakey, N: Metakey>(
-        &self,
-        handle: &Handle<ReducerState<T, F>, IK, N>,
-    ) -> Result<Option<T>>;
-    fn reducer_reduce<T: Value, F: Reducer<T>, IK: Metakey, N: Metakey>(
-        &mut self,
-        handle: &mut Handle<ReducerState<T, F>, IK, N>,
-        value: T,
-    ) -> Result<()>;
-    // endregion
-
-    // region aggregator ops
-    fn aggregator_clear<A: Aggregator, IK: Metakey, N: Metakey>(
-        &mut self,
-        handle: &mut Handle<AggregatorState<A>, IK, N>,
-    ) -> Result<()>;
-    fn aggregator_get<A: Aggregator, IK: Metakey, N: Metakey>(
-        &self,
-        handle: &Handle<AggregatorState<A>, IK, N>,
-    ) -> Result<A::Result>;
-    fn aggregator_aggregate<A: Aggregator, IK: Metakey, N: Metakey>(
-        &mut self,
-        handle: &mut Handle<AggregatorState<A>, IK, N>,
-        value: A::Input,
-    ) -> Result<()>;
     // endregion
 }
 
@@ -318,8 +245,8 @@ impl<T: Value> Default for VecState<T> {
     }
 }
 
-pub trait Reducer<T>: Fn(&T, &T) -> T {}
-impl<F, T> Reducer<T> for F where F: Fn(&T, &T) -> T {}
+pub trait Reducer<T>: Fn(&T, &T) -> T + Send + Sync + Clone + 'static {}
+impl<F, T> Reducer<T> for F where F: Fn(&T, &T) -> T + Send + Sync + Clone + 'static {}
 
 #[derive(Debug)]
 pub struct ReducerState<T: Value, F: Reducer<T>>(PhantomData<(T, F)>);
@@ -332,8 +259,8 @@ impl<T: Value, F: Reducer<T>> Default for ReducerState<T, F> {
     }
 }
 
-pub trait Aggregator {
-    type Input;
+pub trait Aggregator: Send + Sync + Clone + 'static {
+    type Input: Value;
     type Accumulator: Value;
     type Result;
 
@@ -496,58 +423,9 @@ macro_rules! bundle {
     };
 }
 
-#[doc(hidden)]
-pub mod dummy;
 pub mod in_memory;
 pub use in_memory::InMemory;
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    bundle! {
-        struct MyBundle<F: Fn(&i32, &i32) -> i32> {
-            value: Handle<ValueState<u32>>,
-            map: Handle<MapState<String, f64>, i8, u32>,
-            reducer: Handle<ReducerState<i32, F>>,
-        }
-    }
-
-    impl<F: Fn(&i32, &i32) -> i32> MyBundle<F> {
-        fn new(reducer: F) -> MyBundle<F> {
-            MyBundle {
-                value: Handle::value("mybundle.value"),
-                map: Handle::map("mybundle.map")
-                    .with_item_key(-1)
-                    .with_namespace(0),
-                reducer: Handle::reducer("mybundle.reducer", reducer),
-            }
-        }
-    }
-
-    #[test]
-    fn dummy_test() {
-        let mut backend = dummy::DummyBackend;
-        let mut session = backend.session();
-        let mut bundle = MyBundle::new(|a: &i32, b: &i32| a + b);
-        bundle.register_states(&mut session, unsafe { &RegistrationToken::new() });
-        {
-            let mut bundle = bundle.activate(&mut session);
-            let value = bundle.value();
-            dbg!(value);
-            let map = bundle.map();
-            dbg!(map);
-            let reducer = bundle.reducer();
-            dbg!(reducer);
-        }
-        {
-            let mut bundle = bundle.activate(&mut session);
-            let value = bundle.value();
-            dbg!(value);
-            let map = bundle.map();
-            dbg!(map);
-            let reducer = bundle.reducer();
-            dbg!(reducer);
-        }
-    }
-}
+#[cfg(feature = "rocks")]
+pub mod rocks;
+#[cfg(feature = "rocks")]
+pub use rocks::Rocks;

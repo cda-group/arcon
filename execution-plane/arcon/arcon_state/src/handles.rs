@@ -379,3 +379,28 @@ impl<B: Backend, A: Aggregator, IK: Metakey, N: Metakey>
         self.backend.aggregator_aggregate(self.inner, value)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_key_serialization() {
+        let handle: Handle<MapState<String, u32>, _, _> =
+            Handle::map("test").with_item_key(0u8).with_namespace(0u8);
+        let key = handle
+            .serialize_metakeys_and_key(&"foobar".to_string())
+            .unwrap();
+        assert_eq!(
+            key.len(),
+            1 + 1 + serialization::protobuf::size_hint(&"foobar".to_string()).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_unit_state_key_empty() {
+        let handle: Handle<ValueState<u32>> = Handle::value("test");
+        let v = handle.serialize_metakeys().unwrap();
+        assert!(v.is_empty());
+    }
+}
