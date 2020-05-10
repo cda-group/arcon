@@ -636,4 +636,6 @@ pub mod tests {
             panic!("Error should have been returned")
         }
     }
+
+    common_state_tests!(TestDb::new());
 }

@@ -188,7 +188,7 @@ pub(crate) fn vec_merge(
     );
 
     // reserve space for the length
-    fixed_bytes::serialize_into(&mut result, &0)
+    fixed_bytes::serialize_into(&mut result, &0usize)
         .or_else(|e| {
             // TODO: proper logging
             eprintln!("length serialization error: {}", e);
