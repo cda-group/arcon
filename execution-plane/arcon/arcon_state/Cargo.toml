@@ -14,7 +14,7 @@ State management features for Arcon
 [features]
 default = []
 rocks = ["rocksdb"]
-faster = ["faster-rs"]
+faster = ["faster-rs", "serde"]
 metrics = []
 
 [dependencies]
@@ -24,7 +24,7 @@ snafu = "0.6"
 custom_debug = "0.4"
 smallbox = { version = "0.8", features = ["coerce"] }
 
-serde = { version = "1.0", optional = true }
+serde = { version = "1.0", features = ["serde_derive"], optional = true }
 rocksdb = { git = "https://github.com/mrobakowski/rust-rocksdb.git", branch = "arcon", optional = true } # TODO
 sled = { git = "https://github.com/mrobakowski/sled.git", optional = true } # TODO
 faster-rs = { version = "0.10", optional = true }

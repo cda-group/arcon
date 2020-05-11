@@ -1,9 +1,12 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
+use faster_rs::FasterError;
 pub use snafu::{ensure, ErrorCompat, OptionExt, ResultExt};
 use snafu::{Backtrace, Snafu};
 #[cfg(feature = "rocks")]
 use std::collections::HashSet;
+#[cfg(feature = "faster")]
+use std::sync::mpsc::RecvTimeoutError;
 use std::{io, path::PathBuf, result::Result as StdResult};
 
 pub type Result<T, E = ArconStateError> = StdResult<T, E>;
@@ -17,10 +20,7 @@ pub enum ArconStateError {
         backtrace: Backtrace,
     },
     #[snafu(display("Invalid path: {}", path.display()))]
-    InvalidPath {
-        path: PathBuf,
-        backtrace: Backtrace,
-    },
+    InvalidPath { path: PathBuf, backtrace: Backtrace },
     #[snafu(display(
         "Encountered unknown node when trying to restore: {:?}. Known nodes: {:?}",
         unknown_node,
@@ -53,11 +53,10 @@ pub enum ArconStateError {
         source: prost::EncodeError,
         backtrace: Backtrace,
     },
-    DummyImplError,
+
     #[snafu(display("Value in InMemory state backend is of incorrect type"))]
-    InMemoryWrongType {
-        backtrace: Backtrace,
-    },
+    InMemoryWrongType { backtrace: Backtrace },
+
     #[cfg(feature = "rocks")]
     #[snafu(display("Could not find the requested column family: {:?}", cf_name))]
     RocksMissingColumnFamily {
@@ -84,8 +83,50 @@ pub enum ArconStateError {
     },
     #[cfg(feature = "rocks")]
     #[snafu(display("Rocks restore directory is not empty: {}", dir.display()))]
-    RocksRestoreDirNotEmpty {
+    RocksRestoreDirNotEmpty { backtrace: Backtrace, dir: PathBuf },
+
+    #[cfg(feature = "faster")]
+    #[snafu(display("Faster did not send the result in time"))]
+    FasterReceiveTimeout {
+        source: RecvTimeoutError,
         backtrace: Backtrace,
-        dir: PathBuf,
     },
+    #[cfg(feature = "faster")]
+    #[snafu(display(
+        "Faster call returned an unexpected status: {} ({})",
+        faster_format(status),
+        status
+    ))]
+    FasterUnexpectedStatus { backtrace: Backtrace, status: u8 },
+    #[cfg(feature = "faster")]
+    #[snafu(context(false))]
+    FasterOtherError {
+        #[snafu(source(from(FasterError<'_>, faster_error_make_static)))]
+        source: FasterError<'static>,
+        backtrace: Backtrace,
+    },
+    #[cfg(feature = "faster")]
+    #[snafu(display("Faster checkpoint failed"))]
+    FasterCheckpointFailed { backtrace: Backtrace },
+}
+
+#[cfg(feature = "faster")]
+fn faster_format(status: &u8) -> &'static str {
+    match *status {
+        0 => "OK",
+        1 => "PENDING",
+        2 => "NOT_FOUND",
+        3 => "OUT_OF_MEMORY",
+        4 => "IO_ERROR",
+        5 => "CORRUPTION",
+        6 => "ABORTED",
+        _ => "?",
+    }
+}
+
+fn faster_error_make_static(err: FasterError) -> FasterError<'static> {
+    // so... this is a bummer. Every FasterError ever created actually is 'static, but for some
+    // reason the lifetime param is there. The lifetime is only associated with the BuilderError
+    // variant, and that's constructed only in one place, with a static str literal
+    unsafe { std::mem::transmute(err) }
 }

@@ -141,6 +141,8 @@ pub trait Backend: ValueOps + MapOps + VecOps + ReducerOps + AggregatorOps + Sen
     where
         Self: Sized;
 
+    fn was_restored(&self) -> bool;
+
     fn checkpoint(&self, checkpoint_path: &Path) -> Result<()>;
     fn session(&mut self) -> Session<Self> {
         Session {
@@ -298,3 +300,7 @@ pub use in_memory::InMemory;
 pub mod rocks;
 #[cfg(feature = "rocks")]
 pub use rocks::Rocks;
+#[cfg(feature = "faster")]
+pub mod faster;
+#[cfg(feature = "faster")]
+pub use faster::Faster;

@@ -343,8 +343,10 @@ impl Faster {
         }
     }
 
-    fn vec_set(&mut self, key: &Vec<u8>, value: &Vec<Vec<u8>>) -> ArconResult<()> {
-        let status = self.db.upsert(key, value, self.next_serial_number());
+    fn vec_set(&mut self, key: &Vec<u8>, value: Vec<Vec<u8>>) -> ArconResult<()> {
+        let status = self
+            .db
+            .upsert(key, &FasterVecOps::Value(value), self.next_serial_number());
         match status {
             status::OK | status::PENDING => Ok(()),
             _ => arcon_err!("faster put error: {}", status),

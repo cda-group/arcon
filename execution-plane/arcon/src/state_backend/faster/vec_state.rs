@@ -84,7 +84,7 @@ where
                 .map(|v| T::serialize(&self.common.value_serializer, &v))
                 .collect::<ArconResult<Vec<_>>>()?;
 
-            backend.vec_set(&key, &storage)
+            backend.vec_set(&key, storage)
         })
     }
 
@@ -153,5 +153,8 @@ mod test {
 
         assert_eq!(vec_state.get(&db).unwrap(), vec![1, 2, 3, 4, 5, 6]);
         assert_eq!(vec_state.len(&db).unwrap(), 6);
+
+        vec_state.set(&mut db, vec![42, 69]).unwrap();
+        assert_eq!(vec_state.get(&db).unwrap(), vec![42, 69]);
     }
 }

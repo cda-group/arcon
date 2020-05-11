@@ -50,6 +50,10 @@ impl Backend for InMemory {
         Ok(Self::default())
     }
 
+    fn was_restored(&self) -> bool {
+        false
+    }
+
     fn checkpoint(&self, _checkpoint_path: &Path) -> Result<(), ArconStateError> {
         Ok(())
     }

@@ -254,6 +254,9 @@ macro_rules! common_state_tests {
 
                 assert_eq!(bundle.vec().get().unwrap(), vec![1, 2, 3, 4, 5, 6]);
                 assert_eq!(bundle.vec().len().unwrap(), 6);
+
+                bundle.vec().set(vec![42, 69]).unwrap();
+                assert_eq!(bundle.vec().get().unwrap(), vec![42, 69]);
             }
 
             #[test]

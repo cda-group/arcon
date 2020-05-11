@@ -14,15 +14,15 @@ pub mod protobuf {
         Ok(buf)
     }
 
-    pub fn serialize_into(mut target: impl BufMut, payload: &impl Message) -> Result<()> {
-        Ok(payload.encode_length_delimited(&mut target)?)
+    pub fn serialize_into(target: &mut impl BufMut, payload: &impl Message) -> Result<()> {
+        Ok(payload.encode_length_delimited(target)?)
     }
 
     pub fn deserialize<T: Message + Default>(bytes: &[u8]) -> Result<T> {
         Ok(T::decode_length_delimited(bytes)?)
     }
 
-    pub fn deserialize_from<T: Message + Default>(source: impl Buf) -> Result<T> {
+    pub fn deserialize_from<T: Message + Default>(source: &mut impl Buf) -> Result<T> {
         Ok(T::decode_length_delimited(source)?)
     }
 
@@ -41,9 +41,9 @@ pub mod fixed_bytes {
         const SIZE: usize;
 
         fn serialize(payload: &Self) -> Result<Vec<u8>>;
-        fn serialize_into(target: impl BufMut, payload: &Self) -> Result<()>;
+        fn serialize_into(target: &mut impl BufMut, payload: &Self) -> Result<()>;
         fn deserialize(bytes: &[u8]) -> Result<Self>;
-        fn deserialize_from(source: impl Buf) -> Result<Self>;
+        fn deserialize_from(source: &mut impl Buf) -> Result<Self>;
         fn serialize_check(payload: &Self) -> Result<Vec<u8>> {
             let serialized = Self::serialize(payload)?;
             assert_eq!(
@@ -56,20 +56,44 @@ pub mod fixed_bytes {
         }
     }
 
+    pub fn serialize_bytes_into(target: &mut impl BufMut, payload: &[u8]) -> Result<()> {
+        let dest_len = target.remaining_mut();
+        let needed = usize::SIZE + payload.len();
+        ensure!(dest_len >= needed, FixedBytesSerializationError {
+            needed,
+            dest_len
+        });
+        serialize_into(target, &payload.len())?;
+        target.put_slice(payload);
+        Ok(())
+    }
     pub fn serialize<T: FixedBytes>(payload: &T) -> Result<Vec<u8>> {
         T::serialize(payload)
     }
-    pub fn serialize_into<T: FixedBytes>(target: impl BufMut, payload: &T) -> Result<()> {
+    pub fn serialize_into<T: FixedBytes>(target: &mut impl BufMut, payload: &T) -> Result<()> {
         T::serialize_into(target, payload)
     }
     pub fn deserialize<T: FixedBytes>(bytes: &[u8]) -> Result<T> {
         T::deserialize(bytes)
     }
-    pub fn deserialize_from<T: FixedBytes>(source: impl Buf) -> Result<T> {
+    pub fn deserialize_from<T: FixedBytes>(source: &mut impl Buf) -> Result<T> {
         T::deserialize_from(source)
     }
     pub fn serialize_check<T: FixedBytes>(payload: &T) -> Result<Vec<u8>> {
         T::serialize_check(payload)
+    }
+    pub fn deserialize_bytes_from(source: &mut impl Buf) -> Result<Vec<u8>> {
+        let len: usize = deserialize_from(source)?;
+
+        let source_len = source.remaining();
+        ensure!(source_len >= len, FixedBytesDeserializationError {
+            needed: len,
+            source_len
+        });
+
+        let mut res = vec![0; len];
+        source.copy_to_slice(&mut res);
+        Ok(res)
     }
 
     macro_rules! impl_fixed_bytes {
@@ -83,7 +107,7 @@ pub mod fixed_bytes {
                 }
 
                 fn serialize_into(
-                    mut target: impl BufMut,
+                    target: &mut impl BufMut,
                     payload: &Self,
                 ) -> Result<()> {
                     let bytes = payload.to_le_bytes();
@@ -104,7 +128,7 @@ pub mod fixed_bytes {
                     Ok(Self::from_le_bytes(buf))
                 }
 
-                fn deserialize_from(mut source: impl Buf) -> Result<Self> {
+                fn deserialize_from(source: &mut impl Buf) -> Result<Self> {
                     let mut buf = [0; std::mem::size_of::<Self>()];
                     let needed = buf.len();
                     let source_len = source.remaining();
@@ -135,23 +159,23 @@ pub mod fixed_bytes {
                 }
 
                 fn serialize_into(
-                    mut target: impl BufMut,
+                    target: &mut impl BufMut,
                     payload: &Self,
                 ) -> Result<()> {
                     let ($($T),*) = payload;
                     $(
-                        $T::serialize_into(&mut target, $T)?;
+                        $T::serialize_into(target, $T)?;
                     )*
                     Ok(())
                 }
 
-                fn deserialize(bytes: &[u8]) -> Result<Self> {
-                    Self::deserialize_from(bytes)
+                fn deserialize(mut bytes: &[u8]) -> Result<Self> {
+                    Self::deserialize_from(&mut bytes)
                 }
 
-                fn deserialize_from(mut source: impl Buf) -> Result<Self> {
+                fn deserialize_from(source: &mut impl Buf) -> Result<Self> {
                     Ok(($(
-                        $T::deserialize_from(&mut source)?
+                        $T::deserialize_from(source)?
                     ),*))
                 }
             }
@@ -172,7 +196,7 @@ pub mod fixed_bytes {
             Ok(vec![])
         }
 
-        fn serialize_into(_target: impl BufMut, _payload: &Self) -> Result<()> {
+        fn serialize_into(_target: &mut impl BufMut, _payload: &Self) -> Result<()> {
             Ok(())
         }
 
@@ -180,7 +204,7 @@ pub mod fixed_bytes {
             Ok(())
         }
 
-        fn deserialize_from(_source: impl Buf) -> Result<Self> {
+        fn deserialize_from(_source: &mut impl Buf) -> Result<Self> {
             Ok(())
         }
     }
@@ -192,7 +216,7 @@ pub mod fixed_bytes {
             u8::serialize(&(if *payload { 1 } else { 0 }))
         }
 
-        fn serialize_into(target: impl BufMut, payload: &Self) -> Result<()> {
+        fn serialize_into(target: &mut impl BufMut, payload: &Self) -> Result<()> {
             u8::serialize_into(target, &(if *payload { 1 } else { 0 }))
         }
 
@@ -200,7 +224,7 @@ pub mod fixed_bytes {
             Ok(u8::deserialize(bytes)? != 0)
         }
 
-        fn deserialize_from(source: impl Buf) -> Result<Self> {
+        fn deserialize_from(source: &mut impl Buf) -> Result<Self> {
             Ok(u8::deserialize_from(source)? != 0)
         }
     }
@@ -216,21 +240,21 @@ pub mod fixed_bytes {
             Ok(buf)
         }
 
-        fn serialize_into(mut target: impl BufMut, payload: &Self) -> Result<()> {
+        fn serialize_into(target: &mut impl BufMut, payload: &Self) -> Result<()> {
             for x in payload.iter() {
-                T::serialize_into(&mut target, x)?;
+                T::serialize_into(target, x)?;
             }
             Ok(())
         }
 
-        fn deserialize(bytes: &[u8]) -> Result<Self> {
-            Self::deserialize_from(bytes)
+        fn deserialize(mut bytes: &[u8]) -> Result<Self> {
+            Self::deserialize_from(&mut bytes)
         }
 
-        fn deserialize_from(mut source: impl Buf) -> Result<Self> {
+        fn deserialize_from(source: &mut impl Buf) -> Result<Self> {
             let mut result: [MaybeUninit<T>; N] = unsafe { MaybeUninit::uninit().assume_init() };
             for elem in &mut result[..] {
-                *elem = MaybeUninit::new(T::deserialize_from(&mut source)?);
+                *elem = MaybeUninit::new(T::deserialize_from(source)?);
             }
             // transmute doesn't work here. I hope this gets fixed someday :/
             // Ok(unsafe { std::mem::transmute(result) })
