@@ -296,6 +296,8 @@ impl<A: Aggregator> Default for AggregatorState<A> {
 
 pub mod in_memory;
 pub use self::in_memory::InMemory;
+pub mod metered;
+pub use self::metered::Metered;
 #[cfg(feature = "rocks")]
 pub mod rocks;
 #[cfg(feature = "rocks")]

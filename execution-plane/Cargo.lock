@@ -128,6 +128,7 @@ dependencies = [
  "bytes",
  "custom_debug",
  "faster-rs",
+ "once_cell",
  "prost 0.6.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "rocksdb",
  "serde",
