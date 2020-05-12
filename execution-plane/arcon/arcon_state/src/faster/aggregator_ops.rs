@@ -1,6 +1,6 @@
 use crate::{
     error::*, serialization::protobuf, Aggregator, AggregatorOps, AggregatorState, Faster, Handle,
-    Metakey, Value,
+    Metakey,
 };
 
 pub(crate) const ACCUMULATOR_MARKER: u8 = 0xAC;
@@ -56,8 +56,6 @@ impl AggregatorOps for Faster {
 pub fn make_aggregate_fn<A>(aggregator: A) -> Box<dyn Fn(&[u8], &[u8]) -> Vec<u8> + Send>
 where
     A: Aggregator,
-    A::Input: Value,
-    A::Accumulator: Value,
 {
     Box::new(move |old, new| {
         let mut accumulator: A::Accumulator = {

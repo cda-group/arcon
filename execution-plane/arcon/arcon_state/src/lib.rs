@@ -211,7 +211,7 @@ mod reg_token {
         }
     }
 }
-pub use reg_token::RegistrationToken;
+pub use self::reg_token::RegistrationToken;
 
 pub trait Bundle<'this, 'b, B: Backend> {
     type Active;
@@ -295,12 +295,16 @@ impl<A: Aggregator> Default for AggregatorState<A> {
 }
 
 pub mod in_memory;
-pub use in_memory::InMemory;
+pub use self::in_memory::InMemory;
 #[cfg(feature = "rocks")]
 pub mod rocks;
 #[cfg(feature = "rocks")]
-pub use rocks::Rocks;
+pub use self::rocks::Rocks;
 #[cfg(feature = "faster")]
 pub mod faster;
 #[cfg(feature = "faster")]
-pub use faster::Faster;
+pub use self::faster::Faster;
+#[cfg(feature = "sled")]
+pub mod sled;
+#[cfg(feature = "sled")]
+pub use self::sled::Sled;

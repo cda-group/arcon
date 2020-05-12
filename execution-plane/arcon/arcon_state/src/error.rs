@@ -1,6 +1,5 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
-use faster_rs::FasterError;
 pub use snafu::{ensure, ErrorCompat, OptionExt, ResultExt};
 use snafu::{Backtrace, Snafu};
 #[cfg(feature = "rocks")]
@@ -102,12 +101,18 @@ pub enum ArconStateError {
     #[snafu(context(false))]
     FasterOtherError {
         #[snafu(source(from(FasterError<'_>, faster_error_make_static)))]
-        source: FasterError<'static>,
+        source: faster_rs::FasterError<'static>,
         backtrace: Backtrace,
     },
     #[cfg(feature = "faster")]
     #[snafu(display("Faster checkpoint failed"))]
     FasterCheckpointFailed { backtrace: Backtrace },
+    #[cfg(feature = "sled")]
+    #[snafu(context(false))]
+    SledError {
+        source: ::sled::Error,
+        backtrace: Backtrace,
+    },
 }
 
 #[cfg(feature = "faster")]
@@ -124,7 +129,8 @@ fn faster_format(status: &u8) -> &'static str {
     }
 }
 
-fn faster_error_make_static(err: FasterError) -> FasterError<'static> {
+#[cfg(feature = "faster")]
+fn faster_error_make_static(err: faster_rs::FasterError) -> faster_rs::FasterError<'static> {
     // so... this is a bummer. Every FasterError ever created actually is 'static, but for some
     // reason the lifetime param is there. The lifetime is only associated with the BuilderError
     // variant, and that's constructed only in one place, with a static str literal

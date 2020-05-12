@@ -33,7 +33,7 @@ impl Aggregator for TestAggregator {
 
 bundle! {
     #[allow(missing_debug_implementations)]
-    pub struct InMemoryTestStruct<F: Reducer<u32>> {
+    pub struct InMemoryTestStruct<F: Reducer::<u32>> {
         value: Handle<ValueState<u32>, u32, u32>,
         value2: Handle<ValueState<u32>, u32, u32>,
         map: Handle<MapState<String, i32>, u32, u32>,
@@ -257,6 +257,15 @@ macro_rules! common_state_tests {
 
                 bundle.vec().set(vec![42, 69]).unwrap();
                 assert_eq!(bundle.vec().get().unwrap(), vec![42, 69]);
+                assert_eq!(
+                    bundle
+                        .vec()
+                        .iter()
+                        .unwrap()
+                        .collect::<Result<Vec<_>>>()
+                        .unwrap(),
+                    vec![42, 69]
+                );
             }
 
             #[test]

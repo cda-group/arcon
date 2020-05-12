@@ -357,6 +357,10 @@ impl Backend for Rocks {
         })
     }
 
+    fn was_restored(&self) -> bool {
+        self.restored
+    }
+
     fn checkpoint(&self, checkpoint_path: &Path) -> Result<(), ArconStateError> {
         let InitializedRocksDb { db, .. } = self.initialized()?;
 

@@ -16,6 +16,7 @@ default = []
 rocks = ["rocksdb"]
 faster = ["faster-rs", "serde"]
 metrics = []
+sled_checkpoints = ["sled"]
 
 [dependencies]
 prost = "0.6"

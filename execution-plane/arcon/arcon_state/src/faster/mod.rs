@@ -440,7 +440,7 @@ mod value_ops;
 mod vec_ops;
 
 #[cfg(test)]
-pub mod test {
+pub mod tests {
     use super::*;
     use std::{
         fs,

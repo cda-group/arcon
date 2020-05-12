@@ -2,12 +2,12 @@ use crate::{
     error::*,
     handles::BoxedIteratorOfResult,
     serialization::{fixed_bytes, fixed_bytes::FixedBytes, protobuf},
-    Handle, Metakey, Rocks, Value, VecOps, VecState,
+    sled::Sled,
+    Handle, Metakey, Value, VecOps, VecState,
 };
-use rocksdb::MergeOperands;
-use std::{iter, mem};
+use std::iter;
 
-impl VecOps for Rocks {
+impl VecOps for Sled {
     fn vec_clear<T: Value, IK: Metakey, N: Metakey>(
         &mut self,
         handle: &mut Handle<VecState<T>, IK, N>,
@@ -22,7 +22,6 @@ impl VecOps for Rocks {
         handle: &mut Handle<VecState<T>, IK, N>,
         value: T,
     ) -> Result<()> {
-        let backend = self.initialized_mut()?;
         let key = handle.serialize_metakeys()?;
 
         let mut serialized = Vec::with_capacity(
@@ -31,10 +30,11 @@ impl VecOps for Rocks {
         fixed_bytes::serialize_into(&mut serialized, &1usize)?;
         protobuf::serialize_into(&mut serialized, &value)?;
 
-        let cf = backend.get_cf_handle(handle.id)?;
-        // See the vec_merge function in this module. It is set as the merge operator for every
-        // vec state.
-        Ok(backend.db.merge_cf(cf, key, serialized)?)
+        let tree = self.tree(handle.id)?;
+        // See the vec_merge function in this module. It is set as the merge operator for every vec state.
+        tree.merge(key, serialized)?;
+
+        Ok(())
     }
 
     fn vec_get<T: Value, IK: Metakey, N: Metakey>(
@@ -79,6 +79,10 @@ impl VecOps for Rocks {
                 // variable. We have to force `serialized` to move into the closure. We have to
                 // manually keep track of the number of consumed bytes, because otherwise we'd
                 // have a self-referential struct.
+                // Also, we have to recalculate the origin, because the `serialized` is an `IVec`,
+                // so the actual contents can be inline, so they can move in memory between
+                // iterations!
+                let origin = serialized.as_ref().as_ptr() as usize;
                 let mut reader = &serialized[consumed..];
 
                 if !reader.is_empty() {
@@ -114,7 +118,9 @@ impl VecOps for Rocks {
             protobuf::serialize_into(&mut storage, &elem)?;
         }
 
-        self.put(handle.id, key, storage)
+        self.put(handle.id, &key, &storage)?;
+
+        Ok(())
     }
 
     fn vec_add_all<T: Value, IK: Metakey, N: Metakey>(
@@ -122,11 +128,10 @@ impl VecOps for Rocks {
         handle: &mut Handle<VecState<T>, IK, N>,
         values: impl IntoIterator<Item = T>,
     ) -> Result<()> {
-        let backend = self.initialized_mut()?;
         let key = handle.serialize_metakeys()?;
 
-        // figuring out the correct capacity would require iterating through `values`, but we
-        // cannot really consume the `values` iterator twice, so just preallocate a bunch of bytes
+        // figuring out the correct capacity would require iterating through `values`, but
+        // we cannot really consume the `values` iterator twice, so just preallocate a bunch of bytes
         let mut serialized = Vec::with_capacity(256);
 
         // reserve space for the length
@@ -143,8 +148,7 @@ impl VecOps for Rocks {
         // impl for Vec starts at the end and extends it, so we want the first one
         fixed_bytes::serialize_into(&mut serialized.as_mut_slice(), &len)?;
 
-        let cf = backend.get_cf_handle(handle.id)?;
-        backend.db.merge_cf(cf, key, serialized)?;
+        self.tree(handle.id)?.merge(key, serialized)?;
 
         Ok(())
     }
@@ -154,13 +158,9 @@ impl VecOps for Rocks {
         handle: &Handle<VecState<T>, IK, N>,
     ) -> Result<usize> {
         let key = handle.serialize_metakeys()?;
-        if let Some(storage) = self.get(handle.id, key)? {
+        if let Some(storage) = self.get(handle.id, &key)? {
             if storage.is_empty() {
                 return Ok(0);
-            }
-            if storage.len() < <usize as FixedBytes>::SIZE {
-                // this is certainly a bug, so let's not bother with a Result
-                panic!("vec stored with partial size?");
             }
 
             let len = fixed_bytes::deserialize_from(&mut storage.as_ref())?;
@@ -178,13 +178,9 @@ impl VecOps for Rocks {
     }
 }
 
-pub(crate) fn vec_merge(
-    _key: &[u8],
-    first: Option<&[u8]>,
-    rest: &mut MergeOperands,
-) -> Option<Vec<u8>> {
+pub fn vec_merge(_key: &[u8], existent: Option<&[u8]>, new: &[u8]) -> Option<Vec<u8>> {
     let mut result: Vec<u8> = Vec::with_capacity(
-        mem::size_of::<usize>() + first.map(|x| x.len()).unwrap_or(0) + rest.size_hint().0,
+        <usize as FixedBytes>::SIZE + existent.map(|x| x.len()).unwrap_or(0) + new.len(),
     );
 
     // reserve space for the length
@@ -209,7 +205,7 @@ pub(crate) fn vec_merge(
             .ok()
     }
 
-    for mut op in first.into_iter().chain(rest) {
+    for mut op in existent.into_iter().chain(iter::once(new)) {
         len += get_len(&mut op)?;
         result.extend_from_slice(op);
     }
