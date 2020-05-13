@@ -246,52 +246,35 @@ impl<S: StateType, IK: Metakey, N: Metakey> Handle<S, IK, N> {
 // region handle activators
 impl<T: Value, IK: Metakey, N: Metakey> Handle<ValueState<T>, IK, N> {
     #[doc(hidden)]
-    pub fn register<'s, B: Backend>(
-        &'s mut self,
-        session: &'s mut Session<B>,
-        _registration_token: &RegistrationToken,
-    ) {
-        session.backend.register_value_handle(self)
+    pub fn register<B: Backend>(&mut self, registration_token: &mut RegistrationToken<B>) {
+        registration_token.0.backend.register_value_handle(self)
     }
 }
 impl<K: Key, V: Value, IK: Metakey, N: Metakey> Handle<MapState<K, V>, IK, N> {
     #[doc(hidden)]
-    pub fn register<'s, B: Backend>(
-        &'s mut self,
-        session: &'s mut Session<B>,
-        _registration_token: &RegistrationToken,
-    ) {
-        session.backend.register_map_handle(self)
+    pub fn register<B: Backend>(&mut self, registration_token: &mut RegistrationToken<B>) {
+        registration_token.0.backend.register_map_handle(self)
     }
 }
 impl<T: Value, IK: Metakey, N: Metakey> Handle<VecState<T>, IK, N> {
     #[doc(hidden)]
-    pub fn register<'s, B: Backend>(
-        &'s mut self,
-        session: &'s mut Session<B>,
-        _registration_token: &RegistrationToken,
-    ) {
-        session.backend.register_vec_handle(self)
+    pub fn register<B: Backend>(&mut self, registration_token: &mut RegistrationToken<B>) {
+        registration_token.0.backend.register_vec_handle(self)
     }
 }
 impl<T: Value, F: Reducer<T>, IK: Metakey, N: Metakey> Handle<ReducerState<T, F>, IK, N> {
     #[doc(hidden)]
-    pub fn register<'s, B: Backend>(
-        &'s mut self,
-        session: &'s mut Session<B>,
-        _registration_token: &RegistrationToken,
-    ) {
-        session.backend.register_reducer_handle(self)
+    pub fn register<B: Backend>(&mut self, registration_token: &mut RegistrationToken<B>) {
+        registration_token.0.backend.register_reducer_handle(self)
     }
 }
 impl<A: Aggregator, IK: Metakey, N: Metakey> Handle<AggregatorState<A>, IK, N> {
     #[doc(hidden)]
-    pub fn register<'s, B: Backend>(
-        &'s mut self,
-        session: &'s mut Session<B>,
-        _registration_token: &RegistrationToken,
-    ) {
-        session.backend.register_aggregator_handle(self)
+    pub fn register<B: Backend>(&mut self, registration_token: &mut RegistrationToken<B>) {
+        registration_token
+            .0
+            .backend
+            .register_aggregator_handle(self)
     }
 }
 // endregion

@@ -566,9 +566,8 @@ pub mod tests {
     fn checkpoint_restore_state_test() {
         let mut original_test = TestDb::new();
         let mut original = original_test.session();
-        let registration_token = unsafe { RegistrationToken::new() };
         let mut a_handle = Handle::value("a");
-        a_handle.register(&mut original, &registration_token);
+        a_handle.register(&mut unsafe { RegistrationToken::new(&mut original) });
 
         let checkpoint_dir = {
             let mut a = a_handle.activate(original.backend);
@@ -591,7 +590,7 @@ pub mod tests {
 
         let mut restored = TestDb::from_checkpoint(&checkpoint_dir.to_string_lossy());
         let mut restored = restored.session();
-        a_handle.register(&mut restored, &registration_token);
+        a_handle.register(&mut unsafe { RegistrationToken::new(&mut restored) });
         {
             let mut a_restored = a_handle.activate(restored.backend);
             // TODO: serialize value state metadata (type names, serialization, etc.) into rocksdb, so
@@ -613,12 +612,11 @@ pub mod tests {
     fn missing_state_raises_errors() {
         let mut original_test = TestDb::new();
         let mut original = original_test.session();
-        let registration_token = unsafe { RegistrationToken::new() };
 
         let mut a_handle = Handle::value("a");
-        a_handle.register(&mut original, &registration_token);
+        a_handle.register(&mut unsafe { RegistrationToken::new(&mut original) });
         let mut b_handle = Handle::value("b");
-        b_handle.register(&mut original, &registration_token);
+        b_handle.register(&mut unsafe { RegistrationToken::new(&mut original) });
 
         let mut a = a_handle.activate(original.backend);
         a.set(420).unwrap();
@@ -632,7 +630,7 @@ pub mod tests {
         let mut restored = restored.session();
         // original backend had two states created, and here we try to mess with state before we
         // declare all the states
-        a_handle.register(&mut restored, &registration_token);
+        a_handle.register(&mut unsafe { RegistrationToken::new(&mut restored) });
         let a = a_handle.activate(restored.backend);
         if let ArconStateError::RocksUninitialized { unknown_cfs, .. } = a.get().unwrap_err() {
             assert_eq!(unknown_cfs.into_iter().collect::<Vec<_>>(), vec!["b"])

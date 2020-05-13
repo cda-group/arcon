@@ -100,7 +100,7 @@ pub enum ArconStateError {
     #[cfg(feature = "faster")]
     #[snafu(context(false))]
     FasterOtherError {
-        #[snafu(source(from(FasterError<'_>, faster_error_make_static)))]
+        #[snafu(source(from(faster_rs::FasterError<'_>, faster_error_make_static)))]
         source: faster_rs::FasterError<'static>,
         backtrace: Backtrace,
     },

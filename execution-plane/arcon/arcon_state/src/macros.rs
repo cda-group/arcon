@@ -31,7 +31,7 @@
 ///
 /// let mut bundle = MyTestBundle::<u32>::new();
 /// // Usually a bundle should be registered by an arcon node, but we'll do it manually here
-/// bundle.register_states(&mut backend_session, unsafe { &RegistrationToken::new() });
+/// bundle.register_states(&mut unsafe { RegistrationToken::new(&mut backend_session) });
 ///
 /// let mut active_bundle = bundle.activate(&mut backend_session);
 /// let mut value_handle = active_bundle.value();
@@ -117,10 +117,9 @@ macro_rules! bundle {
 
                 fn register_states<'s>(
                     &mut self,
-                    session: &'__backend mut $crate::Session<'s, __B>,
-                    registration_token: &$crate::RegistrationToken
+                    registration_token: &mut $crate::RegistrationToken<'s, '__backend, __B>
                 ) {
-                    $(self.$state_name.register(session, registration_token);)*
+                    $(self.$state_name.register(registration_token);)*
                 }
 
                 fn activate<'s>(

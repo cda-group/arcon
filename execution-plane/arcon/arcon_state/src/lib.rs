@@ -197,17 +197,14 @@ impl<'b, B: ?Sized> Drop for Session<'b, B> {
 }
 
 mod reg_token {
+    use super::*;
     #[derive(Debug)]
-    pub struct RegistrationToken {
-        _private_constructor: (),
-    }
-    impl RegistrationToken {
+    pub struct RegistrationToken<'s, 'b, B>(pub(crate) &'s mut Session<'b, B>);
+    impl<'s, 'b, B: Backend> RegistrationToken<'s, 'b, B> {
         /// This is only safe to call by an Arcon Node. The registration token has to be used
         /// before any state backend operations happen
-        pub unsafe fn new() -> RegistrationToken {
-            RegistrationToken {
-                _private_constructor: (),
-            }
+        pub unsafe fn new(session: &'s mut Session<'b, B>) -> Self {
+            RegistrationToken(session)
         }
     }
 }
@@ -215,11 +212,7 @@ pub use self::reg_token::RegistrationToken;
 
 pub trait Bundle<'this, 'b, B: Backend> {
     type Active;
-    fn register_states<'s>(
-        &mut self,
-        session: &'b mut Session<'s, B>,
-        registration_token: &RegistrationToken,
-    );
+    fn register_states<'s>(&mut self, registration_token: &mut RegistrationToken<'s, 'b, B>);
     fn activate<'s>(&'this mut self, session: &'b mut Session<'s, B>) -> Self::Active;
 }
 

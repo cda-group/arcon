@@ -71,7 +71,7 @@ macro_rules! common_state_tests {
                 let mut db = $construct_backend;
                 let mut session = db.session();
                 let mut bundle = bundle();
-                bundle.register_states(&mut session, unsafe { &RegistrationToken::new() });
+                bundle.register_states(&mut unsafe { RegistrationToken::new(&mut session) });
                 let mut bundle = bundle.activate(&mut session);
 
                 let unset = bundle.value().get().unwrap();
@@ -91,7 +91,7 @@ macro_rules! common_state_tests {
                 let mut db = $construct_backend;
                 let mut session = db.session();
                 let mut bundle = bundle();
-                bundle.register_states(&mut session, unsafe { &RegistrationToken::new() });
+                bundle.register_states(&mut unsafe { RegistrationToken::new(&mut session) });
                 let mut bundle = bundle.activate(&mut session);
 
                 bundle.value().set(123).unwrap();
@@ -114,7 +114,7 @@ macro_rules! common_state_tests {
                 let mut db = $construct_backend;
                 let mut session = db.session();
                 let mut bundle = bundle();
-                bundle.register_states(&mut session, unsafe { &RegistrationToken::new() });
+                bundle.register_states(&mut unsafe { RegistrationToken::new(&mut session) });
                 let mut bundle = bundle.activate(&mut session);
 
                 bundle.value().set(0).unwrap();
@@ -148,7 +148,7 @@ macro_rules! common_state_tests {
                 let mut db = $construct_backend;
                 let mut session = db.session();
                 let mut bundle = bundle();
-                bundle.register_states(&mut session, unsafe { &RegistrationToken::new() });
+                bundle.register_states(&mut unsafe { RegistrationToken::new(&mut session) });
                 let mut bundle = bundle.activate(&mut session);
 
                 // TODO: &String is weird, maybe look at how it's done with the keys in std hash-map
@@ -197,7 +197,7 @@ macro_rules! common_state_tests {
                 let mut db = $construct_backend;
                 let mut session = db.session();
                 let mut bundle = bundle();
-                bundle.register_states(&mut session, unsafe { &RegistrationToken::new() });
+                bundle.register_states(&mut unsafe { RegistrationToken::new(&mut session) });
                 let mut bundle = bundle.activate(&mut session);
 
                 let mut expected_for_key_zero = HashSet::new();
@@ -241,7 +241,7 @@ macro_rules! common_state_tests {
                 let mut db = $construct_backend;
                 let mut session = db.session();
                 let mut bundle = bundle();
-                bundle.register_states(&mut session, unsafe { &RegistrationToken::new() });
+                bundle.register_states(&mut unsafe { RegistrationToken::new(&mut session) });
                 let mut bundle = bundle.activate(&mut session);
 
                 assert!(bundle.vec().is_empty().unwrap());
@@ -273,7 +273,7 @@ macro_rules! common_state_tests {
                 let mut db = $construct_backend;
                 let mut session = db.session();
                 let mut bundle = bundle();
-                bundle.register_states(&mut session, unsafe { &RegistrationToken::new() });
+                bundle.register_states(&mut unsafe { RegistrationToken::new(&mut session) });
                 let mut bundle = bundle.activate(&mut session);
 
                 bundle.reducer().reduce(7).unwrap();
@@ -288,7 +288,7 @@ macro_rules! common_state_tests {
                 let mut db = $construct_backend;
                 let mut session = db.session();
                 let mut bundle = bundle();
-                bundle.register_states(&mut session, unsafe { &RegistrationToken::new() });
+                bundle.register_states(&mut unsafe { RegistrationToken::new(&mut session) });
                 let mut bundle = bundle.activate(&mut session);
 
                 bundle.aggregator().aggregate(1).unwrap();
