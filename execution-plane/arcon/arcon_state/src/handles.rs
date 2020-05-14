@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 use crate::*;
 use bytes::BufMut;
+use std::cell::Cell;
 
 pub struct Handle<S, IK = (), N = ()>
 where
@@ -10,8 +11,8 @@ where
     N: Metakey,
 {
     pub id: &'static str,
-    pub item_key: IK,
-    pub namespace: N,
+    pub item_key: Cell<IK>,
+    pub namespace: Cell<N>,
     pub extra_data: S::ExtraData,
     pub state_type: S,
     pub registered: bool,
@@ -41,7 +42,7 @@ where
     N: Metakey,
 {
     pub backend: &'backend mut B,
-    pub inner: &'handle mut Handle<S, IK, N>,
+    pub inner: &'handle Handle<S, IK, N>,
 }
 
 impl<B, S, IK, N> Debug for ActiveHandle<'_, '_, B, S, IK, N>
@@ -62,8 +63,8 @@ impl<S: StateType<ExtraData = ()>> Handle<S, (), ()> {
     fn no_extra(id: &'static str) -> Handle<S> {
         Handle {
             id,
-            item_key: (),
-            namespace: (),
+            item_key: Cell::new(()),
+            namespace: Cell::new(()),
             extra_data: (),
             state_type: Default::default(),
             registered: false,
@@ -90,8 +91,8 @@ impl<T: Value, F: Reducer<T>> Handle<ReducerState<T, F>> {
     pub fn reducer(id: &'static str, reducer: F) -> Self {
         Handle {
             id,
-            item_key: (),
-            namespace: (),
+            item_key: Cell::new(()),
+            namespace: Cell::new(()),
             extra_data: reducer,
             state_type: ReducerState::default(),
             registered: false,
@@ -102,8 +103,8 @@ impl<A: Aggregator> Handle<AggregatorState<A>> {
     pub fn aggregator(id: &'static str, aggregator: A) -> Self {
         Handle {
             id,
-            item_key: (),
-            namespace: (),
+            item_key: Cell::new(()),
+            namespace: Cell::new(()),
             extra_data: aggregator,
             state_type: AggregatorState::default(),
             registered: false,
@@ -115,7 +116,7 @@ impl<S: StateType, IK: Metakey, N: Metakey> Handle<S, IK, N> {
     pub fn with_item_key<NIK: Metakey>(self, item_key: NIK) -> Handle<S, NIK, N> {
         Handle {
             id: self.id,
-            item_key,
+            item_key: Cell::new(item_key),
             namespace: self.namespace,
             extra_data: self.extra_data,
             state_type: self.state_type,
@@ -126,25 +127,25 @@ impl<S: StateType, IK: Metakey, N: Metakey> Handle<S, IK, N> {
         Handle {
             id: self.id,
             item_key: self.item_key,
-            namespace,
+            namespace: Cell::new(namespace),
             extra_data: self.extra_data,
             state_type: self.state_type,
             registered: self.registered,
         }
     }
 
-    pub fn set_item_key(&mut self, item_key: IK) {
-        self.item_key = item_key;
+    pub fn set_item_key(&self, item_key: IK) {
+        self.item_key.set(item_key);
     }
-    pub fn set_namespace(&mut self, namespace: N) {
-        self.namespace = namespace;
+    pub fn set_namespace(&self, namespace: N) {
+        self.namespace.set(namespace);
     }
 
     #[inline(always)]
     pub fn serialize_metakeys_into(&self, dest: &mut impl BufMut) -> Result<()> {
         use crate::serialization::fixed_bytes::serialize_into;
-        serialize_into(dest, &self.item_key)?;
-        serialize_into(dest, &self.namespace)?;
+        serialize_into(dest, &self.item_key.get())?;
+        serialize_into(dest, &self.namespace.get())?;
         Ok(())
     }
 

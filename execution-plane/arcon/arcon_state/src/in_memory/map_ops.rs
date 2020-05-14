@@ -10,7 +10,7 @@ use std::any::Any;
 impl MapOps for InMemory {
     fn map_clear<K: Key, V: Value, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<MapState<K, V>, IK, N>,
+        handle: &Handle<MapState<K, V>, IK, N>,
     ) -> Result<()> {
         let key = handle.serialize_metakeys()?;
         self.get_mut(handle)
@@ -38,7 +38,7 @@ impl MapOps for InMemory {
 
     fn map_fast_insert<K: Key, V: Value, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<MapState<K, V>, IK, N>,
+        handle: &Handle<MapState<K, V>, IK, N>,
         key: K,
         value: V,
     ) -> Result<()> {
@@ -51,7 +51,7 @@ impl MapOps for InMemory {
 
     fn map_insert<K: Key, V: Value, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<MapState<K, V>, IK, N>,
+        handle: &Handle<MapState<K, V>, IK, N>,
         key: K,
         value: V,
     ) -> Result<Option<V>> {
@@ -73,7 +73,7 @@ impl MapOps for InMemory {
 
     fn map_insert_all<K: Key, V: Value, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<MapState<K, V>, IK, N>,
+        handle: &Handle<MapState<K, V>, IK, N>,
         key_value_pairs: impl IntoIterator<Item = (K, V)>,
     ) -> Result<()> {
         for (k, v) in key_value_pairs.into_iter() {
@@ -85,7 +85,7 @@ impl MapOps for InMemory {
 
     fn map_remove<K: Key, V: Value, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<MapState<K, V>, IK, N>,
+        handle: &Handle<MapState<K, V>, IK, N>,
         key: &K,
     ) -> Result<Option<V>> {
         let key = handle.serialize_metakeys_and_key(key)?;
@@ -101,7 +101,7 @@ impl MapOps for InMemory {
 
     fn map_fast_remove<K: Key, V: Value, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<MapState<K, V>, IK, N>,
+        handle: &Handle<MapState<K, V>, IK, N>,
         key: &K,
     ) -> Result<()> {
         let key = handle.serialize_metakeys_and_key(key)?;

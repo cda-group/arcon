@@ -6,7 +6,7 @@ use crate::{
 impl ReducerOps for Faster {
     fn reducer_clear<T: Value, F: Reducer<T>, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<ReducerState<T, F>, IK, N>,
+        handle: &Handle<ReducerState<T, F>, IK, N>,
     ) -> Result<()> {
         let key = handle.serialize_id_and_metakeys()?;
         self.remove(&key)?;
@@ -28,7 +28,7 @@ impl ReducerOps for Faster {
 
     fn reducer_reduce<T: Value, F: Reducer<T>, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<ReducerState<T, F>, IK, N>,
+        handle: &Handle<ReducerState<T, F>, IK, N>,
         value: T,
     ) -> Result<()> {
         let key = handle.serialize_id_and_metakeys()?;

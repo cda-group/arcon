@@ -251,7 +251,7 @@ impl Rocks {
     }
 }
 
-fn common_options<IK, N>(_item_key: &IK, _namespace: &N) -> Options
+fn common_options<IK, N>() -> Options
 where
     IK: Metakey,
     N: Metakey,
@@ -383,7 +383,7 @@ impl Backend for Rocks {
         handle: &'s mut Handle<ValueState<T>, IK, N>,
     ) {
         handle.registered = true;
-        let opts = common_options(&handle.item_key, &handle.namespace);
+        let opts = common_options::<IK, N>();
         self.create_column_family(&handle.id, opts)
             .expect("Could not create column family");
     }
@@ -393,7 +393,7 @@ impl Backend for Rocks {
         handle: &'s mut Handle<MapState<K, V>, IK, N>,
     ) {
         handle.registered = true;
-        let opts = common_options(&handle.item_key, &handle.namespace);
+        let opts = common_options::<IK, N>();
         self.create_column_family(&handle.id, opts)
             .expect("Could not create column family");
     }
@@ -403,7 +403,7 @@ impl Backend for Rocks {
         handle: &'s mut Handle<VecState<T>, IK, N>,
     ) {
         handle.registered = true;
-        let mut opts = common_options(&handle.item_key, &handle.namespace);
+        let mut opts = common_options::<IK, N>();
         opts.set_merge_operator_associative("vec_merge", vec_ops::vec_merge);
         self.create_column_family(&handle.id, opts)
             .expect("Could not create column family");
@@ -414,7 +414,7 @@ impl Backend for Rocks {
         handle: &'s mut Handle<ReducerState<T, F>, IK, N>,
     ) {
         handle.registered = true;
-        let mut opts = common_options(&handle.item_key, &handle.namespace);
+        let mut opts = common_options::<IK, N>();
         let reducer_merge = reducer_ops::make_reducer_merge(handle.extra_data.clone());
         opts.set_merge_operator_associative("reducer_merge", reducer_merge);
         self.create_column_family(&handle.id, opts)
@@ -426,7 +426,7 @@ impl Backend for Rocks {
         handle: &'s mut Handle<AggregatorState<A>, IK, N>,
     ) {
         handle.registered = true;
-        let mut opts = common_options(&handle.item_key, &handle.namespace);
+        let mut opts = common_options::<IK, N>();
         let aggregator_merge = aggregator_ops::make_aggregator_merge(handle.extra_data.clone());
         opts.set_merge_operator_associative("aggregator_merge", aggregator_merge);
         self.create_column_family(&handle.id, opts)

@@ -8,7 +8,7 @@ use crate::{
 impl MapOps for Faster {
     fn map_clear<K: Key, V: Value, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<MapState<K, V>, IK, N>,
+        handle: &Handle<MapState<K, V>, IK, N>,
     ) -> Result<()> {
         let prefix = handle.serialize_id_and_metakeys()?;
         let keys = self.get_vec(&prefix)?;
@@ -36,7 +36,7 @@ impl MapOps for Faster {
 
     fn map_fast_insert<K: Key, V: Value, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<MapState<K, V>, IK, N>,
+        handle: &Handle<MapState<K, V>, IK, N>,
         key: K,
         value: V,
     ) -> Result<()> {
@@ -51,7 +51,7 @@ impl MapOps for Faster {
 
     fn map_insert<K: Key, V: Value, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<MapState<K, V>, IK, N>,
+        handle: &Handle<MapState<K, V>, IK, N>,
         key: K,
         value: V,
     ) -> Result<Option<V>> {
@@ -73,7 +73,7 @@ impl MapOps for Faster {
 
     fn map_insert_all<K: Key, V: Value, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<MapState<K, V>, IK, N>,
+        handle: &Handle<MapState<K, V>, IK, N>,
         key_value_pairs: impl IntoIterator<Item = (K, V)>,
     ) -> Result<()> {
         let prefix = handle.serialize_id_and_metakeys()?;
@@ -89,7 +89,7 @@ impl MapOps for Faster {
 
     fn map_remove<K: Key, V: Value, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<MapState<K, V>, IK, N>,
+        handle: &Handle<MapState<K, V>, IK, N>,
         key: &K,
     ) -> Result<Option<V>> {
         let prefix = handle.serialize_id_and_metakeys()?;
@@ -109,7 +109,7 @@ impl MapOps for Faster {
 
     fn map_fast_remove<K: Key, V: Value, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<MapState<K, V>, IK, N>,
+        handle: &Handle<MapState<K, V>, IK, N>,
         key: &K,
     ) -> Result<()> {
         let prefix = handle.serialize_id_and_metakeys()?;

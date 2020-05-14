@@ -7,7 +7,7 @@ use std::iter;
 impl VecOps for Faster {
     fn vec_clear<T: Value, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<VecState<T>, IK, N>,
+        handle: &Handle<VecState<T>, IK, N>,
     ) -> Result<()> {
         let key = handle.serialize_id_and_metakeys()?;
         self.remove(&key)?;
@@ -16,7 +16,7 @@ impl VecOps for Faster {
 
     fn vec_append<T: Value, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<VecState<T>, IK, N>,
+        handle: &Handle<VecState<T>, IK, N>,
         value: T,
     ) -> Result<()> {
         let key = handle.serialize_id_and_metakeys()?;
@@ -57,7 +57,7 @@ impl VecOps for Faster {
 
     fn vec_set<T: Value, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<VecState<T>, IK, N>,
+        handle: &Handle<VecState<T>, IK, N>,
         value: Vec<T>,
     ) -> Result<()> {
         let key = handle.serialize_id_and_metakeys()?;
@@ -71,7 +71,7 @@ impl VecOps for Faster {
 
     fn vec_add_all<T: Value, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<VecState<T>, IK, N>,
+        handle: &Handle<VecState<T>, IK, N>,
         values: impl IntoIterator<Item = T>,
     ) -> Result<()> {
         let key = handle.serialize_id_and_metakeys()?;

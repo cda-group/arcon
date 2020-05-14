@@ -6,7 +6,7 @@ use crate::{
 pub trait ValueOps {
     fn value_clear<T: Value, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<ValueState<T>, IK, N>,
+        handle: &Handle<ValueState<T>, IK, N>,
     ) -> Result<()>;
 
     fn value_get<T: Value, IK: Metakey, N: Metakey>(
@@ -16,13 +16,13 @@ pub trait ValueOps {
 
     fn value_set<T: Value, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<ValueState<T>, IK, N>,
+        handle: &Handle<ValueState<T>, IK, N>,
         value: T,
     ) -> Result<Option<T>>;
 
     fn value_fast_set<T: Value, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<ValueState<T>, IK, N>,
+        handle: &Handle<ValueState<T>, IK, N>,
         value: T,
     ) -> Result<()>;
 }
@@ -30,7 +30,7 @@ pub trait ValueOps {
 pub trait MapOps {
     fn map_clear<K: Key, V: Value, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<MapState<K, V>, IK, N>,
+        handle: &Handle<MapState<K, V>, IK, N>,
     ) -> Result<()>;
 
     fn map_get<K: Key, V: Value, IK: Metakey, N: Metakey>(
@@ -41,33 +41,33 @@ pub trait MapOps {
 
     fn map_fast_insert<K: Key, V: Value, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<MapState<K, V>, IK, N>,
+        handle: &Handle<MapState<K, V>, IK, N>,
         key: K,
         value: V,
     ) -> Result<()>;
 
     fn map_insert<K: Key, V: Value, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<MapState<K, V>, IK, N>,
+        handle: &Handle<MapState<K, V>, IK, N>,
         key: K,
         value: V,
     ) -> Result<Option<V>>;
 
     fn map_insert_all<K: Key, V: Value, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<MapState<K, V>, IK, N>,
+        handle: &Handle<MapState<K, V>, IK, N>,
         key_value_pairs: impl IntoIterator<Item = (K, V)>,
     ) -> Result<()>;
 
     fn map_remove<K: Key, V: Value, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<MapState<K, V>, IK, N>,
+        handle: &Handle<MapState<K, V>, IK, N>,
         key: &K,
     ) -> Result<Option<V>>;
 
     fn map_fast_remove<K: Key, V: Value, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<MapState<K, V>, IK, N>,
+        handle: &Handle<MapState<K, V>, IK, N>,
         key: &K,
     ) -> Result<()>;
 
@@ -106,11 +106,11 @@ pub trait MapOps {
 pub trait VecOps {
     fn vec_clear<T: Value, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<VecState<T>, IK, N>,
+        handle: &Handle<VecState<T>, IK, N>,
     ) -> Result<()>;
     fn vec_append<T: Value, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<VecState<T>, IK, N>,
+        handle: &Handle<VecState<T>, IK, N>,
         value: T,
     ) -> Result<()>;
     fn vec_get<T: Value, IK: Metakey, N: Metakey>(
@@ -123,12 +123,12 @@ pub trait VecOps {
     ) -> Result<BoxedIteratorOfResult<T>>;
     fn vec_set<T: Value, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<VecState<T>, IK, N>,
+        handle: &Handle<VecState<T>, IK, N>,
         value: Vec<T>,
     ) -> Result<()>;
     fn vec_add_all<T: Value, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<VecState<T>, IK, N>,
+        handle: &Handle<VecState<T>, IK, N>,
         values: impl IntoIterator<Item = T>,
     ) -> Result<()>;
     fn vec_len<T: Value, IK: Metakey, N: Metakey>(
@@ -144,7 +144,7 @@ pub trait VecOps {
 pub trait ReducerOps {
     fn reducer_clear<T: Value, F: Reducer<T>, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<ReducerState<T, F>, IK, N>,
+        handle: &Handle<ReducerState<T, F>, IK, N>,
     ) -> Result<()>;
     fn reducer_get<T: Value, F: Reducer<T>, IK: Metakey, N: Metakey>(
         &self,
@@ -152,7 +152,7 @@ pub trait ReducerOps {
     ) -> Result<Option<T>>;
     fn reducer_reduce<T: Value, F: Reducer<T>, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<ReducerState<T, F>, IK, N>,
+        handle: &Handle<ReducerState<T, F>, IK, N>,
         value: T,
     ) -> Result<()>;
 }
@@ -160,7 +160,7 @@ pub trait ReducerOps {
 pub trait AggregatorOps {
     fn aggregator_clear<A: Aggregator, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<AggregatorState<A>, IK, N>,
+        handle: &Handle<AggregatorState<A>, IK, N>,
     ) -> Result<()>;
     fn aggregator_get<A: Aggregator, IK: Metakey, N: Metakey>(
         &self,
@@ -168,7 +168,7 @@ pub trait AggregatorOps {
     ) -> Result<A::Result>;
     fn aggregator_aggregate<A: Aggregator, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<AggregatorState<A>, IK, N>,
+        handle: &Handle<AggregatorState<A>, IK, N>,
         value: A::Input,
     ) -> Result<()>;
 }

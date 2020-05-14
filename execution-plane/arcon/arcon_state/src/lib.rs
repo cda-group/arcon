@@ -36,8 +36,8 @@ impl<T> Value for T where T: prost::Message + Default + Clone + 'static {}
 pub trait Key: prost::Message + Default + 'static {}
 impl<T> Key for T where T: prost::Message + Default + 'static {}
 
-pub trait Metakey: FixedBytes + Send + Sync + 'static {}
-impl<T> Metakey for T where T: FixedBytes + Send + Sync + 'static {}
+pub trait Metakey: FixedBytes + Copy + Clone + Send + Sync + 'static {}
+impl<T> Metakey for T where T: FixedBytes + Copy + Clone + Send + Sync + 'static {}
 
 #[derive(Debug, Default)]
 pub struct Config {

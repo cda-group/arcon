@@ -5,7 +5,7 @@ use crate::{
 impl ValueOps for Sled {
     fn value_clear<T: Value, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<ValueState<T>, IK, N>,
+        handle: &Handle<ValueState<T>, IK, N>,
     ) -> Result<()> {
         let key = handle.serialize_metakeys()?;
         self.remove(handle.id, &key)?;
@@ -27,7 +27,7 @@ impl ValueOps for Sled {
 
     fn value_set<T: Value, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<ValueState<T>, IK, N>,
+        handle: &Handle<ValueState<T>, IK, N>,
         value: T,
     ) -> Result<Option<T>> {
         let key = handle.serialize_metakeys()?;
@@ -41,7 +41,7 @@ impl ValueOps for Sled {
 
     fn value_fast_set<T: Value, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<ValueState<T>, IK, N>,
+        handle: &Handle<ValueState<T>, IK, N>,
         value: T,
     ) -> Result<()> {
         let key = handle.serialize_metakeys()?;

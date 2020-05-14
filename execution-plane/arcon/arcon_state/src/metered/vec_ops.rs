@@ -8,12 +8,12 @@ impl<B: Backend> VecOps for Metered<B> {
     measure_delegated! { VecOps:
         fn vec_clear<T: Value, IK: Metakey, N: Metakey>(
             &mut self,
-            handle: &mut Handle<VecState<T>, IK, N>,
+            handle: &Handle<VecState<T>, IK, N>,
         ) -> Result<()>;
 
         fn vec_append<T: Value, IK: Metakey, N: Metakey>(
             &mut self,
-            handle: &mut Handle<VecState<T>, IK, N>,
+            handle: &Handle<VecState<T>, IK, N>,
             value: T,
         ) -> Result<()>;
 
@@ -24,13 +24,13 @@ impl<B: Backend> VecOps for Metered<B> {
 
         fn vec_set<T: Value, IK: Metakey, N: Metakey>(
             &mut self,
-            handle: &mut Handle<VecState<T>, IK, N>,
+            handle: &Handle<VecState<T>, IK, N>,
             value: Vec<T>,
         ) -> Result<()>;
 
         fn vec_add_all<T: Value, IK: Metakey, N: Metakey>(
             &mut self,
-            handle: &mut Handle<VecState<T>, IK, N>,
+            handle: &Handle<VecState<T>, IK, N>,
             values: impl IntoIterator<Item = T>,
         ) -> Result<()>;
 

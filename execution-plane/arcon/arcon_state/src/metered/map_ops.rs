@@ -8,7 +8,7 @@ impl<B: Backend> MapOps for Metered<B> {
     measure_delegated! { MapOps:
         fn map_clear<K: Key, V: Value, IK: Metakey, N: Metakey>(
             &mut self,
-            handle: &mut Handle<MapState<K, V>, IK, N>,
+            handle: &Handle<MapState<K, V>, IK, N>,
         ) -> Result<()>;
 
         fn map_get<K: Key, V: Value, IK: Metakey, N: Metakey>(
@@ -19,33 +19,33 @@ impl<B: Backend> MapOps for Metered<B> {
 
         fn map_fast_insert<K: Key, V: Value, IK: Metakey, N: Metakey>(
             &mut self,
-            handle: &mut Handle<MapState<K, V>, IK, N>,
+            handle: &Handle<MapState<K, V>, IK, N>,
             key: K,
             value: V,
         ) -> Result<()>;
 
         fn map_insert<K: Key, V: Value, IK: Metakey, N: Metakey>(
             &mut self,
-            handle: &mut Handle<MapState<K, V>, IK, N>,
+            handle: &Handle<MapState<K, V>, IK, N>,
             key: K,
             value: V,
         ) -> Result<Option<V>>;
 
         fn map_insert_all<K: Key, V: Value, IK: Metakey, N: Metakey>(
             &mut self,
-            handle: &mut Handle<MapState<K, V>, IK, N>,
+            handle: &Handle<MapState<K, V>, IK, N>,
             key_value_pairs: impl IntoIterator<Item = (K, V)>,
         ) -> Result<()>;
 
         fn map_remove<K: Key, V: Value, IK: Metakey, N: Metakey>(
             &mut self,
-            handle: &mut Handle<MapState<K, V>, IK, N>,
+            handle: &Handle<MapState<K, V>, IK, N>,
             key: &K,
         ) -> Result<Option<V>>;
 
         fn map_fast_remove<K: Key, V: Value, IK: Metakey, N: Metakey>(
             &mut self,
-            handle: &mut Handle<MapState<K, V>, IK, N>,
+            handle: &Handle<MapState<K, V>, IK, N>,
             key: &K,
         ) -> Result<()>;
 

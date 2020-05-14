@@ -9,7 +9,7 @@ pub(crate) const VALUE_MARKER: u8 = 0x00;
 impl AggregatorOps for Faster {
     fn aggregator_clear<A: Aggregator, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<AggregatorState<A>, IK, N>,
+        handle: &Handle<AggregatorState<A>, IK, N>,
     ) -> Result<()> {
         let key = handle.serialize_id_and_metakeys()?;
         self.remove(&key)?;
@@ -39,7 +39,7 @@ impl AggregatorOps for Faster {
 
     fn aggregator_aggregate<A: Aggregator, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<AggregatorState<A>, IK, N>,
+        handle: &Handle<AggregatorState<A>, IK, N>,
         value: <A as Aggregator>::Input,
     ) -> Result<()> {
         let key = handle.serialize_id_and_metakeys()?;

@@ -4,7 +4,7 @@ use smallbox::SmallBox;
 impl AggregatorOps for InMemory {
     fn aggregator_clear<A: Aggregator, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<AggregatorState<A>, IK, N>,
+        handle: &Handle<AggregatorState<A>, IK, N>,
     ) -> Result<()> {
         let key = handle.serialize_metakeys()?;
         let _old_value = self.get_mut(handle).remove(&key);
@@ -33,7 +33,7 @@ impl AggregatorOps for InMemory {
 
     fn aggregator_aggregate<A: Aggregator, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<AggregatorState<A>, IK, N>,
+        handle: &Handle<AggregatorState<A>, IK, N>,
         value: <A as Aggregator>::Input,
     ) -> Result<()> {
         let key = handle.serialize_metakeys()?;

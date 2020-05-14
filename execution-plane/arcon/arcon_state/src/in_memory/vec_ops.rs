@@ -7,7 +7,7 @@ use std::iter;
 impl VecOps for InMemory {
     fn vec_clear<T: Value, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<VecState<T>, IK, N>,
+        handle: &Handle<VecState<T>, IK, N>,
     ) -> Result<()> {
         let key = handle.serialize_metakeys()?;
         self.get_mut(handle).remove(&key);
@@ -16,7 +16,7 @@ impl VecOps for InMemory {
 
     fn vec_append<T: Value, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<VecState<T>, IK, N>,
+        handle: &Handle<VecState<T>, IK, N>,
         value: T,
     ) -> Result<()> {
         let key = handle.serialize_metakeys()?;
@@ -74,7 +74,7 @@ impl VecOps for InMemory {
 
     fn vec_set<T: Value, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<VecState<T>, IK, N>,
+        handle: &Handle<VecState<T>, IK, N>,
         value: Vec<T>,
     ) -> Result<()> {
         let key = handle.serialize_metakeys()?;
@@ -84,7 +84,7 @@ impl VecOps for InMemory {
 
     fn vec_add_all<T: Value, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<VecState<T>, IK, N>,
+        handle: &Handle<VecState<T>, IK, N>,
         value: impl IntoIterator<Item = T>,
     ) -> Result<()> {
         let key = handle.serialize_metakeys()?;

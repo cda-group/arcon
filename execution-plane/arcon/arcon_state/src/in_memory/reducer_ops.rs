@@ -4,7 +4,7 @@ use smallbox::SmallBox;
 impl ReducerOps for InMemory {
     fn reducer_clear<T: Value, F: Reducer<T>, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<ReducerState<T, F>, IK, N>,
+        handle: &Handle<ReducerState<T, F>, IK, N>,
     ) -> Result<()> {
         let key = handle.serialize_metakeys()?;
         let _old_value = self.get_mut(handle).remove(&key);
@@ -30,7 +30,7 @@ impl ReducerOps for InMemory {
 
     fn reducer_reduce<T: Value, F: Reducer<T>, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<ReducerState<T, F>, IK, N>,
+        handle: &Handle<ReducerState<T, F>, IK, N>,
         value: T,
     ) -> Result<()> {
         let key = handle.serialize_metakeys()?;

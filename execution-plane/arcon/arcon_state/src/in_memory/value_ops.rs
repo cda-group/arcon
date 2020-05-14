@@ -5,7 +5,7 @@ use std::any::Any;
 impl ValueOps for InMemory {
     fn value_clear<T: Value, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<ValueState<T>, IK, N>,
+        handle: &Handle<ValueState<T>, IK, N>,
     ) -> Result<()> {
         self.get_mut(handle).remove(&handle.serialize_metakeys()?);
         Ok(())
@@ -25,7 +25,7 @@ impl ValueOps for InMemory {
 
     fn value_set<T: Value, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<ValueState<T>, IK, N>,
+        handle: &Handle<ValueState<T>, IK, N>,
         value: T,
     ) -> Result<Option<T>> {
         let key = handle.serialize_metakeys()?;
@@ -42,7 +42,7 @@ impl ValueOps for InMemory {
 
     fn value_fast_set<T: Value, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<ValueState<T>, IK, N>,
+        handle: &Handle<ValueState<T>, IK, N>,
         value: T,
     ) -> Result<()> {
         let key = handle.serialize_metakeys()?;

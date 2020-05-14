@@ -8,7 +8,7 @@ use std::iter;
 impl ReducerOps for Sled {
     fn reducer_clear<T: Value, F: Reducer<T>, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<ReducerState<T, F>, IK, N>,
+        handle: &Handle<ReducerState<T, F>, IK, N>,
     ) -> Result<()> {
         let key = handle.serialize_metakeys()?;
         self.remove(handle.id, &key)?;
@@ -30,7 +30,7 @@ impl ReducerOps for Sled {
 
     fn reducer_reduce<T: Value, F: Reducer<T>, IK: Metakey, N: Metakey>(
         &mut self,
-        handle: &mut Handle<ReducerState<T, F>, IK, N>,
+        handle: &Handle<ReducerState<T, F>, IK, N>,
         value: T,
     ) -> Result<()> {
         let key = handle.serialize_metakeys()?;
