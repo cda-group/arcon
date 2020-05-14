@@ -1,6 +1,6 @@
 use crate::{
-    error::*, Aggregator, AggregatorState, Backend, Handle, Key, MapState, Metakey, Reducer,
-    ReducerState, Value, ValueState, VecState,
+    error::*, Aggregator, AggregatorState, Backend, BackendContainer, Handle, Key, MapState,
+    Metakey, Reducer, ReducerState, Value, ValueState, VecState,
 };
 use sled::{open, Batch, Db, IVec, Tree};
 use std::path::Path;
@@ -60,19 +60,19 @@ impl Sled {
 }
 
 impl Backend for Sled {
-    fn create(live_path: &Path) -> Result<Self, ArconStateError>
+    fn create(live_path: &Path) -> Result<BackendContainer<Self>>
     where
         Self: Sized,
     {
         let db = open(live_path)?;
-        Ok(Sled {
+        Ok(BackendContainer::new(Sled {
             db,
             restored: false,
-        })
+        }))
     }
 
     #[allow(unused_variables)]
-    fn restore(live_path: &Path, checkpoint_path: &Path) -> Result<Self, ArconStateError>
+    fn restore(live_path: &Path, checkpoint_path: &Path) -> Result<BackendContainer<Self>>
     where
         Self: Sized,
     {
@@ -90,7 +90,7 @@ impl Backend for Sled {
             restored = true;
         }
 
-        Ok(Sled { db, restored })
+        Ok(BackendContainer::new(Sled { db, restored }))
     }
 
     fn was_restored(&self) -> bool {
@@ -272,7 +272,7 @@ mod tests {
 
     #[derive(Debug)]
     pub struct TestDb {
-        sled: Sled,
+        sled: BackendContainer<Sled>,
         dir: TempDir,
     }
 
@@ -288,7 +288,7 @@ mod tests {
     }
 
     impl Deref for TestDb {
-        type Target = Sled;
+        type Target = BackendContainer<Sled>;
 
         fn deref(&self) -> &Self::Target {
             &self.sled
@@ -305,7 +305,8 @@ mod tests {
     #[test]
     fn test_sled_checkpoints() {
         let dir = TempDir::new().unwrap();
-        let sled = Sled::create(dir.path()).unwrap();
+        let mut sled = Sled::create(dir.path()).unwrap();
+        let sled = sled.get_mut();
 
         sled.db.insert(b"a", b"1").unwrap();
         sled.db.insert(b"b", b"2").unwrap();
@@ -319,7 +320,8 @@ mod tests {
 
         sled.checkpoint(chkp_dir.path()).unwrap();
 
-        let restored = Sled::restore(restore_dir.path(), chkp_dir.path()).unwrap();
+        let mut restored = Sled::restore(restore_dir.path(), chkp_dir.path()).unwrap();
+        let restored = restored.get_mut();
 
         assert!(!sled.was_restored());
         assert!(restored.was_restored());

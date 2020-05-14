@@ -19,7 +19,7 @@ metrics = []
 sled_checkpoints = ["sled"]
 
 [dependencies]
-prost = "0.6"
+prost = { git = "https://github.com/Max-Meldrum/prost.git", branch = "derive_generics" }
 bytes = "0.5"
 snafu = "0.6"
 custom_debug = "0.4"

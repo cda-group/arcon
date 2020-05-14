@@ -68,7 +68,7 @@ macro_rules! common_state_tests {
 
             #[test]
             fn value_state_test() {
-                let mut db = $construct_backend;
+                let db = $construct_backend;
                 let mut session = db.session();
                 let mut bundle = bundle();
                 bundle.register_states(&mut unsafe { RegistrationToken::new(&mut session) });
@@ -88,7 +88,7 @@ macro_rules! common_state_tests {
 
             #[test]
             fn value_states_are_independant() {
-                let mut db = $construct_backend;
+                let db = $construct_backend;
                 let mut session = db.session();
                 let mut bundle = bundle();
                 bundle.register_states(&mut unsafe { RegistrationToken::new(&mut session) });
@@ -111,7 +111,7 @@ macro_rules! common_state_tests {
 
             #[test]
             fn value_states_handle_state_for_different_keys_and_namespaces() {
-                let mut db = $construct_backend;
+                let db = $construct_backend;
                 let mut session = db.session();
                 let mut bundle = bundle();
                 bundle.register_states(&mut unsafe { RegistrationToken::new(&mut session) });
@@ -145,7 +145,7 @@ macro_rules! common_state_tests {
 
             #[test]
             fn map_state_test() {
-                let mut db = $construct_backend;
+                let db = $construct_backend;
                 let mut session = db.session();
                 let mut bundle = bundle();
                 bundle.register_states(&mut unsafe { RegistrationToken::new(&mut session) });
@@ -194,7 +194,7 @@ macro_rules! common_state_tests {
 
             #[test]
             fn map_clearing_test() {
-                let mut db = $construct_backend;
+                let db = $construct_backend;
                 let mut session = db.session();
                 let mut bundle = bundle();
                 bundle.register_states(&mut unsafe { RegistrationToken::new(&mut session) });
@@ -238,7 +238,7 @@ macro_rules! common_state_tests {
 
             #[test]
             fn vec_state_test() {
-                let mut db = $construct_backend;
+                let db = $construct_backend;
                 let mut session = db.session();
                 let mut bundle = bundle();
                 bundle.register_states(&mut unsafe { RegistrationToken::new(&mut session) });
@@ -270,7 +270,7 @@ macro_rules! common_state_tests {
 
             #[test]
             fn reducing_state_test() {
-                let mut db = $construct_backend;
+                let db = $construct_backend;
                 let mut session = db.session();
                 let mut bundle = bundle();
                 bundle.register_states(&mut unsafe { RegistrationToken::new(&mut session) });
@@ -285,7 +285,7 @@ macro_rules! common_state_tests {
 
             #[test]
             fn aggregating_state_test() {
-                let mut db = $construct_backend;
+                let db = $construct_backend;
                 let mut session = db.session();
                 let mut bundle = bundle();
                 bundle.register_states(&mut unsafe { RegistrationToken::new(&mut session) });

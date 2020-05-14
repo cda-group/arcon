@@ -46,8 +46,10 @@ pub struct Config {
     backend_ids: Vec<String>,
 }
 
-pub trait Backend: ValueOps + MapOps + VecOps + ReducerOps + AggregatorOps + Send {
-    fn restore_or_create(config: &Config, id: String) -> Result<Self>
+pub trait Backend:
+    ValueOps + MapOps + VecOps + ReducerOps + AggregatorOps + Send + 'static
+{
+    fn restore_or_create(config: &Config, id: String) -> Result<BackendContainer<Self>>
     where
         Self: Sized,
     {
@@ -134,21 +136,23 @@ pub trait Backend: ValueOps + MapOps + VecOps + ReducerOps + AggregatorOps + Sen
         }
     }
 
-    fn create(live_path: &Path) -> Result<Self>
+    fn create(live_path: &Path) -> Result<BackendContainer<Self>>
     where
         Self: Sized;
-    fn restore(live_path: &Path, checkpoint_path: &Path) -> Result<Self>
+    fn restore(live_path: &Path, checkpoint_path: &Path) -> Result<BackendContainer<Self>>
     where
         Self: Sized;
 
     fn was_restored(&self) -> bool;
 
     fn checkpoint(&self, checkpoint_path: &Path) -> Result<()>;
-    fn session(&mut self) -> Session<Self> {
-        Session {
-            backend: self,
-            drop_hook: None,
-        }
+
+    /// should not be called from outside `BackendContainer::session`
+    fn start_session(&mut self) {}
+
+    /// should not be called from outside `BackendContainer::session`
+    fn session_drop_hook(&mut self) -> Option<Box<dyn FnOnce(&mut Self)>> {
+        None
     }
 
     // region handle registration
@@ -175,9 +179,34 @@ pub trait Backend: ValueOps + MapOps + VecOps + ReducerOps + AggregatorOps + Sen
     // endregion
 }
 
+#[derive(Debug)]
+pub struct BackendContainer<B: Backend> {
+    inner: RefCell<B>,
+}
+
+impl<B: Backend> BackendContainer<B> {
+    fn new(backend: B) -> Self {
+        BackendContainer {
+            inner: RefCell::new(backend),
+        }
+    }
+
+    pub fn get_mut(&mut self) -> &mut B {
+        self.inner.get_mut()
+    }
+
+    pub fn session(&self) -> Session<B> {
+        let mut backend = self.inner.borrow_mut();
+        backend.start_session();
+        let drop_hook = backend.session_drop_hook();
+
+        Session { backend, drop_hook }
+    }
+}
+
 pub struct Session<'b, B: ?Sized> {
-    #[doc(hidden)]
-    pub backend: &'b mut B,
+    /// DANGER: _never_ overwrite this
+    pub backend: RefMut<'b, B>,
     drop_hook: Option<Box<dyn FnOnce(&mut B)>>,
 }
 
@@ -190,7 +219,7 @@ impl<B> Debug for Session<'_, B> {
 impl<'b, B: ?Sized> Drop for Session<'b, B> {
     fn drop(&mut self) {
         match self.drop_hook.take() {
-            Some(drop_hook) => drop_hook(self.backend),
+            Some(drop_hook) => drop_hook(&mut *self.backend),
             None => (),
         }
     }
@@ -199,21 +228,29 @@ impl<'b, B: ?Sized> Drop for Session<'b, B> {
 mod reg_token {
     use super::*;
     #[derive(Debug)]
-    pub struct RegistrationToken<'s, 'b, B>(pub(crate) &'s mut Session<'b, B>);
-    impl<'s, 'b, B: Backend> RegistrationToken<'s, 'b, B> {
+    pub struct RegistrationToken<'b, B>(pub(crate) &'b mut B);
+    impl<'s, B: Backend> RegistrationToken<'s, B> {
         /// This is only safe to call by an Arcon Node. The registration token has to be used
         /// before any state backend operations happen
-        pub unsafe fn new(session: &'s mut Session<'b, B>) -> Self {
-            RegistrationToken(session)
+        pub unsafe fn new<'b>(session: &'s mut Session<'b, B>) -> Self {
+            RegistrationToken(&mut *session.backend)
         }
     }
 }
 pub use self::reg_token::RegistrationToken;
 
-pub trait Bundle<'this, 'b, B: Backend> {
+pub trait Bundle<'this, 'session, 'backend, B: Backend>: Send {
     type Active;
-    fn register_states<'s>(&mut self, registration_token: &mut RegistrationToken<'s, 'b, B>);
-    fn activate<'s>(&'this mut self, session: &'b mut Session<'s, B>) -> Self::Active;
+    fn register_states(&mut self, registration_token: &mut RegistrationToken<B>);
+    fn activate(&'this mut self, session: &'session mut Session<'backend, B>) -> Self::Active;
+}
+
+impl<'this, 'session, 'backend, B: Backend> Bundle<'this, 'session, 'backend, B> for () {
+    type Active = ();
+    fn register_states(&mut self, _registration_token: &mut RegistrationToken<B>) {}
+    fn activate(&mut self, _session: &mut Session<B>) -> () {
+        ()
+    }
 }
 
 pub trait StateType: Default {
@@ -303,3 +340,4 @@ pub use self::faster::Faster;
 pub mod sled;
 #[cfg(feature = "sled")]
 pub use self::sled::Sled;
+use std::cell::{RefCell, RefMut};

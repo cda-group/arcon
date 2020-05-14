@@ -75,11 +75,11 @@ macro_rules! bundle {
         const _: () = {
             #[allow(missing_debug_implementations)]
             pub struct Active<
-                '__bundle, '__backend, $($($generic_lifetime_param,)*)?
+                '__bundle, '__session, '__backend, $($($generic_lifetime_param,)*)?
                 __B: $crate::Backend,
                 $($($generic_param $(: $first_bound $(+ $other_bounds)*)?,)*)?
             > {
-                backend: &'__backend mut __B,
+                session: &'__session mut $crate::Session<'__backend, __B>,
                 inner: &'__bundle mut $name$(<
                     $($generic_lifetime_param,)*
                     $($generic_param,)*
@@ -87,11 +87,11 @@ macro_rules! bundle {
             }
 
             impl<
-                '__bundle, '__backend, $($($generic_lifetime_param,)*)?
+                '__bundle, '__session, '__backend, $($($generic_lifetime_param,)*)?
                 __B: $crate::Backend,
                 $($($generic_param $(: $first_bound $(+ $other_bounds)*)?,)*)?
             > Active<
-                '__bundle, '__backend, $($($generic_lifetime_param,)*)?
+                '__bundle, '__session, '__backend, $($($generic_lifetime_param,)*)?
                 __B, $($($generic_param,)*)?
             > {$(
                 $(#[$state_meta])*
@@ -99,35 +99,35 @@ macro_rules! bundle {
                 pub fn $state_name(&mut self) -> $crate::handles::ActiveHandle<__B,
                     $state_type $(, $item_key_type $(, $namespace_type)?)?
                 > {
-                    self.inner.$state_name.activate(&mut self.backend)
+                    self.inner.$state_name.activate(self.session)
                 }
             )*}
 
             impl<
-                '__this, '__backend, $($($generic_lifetime_param,)*)?
-                __B: $crate::Backend + '__backend,
-                $($($generic_param : '__this $(+ $first_bound $(+ $other_bounds)*)?,)*)?
-            > $crate::Bundle<'__this, '__backend, __B> for $name$(<
+                '__this, '__session, '__backend, $($($generic_lifetime_param,)*)?
+                __B: $crate::Backend,
+                $($($generic_param $(: $first_bound $(+ $other_bounds)*)?,)*)?
+            > $crate::Bundle<'__this, '__session, '__backend, __B> for $name$(<
                 $($generic_lifetime_param,)* $($generic_param,)*
-            >)? {
+            >)? where '__backend: '__session {
                 type Active = Active<
-                    '__this, '__backend, $($($generic_lifetime_param,)*)?
+                    '__this, '__session, '__backend, $($($generic_lifetime_param,)*)?
                     __B, $($($generic_param,)*)?
                 >;
 
-                fn register_states<'s>(
+                fn register_states(
                     &mut self,
-                    registration_token: &mut $crate::RegistrationToken<'s, '__backend, __B>
+                    registration_token: &mut $crate::RegistrationToken<__B>
                 ) {
                     $(self.$state_name.register(registration_token);)*
                 }
 
-                fn activate<'s>(
+                fn activate(
                     &'__this mut self,
-                    session: &'__backend mut $crate::Session<'s, __B>,
+                    session: &'__session mut $crate::Session<'__backend, __B>,
                 ) -> Self::Active {
                     Active {
-                        backend: session.backend,
+                        session,
                         inner: self,
                     }
                 }

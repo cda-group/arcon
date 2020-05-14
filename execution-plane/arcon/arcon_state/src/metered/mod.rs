@@ -1,6 +1,6 @@
 use crate::{
-    error::*, Aggregator, AggregatorState, Backend, Config, Handle, Key, MapState, Metakey,
-    Reducer, ReducerState, Session, Value, ValueState, VecState,
+    error::*, Aggregator, AggregatorState, Backend, BackendContainer, Config, Handle, Key,
+    MapState, Metakey, Reducer, ReducerState, Value, ValueState, VecState,
 };
 use custom_debug::CustomDebug;
 use once_cell::sync::Lazy;
@@ -115,7 +115,9 @@ pub struct Metered<SB> {
 }
 
 impl<B: Backend> Metered<B> {
-    fn new_from_initial_measurement((inner, dp): (Result<B>, DataPoint)) -> Result<Metered<B>> {
+    fn new_from_initial_measurement(
+        (inner, dp): (Result<BackendContainer<B>>, DataPoint),
+    ) -> Result<BackendContainer<Metered<B>>> {
         let inner = inner?;
         let metrics_cap = env::var("ARCON_SB_METRICS_LEN")
             .map_err(|_| ())
@@ -128,11 +130,11 @@ impl<B: Backend> Metered<B> {
 
         let backend_name = type_name::<B>();
 
-        Ok(Metered {
-            inner,
+        Ok(BackendContainer::new(Metered {
+            inner: inner.inner.into_inner(),
             backend_name,
             metrics,
-        })
+        }))
     }
 
     fn measure<'a, T>(&'a self, operation_name: &'static str, func: impl FnOnce(&'a B) -> T) -> T {
@@ -183,7 +185,7 @@ fn measure<T>(operation: &'static str, func: impl FnOnce() -> T) -> (T, DataPoin
 }
 
 impl<B: Backend + 'static> Backend for Metered<B> {
-    fn restore_or_create(config: &Config, id: String) -> Result<Self>
+    fn restore_or_create(config: &Config, id: String) -> Result<BackendContainer<Self>>
     where
         Self: Sized,
     {
@@ -192,14 +194,14 @@ impl<B: Backend + 'static> Backend for Metered<B> {
         }))
     }
 
-    fn create(live_path: &Path) -> Result<Self>
+    fn create(live_path: &Path) -> Result<BackendContainer<Self>>
     where
         Self: Sized,
     {
         Self::new_from_initial_measurement(measure("Backend::create", || B::create(live_path)))
     }
 
-    fn restore(live_path: &Path, checkpoint_path: &Path) -> Result<Self>
+    fn restore(live_path: &Path, checkpoint_path: &Path) -> Result<BackendContainer<Self>>
     where
         Self: Sized,
     {
@@ -218,20 +220,16 @@ impl<B: Backend + 'static> Backend for Metered<B> {
         })
     }
 
-    fn session(&mut self) -> Session<Self> {
-        // we need to trigger inner session creation
-        let mut session = self.inner.session();
-        // but we steal its drop hook just to fire it later
-        let inner_drop_hook = session.drop_hook.take();
-        // we drop the inner session, _but it isn't actually closed_, it has an empty drop hook now
-        drop(session);
+    fn start_session(&mut self) {
+        self.inner.start_session();
+    }
 
-        Session {
-            backend: self,
-            drop_hook: inner_drop_hook.map(|dh| {
-                Box::new(move |this: &mut Self| dh(&mut this.inner)) as Box<dyn FnOnce(&mut Self)>
-            }),
-        }
+    fn session_drop_hook(&mut self) -> Option<Box<dyn FnOnce(&mut Self)>> {
+        let hook = self.inner.session_drop_hook();
+
+        hook.map(|dh| {
+            Box::new(move |this: &mut Self| dh(&mut this.inner)) as Box<dyn FnOnce(&mut Self)>
+        })
     }
 
     fn register_value_handle<'s, T: Value, IK: Metakey, N: Metakey>(
@@ -332,7 +330,7 @@ mod tests {
     use crate::InMemory;
     use std::path::PathBuf;
 
-    fn backend() -> Metered<InMemory> {
+    fn backend() -> BackendContainer<Metered<InMemory>> {
         Metered::<InMemory>::create(&PathBuf::new()).unwrap()
     }
 

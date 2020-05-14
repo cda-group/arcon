@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
-    error::*, Aggregator, AggregatorState, Backend, Config, Handle, Key, MapState, Metakey,
-    Reducer, ReducerState, StateType, Value, ValueState, VecState,
+    error::*, Aggregator, AggregatorState, Backend, BackendContainer, Config, Handle, Key,
+    MapState, Metakey, Reducer, ReducerState, StateType, Value, ValueState, VecState,
 };
 use smallbox::{space, SmallBox};
 use std::{any::Any, collections::HashMap, path::Path};
@@ -32,29 +32,29 @@ impl InMemory {
 }
 
 impl Backend for InMemory {
-    fn restore_or_create(_config: &Config, _id: String) -> Result<Self> {
-        Ok(Self::default())
+    fn restore_or_create(_config: &Config, _id: String) -> Result<BackendContainer<Self>> {
+        Ok(BackendContainer::new(Self::default()))
     }
 
-    fn create(_path: &Path) -> Result<Self, ArconStateError>
+    fn create(_path: &Path) -> Result<BackendContainer<Self>>
     where
         Self: Sized,
     {
-        Ok(Self::default())
+        Ok(BackendContainer::new(Self::default()))
     }
 
-    fn restore(_live_path: &Path, _checkpoint_path: &Path) -> Result<Self, ArconStateError>
+    fn restore(_live_path: &Path, _checkpoint_path: &Path) -> Result<BackendContainer<Self>>
     where
         Self: Sized,
     {
-        Ok(Self::default())
+        Ok(BackendContainer::new(Self::default()))
     }
 
     fn was_restored(&self) -> bool {
         false
     }
 
-    fn checkpoint(&self, _checkpoint_path: &Path) -> Result<(), ArconStateError> {
+    fn checkpoint(&self, _checkpoint_path: &Path) -> Result<()> {
         Ok(())
     }
 

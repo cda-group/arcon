@@ -1,6 +1,6 @@
 use crate::{
-    error::*, Aggregator, AggregatorState, Backend, Handle, Key, MapState, Metakey, Reducer,
-    ReducerState, Value, ValueState, VecState,
+    error::*, Aggregator, AggregatorState, Backend, BackendContainer, Handle, Key, MapState,
+    Metakey, Reducer, ReducerState, Value, ValueState, VecState,
 };
 use custom_debug::CustomDebug;
 use rocksdb::{
@@ -267,7 +267,7 @@ where
 }
 
 impl Backend for Rocks {
-    fn create(path: &Path) -> Result<Self, ArconStateError>
+    fn create(path: &Path) -> Result<BackendContainer<Self>>
     where
         Self: Sized,
     {
@@ -310,14 +310,14 @@ impl Backend for Rocks {
             })
         };
 
-        Ok(Rocks {
+        Ok(BackendContainer::new(Rocks {
             inner,
             path,
             restored: false,
-        })
+        }))
     }
 
-    fn restore(live_path: &Path, checkpoint_path: &Path) -> Result<Self, ArconStateError>
+    fn restore(live_path: &Path, checkpoint_path: &Path) -> Result<BackendContainer<Self>>
     where
         Self: Sized,
     {
@@ -352,7 +352,7 @@ impl Backend for Rocks {
         }
 
         Rocks::create(live_path).map(|mut r| {
-            r.restored = true;
+            r.get_mut().restored = true;
             r
         })
     }
@@ -361,7 +361,7 @@ impl Backend for Rocks {
         self.restored
     }
 
-    fn checkpoint(&self, checkpoint_path: &Path) -> Result<(), ArconStateError> {
+    fn checkpoint(&self, checkpoint_path: &Path) -> Result<()> {
         let InitializedRocksDb { db, .. } = self.initialized()?;
 
         db.flush()?;
@@ -449,7 +449,7 @@ pub mod tests {
 
     #[derive(Debug)]
     pub struct TestDb {
-        rocks: Rocks,
+        rocks: BackendContainer<Rocks>,
         dir: TempDir,
     }
 
@@ -466,7 +466,7 @@ pub mod tests {
         pub fn checkpoint(&mut self) -> PathBuf {
             let mut checkpoint_dir: PathBuf = self.dir.path().into();
             checkpoint_dir.push("checkpoint");
-            self.rocks.checkpoint(&checkpoint_dir).unwrap();
+            self.rocks.get_mut().checkpoint(&checkpoint_dir).unwrap();
             checkpoint_dir
         }
 
@@ -480,7 +480,7 @@ pub mod tests {
     }
 
     impl Deref for TestDb {
-        type Target = Rocks;
+        type Target = BackendContainer<Rocks>;
 
         fn deref(&self) -> &Self::Target {
             &self.rocks
@@ -501,16 +501,23 @@ pub mod tests {
         let value = "test";
         let column_family = "default";
 
-        db.put(column_family, key.as_bytes(), value.as_bytes())
+        db.get_mut()
+            .put(column_family, key.as_bytes(), value.as_bytes())
             .expect("put");
 
         {
-            let v = db.get(column_family, key.as_bytes()).unwrap().unwrap();
+            let v = db
+                .get_mut()
+                .get(column_family, key.as_bytes())
+                .unwrap()
+                .unwrap();
             assert_eq!(value, String::from_utf8_lossy(&v));
         }
 
-        db.remove(column_family, key.as_bytes()).expect("remove");
-        let v = db.get(column_family, key.as_bytes()).unwrap();
+        db.get_mut()
+            .remove(column_family, key.as_bytes())
+            .expect("remove");
+        let v = db.get_mut().get(column_family, key.as_bytes()).unwrap();
         assert!(v.is_none());
     }
 
@@ -535,19 +542,23 @@ pub mod tests {
         let new_value: &[u8] = b"new value";
         let column_family = "default";
 
-        db.put(column_family, key, initial_value)
+        db.get_mut()
+            .put(column_family, key, initial_value)
             .expect("put failed");
-        db.checkpoint(&checkpoints_dir_path)
+        db.get_mut()
+            .checkpoint(&checkpoints_dir_path)
             .expect("checkpoint failed");
-        db.put(column_family, key, new_value)
+        db.get_mut()
+            .put(column_family, key, new_value)
             .expect("second put failed");
 
-        let db_from_checkpoint = Rocks::restore(&restore_dir_path, &checkpoints_dir_path)
+        let mut db_from_checkpoint = Rocks::restore(&restore_dir_path, &checkpoints_dir_path)
             .expect("Could not open checkpointed db");
 
         assert_eq!(
             new_value,
-            db.get(column_family, key)
+            db.get_mut()
+                .get(column_family, key)
                 .expect("Could not get from the original db")
                 .unwrap()
                 .as_ref()
@@ -555,6 +566,7 @@ pub mod tests {
         assert_eq!(
             initial_value,
             db_from_checkpoint
+                .get_mut()
                 .get(column_family, key)
                 .expect("Could not get from the checkpoint")
                 .unwrap()
@@ -570,7 +582,7 @@ pub mod tests {
         a_handle.register(&mut unsafe { RegistrationToken::new(&mut original) });
 
         let checkpoint_dir = {
-            let mut a = a_handle.activate(original.backend);
+            let mut a = a_handle.activate(&mut original);
 
             a.set(420).unwrap();
 
@@ -578,8 +590,8 @@ pub mod tests {
             let checkpoint_dir = original_test.checkpoint();
 
             // re-session, because checkpointing requires a mutable borrow
-            let original = original_test.session();
-            let mut a = a_handle.activate(original.backend);
+            let mut original = original_test.session();
+            let mut a = a_handle.activate(&mut original);
 
             assert_eq!(a.get().unwrap().unwrap(), 420);
             a.set(69).unwrap();
@@ -588,11 +600,11 @@ pub mod tests {
             checkpoint_dir
         };
 
-        let mut restored = TestDb::from_checkpoint(&checkpoint_dir.to_string_lossy());
+        let restored = TestDb::from_checkpoint(&checkpoint_dir.to_string_lossy());
         let mut restored = restored.session();
         a_handle.register(&mut unsafe { RegistrationToken::new(&mut restored) });
         {
-            let mut a_restored = a_handle.activate(restored.backend);
+            let mut a_restored = a_handle.activate(&mut restored);
             // TODO: serialize value state metadata (type names, serialization, etc.) into rocksdb, so
             //   that type mismatches are caught early. Right now it would be possible to, let's say,
             //   store an integer, and then read a float from the restored state backend
@@ -601,8 +613,8 @@ pub mod tests {
             a_restored.set(1337).unwrap();
             assert_eq!(a_restored.get().unwrap().unwrap(), 1337);
 
-            let original = original_test.session();
-            let a = a_handle.activate(original.backend);
+            let mut original = original_test.session();
+            let a = a_handle.activate(&mut original);
             assert_eq!(a.get().unwrap().unwrap(), 69);
         }
     }
@@ -618,20 +630,20 @@ pub mod tests {
         let mut b_handle = Handle::value("b");
         b_handle.register(&mut unsafe { RegistrationToken::new(&mut original) });
 
-        let mut a = a_handle.activate(original.backend);
+        let mut a = a_handle.activate(&mut original);
         a.set(420).unwrap();
-        let mut b = b_handle.activate(original.backend);
+        let mut b = b_handle.activate(&mut original);
         b.set(69).unwrap();
 
         drop(original);
         let checkpoint_dir = original_test.checkpoint();
 
-        let mut restored = TestDb::from_checkpoint(&checkpoint_dir.to_string_lossy());
+        let restored = TestDb::from_checkpoint(&checkpoint_dir.to_string_lossy());
         let mut restored = restored.session();
         // original backend had two states created, and here we try to mess with state before we
         // declare all the states
         a_handle.register(&mut unsafe { RegistrationToken::new(&mut restored) });
-        let a = a_handle.activate(restored.backend);
+        let a = a_handle.activate(&mut restored);
         if let ArconStateError::RocksUninitialized { unknown_cfs, .. } = a.get().unwrap_err() {
             assert_eq!(unknown_cfs.into_iter().collect::<Vec<_>>(), vec!["b"])
         } else {

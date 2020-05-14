@@ -33,18 +33,18 @@ where
     }
 }
 
-pub struct ActiveHandle<'a, B, S, IK = (), N = ()>
+pub struct ActiveHandle<'handle, 'backend, B, S, IK = (), N = ()>
 where
     B: Backend + ?Sized,
     S: StateType,
     IK: Metakey,
     N: Metakey,
 {
-    pub backend: &'a mut B,
-    pub inner: &'a mut Handle<S, IK, N>,
+    pub backend: &'backend mut B,
+    pub inner: &'handle mut Handle<S, IK, N>,
 }
 
-impl<B, S, IK, N> Debug for ActiveHandle<'_, B, S, IK, N>
+impl<B, S, IK, N> Debug for ActiveHandle<'_, '_, B, S, IK, N>
 where
     B: Backend + ?Sized,
     S: StateType,
@@ -227,17 +227,16 @@ impl<S: StateType, IK: Metakey, N: Metakey> Handle<S, IK, N> {
 //endregion
 
 impl<S: StateType, IK: Metakey, N: Metakey> Handle<S, IK, N> {
-    #[doc(hidden)]
     #[inline]
-    pub fn activate<'s, B: Backend>(
-        &'s mut self,
-        backend: &'s mut B,
-    ) -> ActiveHandle<'s, B, S, IK, N> {
+    pub fn activate<'this, 'backend, 'session, B: Backend>(
+        &'this mut self,
+        session: &'session mut Session<'backend, B>,
+    ) -> ActiveHandle<'this, 'session, B, S, IK, N> {
         if !self.registered {
             panic!("State handles should be registered before activation!")
         }
         ActiveHandle {
-            backend,
+            backend: &mut *session.backend,
             inner: self,
         }
     }
@@ -245,41 +244,33 @@ impl<S: StateType, IK: Metakey, N: Metakey> Handle<S, IK, N> {
 
 // region handle activators
 impl<T: Value, IK: Metakey, N: Metakey> Handle<ValueState<T>, IK, N> {
-    #[doc(hidden)]
     pub fn register<B: Backend>(&mut self, registration_token: &mut RegistrationToken<B>) {
-        registration_token.0.backend.register_value_handle(self)
+        registration_token.0.register_value_handle(self)
     }
 }
 impl<K: Key, V: Value, IK: Metakey, N: Metakey> Handle<MapState<K, V>, IK, N> {
-    #[doc(hidden)]
     pub fn register<B: Backend>(&mut self, registration_token: &mut RegistrationToken<B>) {
-        registration_token.0.backend.register_map_handle(self)
+        registration_token.0.register_map_handle(self)
     }
 }
 impl<T: Value, IK: Metakey, N: Metakey> Handle<VecState<T>, IK, N> {
-    #[doc(hidden)]
     pub fn register<B: Backend>(&mut self, registration_token: &mut RegistrationToken<B>) {
-        registration_token.0.backend.register_vec_handle(self)
+        registration_token.0.register_vec_handle(self)
     }
 }
 impl<T: Value, F: Reducer<T>, IK: Metakey, N: Metakey> Handle<ReducerState<T, F>, IK, N> {
-    #[doc(hidden)]
     pub fn register<B: Backend>(&mut self, registration_token: &mut RegistrationToken<B>) {
-        registration_token.0.backend.register_reducer_handle(self)
+        registration_token.0.register_reducer_handle(self)
     }
 }
 impl<A: Aggregator, IK: Metakey, N: Metakey> Handle<AggregatorState<A>, IK, N> {
-    #[doc(hidden)]
     pub fn register<B: Backend>(&mut self, registration_token: &mut RegistrationToken<B>) {
-        registration_token
-            .0
-            .backend
-            .register_aggregator_handle(self)
+        registration_token.0.register_aggregator_handle(self)
     }
 }
 // endregion
 
-impl<B: Backend, S: StateType, IK: Metakey, N: Metakey> ActiveHandle<'_, B, S, IK, N> {
+impl<B: Backend, S: StateType, IK: Metakey, N: Metakey> ActiveHandle<'_, '_, B, S, IK, N> {
     pub fn set_item_key(&mut self, item_key: IK) {
         self.inner.set_item_key(item_key)
     }
@@ -288,7 +279,7 @@ impl<B: Backend, S: StateType, IK: Metakey, N: Metakey> ActiveHandle<'_, B, S, I
     }
 }
 
-impl<B: Backend, T: Value, IK: Metakey, N: Metakey> ActiveHandle<'_, B, ValueState<T>, IK, N> {
+impl<B: Backend, T: Value, IK: Metakey, N: Metakey> ActiveHandle<'_, '_, B, ValueState<T>, IK, N> {
     pub fn clear(&mut self) -> Result<()> {
         self.backend.value_clear(self.inner)
     }
@@ -308,7 +299,7 @@ impl<B: Backend, T: Value, IK: Metakey, N: Metakey> ActiveHandle<'_, B, ValueSta
 
 pub type BoxedIteratorOfResult<'a, T> = Box<dyn Iterator<Item = Result<T>> + 'a>;
 impl<B: Backend, K: Key, V: Value, IK: Metakey, N: Metakey>
-    ActiveHandle<'_, B, MapState<K, V>, IK, N>
+    ActiveHandle<'_, '_, B, MapState<K, V>, IK, N>
 {
     pub fn clear(&mut self) -> Result<()> {
         self.backend.map_clear(self.inner)
@@ -357,7 +348,7 @@ impl<B: Backend, K: Key, V: Value, IK: Metakey, N: Metakey>
     }
 }
 
-impl<B: Backend, T: Value, IK: Metakey, N: Metakey> ActiveHandle<'_, B, VecState<T>, IK, N> {
+impl<B: Backend, T: Value, IK: Metakey, N: Metakey> ActiveHandle<'_, '_, B, VecState<T>, IK, N> {
     pub fn clear(&mut self) -> Result<()> {
         self.backend.vec_clear(self.inner)
     }
@@ -385,7 +376,7 @@ impl<B: Backend, T: Value, IK: Metakey, N: Metakey> ActiveHandle<'_, B, VecState
 }
 
 impl<B: Backend, T: Value, F: Reducer<T>, IK: Metakey, N: Metakey>
-    ActiveHandle<'_, B, ReducerState<T, F>, IK, N>
+    ActiveHandle<'_, '_, B, ReducerState<T, F>, IK, N>
 {
     pub fn clear(&mut self) -> Result<()> {
         self.backend.reducer_clear(self.inner)
@@ -401,7 +392,7 @@ impl<B: Backend, T: Value, F: Reducer<T>, IK: Metakey, N: Metakey>
 }
 
 impl<B: Backend, A: Aggregator, IK: Metakey, N: Metakey>
-    ActiveHandle<'_, B, AggregatorState<A>, IK, N>
+    ActiveHandle<'_, '_, B, AggregatorState<A>, IK, N>
 {
     pub fn clear(&mut self) -> Result<()> {
         self.backend.aggregator_clear(self.inner)

@@ -1,6 +1,6 @@
 use crate::{
-    error::*, Aggregator, AggregatorState, Backend, Handle, Key, MapState, Metakey, Reducer,
-    ReducerState, Session, Value, ValueState, VecState,
+    error::*, Aggregator, AggregatorState, Backend, BackendContainer, Handle, Key, MapState,
+    Metakey, Reducer, ReducerState, Value, ValueState, VecState,
 };
 use custom_debug::CustomDebug;
 use faster_rs::{status, FasterKv, FasterKvBuilder, FasterRmw};
@@ -303,7 +303,7 @@ impl FasterRmw for FasterAgg {
 }
 
 impl Backend for Faster {
-    fn create(live_path: &Path) -> Result<Self>
+    fn create(live_path: &Path) -> Result<BackendContainer<Self>>
     where
         Self: Sized,
     {
@@ -314,16 +314,16 @@ impl Backend for Faster {
             })?)
             .build()?;
 
-        Ok(Faster {
+        Ok(BackendContainer::new(Faster {
             db,
             monotonic_serial_number: Cell::new(0),
             aggregate_fns: HashMap::new(),
             dir: live_path.into(),
             restored: false,
-        })
+        }))
     }
 
-    fn restore(live_path: &Path, checkpoint_path: &Path) -> Result<Self>
+    fn restore(live_path: &Path, checkpoint_path: &Path) -> Result<BackendContainer<Self>>
     where
         Self: Sized,
     {
@@ -338,11 +338,11 @@ impl Backend for Faster {
         copy_checkpoint(&token, checkpoint_path, live_path)?;
 
         let mut res = Faster::create(live_path)?;
-        let restore_result = res.db.recover(token.clone(), token)?;
+        let restore_result = res.get_mut().db.recover(token.clone(), token)?;
 
         match restore_result.status {
             status::OK => (),
-            status::PENDING => res.db.complete_pending(true),
+            status::PENDING => res.get_mut().db.complete_pending(true),
             _ => {
                 return FasterUnexpectedStatus {
                     status: restore_result.status,
@@ -351,7 +351,7 @@ impl Backend for Faster {
             }
         }
 
-        res.restored = true;
+        res.get_mut().restored = true;
 
         Ok(res)
     }
@@ -381,12 +381,12 @@ impl Backend for Faster {
         Ok(())
     }
 
-    fn session(&mut self) -> Session<Self> {
+    fn start_session(&mut self) {
         self.db.start_session();
-        Session {
-            backend: self,
-            drop_hook: Some(Box::new(|this| this.db.stop_session())),
-        }
+    }
+
+    fn session_drop_hook(&mut self) -> Option<Box<dyn FnOnce(&mut Self)>> {
+        Some(Box::new(|this| this.db.stop_session()))
     }
 
     fn register_value_handle<'s, T: Value, IK: Metakey, N: Metakey>(
@@ -450,7 +450,7 @@ pub mod tests {
 
     #[derive(Debug)]
     pub struct TestDb {
-        faster: Faster,
+        faster: BackendContainer<Faster>,
         dir: TempDir,
     }
 
@@ -467,7 +467,7 @@ pub mod tests {
         pub fn checkpoint(&mut self) -> PathBuf {
             let mut checkpoint_dir = self.dir.path().to_path_buf();
             checkpoint_dir.push("checkpoint");
-            self.faster.checkpoint(&checkpoint_dir).unwrap();
+            self.faster.get_mut().checkpoint(&checkpoint_dir).unwrap();
             checkpoint_dir
         }
 
@@ -481,7 +481,7 @@ pub mod tests {
     }
 
     impl Deref for TestDb {
-        type Target = Faster;
+        type Target = BackendContainer<Faster>;
 
         fn deref(&self) -> &Self::Target {
             &self.faster
@@ -499,7 +499,7 @@ pub mod tests {
         let dir = tempfile::TempDir::new().unwrap();
         let dir = dir.path().to_string_lossy().into_owned();
         let mut faster = Faster::create(dir.as_ref()).unwrap();
-        let faster_session = faster.session();
+        let mut faster_session = faster.session();
 
         faster_session
             .backend
@@ -520,14 +520,14 @@ pub mod tests {
         let restore_dir = tempfile::TempDir::new().unwrap();
 
         drop(faster_session);
-        faster.checkpoint(chkp_dir.path()).unwrap();
+        faster.get_mut().checkpoint(chkp_dir.path()).unwrap();
 
         let mut restored = Faster::restore(restore_dir.path(), chkp_dir.path()).unwrap();
 
-        assert!(!faster.was_restored());
-        assert!(restored.was_restored());
+        assert!(!faster.get_mut().was_restored());
+        assert!(restored.get_mut().was_restored());
 
-        let restored_session = restored.session();
+        let mut restored_session = restored.session();
 
         let one = restored_session
             .backend
@@ -553,9 +553,9 @@ pub mod tests {
         let restore2_dir = tempfile::TempDir::new().unwrap();
 
         drop(restored_session);
-        restored.checkpoint(chkp2_dir.path()).unwrap();
+        restored.get_mut().checkpoint(chkp2_dir.path()).unwrap();
 
-        let mut restored2 = Faster::restore(restore2_dir.path(), chkp2_dir.path()).unwrap();
+        let restored2 = Faster::restore(restore2_dir.path(), chkp2_dir.path()).unwrap();
         let restored2_session = restored2.session();
 
         let one = restored2_session.backend.get(&b"a".to_vec()).unwrap();
