@@ -62,6 +62,7 @@ dependencies = [
  "arcon_error",
  "arcon_extra",
  "arcon_macros",
+ "arcon_state",
  "better-panic",
  "bincode",
  "bytes",
@@ -107,6 +108,9 @@ dependencies = [
 [[package]]
 name = "arcon_error"
 version = "0.1.1"
+dependencies = [
+ "arcon_state",
+]
 
 [[package]]
 name = "arcon_extra"
@@ -129,7 +133,7 @@ dependencies = [
  "custom_debug",
  "faster-rs",
  "once_cell",
- "prost 0.6.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "prost 0.6.1 (git+https://github.com/Max-Meldrum/prost.git?branch=derive_generics)",
  "rocksdb",
  "serde",
  "sled",

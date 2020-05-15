@@ -1,8 +1,10 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::{prelude::*, stream::operator::OperatorContext};
+use crate::{prelude::*, stream::operator::OperatorContext, timer::TimerBackend};
+use arcon_state::{RegistrationToken, Session};
 use std::{
+    cell::RefCell,
     fs::{File, OpenOptions},
     io::Write,
     marker::PhantomData,
@@ -13,7 +15,7 @@ pub struct LocalFileSink<IN>
 where
     IN: ArconType,
 {
-    file: File,
+    file: RefCell<File>,
     _marker: PhantomData<IN>,
 }
 
@@ -22,12 +24,14 @@ where
     IN: ArconType,
 {
     pub fn new(file_path: impl AsRef<Path>) -> Self {
-        let file = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .append(true)
-            .open(file_path)
-            .expect("Failed to open file");
+        let file = RefCell::new(
+            OpenOptions::new()
+                .write(true)
+                .create(true)
+                .append(true)
+                .open(file_path)
+                .expect("Failed to open file"),
+        );
 
         LocalFileSink {
             file,
@@ -36,22 +40,46 @@ where
     }
 }
 
-impl<IN> Operator for LocalFileSink<IN>
+impl<IN, B> Operator<B> for LocalFileSink<IN>
 where
     IN: ArconType,
+    B: state::Backend,
 {
     type IN = IN;
     type OUT = ArconNever;
     type TimerState = ArconNever;
 
-    fn handle_element(&mut self, element: ArconElement<IN>, _ctx: OperatorContext<Self>) {
-        if let Err(err) = writeln!(self.file, "{:?}", element.data) {
+    fn register_states(&mut self, _registration_token: &mut RegistrationToken<B>) {}
+
+    fn init(&mut self, _session: &mut Session<B>) {}
+
+    fn handle_element(
+        &self,
+        element: ArconElement<IN>,
+        _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
+    ) {
+        if let Err(err) = writeln!(self.file.borrow_mut(), "{:?}", element.data) {
             eprintln!("Error while writing to file sink {}", err.to_string());
         }
     }
-    fn handle_watermark(&mut self, _w: Watermark, _ctx: OperatorContext<Self>) {}
-    fn handle_epoch(&mut self, _epoch: Epoch, _ctx: OperatorContext<Self>) {}
-    fn handle_timeout(&mut self, _timeout: Self::TimerState, _ctx: OperatorContext<Self>) {}
+    fn handle_watermark(
+        &self,
+        _w: Watermark,
+        _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
+    ) {
+    }
+    fn handle_epoch(
+        &self,
+        _epoch: Epoch,
+        _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
+    ) {
+    }
+    fn handle_timeout(
+        &self,
+        _timeout: Self::TimerState,
+        _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
+    ) {
+    }
 }
 
 #[cfg(test)]

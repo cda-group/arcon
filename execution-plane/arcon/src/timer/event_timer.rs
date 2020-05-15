@@ -2,7 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use super::*;
-use crate::prelude::*;
+use crate::prelude::{
+    state::{Handle, MapState, ValueState},
+    *,
+};
+use arcon_state::{Bundle, Session};
 use core::time::Duration;
 use hierarchical_hash_wheel_timer::{
     wheels::{quad_wheel::*, *},
@@ -68,10 +72,21 @@ impl<E: TimerTypeBounds> EventTimerEvent<E> {
     }
 }
 
-/// Internal Node State
-struct TimerState<E: TimerTypeBounds> {
-    current_time: BoxedValueState<u64>,
-    timeouts: BoxedMapState<String, EventTimerEvent<E>>,
+arcon_state::bundle! {
+    /// Internal Node State
+    struct TimerState<E: TimerTypeBounds> {
+        current_time: Handle<ValueState<u64>>,
+        timeouts: Handle<MapState<String, EventTimerEvent<E>>>,
+    }
+}
+
+impl<E: TimerTypeBounds> TimerState<E> {
+    fn new() -> TimerState<E> {
+        TimerState {
+            current_time: Handle::value("__event_timer_current_time"),
+            timeouts: Handle::map("__event_timer_timeouts"),
+        }
+    }
 }
 
 pub struct EventTimer<E: TimerTypeBounds> {
@@ -80,63 +95,51 @@ pub struct EventTimer<E: TimerTypeBounds> {
     state: TimerState<E>,
 }
 impl<E: TimerTypeBounds> EventTimer<E> {
-    pub fn new(state_backend: &mut dyn StateBackend) -> EventTimer<E> {
-        let current_time = state_backend.build("__event_timer_current_time").value();
-        let timeouts = state_backend.build("__event_timer_timeouts").map();
-        if current_time
-            .get(state_backend)
-            .expect("could not check current time")
-            .is_none()
-        {
-            current_time
-                .set(state_backend, 0u64)
-                .expect("could not set current time");
-        }
-        let mut timer = EventTimer {
+    pub fn new() -> EventTimer<E> {
+        let timer = EventTimer {
             timer: QuadWheelWithOverflow::default(),
-            state: TimerState {
-                current_time,
-                timeouts,
-            },
+            state: TimerState::new(),
         };
-        let mut twt = timer.with_state(state_backend);
-        twt.replay_events(); // in case something was already in the storage
         timer
     }
 
-    pub fn with_state<'e, 's>(
-        &'e mut self,
-        state_backend: &'s mut dyn StateBackend,
-    ) -> EventTimerWithState<'e, 's, E> {
+    pub fn with_state<'this, 'session, 'backend, B: state::Backend>(
+        &'this mut self,
+        state_session: &'session mut Session<'backend, B>,
+    ) -> EventTimerWithState<'this, 'session, 'backend, E, B>
+    where
+        'backend: 'session,
+    {
         EventTimerWithState {
-            timer: self,
-            state_backend,
+            timer: &mut self.timer,
+            state: self.state.activate(state_session),
         }
     }
 }
 
-pub struct EventTimerWithState<'e, 's, E>
+pub struct EventTimerWithState<'this, 'session, 'backend, E, B>
 where
     E: TimerTypeBounds,
+    B: state::Backend,
+    'backend: 'session,
 {
-    timer: &'e mut EventTimer<E>,
-    state_backend: &'s mut dyn StateBackend,
+    timer: &'this mut QuadWheelWithOverflow<String>,
+    state: <TimerState<E> as Bundle<'this, 'session, 'backend, B>>::Active,
 }
 
-impl<'e, 's, E: TimerTypeBounds> EventTimerWithState<'e, 's, E> {
+impl<E: TimerTypeBounds, B: state::Backend> EventTimerWithState<'_, '_, '_, E, B> {
     fn replay_events(&mut self) {
         let time = self.current_time();
+
         for res in self
-            .timer
             .state
-            .timeouts
-            .iter(self.state_backend)
+            .timeouts()
+            .iter()
             .expect("could not get timeouts")
         {
             let (id, entry) = res.expect("could not get timeout entry");
             let delay = entry.time_when_scheduled + entry.timeout_millis - time;
             if let Err(f) = self
-                .timer
                 .timer
                 .insert_with_delay(id, Duration::from_millis(delay))
             {
@@ -146,10 +149,9 @@ impl<'e, 's, E: TimerTypeBounds> EventTimerWithState<'e, 's, E> {
     }
 
     fn set_time(&mut self, ts: u64) {
-        self.timer
-            .state
-            .current_time
-            .set(self.state_backend, ts)
+        self.state
+            .current_time()
+            .fast_set(ts)
             .expect("could not set current time");
     }
 
@@ -164,7 +166,7 @@ impl<'e, 's, E: TimerTypeBounds> EventTimerWithState<'e, 's, E> {
         // TODO 2) The we are handling timeouts and timestamps separately can produce a lot of torn writes...
         // we may need to change this if it produces data consistency issues
         while time_left > 0 {
-            match self.timer.timer.can_skip() {
+            match self.timer.can_skip() {
                 Skip::Empty => {
                     // Timer is empty, no point in ticking it
                     self.add_time(time_left as u64);
@@ -174,18 +176,18 @@ impl<'e, 's, E: TimerTypeBounds> EventTimerWithState<'e, 's, E> {
                     // Skip forward
                     if skip_ms >= time_left {
                         // No more ops to gather, skip the remaining time_left and return
-                        self.timer.timer.skip(time_left);
+                        self.timer.skip(time_left);
                         self.add_time(time_left as u64);
                         return;
                     } else {
                         // Skip lower than time-left:
-                        self.timer.timer.skip(skip_ms);
+                        self.timer.skip(skip_ms);
                         self.add_time(skip_ms as u64);
                         time_left -= skip_ms;
                     }
                 }
                 Skip::None => {
-                    for e in self.timer.timer.tick() {
+                    for e in self.timer.tick() {
                         if let Some(entry) = self.take_entry(e) {
                             res.push(entry);
                         }
@@ -201,31 +203,18 @@ impl<'e, 's, E: TimerTypeBounds> EventTimerWithState<'e, 's, E> {
     #[inline(always)]
     fn take_entry(&mut self, id: String) -> Option<E> {
         //self.inner.handles.remove(&id).map(|x| x.payload)
-        // TODO replace this with a remove/take API once we have it
-        let v = self
-            .timer
-            .state
-            .timeouts
-            .get(self.state_backend, &id)
-            .expect("no timeout found for id"); // this wouldn't necessarily be an error anymore if we add a cancellation API at some point
-        if let Some(e) = v {
-            self.timer
-                .state
-                .timeouts
-                .remove(self.state_backend, &id)
-                .expect("no timeout found for id");
-            Some(e.payload)
-        } else {
-            None
-        }
+        self.state
+            .timeouts()
+            .remove(&id)
+            .expect("no timeout found for id") // this wouldn't necessarily be an error anymore if we add a cancellation API at some point
+            .map(|e| e.payload)
     }
 
     #[inline(always)]
     fn put_entry(&mut self, id: String, e: EventTimerEvent<E>) {
-        self.timer
-            .state
-            .timeouts
-            .insert(self.state_backend, id, e)
+        self.state
+            .timeouts()
+            .fast_insert(id, e)
             .expect("couldn't persist timeout");
     }
 
@@ -234,7 +223,6 @@ impl<'e, 's, E: TimerTypeBounds> EventTimerWithState<'e, 's, E> {
         let id = Uuid::new_v4().to_string();
 
         match self
-            .timer
             .timer
             .insert_with_delay(id.clone(), Duration::from_millis(delay))
         {
@@ -257,11 +245,10 @@ impl<'e, 's, E: TimerTypeBounds> EventTimerWithState<'e, 's, E> {
         }
     }
 
-    fn current_time(&self) -> u64 {
-        self.timer
-            .state
-            .current_time
-            .get(self.state_backend)
+    fn current_time(&mut self) -> u64 {
+        self.state
+            .current_time()
+            .get()
             .expect("couldn't get current time")
             .unwrap()
     }
@@ -286,33 +273,64 @@ impl<'e, 's, E: TimerTypeBounds> EventTimerWithState<'e, 's, E> {
 }
 
 impl<E: TimerTypeBounds> TimerBackend<E> for EventTimer<E> {
+    fn register_states(
+        &mut self,
+        registration_token: &mut state::RegistrationToken<impl state::Backend>,
+    ) {
+        self.state.register_states(registration_token)
+    }
+
+    fn init(&mut self, session: &mut state::Session<impl state::Backend>) {
+        let mut state = self.state.activate(session);
+        let mut current_time = state.current_time();
+
+        if current_time
+            .get()
+            .expect("could not check current time")
+            .is_none()
+        {
+            current_time.set(0u64).expect("could not set current time");
+        }
+
+        let mut twt = self.with_state(session);
+        twt.replay_events(); // in case something was already in the storage
+    }
+
     fn schedule_after(
         &mut self,
         delay: u64,
         entry: E,
-        state_backend: &mut dyn StateBackend,
+        state_session: &mut state::Session<impl state::Backend>,
     ) -> Result<(), E> {
-        self.with_state(state_backend).schedule_after(delay, entry)
+        self.with_state(state_session).schedule_after(delay, entry)
     }
 
     fn schedule_at(
         &mut self,
         time: u64,
         entry: E,
-        state_backend: &mut dyn StateBackend,
+        state_session: &mut state::Session<impl state::Backend>,
     ) -> Result<(), E> {
-        self.with_state(state_backend).schedule_at(time, entry)
+        self.with_state(state_session).schedule_at(time, entry)
     }
 
-    fn current_time(&mut self, state_backend: &mut dyn StateBackend) -> u64 {
-        self.with_state(state_backend).current_time()
+    fn current_time(&mut self, state_session: &mut state::Session<impl state::Backend>) -> u64 {
+        self.with_state(state_session).current_time()
     }
 
-    fn advance_to(&mut self, ts: u64, state_backend: &mut dyn StateBackend) -> Vec<E> {
-        self.with_state(state_backend).advance_to(ts)
+    fn advance_to(
+        &mut self,
+        ts: u64,
+        state_session: &mut state::Session<impl state::Backend>,
+    ) -> Vec<E> {
+        self.with_state(state_session).advance_to(ts)
     }
 
-    fn handle_epoch(&mut self, _epoch: Epoch, _state_backend: &mut dyn StateBackend) {
+    fn handle_epoch(
+        &mut self,
+        _epoch: Epoch,
+        _state_session: &mut state::Session<impl state::Backend>,
+    ) {
         () // do absolutely nothing
     }
 }

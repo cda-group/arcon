@@ -3,6 +3,7 @@
 
 //! The arcon_error crate provide error utilities for Arcon related crates.
 
+use arcon_state::error::ArconStateError;
 use std::{error::Error as StdError, fmt};
 
 /// Helper macro for generating an Error
@@ -24,6 +25,7 @@ macro_rules! arcon_err_kind {
 #[derive(Debug)]
 pub enum ErrorKind {
     ArconError(String),
+    StateError(arcon_state::error::ArconStateError),
 }
 
 #[derive(Debug)]
@@ -34,13 +36,19 @@ pub struct Error {
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let ErrorKind::ArconError(ref msg) = self.kind;
-        write!(f, "{}", msg)
+        match &self.kind {
+            ErrorKind::ArconError(msg) => write!(f, "{}", msg),
+            ErrorKind::StateError(e) => write!(f, "{}", e),
+        }
     }
 }
 
 impl StdError for Error {
     fn cause(&self) -> Option<&dyn StdError> {
+        if let ErrorKind::StateError(e) = &self.kind {
+            return e.source();
+        }
+
         match self.cause {
             Some(ref x) => Some(&**x),
             None => None,
@@ -60,6 +68,15 @@ impl Error {
     }
     pub fn kind(&self) -> &ErrorKind {
         &self.kind
+    }
+}
+
+impl From<ArconStateError> for Error {
+    fn from(e: ArconStateError) -> Self {
+        Error {
+            kind: ErrorKind::StateError(e),
+            cause: None,
+        }
     }
 }
 

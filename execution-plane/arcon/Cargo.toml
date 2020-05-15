@@ -30,6 +30,7 @@ quiet = ["slog"]
 arcon_macros = { version = "0.1", path = "arcon_macros" }
 arcon_error = { version = "0.1", path = "arcon_error" }
 arcon_extra = { version = "0.1", path = "arcon_extra" }
+arcon_state = { version = "0.1", path = "arcon_state"}
 kompact = { git = "https://github.com/kompics/kompact.git", branch = "master"}
 hierarchical_hash_wheel_timer = "1.0"
 uuid = "0.8"

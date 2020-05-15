@@ -151,32 +151,32 @@ pub fn q3_node(
         match person_or_auction.inner.unwrap() {
             P::Person(p) => {
                 let person_state = ctx
-                    .state_backend
+                    .state_session
                     .build(PERSON)
                     .with_item_key(p.id) // partitioning
                     .value::<Person>();
 
                 person_state
-                    .set(ctx.state_backend, p.clone())
+                    .set(ctx.state_session, p.clone())
                     .expect("Could not update person state");
 
                 // check if any auctions are pending
                 let pending_auctions = ctx
-                    .state_backend
+                    .state_session
                     .build(PENDING_AUCTIONS)
                     .with_item_key(p.id)
                     .vec::<Auction>();
 
                 if !pending_auctions
-                    .is_empty(ctx.state_backend)
+                    .is_empty(ctx.state_session)
                     .expect("Could not check if pending auctions are empty")
                 {
                     let auctions = pending_auctions
-                        .get(ctx.state_backend)
+                        .get(ctx.state_session)
                         .expect("Could not get pending auctions");
 
                     pending_auctions
-                        .clear(ctx.state_backend)
+                        .clear(ctx.state_session)
                         .expect("Could not clear pending auctions");
 
                     auctions
@@ -200,26 +200,26 @@ pub fn q3_node(
             }
             P::Auction(auction) => {
                 let person_state = ctx
-                    .state_backend
+                    .state_session
                     .build(PERSON)
                     .with_item_key(auction.seller) // partitioning
                     .value::<Person>();
 
                 let person = if let Some(p) = person_state
-                    .get(ctx.state_backend)
+                    .get(ctx.state_session)
                     .expect("Could not get person state")
                 {
                     p
                 } else {
                     // we don't have a user with that id, so add to pending
                     let pending_auctions = ctx
-                        .state_backend
+                        .state_session
                         .build(PENDING_AUCTIONS)
                         .with_item_key(auction.seller)
                         .vec::<Auction>();
 
                     pending_auctions
-                        .append(ctx.state_backend, auction)
+                        .append(ctx.state_session, auction)
                         .expect("Could not store the auction");
 
                     return vec![];

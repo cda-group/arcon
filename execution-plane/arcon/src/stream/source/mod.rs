@@ -3,7 +3,7 @@
 
 use crate::{
     data::{ArconElement, ArconEvent, Watermark},
-    state_backend::StateBackend,
+    prelude::state,
     stream::{
         channel::strategy::ChannelStrategy,
         operator::{Operator, OperatorContext},
@@ -20,7 +20,7 @@ pub mod local_file;
 pub mod socket;
 
 /// Common Context for all Source implementations
-pub struct SourceContext<OP: Operator> {
+pub struct SourceContext<OP: Operator<B>, B: state::Backend, T: TimerBackend<OP::TimerState>> {
     /// Timestamp extractor function
     ///
     /// If set to None, timestamps of ArconElement's will also be None.
@@ -38,24 +38,41 @@ pub struct SourceContext<OP: Operator> {
     /// Strategy for outputting events
     channel_strategy: ChannelStrategy<OP::OUT>,
     /// State backend that a source can keep persistent data in
-    pub state_backend: Box<dyn StateBackend>,
+    pub state_backend: state::BackendContainer<B>,
     /// Timer Backend to keep track of event timers
-    timer_backend: Box<dyn TimerBackend<OP::TimerState>>,
+    timer_backend: T,
 }
 
-impl<OP: Operator> SourceContext<OP> {
-    pub fn new<F>(
+impl<OP, B, T> SourceContext<OP, B, T>
+where
+    OP: Operator<B>,
+    B: state::Backend,
+    T: TimerBackend<OP::TimerState>,
+{
+    pub fn new(
         watermark_interval: u64,
         ts_extractor: Option<&'static dyn SafelySendableFn(&OP::IN) -> u64>,
         channel_strategy: ChannelStrategy<OP::OUT>,
-        operator: OP,
-        mut state_backend: Box<dyn StateBackend>,
-        timer_backend_fn: F,
-    ) -> Self
-    where
-        F: Fn(&mut dyn StateBackend) -> Box<dyn TimerBackend<OP::TimerState>> + Sized + 'static,
-    {
-        let timer_backend = timer_backend_fn(state_backend.as_mut());
+        mut operator: OP,
+        state_backend: state::BackendContainer<B>,
+        mut timer_backend: T,
+    ) -> Self {
+        let mut sb_session = state_backend.session();
+
+        // register all the states that will ever be used by this Node
+        {
+            // SAFETY: we specifically want this to be the only place that is supposed to call this
+            let mut registration_token = unsafe { state::RegistrationToken::new(&mut sb_session) };
+
+            operator.register_states(&mut registration_token);
+            timer_backend.register_states(&mut registration_token);
+        }
+
+        operator.init(&mut sb_session);
+        timer_backend.init(&mut sb_session);
+
+        drop(sb_session);
+
         SourceContext {
             ts_extractor,
             current_watermark: 0,
@@ -106,12 +123,13 @@ impl<OP: Operator> SourceContext<OP> {
     /// Calls a transformation function on the source data to generate outgoing ArconEvent<OUT>
     #[inline]
     pub fn process(&mut self, data: ArconElement<OP::IN>) {
+        let mut session = self.state_backend.session();
         self.operator.handle_element(
             data,
             OperatorContext::new(
                 &mut self.channel_strategy,
-                self.state_backend.as_mut(),
-                self.timer_backend.as_mut(),
+                &mut session,
+                &mut self.timer_backend,
             ),
         );
     }

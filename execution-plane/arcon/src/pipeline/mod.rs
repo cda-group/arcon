@@ -5,7 +5,7 @@
 use crate::tui::{component::TuiComponent, widgets::node::Node as TuiNode};
 use crate::{
     allocator::ArconAllocator, buffer::event::PoolInfo, conf::ArconConf, manager::node_manager::*,
-    prelude::*, util::SafelySendableFn,
+    prelude::*, timer::TimerBackend, util::SafelySendableFn,
 };
 use fxhash::FxHashMap;
 use kompact::prelude::KompactSystem;
@@ -121,7 +121,7 @@ impl ArconPipeline {
     }
 
     /// Adds a NodeManager to the Arcon Pipeline
-    pub fn create_node_manager<OP>(
+    pub fn create_node_manager<OP, B, T>(
         &mut self,
         node_description: String,
         node_fn: &'static dyn SafelySendableFn(
@@ -129,12 +129,14 @@ impl ArconPipeline {
             NodeID,
             Vec<NodeID>,
             ChannelStrategy<OP::OUT>,
-        ) -> Node<OP>,
+        ) -> Node<OP, B, T>,
         in_channels: Vec<NodeID>,
-        nodes: Vec<Node<OP>>,
-    ) -> Vec<Arc<Component<Node<OP>>>>
+        nodes: Vec<Node<OP, B, T>>,
+    ) -> Vec<Arc<Component<Node<OP, B, T>>>>
     where
-        OP: Operator + 'static,
+        OP: Operator<B> + 'static,
+        B: state::Backend,
+        T: TimerBackend<OP::TimerState>,
     {
         let timeout = std::time::Duration::from_millis(500);
         let mut node_comps = Vec::with_capacity(nodes.len());

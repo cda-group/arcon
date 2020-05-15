@@ -3,49 +3,112 @@
 
 use crate::{
     data::{ArconElement, ArconEvent, ArconNever, ArconType, Epoch, Watermark},
+    prelude::state,
     stream::operator::{Operator, OperatorContext},
+    timer::TimerBackend,
     util::SafelySendableFn,
 };
+use std::marker::PhantomData;
 
 /// IN: Input Event
-pub struct Filter<IN>
+/// F: closure type
+/// B: state backend type
+/// S: state bundle type
+// I would _love_ for Filter not to have B as a parameter, but that would require like, at least
+// GATs and maybe even generic closures. If we don't want any dynamic dispatch that is.
+pub struct Filter<IN, F, B, S>
 where
-    IN: 'static + ArconType,
+    IN: ArconType,
+    F: SafelySendableFn(&IN, &S, &mut state::Session<B>) -> bool,
+    B: state::Backend,
+    S: state::GenericBundle<B>,
 {
-    udf: &'static dyn SafelySendableFn(&IN) -> bool,
+    state: S,
+    udf: F,
+    // phantom data of fn, because we don't care if captured generics aren't Send
+    _marker: PhantomData<fn(IN, B)>,
 }
 
-impl<IN> Filter<IN>
+impl<IN, F, B, S> Filter<IN, F, B, S>
 where
-    IN: 'static + ArconType,
+    IN: ArconType,
+    B: state::Backend,
+    S: state::GenericBundle<B>,
+    F: SafelySendableFn(&IN, &S, &mut state::Session<B>) -> bool,
 {
-    pub fn new(udf: &'static dyn SafelySendableFn(&IN) -> bool) -> Self {
-        Filter { udf }
+    pub fn stateful(state: S, udf: F) -> Self {
+        Filter {
+            state,
+            udf,
+            _marker: Default::default(),
+        }
     }
 
-    #[inline]
-    pub fn run_udf(&self, element: &IN) -> bool {
-        (self.udf)(element)
+    pub fn new<FF>(
+        udf: FF,
+    ) -> Filter<IN, impl SafelySendableFn(&IN, &(), &mut state::Session<B>) -> bool, B, ()>
+    where
+        FF: SafelySendableFn(&IN) -> bool,
+    {
+        let udf = move |input: &IN, _: &(), _: &mut state::Session<B>| udf(input);
+        Filter {
+            state: (),
+            udf,
+            _marker: Default::default(),
+        }
     }
 }
 
-impl<IN> Operator for Filter<IN>
+impl<IN, B, S, F> Operator<B> for Filter<IN, F, B, S>
 where
-    IN: 'static + ArconType,
+    IN: ArconType,
+    B: state::Backend,
+    S: state::GenericBundle<B>,
+    F: SafelySendableFn(&IN, &S, &mut state::Session<B>) -> bool,
 {
     type IN = IN;
     type OUT = IN;
     type TimerState = ArconNever;
 
-    fn handle_element(&mut self, element: ArconElement<IN>, mut ctx: OperatorContext<Self>) {
-        if self.run_udf(&element.data) {
+    fn register_states(&mut self, registration_token: &mut state::RegistrationToken<B>) {
+        self.state.register_states(registration_token);
+    }
+
+    fn init(&mut self, _session: &mut state::Session<B>) {}
+
+    fn handle_element(
+        &self,
+        element: ArconElement<IN>,
+        mut ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
+    ) {
+        let Filter { state, udf, .. } = self;
+
+        // the first thing the udf will pretty much always do is to activate the state
+        // we cannot do that out here, because rustc's buggy
+        // https://github.com/rust-lang/rust/issues/62529
+        if udf(&element.data, state, ctx.state_session) {
             ctx.output(ArconEvent::Element(element));
         }
     }
 
-    fn handle_watermark(&mut self, _w: Watermark, _ctx: OperatorContext<Self>) -> () {}
-    fn handle_epoch(&mut self, _epoch: Epoch, _ctx: OperatorContext<Self>) {}
-    fn handle_timeout(&mut self, _timeout: Self::TimerState, _ctx: OperatorContext<Self>) {}
+    fn handle_watermark(
+        &self,
+        _w: Watermark,
+        _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
+    ) -> () {
+    }
+    fn handle_epoch(
+        &self,
+        _epoch: Epoch,
+        _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
+    ) {
+    }
+    fn handle_timeout(
+        &self,
+        _timeout: Self::TimerState,
+        _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
+    ) {
+    }
 }
 
 #[cfg(test)]

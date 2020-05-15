@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
+    prelude::state,
     stream::{operator::Operator, source::SourceContext},
+    timer::TimerBackend,
     util::io::*,
 };
 use kompact::prelude::*;
@@ -18,26 +20,30 @@ pub enum SocketKind {
 }
 
 #[derive(ComponentDefinition)]
-pub struct SocketSource<OP>
+pub struct SocketSource<OP, B, T>
 where
-    OP: Operator + 'static,
+    OP: Operator<B> + 'static,
     OP::IN: FromStr,
+    B: state::Backend,
+    T: TimerBackend<OP::TimerState>,
 {
     ctx: ComponentContext<Self>,
-    source_ctx: SourceContext<OP>,
+    source_ctx: SourceContext<OP, B, T>,
     sock_addr: SocketAddr,
     sock_kind: SocketKind,
 }
 
-impl<OP> SocketSource<OP>
+impl<OP, B, T> SocketSource<OP, B, T>
 where
-    OP: Operator + 'static,
+    OP: Operator<B> + 'static,
     OP::IN: FromStr,
+    B: state::Backend,
+    T: TimerBackend<OP::TimerState>,
 {
     pub fn new(
         sock_addr: SocketAddr,
         sock_kind: SocketKind,
-        source_ctx: SourceContext<OP>,
+        source_ctx: SourceContext<OP, B>,
     ) -> Self {
         assert!(source_ctx.watermark_interval > 0);
         SocketSource {
@@ -49,10 +55,12 @@ where
     }
 }
 
-impl<OP> Provide<ControlPort> for SocketSource<OP>
+impl<OP, B, T> Provide<ControlPort> for SocketSource<OP, B, T>
 where
-    OP: Operator + 'static,
+    OP: Operator<B> + 'static,
     OP::IN: FromStr,
+    B: state::Backend,
+    T: TimerBackend<OP::TimerState>,
 {
     fn handle(&mut self, event: ControlEvent) {
         if let ControlEvent::Start = event {
@@ -81,10 +89,12 @@ where
     }
 }
 
-impl<OP> Actor for SocketSource<OP>
+impl<OP, B, T> Actor for SocketSource<OP, B, T>
 where
-    OP: Operator + 'static,
+    OP: Operator<B> + 'static,
     OP::IN: FromStr,
+    B: state::Backend,
+    T: TimerBackend<OP::TimerState>,
 {
     type Message = IOMessage;
 

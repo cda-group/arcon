@@ -31,8 +31,6 @@ pub mod data;
 pub mod manager;
 /// Utilities for creating an Arcon pipeline
 pub mod pipeline;
-/// State backend implementations
-pub mod state_backend;
 /// Contains the core stream logic
 pub mod stream;
 /// Arcon event time facilities
@@ -89,7 +87,7 @@ pub mod prelude {
             },
             node::{debug::DebugNode, Node, NodeDescriptor},
             operator::{
-                function::{Filter, FilterMap, FlatMap, Map, MapInPlace},
+                function::Filter,
                 sink::local_file::LocalFileSink,
                 window::{AppenderWindow, EventTimeWindowAssigner, IncrementalWindow, Window},
                 Operator,
@@ -113,10 +111,7 @@ pub mod prelude {
     #[cfg(feature = "thread_pinning")]
     pub use kompact::{get_core_ids, CoreId};
 
-    pub use crate::{
-        state_backend,
-        state_backend::{builders::*, state_types::*, StateBackend},
-    };
+    pub use arcon_state as state;
     #[cfg(feature = "rayon")]
     pub use rayon::prelude::*;
 }

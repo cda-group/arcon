@@ -1,13 +1,15 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::{prelude::*, stream::operator::OperatorContext};
+use crate::{prelude::*, stream::operator::OperatorContext, timer::TimerBackend};
+use arcon_state::{RegistrationToken, Session};
 use futures::executor::block_on;
 use rdkafka::{
     config::ClientConfig,
     error::KafkaResult,
     producer::{FutureProducer, FutureRecord},
 };
+use std::cell::RefCell;
 
 /*
     KafkaSink: Buffers received elements
@@ -23,7 +25,7 @@ where
     offset: u32,
     batch_size: u32,
     producer: FutureProducer,
-    buffer: Vec<ArconElement<IN>>,
+    buffer: RefCell<Vec<ArconElement<IN>>>,
 }
 
 impl<IN> KafkaSink<IN>
@@ -45,7 +47,7 @@ where
                 offset,
                 batch_size: 100,
                 producer,
-                buffer: Vec::new(),
+                buffer: RefCell::new(Vec::new()),
             },
             _ => {
                 panic!("Failed to start KafkaSink");
@@ -53,12 +55,12 @@ where
         }
     }
 
-    pub fn commit_buffer(&mut self) -> () {
+    pub fn commit_buffer(&self) -> () {
         //println!("sink committing buffer");
         // Will asynchronously try to write all messages in the buffer
         // But will block the thread until all commits are complete
         let mut futures = Vec::new();
-        for element in self.buffer.drain(..) {
+        for element in self.buffer.borrow_mut().drain(..) {
             if let Ok(serialized) = serde_json::to_string(&element.data) {
                 futures.push(self.producer.send(
                     FutureRecord::to(&self.topic).payload(&serialized).key(&()),
@@ -74,7 +76,7 @@ where
     }
 }
 
-impl<IN> Operator for KafkaSink<IN>
+impl<IN, B: state::Backend> Operator<B> for KafkaSink<IN>
 where
     IN: ArconType + ::serde::Serialize + ::serde::de::DeserializeOwned,
 {
@@ -82,15 +84,41 @@ where
     type OUT = ArconNever;
     type TimerState = ArconNever;
 
-    fn handle_element(&mut self, element: ArconElement<IN>, _ctx: OperatorContext<Self>) {
-        self.buffer.push(element);
+    fn register_states(&mut self, _registration_token: &mut RegistrationToken<B>) {
+        ()
     }
-    fn handle_watermark(&mut self, _w: Watermark, _ctx: OperatorContext<Self>) {}
-    fn handle_epoch(&mut self, _epoch: Epoch, _ctx: OperatorContext<Self>) {
+
+    fn init(&mut self, _session: &mut Session<B>) {
+        ()
+    }
+
+    fn handle_element(
+        &self,
+        element: ArconElement<IN>,
+        _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
+    ) {
+        self.buffer.borrow_mut().push(element);
+    }
+    fn handle_watermark(
+        &self,
+        _w: Watermark,
+        _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
+    ) {
+    }
+    fn handle_epoch(
+        &self,
+        _epoch: Epoch,
+        _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
+    ) {
         self.commit_buffer();
     }
 
-    fn handle_timeout(&mut self, _timeout: Self::TimerState, _ctx: OperatorContext<Self>) {}
+    fn handle_timeout(
+        &self,
+        _timeout: Self::TimerState,
+        _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
+    ) {
+    }
 }
 
 // Tested via kafka_source
