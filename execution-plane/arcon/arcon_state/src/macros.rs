@@ -80,7 +80,7 @@ macro_rules! bundle {
                 $($($generic_param $(: $first_bound $(+ $other_bounds)*)?,)*)?
             > {
                 session: &'__session mut $crate::Session<'__backend, __B>,
-                inner: &'__bundle mut $name$(<
+                inner: &'__bundle $name$(<
                     $($generic_lifetime_param,)*
                     $($generic_param,)*
                 >)?,
@@ -123,7 +123,7 @@ macro_rules! bundle {
                 }
 
                 fn activate(
-                    &'__this mut self,
+                    &'__this self,
                     session: &'__session mut $crate::Session<'__backend, __B>,
                 ) -> Self::Active {
                     Active {

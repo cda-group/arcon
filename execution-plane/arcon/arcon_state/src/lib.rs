@@ -239,18 +239,32 @@ mod reg_token {
 }
 pub use self::reg_token::RegistrationToken;
 
+// In an ideal world where rust has working GATs, there would be 0 generics here...
 pub trait Bundle<'this, 'session, 'backend, B: Backend>: Send {
+    // ... because they would be here instead. And everybody would be happy.
     type Active;
     fn register_states(&mut self, registration_token: &mut RegistrationToken<B>);
-    fn activate(&'this mut self, session: &'session mut Session<'backend, B>) -> Self::Active;
+    fn activate(&'this self, session: &'session mut Session<'backend, B>) -> Self::Active;
 }
 
 impl<'this, 'session, 'backend, B: Backend> Bundle<'this, 'session, 'backend, B> for () {
     type Active = ();
     fn register_states(&mut self, _registration_token: &mut RegistrationToken<B>) {}
-    fn activate(&mut self, _session: &mut Session<B>) -> () {
+    fn activate(&self, _session: &mut Session<B>) -> () {
         ()
     }
+}
+
+// trait alias analogous to DeserializeOwned in serde
+// would be cleaner if we had GATs
+pub trait GenericBundle<B: Backend>:
+    for<'this, 'session, 'backend> Bundle<'this, 'session, 'backend, B>
+{
+}
+
+impl<T, B: Backend> GenericBundle<B> for T where
+    T: for<'this, 'session, 'backend> Bundle<'this, 'session, 'backend, B>
+{
 }
 
 pub trait StateType: Default {

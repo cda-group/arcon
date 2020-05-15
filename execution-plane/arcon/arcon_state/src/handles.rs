@@ -230,7 +230,7 @@ impl<S: StateType, IK: Metakey, N: Metakey> Handle<S, IK, N> {
 impl<S: StateType, IK: Metakey, N: Metakey> Handle<S, IK, N> {
     #[inline]
     pub fn activate<'this, 'backend, 'session, B: Backend>(
-        &'this mut self,
+        &'this self,
         session: &'session mut Session<'backend, B>,
     ) -> ActiveHandle<'this, 'session, B, S, IK, N> {
         if !self.registered {
