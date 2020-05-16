@@ -16,16 +16,14 @@ extern crate arcon_macros;
 #[doc(hidden)]
 pub use arcon_macros::*;
 
-
 // Imports below are exposed for #[derive(Arcon)]
 pub use crate::data::{ArconType, VersionId};
-pub use kompact::prelude::SerId;
 pub use fxhash::FxHasher;
+pub use kompact::prelude::SerId;
 pub use twox_hash::XxHash64;
 
 #[macro_use]
 extern crate arcon_error as error;
-
 
 // Public Interface
 
@@ -118,7 +116,10 @@ pub mod prelude {
     pub use kompact::{get_core_ids, CoreId};
 
     pub use arcon_state as state;
-    pub use arcon_state::Backend as _;
+    pub use arcon_state::{
+        AggregatorState, Backend as _, Bundle as _, Handle, MapState, ReducerState, ValueState,
+        VecState,
+    };
     #[cfg(feature = "rayon")]
     pub use rayon::prelude::*;
 }

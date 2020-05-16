@@ -75,11 +75,11 @@ macro_rules! bundle {
         const _: () = {
             #[allow(missing_debug_implementations)]
             pub struct Active<
-                '__bundle, '__session, '__backend, $($($generic_lifetime_param,)*)?
+                '__bundle, '__session, $($($generic_lifetime_param,)*)?
                 __B: $crate::Backend,
                 $($($generic_param $(: $first_bound $(+ $other_bounds)*)?,)*)?
             > {
-                session: &'__session mut $crate::Session<'__backend, __B>,
+                session: &'__session mut $crate::Session<'__session, __B>,
                 inner: &'__bundle $name$(<
                     $($generic_lifetime_param,)*
                     $($generic_param,)*
@@ -91,7 +91,7 @@ macro_rules! bundle {
                 __B: $crate::Backend,
                 $($($generic_param $(: $first_bound $(+ $other_bounds)*)?,)*)?
             > Active<
-                '__bundle, '__session, '__backend, $($($generic_lifetime_param,)*)?
+                '__bundle, '__session, $($($generic_lifetime_param,)*)?
                 __B, $($($generic_param,)*)?
             > {$(
                 $(#[$state_meta])*
@@ -109,9 +109,9 @@ macro_rules! bundle {
                 $($($generic_param $(: $first_bound $(+ $other_bounds)*)?,)*)?
             > $crate::Bundle<'__this, '__session, '__backend, __B> for $name$(<
                 $($generic_lifetime_param,)* $($generic_param,)*
-            >)? where '__backend: '__session {
+            >)? {
                 type Active = Active<
-                    '__this, '__session, '__backend, $($($generic_lifetime_param,)*)?
+                    '__this, '__session, $($($generic_lifetime_param,)*)?
                     __B, $($($generic_param,)*)?
                 >;
 
@@ -127,7 +127,19 @@ macro_rules! bundle {
                     session: &'__session mut $crate::Session<'__backend, __B>,
                 ) -> Self::Active {
                     Active {
-                        session,
+                        // SAFETY: this boils down to lifetime variance.
+                        // Session has a RefMut<'a, B>, which is invariant, because
+                        // it acts as a mutable reference. If it weren't invariant
+                        // someone could _assign_ a shorter-lived backend reference there.
+                        // But we know in fact that no one ever assigns through that
+                        // reference.
+                        // ...
+                        // And why doesn't Active just have three lifetime params?
+                        // Because then I'd have to bound this trait impl by '__backend: '__session
+                        // which is a no-go, because I have to be able to say
+                        // S: for<'a, 'b, 'c> Bundle<'a, 'b, 'c, B>
+                        // there's no syntax to add this additional bound info there
+                        session: unsafe { std::mem::transmute(session) },
                         inner: self,
                     }
                 }

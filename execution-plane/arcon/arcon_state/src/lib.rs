@@ -181,7 +181,7 @@ pub trait Backend:
 
 #[derive(Debug)]
 pub struct BackendContainer<B: Backend> {
-    inner: RefCell<B>,
+    pub inner: RefCell<B>,
 }
 
 impl<B: Backend> BackendContainer<B> {
