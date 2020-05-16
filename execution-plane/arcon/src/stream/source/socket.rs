@@ -43,7 +43,7 @@ where
     pub fn new(
         sock_addr: SocketAddr,
         sock_kind: SocketKind,
-        source_ctx: SourceContext<OP, B>,
+        source_ctx: SourceContext<OP, B, T>,
     ) -> Self {
         assert!(source_ctx.watermark_interval > 0);
         SocketSource {
@@ -167,7 +167,7 @@ mod tests {
             watermark_interval,
             None, // no timestamp extractor
             channel_strategy,
-            Map::<u32, u32>::new(&map_fn),
+            Map::new(&map_fn),
             InMemory::create("test".as_ref()).unwrap(),
             timer::none(),
         );
@@ -238,7 +238,7 @@ mod tests {
             watermark_interval,
             Some(&timestamp_extractor),
             channel_strategy,
-            Map::<ExtractorStruct, ExtractorStruct>::new(&map_fn),
+            Map::new(&map_fn),
             InMemory::create("test".as_ref()).unwrap(),
             timer::none(),
         );

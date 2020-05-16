@@ -4,9 +4,6 @@ version = "0.1.0"
 authors = ["Max Meldrum <mmeldrum@kth.se>"]
 edition = "2018"
 
-[features]
-rdtsc = ["arcon/metered_state_backend_rdtsc"]
-
 [dependencies.arcon]
 path = "../"
 features = [
@@ -17,7 +14,6 @@ features = [
     "arcon_rocksdb",
     "arcon_sled",
     "arcon_faster",
-    "metered_state_backend",
 ]
 
 [dependencies]

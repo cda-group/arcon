@@ -3,14 +3,16 @@
 
 use crate::{prelude::*, timer};
 use once_cell::sync::Lazy;
+use static_assertions::_core::sync::atomic::AtomicU64;
 use std::{
     any::TypeId,
+    cell::Cell,
     collections::HashMap,
     fs,
     fs::File,
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
-    sync::RwLock,
+    sync::{Mutex, RwLock},
 };
 use tempfile::NamedTempFile;
 
@@ -21,10 +23,6 @@ pub struct NormaliseElements {
     #[prost(int64, repeated, tag = "1")]
     pub data: Vec<i64>,
 }
-
-#[allow(dead_code)]
-static PANIC_COUNTDOWN: Lazy<RwLock<HashMap<TypeId, u32>>> =
-    Lazy::new(|| RwLock::new(HashMap::new()));
 
 #[allow(dead_code)]
 fn backend<SB: state::Backend>(
@@ -76,6 +74,7 @@ fn run_pipeline<SB: state::Backend>(
     state_dir: &Path,
     sink_path: &Path,
     conf: ArconConf,
+    crash_after: u32,
 ) -> Result<(), ()> {
     let timeout = std::time::Duration::from_millis(500);
     let mut pipeline = crate::pipeline::ArconPipeline::with_conf(conf);
@@ -112,17 +111,16 @@ fn run_pipeline<SB: state::Backend>(
         pool_info.clone(),
     ));
 
-    fn map_fn<SB: 'static>(x: NormaliseElements) -> i64 {
-        let t = TypeId::of::<SB>();
-
-        let panic_countdown = *PANIC_COUNTDOWN.read().unwrap().get(&t).unwrap_or(&0);
-        if panic_countdown == 0 {
+    let crash_after = Mutex::new(crash_after);
+    let map_fn = move |x: NormaliseElements| -> i64 {
+        let mut crash_after = crash_after.lock().unwrap();
+        if *crash_after == 0 {
             panic!("expected panic!")
         }
-        *PANIC_COUNTDOWN.write().unwrap().entry(t).or_insert(1) -= 1;
+        *crash_after -= 1;
 
         x.data.iter().map(|x| x + 3).sum()
-    }
+    };
 
     let map_node = system.create(|| {
         Node::new(
@@ -130,7 +128,7 @@ fn run_pipeline<SB: state::Backend>(
             3.into(),
             vec![2.into()],
             channel_strategy,
-            Map::new(&map_fn::<SB>),
+            Map::new(map_fn),
             backend::<SB>(state_dir, &checkpoint_dir, 3),
             timer::none(),
         )
@@ -237,8 +235,7 @@ fn run_test<SB: state::Backend>() {
     let sink_file = NamedTempFile::new().unwrap();
     let sink_path = sink_file.path();
 
-    PANIC_COUNTDOWN.write().unwrap().insert(t, 2); // reaches zero quite quickly
-    run_pipeline::<SB>(test_dir, sink_path, conf.clone()).unwrap_err();
+    run_pipeline::<SB>(test_dir, sink_path, conf.clone(), 2).unwrap_err();
     {
         // Check results from the sink file!
         let file = File::open(sink_file.path()).expect("no such file");
@@ -251,8 +248,7 @@ fn run_test<SB: state::Backend>() {
         assert_eq!(result, vec![9, 8]); // partial result after panic
     }
 
-    PANIC_COUNTDOWN.write().unwrap().insert(t, 100); // won't reach zero
-    run_pipeline::<SB>(test_dir, sink_path, conf).unwrap();
+    run_pipeline::<SB>(test_dir, sink_path, conf, 100).unwrap();
 
     // Check results from the sink file!
     let buf = BufReader::new(sink_file);
@@ -267,18 +263,18 @@ fn run_test<SB: state::Backend>() {
 #[cfg(feature = "arcon_rocksdb")]
 #[test]
 fn test_rocks_recovery_pipeline() {
-    run_test::<state_backend::rocks::RocksDb>()
+    run_test::<state::Rocks>()
 }
 
 #[cfg(all(feature = "arcon_sled", feature = "arcon_sled_checkpoints"))]
 #[test]
 fn test_sled_recovery_pipeline() {
-    run_test::<state_backend::sled::Sled>()
+    run_test::<state::Sled>()
 }
 
 #[cfg(all(feature = "arcon_faster", target_os = "linux"))]
 #[test]
 // #[ignore]
 fn test_faster_recovery_pipeline() {
-    run_test::<state_backend::faster::Faster>()
+    run_test::<state::Faster>()
 }

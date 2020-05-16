@@ -15,7 +15,6 @@ State management features for Arcon
 default = []
 rocks = ["rocksdb"]
 faster = ["faster-rs", "serde"]
-metrics = []
 sled_checkpoints = ["sled"]
 
 [dependencies]
