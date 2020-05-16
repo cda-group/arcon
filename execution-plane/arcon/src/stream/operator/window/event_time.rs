@@ -3,18 +3,17 @@
 
 use crate::{
     prelude::{
-        state::{Handle, MapState, ValueState},
+        state::{Backend, Bundle, Handle, MapState, RegistrationToken, Session, ValueState},
         *,
     },
     stream::operator::{window::WindowContext, OperatorContext},
     timer::TimerBackend,
 };
-use arcon_state::{Backend, Bundle, RegistrationToken, Session};
 use prost::Message;
-use static_assertions::_core::marker::PhantomData;
 use std::{
     collections::hash_map::DefaultHasher,
     hash::{BuildHasher, BuildHasherDefault, Hash, Hasher},
+    marker::PhantomData,
 };
 
 /*
@@ -83,7 +82,7 @@ impl EventTimeWindowAssignerState {
 /// OUT: Output of Window
 pub struct EventTimeWindowAssigner<IN, OUT, W>
 where
-    IN: ArconType + Hash,
+    IN: ArconType,
     OUT: ArconType,
     W: Window<IN, OUT>,
 {
@@ -91,7 +90,6 @@ where
     window_length: u64,
     window_slide: u64,
     late_arrival_time: u64,
-    hasher: BuildHasherDefault<DefaultHasher>,
     keyed: bool,
 
     // window keeps its own state per key and index (via state backend api)
@@ -105,7 +103,7 @@ where
 
 impl<IN, OUT, W> EventTimeWindowAssigner<IN, OUT, W>
 where
-    IN: 'static + ArconType + Hash,
+    IN: 'static + ArconType,
     OUT: 'static + ArconType,
     W: Window<IN, OUT>,
 {
@@ -123,7 +121,6 @@ where
             window_slide: slide,
             late_arrival_time: late,
             window,
-            hasher: BuildHasherDefault::<DefaultHasher>::default(),
             keyed,
 
             state: EventTimeWindowAssignerState::new(),
@@ -160,15 +157,13 @@ where
         if !self.keyed {
             return 0;
         }
-        let mut h = self.hasher.build_hasher();
-        e.data.hash(&mut h);
-        h.finish()
+        e.data.get_key()
     }
 }
 
 impl<IN, OUT, W, B> Operator<B> for EventTimeWindowAssigner<IN, OUT, W>
 where
-    IN: ArconType + Hash,
+    IN: ArconType,
     OUT: ArconType,
     W: Window<IN, OUT>,
     B: Backend,

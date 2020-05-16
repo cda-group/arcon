@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
-    prelude::state,
+    state,
     stream::{operator::Operator, source::SourceContext},
     timer::TimerBackend,
     util::io::*,
@@ -125,9 +125,8 @@ where
 mod tests {
     use super::*;
     use crate::{
-        data::ArconType,
         pipeline::ArconPipeline,
-        prelude::{Channel, ChannelStrategy, DebugNode, Forward, Map, SerId, VersionId},
+        prelude::{Channel, ChannelStrategy, DebugNode, Forward, Map},
         state::{Backend, InMemory},
         timer,
     };
