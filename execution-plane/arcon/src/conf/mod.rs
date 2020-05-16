@@ -3,7 +3,7 @@
 
 use arcon_error::*;
 use hocon::HoconLoader;
-use kompact::prelude::KompactConfig;
+use kompact::prelude::{DeadletterBox, NetworkConfig, KompactConfig};
 use serde::Deserialize;
 use std::path::PathBuf;
 
@@ -43,6 +43,11 @@ pub struct ArconConf {
     /// Float value that sets message priority
     #[serde(default = "kompact_msg_priority_default")]
     pub kompact_msg_priority: f32,
+    /// Host address for the KompactSystem
+    ///
+    /// It is set as optional as it is not necessary for local deployments
+    #[serde(default = "kompact_network_host_default")]
+    pub kompact_network_host: Option<String>,
 }
 
 impl ArconConf {
@@ -58,9 +63,17 @@ impl ArconConf {
         cfg.threads(self.kompact_threads);
         cfg.throughput(self.kompact_throughput);
         cfg.msg_priority(self.kompact_msg_priority);
+
+        // Set up Kompact network only if we are gonna use it..
+        if let Some(host) = &self.kompact_network_host {
+            let sock_addr = host.parse().unwrap();
+            cfg.system_components(DeadletterBox::new, NetworkConfig::new(sock_addr).build());
+        }
+
         cfg
     }
 
+    /// Returns the default Arcon Configuration
     pub fn default() -> ArconConf {
         ArconConf {
             checkpoint_dir: checkpoint_dir_default(),
@@ -74,6 +87,7 @@ impl ArconConf {
             kompact_threads: kompact_threads_default(),
             kompact_throughput: kompact_throughput_default(),
             kompact_msg_priority: kompact_msg_priority_default(),
+            kompact_network_host: kompact_network_host_default(),
         }
     }
 
@@ -144,6 +158,10 @@ fn kompact_msg_priority_default() -> f32 {
     1.0
 }
 
+fn kompact_network_host_default() -> Option<String> {
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -173,5 +191,6 @@ mod tests {
         assert_eq!(conf.kompact_threads, kompact_threads_default());
         assert_eq!(conf.kompact_throughput, kompact_throughput_default());
         assert_eq!(conf.kompact_msg_priority, kompact_msg_priority_default());
+        assert_eq!(conf.kompact_network_host, kompact_network_host_default());
     }
 }
