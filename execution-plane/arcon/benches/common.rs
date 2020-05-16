@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use arcon::prelude::*;
-use arcon_error::*;
 use std::time::{Duration, Instant};
 
 #[derive(Debug)]

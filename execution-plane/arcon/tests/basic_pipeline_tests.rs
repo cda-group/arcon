@@ -108,7 +108,7 @@ fn normalise_pipeline_test() {
         NormaliseElements { data }
     }
 
-    let mut state_backend_2 = InMemory::create("test2".as_ref()).unwrap();
+    let state_backend_2 = InMemory::create("test2".as_ref()).unwrap();
 
     let window = AppenderWindow::new(&window_fn);
 

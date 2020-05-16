@@ -3,11 +3,7 @@
 
 // Benchmarks for different Window types
 
-use arcon::{
-    prelude::*,
-    state::{InMemory, Rocks},
-    stream::operator::window::WindowContext,
-};
+use arcon::{prelude::*, state::InMemory, stream::operator::window::WindowContext};
 use criterion::{black_box, criterion_group, criterion_main, Bencher, Criterion};
 
 const WINDOW_MSGS: usize = 1000;
@@ -34,16 +30,17 @@ fn arcon_window_latency(c: &mut Criterion) {
 }
 
 pub fn window_appender_sum(b: &mut Bencher) {
-    let mut state_backend = InMemory::create("bench".as_ref()).unwrap();
+    let state_backend = InMemory::create("bench".as_ref()).unwrap();
     let mut state_session = state_backend.session();
     b.iter(|| appender_sum(black_box(WINDOW_MSGS), &mut state_session));
 }
 
 #[cfg(feature = "arcon_rocksdb")]
 pub fn window_appender_sum_rocksdb(b: &mut Bencher) {
+    use state::Rocks;
     let temp_dir = tempfile::TempDir::new().unwrap();
     let test_directory = temp_dir.path();
-    let mut state_backend = Rocks::create(test_directory).unwrap();
+    let state_backend = Rocks::create(test_directory).unwrap();
     let mut state_session = state_backend.session();
     b.iter(|| appender_sum(black_box(WINDOW_MSGS), &mut state_session));
 }
@@ -65,16 +62,17 @@ pub fn appender_sum<SB: state::Backend>(messages: usize, state_session: &mut sta
 }
 
 pub fn window_incremental_sum(b: &mut Bencher) {
-    let mut state_backend = InMemory::create("bench".as_ref()).unwrap();
+    let state_backend = InMemory::create("bench".as_ref()).unwrap();
     let mut state_session = state_backend.session();
     b.iter(|| incremental_sum(black_box(WINDOW_MSGS), &mut state_session));
 }
 
 #[cfg(feature = "arcon_rocksdb")]
 pub fn window_incremental_sum_rocksdb(b: &mut Bencher) {
+    use state::Rocks;
     let temp_dir = tempfile::TempDir::new().unwrap();
     let test_directory = temp_dir.path();
-    let mut state_backend = Rocks::create(test_directory).unwrap();
+    let state_backend = Rocks::create(test_directory).unwrap();
     let mut state_session = state_backend.session();
     b.iter(|| incremental_sum(black_box(WINDOW_MSGS), &mut state_session));
 }
@@ -116,7 +114,7 @@ pub fn window_appender_sum_square_par(b: &mut Bencher) {
 }
 
 pub fn sum_square(messages: usize) {
-    let mut state_backend = InMemory::create("bench".as_ref()).unwrap();
+    let state_backend = InMemory::create("bench".as_ref()).unwrap();
     let mut state_session = state_backend.session();
 
     #[inline]
@@ -137,7 +135,7 @@ pub fn sum_square(messages: usize) {
 
 #[cfg(feature = "rayon")]
 pub fn sum_square_par(messages: usize) {
-    let mut state_backend = InMemory::create("bench".as_ref()).unwrap();
+    let state_backend = InMemory::create("bench".as_ref()).unwrap();
     let mut state_session = state_backend.session();
 
     #[inline]

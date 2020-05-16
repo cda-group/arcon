@@ -10,9 +10,9 @@
 #![feature(unboxed_closures)]
 
 // Enable use of arcon_macros within this crate
-extern crate self as arcon;
 #[cfg_attr(test, macro_use)]
 extern crate arcon_macros;
+extern crate self as arcon;
 #[doc(hidden)]
 pub use arcon_macros::*;
 

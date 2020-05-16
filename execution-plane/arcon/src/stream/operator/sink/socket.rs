@@ -3,7 +3,6 @@
 
 use crate::{prelude::*, stream::operator::OperatorContext, timer::TimerBackend};
 use ::serde::Serialize;
-use arcon_state::{RegistrationToken, Session};
 use bytes::Bytes;
 use futures::{channel, executor::block_on, SinkExt, StreamExt};
 use std::{

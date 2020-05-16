@@ -10,11 +10,7 @@ use crate::{
     timer::TimerBackend,
 };
 use prost::Message;
-use std::{
-    collections::hash_map::DefaultHasher,
-    hash::{BuildHasher, BuildHasherDefault, Hash, Hasher},
-    marker::PhantomData,
-};
+use std::marker::PhantomData;
 
 /*
     EventTimeWindowAssigner
@@ -338,7 +334,7 @@ mod tests {
             u.len() as u64
         }
 
-        let mut state_backend = InMemory::create("test".as_ref()).unwrap();
+        let state_backend = InMemory::create("test".as_ref()).unwrap();
 
         let window = AppenderWindow::new(&appender_fn);
         let window_assigner = EventTimeWindowAssigner::new(window, length, slide, late, true);

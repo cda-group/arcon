@@ -2,17 +2,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{prelude::*, timer};
-use once_cell::sync::Lazy;
-use static_assertions::_core::sync::atomic::AtomicU64;
 use std::{
-    any::TypeId,
-    cell::Cell,
     collections::HashMap,
     fs,
     fs::File,
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
-    sync::{Mutex, RwLock},
+    sync::Mutex,
 };
 use tempfile::NamedTempFile;
 
@@ -148,7 +144,7 @@ fn run_pipeline<SB: state::Backend>(
         NormaliseElements { data }
     }
 
-    let mut window_state_backend = backend::<SB>(state_dir, &checkpoint_dir, 2);
+    let window_state_backend = backend::<SB>(state_dir, &checkpoint_dir, 2);
 
     let window = AppenderWindow::new(&window_fn);
 
@@ -221,8 +217,6 @@ fn run_pipeline<SB: state::Backend>(
 
 #[allow(dead_code)]
 fn run_test<SB: state::Backend>() {
-    let t = TypeId::of::<SB>();
-
     let test_dir = tempfile::tempdir().unwrap();
     let test_dir = test_dir.path();
 
