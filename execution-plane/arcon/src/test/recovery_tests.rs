@@ -27,11 +27,11 @@ static PANIC_COUNTDOWN: Lazy<RwLock<HashMap<TypeId, u32>>> =
     Lazy::new(|| RwLock::new(HashMap::new()));
 
 #[allow(dead_code)]
-fn backend<SB: StateBackend>(
+fn backend<SB: state::Backend>(
     state_dir: &Path,
     checkpoints_dir: &Path,
     node_id: u32,
-) -> Box<dyn StateBackend> {
+) -> state::BackendContainer<SB> {
     let mut running_dir: PathBuf = state_dir.into();
     running_dir.push(format!("running_{}", node_id));
     let _ = fs::remove_dir_all(&running_dir); // ignore possible NotFound error
@@ -64,15 +64,15 @@ fn backend<SB: StateBackend>(
                 epoch = epoch
             ));
 
-            Box::new(SB::restore(&running_dir, &checkpoint_path).unwrap())
+            SB::restore(&running_dir, &checkpoint_path).unwrap()
         }
-        None => Box::new(SB::new(&running_dir).unwrap()),
+        None => SB::create(&running_dir).unwrap(),
     }
 }
 
 #[allow(dead_code)]
 /// manually sent events -> Window -> Map -> LocalFileSink
-fn run_pipeline<SB: StateBackend>(
+fn run_pipeline<SB: state::Backend>(
     state_dir: &Path,
     sink_path: &Path,
     conf: ArconConf,
@@ -93,7 +93,7 @@ fn run_pipeline<SB: StateBackend>(
             ChannelStrategy::Mute,
             LocalFileSink::new(sink_path),
             backend::<SB>(state_dir, &checkpoint_dir, 4),
-            timer::none,
+            timer::none(),
         )
     });
     system
@@ -130,9 +130,9 @@ fn run_pipeline<SB: StateBackend>(
             3.into(),
             vec![2.into()],
             channel_strategy,
-            Map::<NormaliseElements, i64>::new(&map_fn::<SB>),
+            Map::new(&map_fn::<SB>),
             backend::<SB>(state_dir, &checkpoint_dir, 3),
-            timer::none,
+            timer::none(),
         )
     });
 
@@ -152,8 +152,7 @@ fn run_pipeline<SB: StateBackend>(
 
     let mut window_state_backend = backend::<SB>(state_dir, &checkpoint_dir, 2);
 
-    let window: Box<dyn Window<i64, NormaliseElements>> =
-        Box::new(AppenderWindow::new(&window_fn, &mut *window_state_backend));
+    let window = AppenderWindow::new(&window_fn);
 
     let map_node_ref = map_node.actor_ref().hold().expect("Failed to fetch ref");
     let channel_strategy = ChannelStrategy::Forward(Forward::new(
@@ -168,16 +167,9 @@ fn run_pipeline<SB: StateBackend>(
             2.into(),
             vec![1.into()],
             channel_strategy,
-            EventTimeWindowAssigner::<i64, NormaliseElements>::new(
-                window,
-                2,
-                2,
-                0,
-                false,
-                &mut *window_state_backend,
-            ),
+            EventTimeWindowAssigner::new(window, 2, 2, 0, false),
             window_state_backend,
-            timer::wheel,
+            timer::wheel(),
         )
     });
     system
@@ -230,7 +222,7 @@ fn run_pipeline<SB: StateBackend>(
 }
 
 #[allow(dead_code)]
-fn run_test<SB: StateBackend>() {
+fn run_test<SB: state::Backend>() {
     let t = TypeId::of::<SB>();
 
     let test_dir = tempfile::tempdir().unwrap();

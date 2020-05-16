@@ -29,6 +29,23 @@ where
     _marker: PhantomData<fn(IN, B)>,
 }
 
+impl<IN, B> Filter<IN, fn(&IN, &(), &mut state::Session<B>) -> bool, B, ()>
+where
+    IN: ArconType,
+    B: state::Backend,
+{
+    pub fn new(
+        udf: impl SafelySendableFn(&IN) -> bool,
+    ) -> Filter<IN, impl SafelySendableFn(&IN, &(), &mut state::Session<B>) -> bool, B, ()> {
+        let udf = move |input: &IN, _: &(), _: &mut state::Session<B>| udf(input);
+        Filter {
+            state: (),
+            udf,
+            _marker: Default::default(),
+        }
+    }
+}
+
 impl<IN, F, B, S> Filter<IN, F, B, S>
 where
     IN: ArconType,
@@ -39,20 +56,6 @@ where
     pub fn stateful(state: S, udf: F) -> Self {
         Filter {
             state,
-            udf,
-            _marker: Default::default(),
-        }
-    }
-
-    pub fn new<FF>(
-        udf: FF,
-    ) -> Filter<IN, impl SafelySendableFn(&IN, &(), &mut state::Session<B>) -> bool, B, ()>
-    where
-        FF: SafelySendableFn(&IN) -> bool,
-    {
-        let udf = move |input: &IN, _: &(), _: &mut state::Session<B>| udf(input);
-        Filter {
-            state: (),
             udf,
             _marker: Default::default(),
         }
@@ -114,7 +117,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{prelude::*, state_backend::in_memory::InMemory};
+    use crate::{prelude::*, state::InMemory};
 
     #[test]
     fn filter_test() {
@@ -141,8 +144,8 @@ mod tests {
                 vec![1.into()],
                 channel_strategy,
                 Filter::new(&filter_fn),
-                Box::new(InMemory::new("test".as_ref()).unwrap()),
-                timer::none,
+                InMemory::create("test".as_ref()).unwrap(),
+                timer::none(),
             )
         });
         system.start(&filter_node);

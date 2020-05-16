@@ -374,11 +374,12 @@ where
                         self.operator
                             .handle_watermark(new_watermark, make_context!(self, sb_session));
 
-                        for timeout in self
+                        let timeouts = self
                             .timer_backend
                             .borrow_mut()
-                            .advance_to(new_watermark.timestamp, sb_session)
-                        {
+                            .advance_to(new_watermark.timestamp, sb_session);
+
+                        for timeout in timeouts {
                             self.operator
                                 .handle_timeout(timeout, make_context!(self, sb_session));
                         }
@@ -604,7 +605,11 @@ where
 mod tests {
     // Tests the message logic of Node.
     use super::*;
-    use crate::{pipeline::*, state_backend::in_memory::InMemory, timer};
+    use crate::{
+        pipeline::*,
+        state::{Backend, InMemory},
+        timer,
+    };
     use std::{sync::Arc, thread, time};
 
     fn node_test_setup() -> (ActorRef<ArconMessage<i32>>, Arc<Component<DebugNode<i32>>>) {
@@ -633,8 +638,8 @@ mod tests {
                 vec![1.into(), 2.into(), 3.into()],
                 channel_strategy,
                 Filter::new(&node_fn),
-                Box::new(InMemory::new("test".as_ref()).unwrap()),
-                timer::none,
+                InMemory::create("test".as_ref()).unwrap(),
+                timer::none(),
             )
         });
 

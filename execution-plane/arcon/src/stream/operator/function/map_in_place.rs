@@ -25,6 +25,23 @@ where
     _marker: PhantomData<fn(IN, B)>,
 }
 
+impl<IN, B> MapInPlace<IN, fn(&mut IN, &(), &mut state::Session<B>), B, ()>
+where
+    IN: ArconType,
+    B: state::Backend,
+{
+    pub fn new(
+        udf: impl SafelySendableFn(&mut IN),
+    ) -> MapInPlace<IN, impl SafelySendableFn(&mut IN, &(), &mut state::Session<B>), B, ()> {
+        let udf = move |input: &mut IN, _: &(), _: &mut state::Session<B>| udf(input);
+        MapInPlace {
+            state: (),
+            udf,
+            _marker: Default::default(),
+        }
+    }
+}
+
 impl<IN, F, B, S> MapInPlace<IN, F, B, S>
 where
     IN: ArconType,
@@ -35,16 +52,6 @@ where
     pub fn stateful(state: S, udf: F) -> Self {
         MapInPlace {
             state,
-            udf,
-            _marker: Default::default(),
-        }
-    }
-    pub fn new<FF>(
-        udf: impl SafelySendableFn(&mut IN),
-    ) -> MapInPlace<IN, impl SafelySendableFn(&mut IN, &(), &mut state::Session<B>), B, ()> {
-        let udf = move |input: &mut IN, _: &(), _: &mut state::Session<B>| udf(input);
-        MapInPlace {
-            state: (),
             udf,
             _marker: Default::default(),
         }

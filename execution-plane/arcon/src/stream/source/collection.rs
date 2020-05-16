@@ -112,7 +112,7 @@ mod tests {
         data::ArconMessage,
         pipeline::ArconPipeline,
         prelude::{Channel, ChannelStrategy, DebugNode, Filter, Forward},
-        state_backend::{in_memory::InMemory, StateBackend},
+        state::{Backend, InMemory},
         timer,
     };
 
@@ -144,9 +144,9 @@ mod tests {
             watermark_interval,
             None, // no timestamp extractor
             channel_strategy,
-            Filter::<u64>::new(&filter_fn),
-            Box::new(InMemory::new("test".as_ref()).unwrap()),
-            timer::none,
+            Filter::new(&filter_fn),
+            InMemory::create("test".as_ref()).unwrap(),
+            timer::none(),
         );
 
         // Generate collection

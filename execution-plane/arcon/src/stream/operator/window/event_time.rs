@@ -307,7 +307,7 @@ where
 mod tests {
     use super::*;
     use crate::{
-        state_backend::in_memory::InMemory,
+        state::InMemory,
         stream::channel::{strategy::forward::*, Channel},
         tests::Item,
         timer,
@@ -343,11 +343,10 @@ mod tests {
             u.len() as u64
         }
 
-        let mut state_backend = Box::new(InMemory::new("test".as_ref()).unwrap());
+        let mut state_backend = InMemory::create("test".as_ref()).unwrap();
 
-        let window: Box<dyn Window<Item, u64>> = Box::new(AppenderWindow::new(&appender_fn));
-        let window_assigner =
-            EventTimeWindowAssigner::<Item, u64>::new(window, length, slide, late, true);
+        let window = AppenderWindow::new(&appender_fn);
+        let window_assigner = EventTimeWindowAssigner::new(window, length, slide, late, true);
 
         let window_node = system.create(move || {
             Node::new(
@@ -357,7 +356,7 @@ mod tests {
                 channel_strategy,
                 window_assigner,
                 state_backend,
-                timer::wheel,
+                timer::wheel(),
             )
         });
 

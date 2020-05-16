@@ -87,7 +87,7 @@ pub mod prelude {
             },
             node::{debug::DebugNode, Node, NodeDescriptor},
             operator::{
-                function::Filter,
+                function::*,
                 sink::local_file::LocalFileSink,
                 window::{AppenderWindow, EventTimeWindowAssigner, IncrementalWindow, Window},
                 Operator,
@@ -112,9 +112,12 @@ pub mod prelude {
     pub use kompact::{get_core_ids, CoreId};
 
     pub use arcon_state as state;
+    pub use arcon_state::Backend as _;
     #[cfg(feature = "rayon")]
     pub use rayon::prelude::*;
 }
+
+pub use arcon_state as state;
 
 #[cfg(test)]
 pub(crate) mod tests {

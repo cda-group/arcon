@@ -128,7 +128,7 @@ mod tests {
         data::ArconType,
         pipeline::ArconPipeline,
         prelude::{Channel, ChannelStrategy, DebugNode, Forward, Map, SerId, VersionId},
-        state_backend::{in_memory::InMemory, StateBackend},
+        state::{Backend, InMemory},
         timer,
     };
     use std::{thread, time};
@@ -169,8 +169,8 @@ mod tests {
             None, // no timestamp extractor
             channel_strategy,
             Map::<u32, u32>::new(&map_fn),
-            Box::new(InMemory::new("test".as_ref()).unwrap()),
-            timer::none,
+            InMemory::create("test".as_ref()).unwrap(),
+            timer::none(),
         );
 
         let socket_source = SocketSource::new(addr, SocketKind::Tcp, source_context);
@@ -240,8 +240,8 @@ mod tests {
             Some(&timestamp_extractor),
             channel_strategy,
             Map::<ExtractorStruct, ExtractorStruct>::new(&map_fn),
-            Box::new(InMemory::new("test".as_ref()).unwrap()),
-            timer::none,
+            InMemory::create("test".as_ref()).unwrap(),
+            timer::none(),
         );
 
         let socket_source = SocketSource::new(addr, SocketKind::Tcp, source_context);

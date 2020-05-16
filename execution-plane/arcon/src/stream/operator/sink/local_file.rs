@@ -85,7 +85,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{prelude::ChannelStrategy, state_backend::in_memory::InMemory, timer};
+    use crate::{prelude::ChannelStrategy, state::InMemory, timer};
     use std::io::{BufRead, BufReader};
     use tempfile::NamedTempFile;
 
@@ -104,8 +104,8 @@ mod tests {
                 vec![node_id],
                 ChannelStrategy::Mute,
                 LocalFileSink::new(&file_path),
-                Box::new(InMemory::new("test".as_ref()).unwrap()),
-                timer::none,
+                InMemory::create("test".as_ref()).unwrap(),
+                timer::none(),
             )
         });
         system.start(&sink_comp);

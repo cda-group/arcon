@@ -6,7 +6,7 @@ use crate::nexmark::{
     queries::{Query, QueryTimer},
     Bid, Event, NEXMarkEvent,
 };
-use arcon::{prelude::*, state_backend::in_memory::InMemory};
+use arcon::{prelude::*, state::InMemory};
 
 // Filter out events that are bids using a FilterMap operator
 #[inline(always)]
@@ -69,8 +69,8 @@ impl Query for QueryOne {
                 None, // no timestamp extractor
                 channel_strategy,
                 FilterMap::<NEXMarkEvent, Bid>::new(&bid_filter_map),
-                Box::new(InMemory::new("src".as_ref()).unwrap()),
-                timer::none,
+                InMemory::create("src".as_ref()).unwrap(),
+                timer::none(),
             );
 
             super::source(sink_port_opt, nexmark_config, source_context, &mut system)
@@ -95,7 +95,7 @@ pub fn q1_node(
         in_channels,
         channel_strategy,
         MapInPlace::new(&map_fn),
-        Box::new(InMemory::new("map".as_ref()).unwrap()),
-        timer::none,
+        InMemory::create("map".as_ref()).unwrap(),
+        timer::none(),
     )
 }

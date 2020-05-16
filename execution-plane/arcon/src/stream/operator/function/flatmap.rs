@@ -29,6 +29,26 @@ where
     _marker: PhantomData<fn(IN, B) -> OUTS>,
 }
 
+impl<IN, OUTS, B> FlatMap<IN, OUTS, fn(&IN, &(), &mut state::Session<B>) -> OUTS, B, ()>
+where
+    IN: ArconType,
+    OUTS: IntoIterator,
+    OUTS::Item: ArconType,
+    B: state::Backend,
+{
+    pub fn new(
+        udf: impl SafelySendableFn(&IN) -> OUTS,
+    ) -> FlatMap<IN, OUTS, impl SafelySendableFn(&IN, &(), &mut state::Session<B>) -> OUTS, B, ()>
+    {
+        let udf = move |input: &IN, _: &(), _: &mut state::Session<B>| udf(input);
+        FlatMap {
+            state: (),
+            udf,
+            _marker: Default::default(),
+        }
+    }
+}
+
 impl<IN, OUTS, F, B, S> FlatMap<IN, OUTS, F, B, S>
 where
     IN: ArconType,
@@ -41,18 +61,6 @@ where
     pub fn stateful(state: S, udf: F) -> Self {
         FlatMap {
             state,
-            udf,
-            _marker: Default::default(),
-        }
-    }
-
-    pub fn new<FF>(
-        udf: impl SafelySendableFn(&IN) -> OUTS,
-    ) -> FlatMap<IN, OUTS, impl SafelySendableFn(&IN, &(), &mut state::Session<B>) -> OUTS, B, ()>
-    {
-        let udf = move |input: &IN, _: &(), _: &mut state::Session<B>| udf(input);
-        FlatMap {
-            state: (),
             udf,
             _marker: Default::default(),
         }
@@ -117,7 +125,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{prelude::*, state_backend::in_memory::InMemory, timer};
+    use crate::{prelude::*, state::InMemory, timer};
 
     #[test]
     fn flatmap_test() {
@@ -143,8 +151,8 @@ mod tests {
                 vec![1.into()],
                 channel_strategy,
                 FlatMap::new(&flatmap_fn),
-                Box::new(InMemory::new("test".as_ref()).unwrap()),
-                timer::none,
+                InMemory::create("test".as_ref()).unwrap(),
+                timer::none(),
             )
         });
         system.start(&flatmap_node);

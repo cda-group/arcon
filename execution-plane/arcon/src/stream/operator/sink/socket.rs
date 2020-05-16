@@ -138,7 +138,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{prelude::ChannelStrategy, state_backend::in_memory::InMemory, timer};
+    use crate::{prelude::ChannelStrategy, state::InMemory, timer};
 
     #[test]
     fn udp_sink_test() {
@@ -159,8 +159,8 @@ mod tests {
                         vec![1.into()],
                         ChannelStrategy::Mute,
                         SocketSink::udp(addr),
-                        Box::new(InMemory::new("test".as_ref()).unwrap()),
-                        timer::none,
+                        InMemory::create("test".as_ref()).unwrap(),
+                        timer::none(),
                     )
                 });
                 system.start(&socket_sink);

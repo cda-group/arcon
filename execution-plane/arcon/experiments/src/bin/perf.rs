@@ -194,7 +194,7 @@ fn exec(
         state_backend_type
             .create(&arcon_config, num_nodes, 1.into())
             .unwrap(),
-        timer::none,
+        timer::none(),
     );
 
     let map_node = if dedicated {
@@ -240,7 +240,7 @@ fn exec(
         state_backend_type
             .create(&arcon_config, num_nodes, 2.into())
             .unwrap(),
-        timer::none,
+        timer::none(),
     );
 
     // Collection for source

@@ -115,7 +115,7 @@ mod tests {
         data::{ArconF64, ArconType},
         pipeline::ArconPipeline,
         prelude::{Channel, ChannelStrategy, DebugNode, Forward, Map, NodeID},
-        state_backend::{in_memory::InMemory, StateBackend},
+        state::{Backend, InMemory},
         timer,
     };
     use std::{io::prelude::*, sync::Arc, thread, time};
@@ -168,9 +168,9 @@ mod tests {
             watermark_interval,
             None, // no timestamp extractor
             channel_strategy,
-            Map::<u64, u64>::new(&map_fn),
-            Box::new(InMemory::new("test".as_ref()).unwrap()),
-            timer::none,
+            Map::new(&map_fn),
+            InMemory::create("test".as_ref()).unwrap(),
+            timer::none(),
         );
 
         let file_source = LocalFileSource::new(String::from(&file_path), source_context);
@@ -218,9 +218,9 @@ mod tests {
             watermark_interval,
             None, // no timestamp extractor
             channel_strategy,
-            Map::<ArconF64, ArconF64>::new(&map_fn),
-            Box::new(InMemory::new("test".as_ref()).unwrap()),
-            timer::none,
+            Map::new(&map_fn),
+            InMemory::create("test".as_ref()).unwrap(),
+            timer::none(),
         );
 
         let file_source = LocalFileSource::new(String::from(&file_path), source_context);

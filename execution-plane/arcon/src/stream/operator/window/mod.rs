@@ -219,22 +219,25 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state_backend::in_memory::InMemory;
+    use crate::state::InMemory;
 
     #[test]
     fn sum_appender_window_test() {
-        let mut state_backend = InMemory::new("test".as_ref()).unwrap();
+        let mut state_backend = InMemory::create("test".as_ref()).unwrap();
+        let mut session = state_backend.session();
 
         fn materializer(buffer: &[i32]) -> i32 {
             buffer.iter().sum()
         }
         let mut window: AppenderWindow<i32, i32> = AppenderWindow::new(&materializer);
+        window.register_states(&mut unsafe { state::RegistrationToken::new(&mut session) });
+
         for i in 0..10 {
-            let _ = window.on_element(i, WindowContext::new(&mut state_backend, 0, 0));
+            let _ = window.on_element(i, WindowContext::new(&mut session, 0, 0));
         }
 
         let sum = window
-            .result(WindowContext::new(&mut state_backend, 0, 0))
+            .result(WindowContext::new(&mut session, 0, 0))
             .unwrap();
         let expected: i32 = 45;
         assert_eq!(sum, expected);
@@ -242,24 +245,25 @@ mod tests {
 
     #[test]
     fn sum_incremental_window_test() {
-        let mut state_backend = InMemory::new("test".as_ref()).unwrap();
+        let mut state_backend = InMemory::create("test".as_ref()).unwrap();
+        let mut session = state_backend.session();
 
         fn init(i: i32) -> u64 {
             i as u64
         }
-
         fn aggregation(i: i32, agg: &u64) -> u64 {
             agg + i as u64
         }
 
         let mut window: IncrementalWindow<i32, u64> = IncrementalWindow::new(&init, &aggregation);
+        window.register_states(&mut unsafe { state::RegistrationToken::new(&mut session) });
 
         for i in 0..10 {
-            let _ = window.on_element(i, WindowContext::new(&mut state_backend, 0, 0));
+            let _ = window.on_element(i, WindowContext::new(&mut session, 0, 0));
         }
 
         let sum = window
-            .result(WindowContext::new(&mut state_backend, 0, 0))
+            .result(WindowContext::new(&mut session, 0, 0))
             .unwrap();
         let expected: u64 = 45;
         assert_eq!(sum, expected);

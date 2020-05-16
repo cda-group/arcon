@@ -28,6 +28,24 @@ where
     _marker: PhantomData<fn(IN, B) -> OUT>,
 }
 
+impl<IN, OUT, B> Map<IN, OUT, fn(IN, &(), &mut state::Session<B>) -> OUT, B, ()>
+where
+    IN: ArconType,
+    OUT: ArconType,
+    B: state::Backend,
+{
+    pub fn new(
+        udf: impl SafelySendableFn(IN) -> OUT,
+    ) -> Map<IN, OUT, impl SafelySendableFn(IN, &(), &mut state::Session<B>) -> OUT, B, ()> {
+        let udf = move |input: IN, _: &(), _: &mut state::Session<B>| udf(input);
+        Map {
+            state: (),
+            udf,
+            _marker: Default::default(),
+        }
+    }
+}
+
 impl<IN, OUT, F, B, S> Map<IN, OUT, F, B, S>
 where
     IN: ArconType,
@@ -39,17 +57,6 @@ where
     pub fn stateful(state: S, udf: F) -> Self {
         Map {
             state,
-            udf,
-            _marker: Default::default(),
-        }
-    }
-
-    pub fn new<FF>(
-        udf: impl SafelySendableFn(IN) -> OUT,
-    ) -> Map<IN, OUT, impl SafelySendableFn(IN, &(), &mut state::Session<B>) -> OUT, B, ()> {
-        let udf = move |input: IN, _: &(), _: &mut state::Session<B>| udf(input);
-        Map {
-            state: (),
             udf,
             _marker: Default::default(),
         }
@@ -112,7 +119,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{prelude::*, state_backend::in_memory::InMemory, timer};
+    use crate::{prelude::*, state::InMemory, timer};
 
     #[test]
     fn map_test() {
@@ -138,8 +145,8 @@ mod tests {
                 vec![1.into()],
                 channel_strategy,
                 Map::new(&map_fn),
-                Box::new(InMemory::new("test".as_ref()).unwrap()),
-                timer::none,
+                InMemory::create("test".as_ref()).unwrap(),
+                timer::none(),
             )
         });
         system.start(&map_node);

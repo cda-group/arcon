@@ -8,7 +8,7 @@ use crate::nexmark::{
 };
 use arcon::{
     prelude::*,
-    state_backend::in_memory::InMemory,
+    state::InMemory,
     stream::operator::{function::StatefulFlatMap, OperatorContext},
     timer,
 };
@@ -116,8 +116,8 @@ impl Query for QueryThree {
                 None, // no timestamp extractor
                 channel_strategy,
                 FilterMap::<NEXMarkEvent, PersonOrAuction>::new(&person_or_auction_filter_map),
-                Box::new(InMemory::new("src".as_ref()).unwrap()),
-                timer::none,
+                InMemory::create("src".as_ref()).unwrap(),
+                timer::none(),
             );
 
             super::source(sink_port_opt, nexmark_config, source_context, &mut system)
@@ -245,7 +245,7 @@ pub fn q3_node(
         in_channels,
         channel_strategy,
         StatefulFlatMap::new(&flatmap_fn),
-        Box::new(InMemory::new("flatmap".as_ref()).unwrap()),
-        timer::none,
+        InMemory::create("flatmap".as_ref()).unwrap(),
+        timer::none(),
     )
 }
