@@ -41,9 +41,9 @@ impl<T> Metakey for T where T: FixedBytes + Copy + Clone + Send + Sync + 'static
 
 #[derive(Debug, Default)]
 pub struct Config {
-    live_state_base_path: PathBuf,
-    checkpoints_base_path: PathBuf,
-    backend_ids: Vec<String>,
+    pub live_state_base_path: PathBuf,
+    pub checkpoints_base_path: PathBuf,
+    pub backend_ids: Vec<String>,
 }
 
 pub trait Backend:
@@ -152,6 +152,10 @@ pub trait Backend:
 
     /// should not be called from outside `BackendContainer::session`
     fn session_drop_hook(&mut self) -> Option<Box<dyn FnOnce(&mut Self)>> {
+        None
+    }
+
+    fn metrics(&mut self) -> Option<&mut Metrics> {
         None
     }
 
@@ -354,4 +358,5 @@ pub use self::faster::Faster;
 pub mod sled;
 #[cfg(feature = "sled")]
 pub use self::sled::Sled;
+use crate::metered::Metrics;
 use std::cell::{RefCell, RefMut};

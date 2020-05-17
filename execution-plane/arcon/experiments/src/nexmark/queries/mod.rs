@@ -8,7 +8,7 @@ use crate::nexmark::{
     NEXMarkEvent,
 };
 
-use arcon::prelude::*;
+use arcon::{prelude::*, timer::TimerBackend};
 use std::time::Duration;
 
 pub mod q1;
@@ -66,14 +66,16 @@ pub fn sink<A: ArconType>(
     }
 }
 
-pub fn source<OP>(
+pub fn source<OP, B, T>(
     sink_port_opt: Option<ProvidedRef<SinkPort>>,
     nexmark_config: NEXMarkConfig,
-    source_context: SourceContext<OP>,
+    source_context: SourceContext<OP, B, T>,
     system: &mut KompactSystem,
 ) -> QueryTimer
 where
-    OP: Operator<IN = NEXMarkEvent> + 'static,
+    OP: Operator<B, IN = NEXMarkEvent, TimerState = ArconNever> + 'static,
+    B: state::Backend,
+    T: TimerBackend<ArconNever>,
 {
     let nexmark_source_comp =
         system.create_dedicated(move || NEXMarkSource::new(nexmark_config, source_context));

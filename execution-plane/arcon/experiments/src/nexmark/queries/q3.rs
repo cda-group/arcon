@@ -7,10 +7,7 @@ use crate::nexmark::{
     Auction, Event, NEXMarkEvent, Person,
 };
 use arcon::{
-    prelude::*,
-    state::InMemory,
-    stream::operator::{function::StatefulFlatMap, OperatorContext},
-    timer,
+    prelude::*, state::InMemory, stream::operator::function::FlatMap, timer, timer::TimerBackend,
 };
 use serde::{Deserialize, Serialize};
 
@@ -115,7 +112,7 @@ impl Query for QueryThree {
                 watermark_interval,
                 None, // no timestamp extractor
                 channel_strategy,
-                FilterMap::<NEXMarkEvent, PersonOrAuction>::new(&person_or_auction_filter_map),
+                FlatMap::new(&person_or_auction_filter_map),
                 InMemory::create("src".as_ref()).unwrap(),
                 timer::none(),
             );
@@ -125,12 +122,32 @@ impl Query for QueryThree {
     }
 }
 
+state::bundle! {
+    struct Q3State {
+        person: Handle<ValueState<Person>, u32>,
+        pending_auctions: Handle<VecState<Auction>, u32>,
+    }
+}
+
+impl Q3State {
+    fn new() -> Q3State {
+        Q3State {
+            person: Handle::value("person").with_item_key(0),
+            pending_auctions: Handle::vec("pending_auctions").with_item_key(0),
+        }
+    }
+}
+
 pub fn q3_node(
     descriptor: String,
     id: NodeID,
     in_channels: Vec<NodeID>,
     channel_strategy: ChannelStrategy<Q3Result>,
-) -> Node<impl Operator<IN = PersonOrAuction, OUT = Q3Result>> {
+) -> Node<
+    impl Operator<InMemory, IN = PersonOrAuction, OUT = Q3Result, TimerState = ArconNever>,
+    InMemory,
+    impl TimerBackend<ArconNever>,
+> {
     // SELECT person.name, person.city,
     //      person.state, open_auction.id
     // FROM open_auction, person, item
@@ -141,42 +158,38 @@ pub fn q3_node(
 
     #[inline(always)]
     fn flatmap_fn(
-        ctx: OperatorContext<impl Operator>,
         person_or_auction: PersonOrAuction,
+        state: &Q3State,
+        session: &mut state::Session<InMemory>,
     ) -> Vec<Q3Result> {
-        const PERSON: &str = "person_state";
-        const PENDING_AUCTIONS: &str = "pending_auctions";
+        let mut state = state.activate(session);
 
         use PersonOrAuctionInner as P;
         match person_or_auction.inner.unwrap() {
             P::Person(p) => {
-                let person_state = ctx
-                    .state_session
-                    .build(PERSON)
-                    .with_item_key(p.id) // partitioning
-                    .value::<Person>();
+                // partitioning
+                state.person().set_item_key(p.id);
+                state.pending_auctions().set_item_key(p.id);
 
-                person_state
-                    .set(ctx.state_session, p.clone())
+                state
+                    .person()
+                    .set(p.clone())
                     .expect("Could not update person state");
 
                 // check if any auctions are pending
-                let pending_auctions = ctx
-                    .state_session
-                    .build(PENDING_AUCTIONS)
-                    .with_item_key(p.id)
-                    .vec::<Auction>();
-
-                if !pending_auctions
-                    .is_empty(ctx.state_session)
+                if !state
+                    .pending_auctions()
+                    .is_empty()
                     .expect("Could not check if pending auctions are empty")
                 {
-                    let auctions = pending_auctions
-                        .get(ctx.state_session)
+                    let auctions = state
+                        .pending_auctions()
+                        .get()
                         .expect("Could not get pending auctions");
 
-                    pending_auctions
-                        .clear(ctx.state_session)
+                    state
+                        .pending_auctions()
+                        .clear()
                         .expect("Could not clear pending auctions");
 
                     auctions
@@ -199,31 +212,20 @@ pub fn q3_node(
                 }
             }
             P::Auction(auction) => {
-                let person_state = ctx
-                    .state_session
-                    .build(PERSON)
-                    .with_item_key(auction.seller) // partitioning
-                    .value::<Person>();
+                state.person().set_item_key(auction.seller);
+                state.pending_auctions().set_item_key(auction.seller);
 
-                let person = if let Some(p) = person_state
-                    .get(ctx.state_session)
-                    .expect("Could not get person state")
-                {
-                    p
-                } else {
-                    // we don't have a user with that id, so add to pending
-                    let pending_auctions = ctx
-                        .state_session
-                        .build(PENDING_AUCTIONS)
-                        .with_item_key(auction.seller)
-                        .vec::<Auction>();
+                let person =
+                    if let Some(p) = state.person().get().expect("Could not get person state") {
+                        p
+                    } else {
+                        state
+                            .pending_auctions()
+                            .append(auction)
+                            .expect("Could not store the auction");
 
-                    pending_auctions
-                        .append(ctx.state_session, auction)
-                        .expect("Could not store the auction");
-
-                    return vec![];
-                };
+                        return vec![];
+                    };
 
                 if auction.category == 10 {
                     vec![Q3Result {
@@ -244,7 +246,7 @@ pub fn q3_node(
         id,
         in_channels,
         channel_strategy,
-        StatefulFlatMap::new(&flatmap_fn),
+        FlatMap::stateful(Q3State::new(), &flatmap_fn),
         InMemory::create("flatmap".as_ref()).unwrap(),
         timer::none(),
     )

@@ -67,7 +67,7 @@ impl Metrics {
             acc
         });
 
-        let mut res = format!("{:20}\tcount\tmin\tavg\tmax", "operation");
+        let mut res = format!("{:25}\tcount\tmin\tavg\tmax", "operation");
         for (
             operation,
             Summary {
@@ -81,7 +81,7 @@ impl Metrics {
             use std::fmt::Write;
             write!(
                 res,
-                "\n{operation:20}\t{count}\t{min}\t{avg}\t{max}",
+                "\n{operation:25}\t{count}\t{min}\t{avg}\t{max}",
                 operation = operation,
                 count = count,
                 min = min,
@@ -230,6 +230,10 @@ impl<B: Backend + 'static> Backend for Metered<B> {
         hook.map(|dh| {
             Box::new(move |this: &mut Self| dh(&mut this.inner)) as Box<dyn FnOnce(&mut Self)>
         })
+    }
+
+    fn metrics(&mut self) -> Option<&mut Metrics> {
+        Some(self.metrics.get_mut())
     }
 
     fn register_value_handle<'s, T: Value, IK: Metakey, N: Metakey>(

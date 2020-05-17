@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 cd "${0%/*}" || exit 1
 mkdir target
+echo "Compiling..."
+# shellcheck disable=SC2068
+cargo build --release $@ --bin perf
 
 for backend in {rocks,sled,faster}; do
   echo -n "Warming up ${backend}... "

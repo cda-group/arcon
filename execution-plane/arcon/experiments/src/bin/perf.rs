@@ -1,9 +1,13 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
-
+#![feature(specialization)]
 // A simple pipeline to profile arcon.
 // Can be used to identify performance regressions..
-use arcon::{prelude::*, timer};
+use arcon::{
+    prelude::*,
+    state::{metered::Metrics, Faster, InMemory, Metered, Rocks, Sled},
+    timer,
+};
 use experiments::{
     get_items, square_root_newton,
     throughput_sink::{Run, ThroughputSink},
@@ -23,28 +27,6 @@ arg_enum! {
         MeteredRocks,
         MeteredSled,
         MeteredFaster,
-    }
-}
-
-impl StateBackendType {
-    fn create(
-        &self,
-        cfg: &ArconConf,
-        num_nodes: u64,
-        node_id: NodeID,
-    ) -> ArconResult<Box<dyn StateBackend>> {
-        use state_backend::*;
-        use StateBackendType::*;
-        match self {
-            InMemory => in_memory(cfg, num_nodes, node_id),
-            Rocks => rocks(cfg, num_nodes, node_id),
-            Sled => sled(cfg, num_nodes, node_id),
-            Faster => faster(cfg, num_nodes, node_id),
-            MeteredInMemory => metered_in_memory(cfg, num_nodes, node_id),
-            MeteredRocks => metered_rocks(cfg, num_nodes, node_id),
-            MeteredSled => metered_sled(cfg, num_nodes, node_id),
-            MeteredFaster => metered_faster(cfg, num_nodes, node_id),
-        }
     }
 }
 
@@ -101,22 +83,36 @@ fn main() {
         state_backend_type,
     } = Opts::from_args();
 
-    exec(
-        scaling_factor,
-        collection_size,
-        batch_size,
-        kompact_threads,
-        log_frequency,
-        kompact_throughput,
-        dedicated,
-        pinned,
-        log_throughput,
-        state_backend_type,
-    );
+    macro_rules! exec {
+        ($SB:ty) => {
+            exec::<$SB>(
+                scaling_factor,
+                collection_size,
+                batch_size,
+                kompact_threads,
+                log_frequency,
+                kompact_throughput,
+                dedicated,
+                pinned,
+                log_throughput,
+            )
+        };
+    }
+
+    match state_backend_type {
+        StateBackendType::InMemory => exec!(InMemory),
+        StateBackendType::Rocks => exec!(Rocks),
+        StateBackendType::Sled => exec!(Sled),
+        StateBackendType::Faster => exec!(Faster),
+        StateBackendType::MeteredInMemory => exec!(Metered<InMemory>),
+        StateBackendType::MeteredRocks => exec!(Metered<Rocks>),
+        StateBackendType::MeteredSled => exec!(Metered<Sled>),
+        StateBackendType::MeteredFaster => exec!(Metered<Faster>),
+    }
 }
 
 // CollectionSource -> Map Node -> ThroughputSink
-fn exec(
+fn exec<SB: state::Backend>(
     scaling_factor: u64,
     collection_size: usize,
     batch_size: u64,
@@ -126,14 +122,12 @@ fn exec(
     dedicated: bool,
     pinned: bool,
     log_throughput: bool,
-    state_backend_type: StateBackendType,
 ) {
     let arcon_config = ArconConf::default(); // TODO: make an actual pipeline out of this
-    fs::remove_dir_all(&arcon_config.checkpoint_dir).unwrap();
+    let _ = fs::remove_dir_all(&arcon_config.checkpoint_dir);
     fs::create_dir_all(&arcon_config.checkpoint_dir).unwrap();
-    fs::remove_dir_all(&arcon_config.state_dir).unwrap();
+    let _ = fs::remove_dir_all(&arcon_config.state_dir);
     fs::create_dir_all(&arcon_config.state_dir).unwrap();
-    let num_nodes = 2;
 
     let core_ids = get_core_ids().unwrap();
     // So we don't pin on cores that the Kompact workers also pinned to.
@@ -185,15 +179,19 @@ fn exec(
         pool_info.clone(),
     ));
 
+    let sb_config = state::Config {
+        live_state_base_path: arcon_config.state_dir.clone(),
+        checkpoints_base_path: arcon_config.checkpoint_dir.clone(),
+        backend_ids: vec![1.to_string(), 2.to_string()],
+    };
+
     let node = Node::new(
         String::from("map_node"),
         1.into(),
         vec![2.into()],
         channel_strategy,
         Map::new(&map_fn),
-        state_backend_type
-            .create(&arcon_config, num_nodes, 1.into())
-            .unwrap(),
+        SB::restore_or_create(&sb_config, 1.to_string()).unwrap(),
         timer::none(),
     );
 
@@ -236,10 +234,8 @@ fn exec(
         watermark_interval,
         None, // no timestamp extractor
         channel_strategy,
-        Map::<Item, Item>::new(&mapper),
-        state_backend_type
-            .create(&arcon_config, num_nodes, 2.into())
-            .unwrap(),
+        Map::new(&mapper),
+        SB::restore_or_create(&sb_config, 2.to_string()).unwrap(),
         timer::none(),
     );
 
@@ -276,46 +272,62 @@ fn exec(
     // wait for sink to return completion msg.
     let res = future.wait();
     println!("=== Execution took {:?} milliseconds ===", res.as_millis());
-    {
-        use state_backend::{Faster, InMemory, RocksDb, Sled};
-        use StateBackendType::*;
-        match state_backend_type {
-            MeteredInMemory => print_state_backend_metrics::<InMemory>(source, map_node),
-            MeteredRocks => print_state_backend_metrics::<RocksDb>(source, map_node),
-            MeteredSled => print_state_backend_metrics::<Sled>(source, map_node),
-            MeteredFaster => print_state_backend_metrics::<Faster>(source, map_node),
-            _ => (),
-        }
-    }
+    print_state_backend_metrics(source, map_node);
 
     pipeline.shutdown();
 }
 
-fn print_state_backend_metrics<SB: StateBackend>(
-    source: Arc<Component<CollectionSource<Map<Item, Item>>>>,
-    map_node: Arc<Component<Node<Map<Item, EnrichedItem>>>>,
+trait HasMetrics: ComponentDefinition + ActorRaw + Sized + 'static {
+    fn get_metrics(&mut self) -> Option<&mut Metrics>;
+    fn backend_name(&self) -> &'static str;
+}
+
+impl<OP, B, T> HasMetrics for Node<OP, B, T>
+where
+    OP: Operator<B>,
+    B: state::Backend,
+    T: timer::TimerBackend<OP::TimerState>,
+{
+    fn get_metrics(&mut self) -> Option<&mut Metrics> {
+        self.state_backend.inner.get_mut().metrics()
+    }
+
+    fn backend_name(&self) -> &'static str {
+        std::any::type_name::<B>()
+    }
+}
+
+impl<OP, B, T> HasMetrics for CollectionSource<OP, B, T>
+where
+    OP: Operator<B>,
+    B: state::Backend,
+    T: timer::TimerBackend<OP::TimerState>,
+{
+    fn get_metrics(&mut self) -> Option<&mut Metrics> {
+        self.source_ctx.state_backend.get_mut().metrics()
+    }
+
+    fn backend_name(&self) -> &'static str {
+        std::any::type_name::<B>()
+    }
+}
+
+fn print_state_backend_metrics(
+    source: Arc<Component<impl HasMetrics>>,
+    map_node: Arc<Component<impl HasMetrics>>,
 ) {
-    use state_backend::Metered;
-    let source_def = source.definition().lock().unwrap();
-    let source_sb: &Metered<SB> = source_def.source_ctx.state_backend.downcast_ref().unwrap();
+    let mut source_def = source.definition().lock().unwrap();
+    let mut map_def = map_node.definition().lock().unwrap();
+    let name = source_def.backend_name();
 
-    let map_def = map_node.definition().lock().unwrap();
-    let map_sb: &Metered<SB> = map_def.state_backend.downcast_ref().unwrap();
+    let (source_metrics, map_metrics) = match (source_def.get_metrics(), map_def.get_metrics()) {
+        (Some(s), Some(m)) => (s, m),
+        _ => return,
+    };
 
-    #[cfg(feature = "rdtsc")]
-    let unit = "cpu cycles";
-    #[cfg(not(feature = "rdtsc"))]
-    let unit = "nanoseconds";
-
-    println!(
-        "\nmin, avg, and max are measured in {}\n\nSource state backend metrics ({})",
-        unit, source_sb.backend_name
-    );
-    println!("{}\n", source_sb.metrics.borrow().summary());
-
-    println!(
-        "Map node state backend metrics ({})",
-        source_sb.backend_name
-    );
-    println!("{}", map_sb.metrics.borrow().summary());
+    println!("State backend metrics for `{}`", name);
+    println!("\nmin, avg, and max are measured in nanoseconds\n\nSource node metrics");
+    println!("{}\n", source_metrics.summary());
+    println!("Map node metrics");
+    println!("{}", map_metrics.summary());
 }
