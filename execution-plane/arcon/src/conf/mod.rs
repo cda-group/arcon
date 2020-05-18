@@ -3,9 +3,9 @@
 
 use arcon_error::*;
 use hocon::HoconLoader;
-use kompact::prelude::{DeadletterBox, NetworkConfig, KompactConfig};
+use kompact::prelude::{DeadletterBox, KompactConfig, NetworkConfig};
 use serde::Deserialize;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Configuration for an Arcon Pipeline
 #[derive(Deserialize, Clone, Debug)]
@@ -96,7 +96,7 @@ impl ArconConf {
     }
 
     /// Loads ArconConf from a file
-    pub fn from_file(path: &str) -> ArconResult<ArconConf> {
+    pub fn from_file(path: impl AsRef<Path>) -> ArconResult<ArconConf> {
         let data = std::fs::read_to_string(path)
             .map_err(|e| arcon_err_kind!("Failed to read config file with err {}", e))?;
 
