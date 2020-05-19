@@ -4,7 +4,7 @@ pub use snafu::{ensure, ErrorCompat, OptionExt, ResultExt};
 use snafu::{Backtrace, Snafu};
 #[cfg(feature = "rocks")]
 use std::collections::HashSet;
-#[cfg(feature = "faster")]
+#[cfg(all(feature = "faster", target_os = "linux"))]
 use std::sync::mpsc::RecvTimeoutError;
 use std::{io, path::PathBuf, result::Result as StdResult};
 
@@ -84,27 +84,27 @@ pub enum ArconStateError {
     #[snafu(display("Rocks restore directory is not empty: {}", dir.display()))]
     RocksRestoreDirNotEmpty { backtrace: Backtrace, dir: PathBuf },
 
-    #[cfg(feature = "faster")]
+    #[cfg(all(feature = "faster", target_os = "linux"))]
     #[snafu(display("Faster did not send the result in time"))]
     FasterReceiveTimeout {
         source: RecvTimeoutError,
         backtrace: Backtrace,
     },
-    #[cfg(feature = "faster")]
+    #[cfg(all(feature = "faster", target_os = "linux"))]
     #[snafu(display(
         "Faster call returned an unexpected status: {} ({})",
         faster_format(status),
         status
     ))]
     FasterUnexpectedStatus { backtrace: Backtrace, status: u8 },
-    #[cfg(feature = "faster")]
+    #[cfg(all(feature = "faster", target_os = "linux"))]
     #[snafu(context(false))]
     FasterOtherError {
         #[snafu(source(from(faster_rs::FasterError<'_>, faster_error_make_static)))]
         source: faster_rs::FasterError<'static>,
         backtrace: Backtrace,
     },
-    #[cfg(feature = "faster")]
+    #[cfg(all(feature = "faster", target_os = "linux"))]
     #[snafu(display("Faster checkpoint failed"))]
     FasterCheckpointFailed { backtrace: Backtrace },
     #[cfg(feature = "sled")]
@@ -115,7 +115,7 @@ pub enum ArconStateError {
     },
 }
 
-#[cfg(feature = "faster")]
+#[cfg(all(feature = "faster", target_os = "linux"))]
 fn faster_format(status: &u8) -> &'static str {
     match *status {
         0 => "OK",
@@ -129,7 +129,7 @@ fn faster_format(status: &u8) -> &'static str {
     }
 }
 
-#[cfg(feature = "faster")]
+#[cfg(all(feature = "faster", target_os = "linux"))]
 fn faster_error_make_static(err: faster_rs::FasterError) -> faster_rs::FasterError<'static> {
     // so... this is a bummer. Every FasterError ever created actually is 'static, but for some
     // reason the lifetime param is there. The lifetime is only associated with the BuilderError

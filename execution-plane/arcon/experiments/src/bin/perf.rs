@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // A simple pipeline to profile arcon.
 // Can be used to identify performance regressions..
+#[cfg(target_os = "linux")]
+use arcon::state::Faster;
 use arcon::{
     prelude::*,
-    state::{metered::Metrics, Faster, InMemory, Metered, Rocks, Sled},
+    state::{metered::Metrics, InMemory, Metered, Rocks, Sled},
     timer,
 };
 use experiments::{
@@ -102,11 +104,21 @@ fn main() {
         StateBackendType::InMemory => exec!(InMemory),
         StateBackendType::Rocks => exec!(Rocks),
         StateBackendType::Sled => exec!(Sled),
-        StateBackendType::Faster => exec!(Faster),
+        StateBackendType::Faster => {
+            #[cfg(not(target_os = "linux"))]
+            panic!("Faster backend is not supported on this OS");
+            #[cfg(target_os = "linux")]
+            exec!(Faster)
+        }
         StateBackendType::MeteredInMemory => exec!(Metered<InMemory>),
         StateBackendType::MeteredRocks => exec!(Metered<Rocks>),
         StateBackendType::MeteredSled => exec!(Metered<Sled>),
-        StateBackendType::MeteredFaster => exec!(Metered<Faster>),
+        StateBackendType::MeteredFaster => {
+            #[cfg(not(target_os = "linux"))]
+            panic!("Metered<Faster> backend is not supported on this OS");
+            #[cfg(target_os = "linux")]
+            exec!(Metered<Faster>)
+        }
     }
 }
 

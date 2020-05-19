@@ -3,9 +3,10 @@
 #![feature(associated_type_defaults)]
 #![feature(const_generics)]
 #![warn(missing_debug_implementations)]
-use crate::{error::*, serialization::fixed_bytes::FixedBytes};
+use crate::{error::*, metered::Metrics, serialization::fixed_bytes::FixedBytes};
 use std::{
     any,
+    cell::{RefCell, RefMut},
     collections::{BTreeSet, HashMap},
     fmt,
     fmt::{Debug, Formatter},
@@ -346,17 +347,18 @@ pub mod in_memory;
 pub use self::in_memory::InMemory;
 pub mod metered;
 pub use self::metered::Metered;
+
 #[cfg(feature = "rocks")]
 pub mod rocks;
 #[cfg(feature = "rocks")]
 pub use self::rocks::Rocks;
-#[cfg(feature = "faster")]
+
+#[cfg(all(feature = "faster", target_os = "linux"))]
 pub mod faster;
-#[cfg(feature = "faster")]
+#[cfg(all(feature = "faster", target_os = "linux"))]
 pub use self::faster::Faster;
+
 #[cfg(feature = "sled")]
 pub mod sled;
 #[cfg(feature = "sled")]
 pub use self::sled::Sled;
-use crate::metered::Metrics;
-use std::cell::{RefCell, RefMut};
