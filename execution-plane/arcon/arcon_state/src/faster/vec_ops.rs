@@ -77,11 +77,13 @@ impl VecOps for Faster {
         values: impl IntoIterator<Item = T>,
     ) -> Result<()> {
         let key = handle.serialize_id_and_metakeys()?;
+        let storage = values
+            .into_iter()
+            .map(|v| protobuf::serialize(&v))
+            .collect::<Result<Vec<_>>>()?;
 
-        for value in values {
-            let serialized = protobuf::serialize(&value)?;
-            self.vec_push(&key, serialized)?;
-        }
+        self.vec_push_all(&key, storage)?;
+
         Ok(())
     }
 

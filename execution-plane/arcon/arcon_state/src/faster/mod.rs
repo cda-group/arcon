@@ -171,6 +171,19 @@ impl Faster {
         }
     }
 
+    fn vec_push_all(&mut self, key: &Vec<u8>, to_push: Vec<Vec<u8>>) -> Result<()> {
+        let status = self.db.rmw(
+            key,
+            &FasterVecOps::Value(to_push),
+            self.next_serial_number(),
+        );
+
+        match status {
+            status::OK | status::PENDING => Ok(()),
+            _ => FasterUnexpectedStatus { status }.fail(),
+        }
+    }
+
     fn vec_push_if_absent(&mut self, key: &Vec<u8>, to_push: Vec<u8>) -> Result<()> {
         let status = self.db.rmw(
             key,
