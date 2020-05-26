@@ -2,7 +2,6 @@
 members = [
   "arcon",
   "arcon/experiments",
-  "arcon/arcon_state",
   "arcon/proto_tests"
 ]
 
