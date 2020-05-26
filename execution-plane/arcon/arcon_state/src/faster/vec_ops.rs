@@ -1,3 +1,5 @@
+// Copyright (c) 2020, KTH Royal Institute of Technology.
+// SPDX-License-Identifier: AGPL-3.0-only
 use crate::{
     error::*, handles::BoxedIteratorOfResult, serialization::protobuf, Faster, Handle, Metakey,
     Value, VecOps, VecState,

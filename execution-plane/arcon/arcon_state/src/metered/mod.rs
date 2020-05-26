@@ -1,3 +1,5 @@
+// Copyright (c) 2020, KTH Royal Institute of Technology.
+// SPDX-License-Identifier: AGPL-3.0-only
 use crate::{
     error::*, Aggregator, AggregatorState, Backend, BackendContainer, Config, Handle, Key,
     MapState, Metakey, Reducer, ReducerState, Value, ValueState, VecState,

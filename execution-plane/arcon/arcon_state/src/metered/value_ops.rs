@@ -1,3 +1,5 @@
+// Copyright (c) 2020, KTH Royal Institute of Technology.
+// SPDX-License-Identifier: AGPL-3.0-only
 use crate::{error::*, Backend, Handle, Metakey, Metered, Value, ValueOps, ValueState};
 
 impl<B: Backend> ValueOps for Metered<B> {

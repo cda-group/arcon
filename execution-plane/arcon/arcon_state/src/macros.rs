@@ -1,3 +1,5 @@
+// Copyright (c) 2020, KTH Royal Institute of Technology.
+// SPDX-License-Identifier: AGPL-3.0-only
 /// Macro to implement [`Bundle`]s.
 ///
 /// [`Bundle`]: trait.Bundle.html

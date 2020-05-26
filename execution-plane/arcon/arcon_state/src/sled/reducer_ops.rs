@@ -1,3 +1,5 @@
+// Copyright (c) 2020, KTH Royal Institute of Technology.
+// SPDX-License-Identifier: AGPL-3.0-only
 use crate::{
     error::*, serialization::protobuf, sled::Sled, Handle, Metakey, Reducer, ReducerOps,
     ReducerState, Value,
