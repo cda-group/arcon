@@ -1,8 +1,8 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 use crate::{
-    error::*, serialization::protobuf, Aggregator, AggregatorOps, AggregatorState, Faster, Handle,
-    Metakey,
+    error::*, faster::AggregatorFn, serialization::protobuf, Aggregator, AggregatorOps,
+    AggregatorState, Faster, Handle, Metakey,
 };
 
 pub(crate) const ACCUMULATOR_MARKER: u8 = 0xAC;
@@ -55,7 +55,7 @@ impl AggregatorOps for Faster {
     }
 }
 
-pub fn make_aggregate_fn<A>(aggregator: A) -> Box<dyn Fn(&[u8], &[u8]) -> Vec<u8> + Send>
+pub fn make_aggregate_fn<A>(aggregator: A) -> Box<AggregatorFn>
 where
     A: Aggregator,
 {
@@ -63,12 +63,10 @@ where
         let mut accumulator: A::Accumulator = {
             match old {
                 [ACCUMULATOR_MARKER, accumulator_bytes @ ..] => {
-                    protobuf::deserialize(accumulator_bytes)
-                        .expect("accumulator deserialization error")
+                    protobuf::deserialize(accumulator_bytes)?
                 }
                 [VALUE_MARKER, value_bytes @ ..] => {
-                    let value =
-                        protobuf::deserialize(value_bytes).expect("value deserialization error");
+                    let value = protobuf::deserialize(value_bytes)?;
                     let mut acc = aggregator.create_accumulator();
                     aggregator.add(&mut acc, value);
                     acc
@@ -81,15 +79,11 @@ where
 
         match new {
             [ACCUMULATOR_MARKER, accumulator_bytes @ ..] => {
-                let second_acc = protobuf::deserialize(accumulator_bytes)
-                    .expect("accumulator deserialization error");
-
+                let second_acc = protobuf::deserialize(accumulator_bytes)?;
                 accumulator = aggregator.merge_accumulators(accumulator, second_acc);
             }
             [VALUE_MARKER, value_bytes @ ..] => {
-                let value =
-                    protobuf::deserialize(value_bytes).expect("value deserialization error");
-
+                let value = protobuf::deserialize(value_bytes)?;
                 aggregator.add(&mut accumulator, value);
             }
             _ => {
@@ -100,9 +94,8 @@ where
         let mut result = Vec::with_capacity(1 + protobuf::size_hint(&accumulator).unwrap_or(0));
         result.push(ACCUMULATOR_MARKER);
 
-        protobuf::serialize_into(&mut result, &accumulator)
-            .expect("accumulator serialization error");
+        protobuf::serialize_into(&mut result, &accumulator)?;
 
-        result
+        Ok(result)
     })
 }

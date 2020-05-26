@@ -16,13 +16,15 @@ use std::{
     time::Duration,
 };
 
+pub(crate) type AggregatorFn = dyn Fn(&[u8], &[u8]) -> Result<Vec<u8>> + Send;
+
 #[derive(CustomDebug)]
 pub struct Faster {
     #[debug(skip)]
     db: FasterKv,
     monotonic_serial_number: Cell<u64>,
     #[debug(skip)]
-    aggregate_fns: HashMap<&'static str, Box<dyn Fn(&[u8], &[u8]) -> Vec<u8> + Send>>,
+    aggregate_fns: HashMap<&'static str, Box<AggregatorFn>>,
     dir: PathBuf,
     restored: bool,
 }
@@ -232,13 +234,14 @@ impl Faster {
         match status {
             status::NOT_FOUND => Ok(None),
             status::OK | status::PENDING => {
-                let vec_ops: FasterAgg = receiver
+                let agg_ops: FasterAgg = receiver
                     .recv_timeout(Duration::from_secs(2)) // TODO: make that customizable
                     .context(FasterReceiveTimeout)?;
 
-                let val = match vec_ops {
+                let val = match agg_ops {
                     FasterAgg::Value(v) => v,
                     FasterAgg::Modify(v, _fn_fat_ptr_bytes) => v,
+                    FasterAgg::Error(message) => return FasterErrorInRmw { message }.fail(),
                 };
 
                 Ok(Some(val))
@@ -291,26 +294,29 @@ impl FasterRmw for FasterVecOps {
 }
 
 // HACK: we box the closure and serialize a raw pointer to it
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 enum FasterAgg {
     Value(Vec<u8>),
-    Modify(
-        Vec<u8>,
-        [u8; std::mem::size_of::<&dyn Fn(&[u8], &[u8]) -> Vec<u8>>()],
-    ),
+    Modify(Vec<u8>, [u8; std::mem::size_of::<&AggregatorFn>()]),
+    // ideally this'd be something like Error(Box<dyn std::error::Error>), but it has to be
+    // serializable, so we'll just save the error description here :(
+    Error(String),
 }
 
 impl FasterRmw for FasterAgg {
     fn rmw(&self, modification: Self) -> Self {
         let old = match self {
+            e @ FasterAgg::Error(_) => return e.clone(),
             FasterAgg::Value(v) => v,
             FasterAgg::Modify(v, _fun_fat_ptr_bytes) => v,
         };
 
         if let FasterAgg::Modify(new, fun_fat_ptr_bytes) = modification {
-            let f: &dyn Fn(&[u8], &[u8]) -> Vec<u8> =
-                unsafe { std::mem::transmute(fun_fat_ptr_bytes) };
-            FasterAgg::Value(f(old, &new))
+            let f: &AggregatorFn = unsafe { std::mem::transmute(fun_fat_ptr_bytes) };
+            match f(old, &new) {
+                Ok(bytes) => FasterAgg::Value(bytes),
+                Err(e) => FasterAgg::Error(e.to_string()),
+            }
         } else {
             panic!("modification argument must be Agg::Modify");
         }

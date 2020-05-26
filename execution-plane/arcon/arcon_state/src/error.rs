@@ -107,6 +107,13 @@ pub enum ArconStateError {
     #[cfg(all(feature = "faster", target_os = "linux"))]
     #[snafu(display("Faster checkpoint failed"))]
     FasterCheckpointFailed { backtrace: Backtrace },
+    #[cfg(all(feature = "faster", target_os = "linux"))]
+    #[snafu(display("Error in faster rmw: {}", message))]
+    FasterErrorInRmw {
+        message: String,
+        backtrace: Backtrace,
+    },
+
     #[cfg(feature = "sled")]
     #[snafu(context(false))]
     SledError {

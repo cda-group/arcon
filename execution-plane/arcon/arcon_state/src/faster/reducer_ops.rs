@@ -1,8 +1,8 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 use crate::{
-    error::*, serialization::protobuf, Faster, Handle, Metakey, Reducer, ReducerOps, ReducerState,
-    Value,
+    error::*, faster::AggregatorFn, serialization::protobuf, Faster, Handle, Metakey, Reducer,
+    ReducerOps, ReducerState, Value,
 };
 
 impl ReducerOps for Faster {
@@ -40,17 +40,16 @@ impl ReducerOps for Faster {
     }
 }
 
-pub fn make_reduce_fn<T, F>(reducer: F) -> Box<dyn Fn(&[u8], &[u8]) -> Vec<u8> + Send>
+pub fn make_reduce_fn<T, F>(reducer: F) -> Box<AggregatorFn>
 where
     T: Value,
     F: Reducer<T>,
 {
     Box::new(move |old, new| {
-        let old = protobuf::deserialize(old).expect("Could not deserialize old value");
-        let new = protobuf::deserialize(new).expect("Could not deserialize new value");
-
+        let old = protobuf::deserialize(old)?;
+        let new = protobuf::deserialize(new)?;
         let res = reducer(&old, &new);
 
-        protobuf::serialize(&res).expect("Could not serialize the result")
+        protobuf::serialize(&res)
     })
 }
