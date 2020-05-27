@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
+    state,
     stream::{operator::Operator, source::SourceContext},
+    timer::TimerBackend,
     util::io::*,
 };
 use kompact::prelude::*;
@@ -18,26 +20,30 @@ pub enum SocketKind {
 }
 
 #[derive(ComponentDefinition)]
-pub struct SocketSource<OP>
+pub struct SocketSource<OP, B, T>
 where
-    OP: Operator + 'static,
+    OP: Operator<B> + 'static,
     OP::IN: FromStr,
+    B: state::Backend,
+    T: TimerBackend<OP::TimerState>,
 {
     ctx: ComponentContext<Self>,
-    source_ctx: SourceContext<OP>,
+    source_ctx: SourceContext<OP, B, T>,
     sock_addr: SocketAddr,
     sock_kind: SocketKind,
 }
 
-impl<OP> SocketSource<OP>
+impl<OP, B, T> SocketSource<OP, B, T>
 where
-    OP: Operator + 'static,
+    OP: Operator<B> + 'static,
     OP::IN: FromStr,
+    B: state::Backend,
+    T: TimerBackend<OP::TimerState>,
 {
     pub fn new(
         sock_addr: SocketAddr,
         sock_kind: SocketKind,
-        source_ctx: SourceContext<OP>,
+        source_ctx: SourceContext<OP, B, T>,
     ) -> Self {
         assert!(source_ctx.watermark_interval > 0);
         SocketSource {
@@ -49,10 +55,12 @@ where
     }
 }
 
-impl<OP> Provide<ControlPort> for SocketSource<OP>
+impl<OP, B, T> Provide<ControlPort> for SocketSource<OP, B, T>
 where
-    OP: Operator + 'static,
+    OP: Operator<B> + 'static,
     OP::IN: FromStr,
+    B: state::Backend,
+    T: TimerBackend<OP::TimerState>,
 {
     fn handle(&mut self, event: ControlEvent) {
         if let ControlEvent::Start = event {
@@ -81,10 +89,12 @@ where
     }
 }
 
-impl<OP> Actor for SocketSource<OP>
+impl<OP, B, T> Actor for SocketSource<OP, B, T>
 where
-    OP: Operator + 'static,
+    OP: Operator<B> + 'static,
     OP::IN: FromStr,
+    B: state::Backend,
+    T: TimerBackend<OP::TimerState>,
 {
     type Message = IOMessage;
 
@@ -117,7 +127,7 @@ mod tests {
     use crate::{
         pipeline::ArconPipeline,
         prelude::{Channel, ChannelStrategy, DebugNode, Forward, Map},
-        state_backend::{in_memory::InMemory, StateBackend},
+        state::{Backend, InMemory},
         timer,
     };
     use std::{thread, time};
@@ -157,9 +167,9 @@ mod tests {
             watermark_interval,
             None, // no timestamp extractor
             channel_strategy,
-            Map::<u32, u32>::new(&map_fn),
-            Box::new(InMemory::new("test".as_ref()).unwrap()),
-            timer::none,
+            Map::new(&map_fn),
+            InMemory::create("test".as_ref()).unwrap(),
+            timer::none(),
         );
 
         let socket_source = SocketSource::new(addr, SocketKind::Tcp, source_context);
@@ -228,9 +238,9 @@ mod tests {
             watermark_interval,
             Some(&timestamp_extractor),
             channel_strategy,
-            Map::<ExtractorStruct, ExtractorStruct>::new(&map_fn),
-            Box::new(InMemory::new("test".as_ref()).unwrap()),
-            timer::none,
+            Map::new(&map_fn),
+            InMemory::create("test".as_ref()).unwrap(),
+            timer::none(),
         );
 
         let socket_source = SocketSource::new(addr, SocketKind::Tcp, source_context);

@@ -10,3 +10,6 @@ homepage = "https://github.com/cda-group/arcon"
 description = """
 Arcon's common error utilities
 """
+
+[dependencies]
+arcon_state = { version = "0.1", path = "../arcon_state" }

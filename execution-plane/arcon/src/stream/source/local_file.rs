@@ -3,7 +3,9 @@
 
 use crate::{
     data::ArconNever,
+    prelude::state,
     stream::{operator::Operator, source::SourceContext},
+    timer::TimerBackend,
 };
 use kompact::prelude::*;
 use std::{
@@ -13,22 +15,26 @@ use std::{
 };
 
 #[derive(ComponentDefinition)]
-pub struct LocalFileSource<OP>
+pub struct LocalFileSource<OP, B, T>
 where
-    OP: Operator + 'static,
+    OP: Operator<B> + 'static,
     OP::IN: FromStr,
+    B: state::Backend,
+    T: TimerBackend<OP::TimerState>,
 {
     ctx: ComponentContext<Self>,
-    source_ctx: SourceContext<OP>,
+    source_ctx: SourceContext<OP, B, T>,
     file_path: String,
 }
 
-impl<OP> LocalFileSource<OP>
+impl<OP, B, T> LocalFileSource<OP, B, T>
 where
-    OP: Operator + 'static,
+    OP: Operator<B> + 'static,
     OP::IN: FromStr,
+    B: state::Backend,
+    T: TimerBackend<OP::TimerState>,
 {
-    pub fn new(file_path: String, source_ctx: SourceContext<OP>) -> Self {
+    pub fn new(file_path: String, source_ctx: SourceContext<OP, B, T>) -> Self {
         LocalFileSource {
             ctx: ComponentContext::new(),
             source_ctx,
@@ -73,10 +79,12 @@ where
     }
 }
 
-impl<OP> Provide<ControlPort> for LocalFileSource<OP>
+impl<OP, B, T> Provide<ControlPort> for LocalFileSource<OP, B, T>
 where
-    OP: Operator + 'static,
+    OP: Operator<B> + 'static,
     OP::IN: FromStr,
+    B: state::Backend,
+    T: TimerBackend<OP::TimerState>,
 {
     fn handle(&mut self, event: ControlEvent) {
         if let ControlEvent::Start = event {
@@ -85,10 +93,12 @@ where
     }
 }
 
-impl<OP> NetworkActor for LocalFileSource<OP>
+impl<OP, B, T> NetworkActor for LocalFileSource<OP, B, T>
 where
-    OP: Operator + 'static,
+    OP: Operator<B> + 'static,
     OP::IN: FromStr,
+    B: state::Backend,
+    T: TimerBackend<OP::TimerState>,
 {
     type Message = Never;
     type Deserialiser = Never;
@@ -105,7 +115,7 @@ mod tests {
         data::{ArconF64, ArconType},
         pipeline::ArconPipeline,
         prelude::{Channel, ChannelStrategy, DebugNode, Forward, Map, NodeID},
-        state_backend::{in_memory::InMemory, StateBackend},
+        state::{Backend, InMemory},
         timer,
     };
     use std::{io::prelude::*, sync::Arc, thread, time};
@@ -158,9 +168,9 @@ mod tests {
             watermark_interval,
             None, // no timestamp extractor
             channel_strategy,
-            Map::<u64, u64>::new(&map_fn),
-            Box::new(InMemory::new("test".as_ref()).unwrap()),
-            timer::none,
+            Map::new(&map_fn),
+            InMemory::create("test".as_ref()).unwrap(),
+            timer::none(),
         );
 
         let file_source = LocalFileSource::new(String::from(&file_path), source_context);
@@ -208,9 +218,9 @@ mod tests {
             watermark_interval,
             None, // no timestamp extractor
             channel_strategy,
-            Map::<ArconF64, ArconF64>::new(&map_fn),
-            Box::new(InMemory::new("test".as_ref()).unwrap()),
-            timer::none,
+            Map::new(&map_fn),
+            InMemory::create("test".as_ref()).unwrap(),
+            timer::none(),
         );
 
         let file_source = LocalFileSource::new(String::from(&file_path), source_context);

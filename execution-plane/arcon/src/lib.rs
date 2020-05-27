@@ -10,22 +10,20 @@
 #![feature(unboxed_closures)]
 
 // Enable use of arcon_macros within this crate
-extern crate self as arcon;
 #[cfg_attr(test, macro_use)]
 extern crate arcon_macros;
+extern crate self as arcon;
 #[doc(hidden)]
 pub use arcon_macros::*;
 
-
 // Imports below are exposed for #[derive(Arcon)]
 pub use crate::data::{ArconType, VersionId};
-pub use kompact::prelude::SerId;
 pub use fxhash::FxHasher;
+pub use kompact::prelude::SerId;
 pub use twox_hash::XxHash64;
 
 #[macro_use]
 extern crate arcon_error as error;
-
 
 // Public Interface
 
@@ -37,8 +35,6 @@ pub mod data;
 pub mod manager;
 /// Utilities for creating an Arcon pipeline
 pub mod pipeline;
-/// State backend implementations
-pub mod state_backend;
 /// Contains the core stream logic
 pub mod stream;
 /// Arcon event time facilities
@@ -95,7 +91,7 @@ pub mod prelude {
             },
             node::{debug::DebugNode, Node, NodeDescriptor},
             operator::{
-                function::{Filter, FilterMap, FlatMap, Map, MapInPlace},
+                function::*,
                 sink::local_file::LocalFileSink,
                 window::{AppenderWindow, EventTimeWindowAssigner, IncrementalWindow, Window},
                 Operator,
@@ -113,24 +109,22 @@ pub mod prelude {
         flight_serde::{reliable_remote::ReliableSerde, unsafe_remote::UnsafeSerde, FlightSerde},
         *,
     };
-    pub use error::ArconResult;
+    pub use error::{arcon_err, arcon_err_kind, ArconResult};
 
     pub use kompact::{default_components::*, prelude::*};
     #[cfg(feature = "thread_pinning")]
     pub use kompact::{get_core_ids, CoreId};
 
-    #[cfg(all(feature = "arcon_faster", target_os = "linux"))]
-    pub use crate::state_backend::faster::Faster;
-    #[cfg(feature = "arcon_rocksdb")]
-    pub use crate::state_backend::rocks::RocksDb;
-    #[cfg(feature = "arcon_sled")]
-    pub use crate::state_backend::sled::Sled;
-    pub use crate::state_backend::{
-        builders::*, in_memory::InMemory, state_types::*, StateBackend,
+    pub use arcon_state as state;
+    pub use arcon_state::{
+        AggregatorState, Backend as _, Bundle as _, Handle, MapState, ReducerState, ValueState,
+        VecState,
     };
     #[cfg(feature = "rayon")]
     pub use rayon::prelude::*;
 }
+
+pub use arcon_state as state;
 
 #[cfg(test)]
 pub(crate) mod tests {

@@ -1,7 +1,7 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::{prelude::*, stream::operator::OperatorContext};
+use crate::{prelude::*, stream::operator::OperatorContext, timer::TimerBackend};
 use ::serde::Serialize;
 use bytes::Bytes;
 use futures::{channel, executor::block_on, SinkExt, StreamExt};
@@ -71,15 +71,28 @@ where
     }
 }
 
-impl<IN> Operator for SocketSink<IN>
+impl<IN, B> Operator<B> for SocketSink<IN>
 where
     IN: ArconType + Serialize,
+    B: state::Backend,
 {
     type IN = IN;
     type OUT = ArconNever;
     type TimerState = ArconNever;
 
-    fn handle_element(&mut self, e: ArconElement<IN>, _ctx: OperatorContext<Self>) {
+    fn register_states(&mut self, _registration_token: &mut state::RegistrationToken<B>) {
+        ()
+    }
+
+    fn init(&mut self, _session: &mut state::Session<B>) {
+        ()
+    }
+
+    fn handle_element(
+        &self,
+        e: ArconElement<IN>,
+        _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
+    ) {
         let mut tx = self.tx_channel.clone();
         let fmt_data = {
             if let Ok(mut json) = serde_json::to_string(&e.data) {
@@ -100,16 +113,31 @@ where
         };
         self.runtime_handle.spawn(req_dispatch);
     }
-    fn handle_watermark(&mut self, _w: Watermark, _ctx: OperatorContext<Self>) {}
-    fn handle_epoch(&mut self, _epoch: Epoch, _ctx: OperatorContext<Self>) {}
+    fn handle_watermark(
+        &self,
+        _w: Watermark,
+        _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
+    ) {
+    }
+    fn handle_epoch(
+        &self,
+        _epoch: Epoch,
+        _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
+    ) {
+    }
 
-    fn handle_timeout(&mut self, _timeout: Self::TimerState, _ctx: OperatorContext<Self>) {}
+    fn handle_timeout(
+        &self,
+        _timeout: Self::TimerState,
+        _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
+    ) {
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{prelude::ChannelStrategy, timer};
+    use crate::{prelude::ChannelStrategy, state::InMemory, timer};
 
     #[test]
     fn udp_sink_test() {
@@ -130,8 +158,8 @@ mod tests {
                         vec![1.into()],
                         ChannelStrategy::Mute,
                         SocketSink::udp(addr),
-                        Box::new(InMemory::new("test".as_ref()).unwrap()),
-                        timer::none,
+                        InMemory::create("test".as_ref()).unwrap(),
+                        timer::none(),
                     )
                 });
                 system.start(&socket_sink);

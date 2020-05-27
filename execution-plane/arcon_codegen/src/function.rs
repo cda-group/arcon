@@ -78,7 +78,7 @@ pub fn function(
                             vec!(#predecessor.into()),
                             channel_strategy,
                             Box::new(#task_signature),
-                            Box::new(InMemory::new("ignored for InMemory").unwrap()) // TODO: make customizable
+                            InMemory::create("ignored for InMemory").unwrap() // TODO: make customizable
                         )
                     });
 

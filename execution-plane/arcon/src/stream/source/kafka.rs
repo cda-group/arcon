@@ -311,7 +311,7 @@ mod tests {
                 vec![0.into()],
                 mute_strategy::<Thing>(),
                 Box::new(kafka_sink),
-                Box::new(InMemory::new("test".as_ref()).unwrap()),
+                InMemory::create("test".as_ref()).unwrap(),
             )
         });
 

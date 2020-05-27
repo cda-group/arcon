@@ -2,15 +2,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{prelude::*, timer};
-use once_cell::sync::Lazy;
 use std::{
-    any::TypeId,
     collections::HashMap,
     fs,
     fs::File,
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
-    sync::RwLock,
+    sync::Mutex,
 };
 use tempfile::NamedTempFile;
 
@@ -23,15 +21,11 @@ pub struct NormaliseElements {
 }
 
 #[allow(dead_code)]
-static PANIC_COUNTDOWN: Lazy<RwLock<HashMap<TypeId, u32>>> =
-    Lazy::new(|| RwLock::new(HashMap::new()));
-
-#[allow(dead_code)]
-fn backend<SB: StateBackend>(
+fn backend<SB: state::Backend>(
     state_dir: &Path,
     checkpoints_dir: &Path,
     node_id: u32,
-) -> Box<dyn StateBackend> {
+) -> state::BackendContainer<SB> {
     let mut running_dir: PathBuf = state_dir.into();
     running_dir.push(format!("running_{}", node_id));
     let _ = fs::remove_dir_all(&running_dir); // ignore possible NotFound error
@@ -64,18 +58,19 @@ fn backend<SB: StateBackend>(
                 epoch = epoch
             ));
 
-            Box::new(SB::restore(&running_dir, &checkpoint_path).unwrap())
+            SB::restore(&running_dir, &checkpoint_path).unwrap()
         }
-        None => Box::new(SB::new(&running_dir).unwrap()),
+        None => SB::create(&running_dir).unwrap(),
     }
 }
 
 #[allow(dead_code)]
 /// manually sent events -> Window -> Map -> LocalFileSink
-fn run_pipeline<SB: StateBackend>(
+fn run_pipeline<SB: state::Backend>(
     state_dir: &Path,
     sink_path: &Path,
     conf: ArconConf,
+    crash_after: u32,
 ) -> Result<(), ()> {
     let timeout = std::time::Duration::from_millis(500);
     let mut pipeline = crate::pipeline::ArconPipeline::with_conf(conf);
@@ -93,7 +88,7 @@ fn run_pipeline<SB: StateBackend>(
             ChannelStrategy::Mute,
             LocalFileSink::new(sink_path),
             backend::<SB>(state_dir, &checkpoint_dir, 4),
-            timer::none,
+            timer::none(),
         )
     });
     system
@@ -112,17 +107,16 @@ fn run_pipeline<SB: StateBackend>(
         pool_info.clone(),
     ));
 
-    fn map_fn<SB: 'static>(x: NormaliseElements) -> i64 {
-        let t = TypeId::of::<SB>();
-
-        let panic_countdown = *PANIC_COUNTDOWN.read().unwrap().get(&t).unwrap_or(&0);
-        if panic_countdown == 0 {
+    let crash_after = Mutex::new(crash_after);
+    let map_fn = move |x: NormaliseElements| -> i64 {
+        let mut crash_after = crash_after.lock().unwrap();
+        if *crash_after == 0 {
             panic!("expected panic!")
         }
-        *PANIC_COUNTDOWN.write().unwrap().entry(t).or_insert(1) -= 1;
+        *crash_after -= 1;
 
         x.data.iter().map(|x| x + 3).sum()
-    }
+    };
 
     let map_node = system.create(|| {
         Node::new(
@@ -130,9 +124,9 @@ fn run_pipeline<SB: StateBackend>(
             3.into(),
             vec![2.into()],
             channel_strategy,
-            Map::<NormaliseElements, i64>::new(&map_fn::<SB>),
+            Map::new(map_fn),
             backend::<SB>(state_dir, &checkpoint_dir, 3),
-            timer::none,
+            timer::none(),
         )
     });
 
@@ -150,10 +144,9 @@ fn run_pipeline<SB: StateBackend>(
         NormaliseElements { data }
     }
 
-    let mut window_state_backend = backend::<SB>(state_dir, &checkpoint_dir, 2);
+    let window_state_backend = backend::<SB>(state_dir, &checkpoint_dir, 2);
 
-    let window: Box<dyn Window<i64, NormaliseElements>> =
-        Box::new(AppenderWindow::new(&window_fn, &mut *window_state_backend));
+    let window = AppenderWindow::new(&window_fn);
 
     let map_node_ref = map_node.actor_ref().hold().expect("Failed to fetch ref");
     let channel_strategy = ChannelStrategy::Forward(Forward::new(
@@ -168,16 +161,9 @@ fn run_pipeline<SB: StateBackend>(
             2.into(),
             vec![1.into()],
             channel_strategy,
-            EventTimeWindowAssigner::<i64, NormaliseElements>::new(
-                window,
-                2,
-                2,
-                0,
-                false,
-                &mut *window_state_backend,
-            ),
+            EventTimeWindowAssigner::new(window, 2, 2, 0, false),
             window_state_backend,
-            timer::wheel,
+            timer::wheel(),
         )
     });
     system
@@ -230,9 +216,7 @@ fn run_pipeline<SB: StateBackend>(
 }
 
 #[allow(dead_code)]
-fn run_test<SB: StateBackend>() {
-    let t = TypeId::of::<SB>();
-
+fn run_test<SB: state::Backend>() {
     let test_dir = tempfile::tempdir().unwrap();
     let test_dir = test_dir.path();
 
@@ -245,8 +229,7 @@ fn run_test<SB: StateBackend>() {
     let sink_file = NamedTempFile::new().unwrap();
     let sink_path = sink_file.path();
 
-    PANIC_COUNTDOWN.write().unwrap().insert(t, 2); // reaches zero quite quickly
-    run_pipeline::<SB>(test_dir, sink_path, conf.clone()).unwrap_err();
+    run_pipeline::<SB>(test_dir, sink_path, conf.clone(), 2).unwrap_err();
     {
         // Check results from the sink file!
         let file = File::open(sink_file.path()).expect("no such file");
@@ -259,8 +242,7 @@ fn run_test<SB: StateBackend>() {
         assert_eq!(result, vec![9, 8]); // partial result after panic
     }
 
-    PANIC_COUNTDOWN.write().unwrap().insert(t, 100); // won't reach zero
-    run_pipeline::<SB>(test_dir, sink_path, conf).unwrap();
+    run_pipeline::<SB>(test_dir, sink_path, conf, 100).unwrap();
 
     // Check results from the sink file!
     let buf = BufReader::new(sink_file);
@@ -275,18 +257,20 @@ fn run_test<SB: StateBackend>() {
 #[cfg(feature = "arcon_rocksdb")]
 #[test]
 fn test_rocks_recovery_pipeline() {
-    run_test::<RocksDb>()
+    run_test::<state::Rocks>()
 }
 
 #[cfg(all(feature = "arcon_sled", feature = "arcon_sled_checkpoints"))]
 #[test]
 fn test_sled_recovery_pipeline() {
-    run_test::<Sled>()
+    run_test::<state::Sled>()
 }
 
 #[cfg(all(feature = "arcon_faster", target_os = "linux"))]
 #[test]
+// flakey, sometimes passes, sometimes hangs, sometimes fails. But usually works as expected
+// when debugging :(
 #[ignore]
 fn test_faster_recovery_pipeline() {
-    run_test::<Faster>()
+    run_test::<state::Faster>()
 }

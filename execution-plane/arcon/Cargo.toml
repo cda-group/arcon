@@ -17,19 +17,20 @@ arcon_serde = ["serde_json", "bincode", "serde", "uuid/serde"]
 kafka = ["rdkafka", "futures", "serde_json", "serde"]
 thread_pinning = ["kompact/thread_pinning"]
 socket = ["tokio-util", "tokio", "futures", "serde_json", "serde"]
-arcon_rocksdb = ["rocksdb"]
 arcon_tui = ["tui", "num-rational", "psutil", "serde_json", "size", "crossbeam-channel", "ctrlc", "crossterm", "better-panic"]
-arcon_sled = ["sled"]
-arcon_sled_checkpoints = []
-metered_state_backend = ["once_cell"]
-metered_state_backend_rdtsc = ["x86"]
-arcon_faster = ["faster-rs", "serde"]
 quiet = ["slog"]
+
+# state features
+arcon_rocksdb = ["arcon_state/rocks"]
+arcon_faster = ["arcon_state/faster", "serde"]
+arcon_sled = ["arcon_state/sled"]
+arcon_sled_checkpoints = ["arcon_state/sled_checkpoints"]
 
 [dependencies]
 arcon_macros = { version = "0.1", path = "arcon_macros" }
 arcon_error = { version = "0.1", path = "arcon_error" }
 arcon_extra = { version = "0.1", path = "arcon_extra" }
+arcon_state = { version = "0.1", path = "arcon_state"}
 kompact = { git = "https://github.com/kompics/kompact.git", branch = "master"}
 hierarchical_hash_wheel_timer = "1.0"
 uuid = "0.8"

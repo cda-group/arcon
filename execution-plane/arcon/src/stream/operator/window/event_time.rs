@@ -2,10 +2,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
-    prelude::*,
+    prelude::{
+        state::{Backend, Bundle, Handle, MapState, RegistrationToken, Session, ValueState},
+        *,
+    },
     stream::operator::{window::WindowContext, OperatorContext},
+    timer::TimerBackend,
 };
 use prost::Message;
+use std::marker::PhantomData;
 
 /*
     EventTimeWindowAssigner
@@ -40,14 +45,42 @@ impl WindowEvent {
     }
 }
 
+#[derive(prost::Message)]
+pub struct KeyAndIndex {
+    #[prost(uint64)]
+    key: Key,
+    #[prost(uint64)]
+    index: Index,
+}
+
+arcon_state::bundle! {
+    struct EventTimeWindowAssignerState {
+        // window start has one value per key (via state backend api)
+        window_start: Handle<ValueState<Timestamp>, Key>,
+        // active windows technically could also use the state backend integration and
+        // set IK=Key, N=Index, but I find it clearer this way
+        active_windows: Handle<MapState<KeyAndIndex, ()>>
+    }
+}
+
+impl EventTimeWindowAssignerState {
+    fn new() -> Self {
+        EventTimeWindowAssignerState {
+            window_start: Handle::value("window_start").with_item_key(0),
+            active_windows: Handle::map("active_windows"),
+        }
+    }
+}
+
 /// Window Assigner Based on Event Time
 ///
 /// IN: Input event
 /// OUT: Output of Window
-pub struct EventTimeWindowAssigner<IN, OUT>
+pub struct EventTimeWindowAssigner<IN, OUT, W>
 where
     IN: ArconType,
     OUT: ArconType,
+    W: Window<IN, OUT>,
 {
     // effectively immutable, so no reason to persist
     window_length: u64,
@@ -56,29 +89,21 @@ where
     keyed: bool,
 
     // window keeps its own state per key and index (via state backend api)
-    window: Box<dyn Window<IN, OUT>>,
+    window: W,
 
     // simply persisted state
-    // window start has one value per key (via state backend api)
-    window_start: BoxedValueState<Timestamp, /*IK=*/ Key, ()>,
-    // active windows technically could also use the state backend integration and
-    // set IK=Key, N=Index, but I find it clearer this way
-    active_windows: BoxedMapState<(Key, Index), ()>,
+    state: EventTimeWindowAssignerState,
+
+    _marker: PhantomData<(IN, OUT)>,
 }
 
-impl<IN, OUT> EventTimeWindowAssigner<IN, OUT>
+impl<IN, OUT, W> EventTimeWindowAssigner<IN, OUT, W>
 where
     IN: 'static + ArconType,
     OUT: 'static + ArconType,
+    W: Window<IN, OUT>,
 {
-    pub fn new(
-        window: Box<dyn Window<IN, OUT>>,
-        length: u64,
-        slide: u64,
-        late: u64,
-        keyed: bool,
-        state_backend: &mut dyn StateBackend,
-    ) -> Self {
+    pub fn new(window: W, length: u64, slide: u64, late: u64, keyed: bool) -> Self {
         // Sanity check on slide and length
         if length < slide {
             panic!("Window Length lower than slide!");
@@ -93,25 +118,25 @@ where
             late_arrival_time: late,
             window,
             keyed,
-            window_start: state_backend.build("window_start").with_item_key(0).value(),
-            active_windows: state_backend.build("window_active").map(),
+
+            state: EventTimeWindowAssignerState::new(),
+            _marker: Default::default(),
         }
     }
 
     // Creates the window trigger for a key and "window index"
     fn new_window_trigger(
-        &mut self,
+        &self,
         key: Key,
         index: Index,
-        ctx: &mut OperatorContext<Self>,
+        ctx: &mut OperatorContext<Self, impl state::Backend, impl TimerBackend<WindowEvent>>,
     ) -> Result<(), WindowEvent> {
-        self.window_start
-            .set_current_key(key)
-            .expect("window key error");
+        let mut active_state = self.state.activate(ctx.state_session);
+        active_state.window_start().set_item_key(key);
 
-        let w_start = self
-            .window_start
-            .get(ctx.state_backend)
+        let w_start = active_state
+            .window_start()
+            .get()
             .expect("window start state get error")
             .expect("tried to schedule window_trigger for key which hasn't started");
 
@@ -124,7 +149,7 @@ where
     }
 
     // Extracts the key from ArconElements
-    fn get_key(&mut self, e: &ArconElement<IN>) -> u64 {
+    fn get_key(&self, e: &ArconElement<IN>) -> u64 {
         if !self.keyed {
             return 0;
         }
@@ -132,18 +157,31 @@ where
     }
 }
 
-impl<IN, OUT> Operator for EventTimeWindowAssigner<IN, OUT>
+impl<IN, OUT, W, B> Operator<B> for EventTimeWindowAssigner<IN, OUT, W>
 where
     IN: ArconType,
     OUT: ArconType,
+    W: Window<IN, OUT>,
+    B: Backend,
 {
     type IN = IN;
-
     type OUT = OUT;
-
     type TimerState = WindowEvent;
 
-    fn handle_element(&mut self, element: ArconElement<IN>, mut ctx: OperatorContext<Self>) {
+    fn register_states(&mut self, registration_token: &mut RegistrationToken<B>) {
+        self.state.register_states(registration_token);
+        self.window.register_states(registration_token);
+    }
+
+    fn init(&mut self, _session: &mut Session<B>) {
+        ()
+    }
+
+    fn handle_element(
+        &self,
+        element: ArconElement<IN>,
+        mut ctx: OperatorContext<Self, B, impl TimerBackend<WindowEvent>>,
+    ) {
         let ts = element.timestamp.unwrap_or(1);
 
         let time = ctx.current_time();
@@ -155,17 +193,16 @@ where
             return;
         }
 
+        let mut state = self.state.activate(ctx.state_session);
         let key = self.get_key(&element);
-        self.window_start
-            .set_current_key(key)
-            .expect("window start set key error");
+        state.window_start().set_item_key(key);
 
         // Will store the index of the highest and lowest window it should go into
         let mut floor = 0;
         let mut ceil = 0;
-        if let Some(start) = self
-            .window_start
-            .get(ctx.state_backend)
+        if let Some(start) = state
+            .window_start()
+            .get()
             .expect("window start state get error")
         {
             // Get the highest window the element goes into
@@ -175,30 +212,37 @@ where
             }
         } else {
             // Window starting now, first element only goes into the first window
-            self.window_start
-                .set(ctx.state_backend, ts)
+            state
+                .window_start()
+                .set(ts)
                 .expect("window start set error");
         }
 
+        // temporarily deactivate state, so we can borrow the session mutably again
+        drop(state);
+
         // Insert the element into all windows and create new where necessary
-        for i in floor..=ceil {
+        for index in floor..=ceil {
             self.window
                 .on_element(
                     element.data.clone(),
-                    WindowContext::new(ctx.state_backend, key, i),
+                    WindowContext::new(ctx.state_session, key, index),
                 )
                 .expect("window error");
 
-            if !self
-                .active_windows
-                .contains(ctx.state_backend, &(key, i))
+            let mut state = self.state.activate(ctx.state_session);
+
+            if !state
+                .active_windows()
+                .contains(&KeyAndIndex { key, index })
                 .expect("window active check error")
             {
-                self.active_windows
-                    .insert(ctx.state_backend, (key, i), ())
+                state
+                    .active_windows()
+                    .insert(KeyAndIndex { key, index }, ())
                     .expect("active windows insert error");
                 // Create the window trigger
-                if let Err(event) = self.new_window_trigger(key, i, &mut ctx) {
+                if let Err(event) = self.new_window_trigger(key, index, &mut ctx) {
                     // I'm pretty sure this shouldn't happen
                     unreachable!("Window was expired when scheduled: {:?}", event);
                 }
@@ -206,11 +250,25 @@ where
         }
     }
 
-    fn handle_watermark(&mut self, _w: Watermark, _ctx: OperatorContext<Self>) {}
+    fn handle_watermark(
+        &self,
+        _w: Watermark,
+        _ctx: OperatorContext<Self, B, impl TimerBackend<WindowEvent>>,
+    ) {
+    }
 
-    fn handle_epoch(&mut self, _epoch: Epoch, _ctx: OperatorContext<Self>) {}
+    fn handle_epoch(
+        &self,
+        _epoch: Epoch,
+        _ctx: OperatorContext<Self, B, impl TimerBackend<WindowEvent>>,
+    ) {
+    }
 
-    fn handle_timeout(&mut self, timeout: Self::TimerState, ctx: OperatorContext<Self>) -> () {
+    fn handle_timeout(
+        &self,
+        timeout: Self::TimerState,
+        ctx: OperatorContext<Self, B, impl TimerBackend<WindowEvent>>,
+    ) -> () {
         let WindowEvent {
             key,
             index,
@@ -219,14 +277,16 @@ where
 
         let e = self
             .window
-            .result(WindowContext::new(ctx.state_backend, key, index))
+            .result(WindowContext::new(ctx.state_session, key, index))
             .expect("window result error");
 
         self.window
-            .clear(WindowContext::new(ctx.state_backend, key, index))
+            .clear(WindowContext::new(ctx.state_session, key, index))
             .expect("window clear error");
-        self.active_windows
-            .remove(ctx.state_backend, &(key, index))
+        self.state
+            .activate(ctx.state_session)
+            .active_windows()
+            .remove(&KeyAndIndex { key, index })
             .expect("active window remove error");
 
         let window_result = ArconEvent::Element(ArconElement::with_timestamp(e, timestamp));
@@ -238,6 +298,7 @@ where
 mod tests {
     use super::*;
     use crate::{
+        state::InMemory,
         stream::channel::{strategy::forward::*, Channel},
         tests::Item,
         timer,
@@ -273,18 +334,10 @@ mod tests {
             u.len() as u64
         }
 
-        let mut state_backend = Box::new(InMemory::new("test".as_ref()).unwrap());
+        let state_backend = InMemory::create("test".as_ref()).unwrap();
 
-        let window: Box<dyn Window<Item, u64>> =
-            Box::new(AppenderWindow::new(&appender_fn, &mut *state_backend));
-        let window_assigner = EventTimeWindowAssigner::<Item, u64>::new(
-            window,
-            length,
-            slide,
-            late,
-            true,
-            state_backend.as_mut(),
-        );
+        let window = AppenderWindow::new(&appender_fn);
+        let window_assigner = EventTimeWindowAssigner::new(window, length, slide, late, true);
 
         let window_node = system.create(move || {
             Node::new(
@@ -294,7 +347,7 @@ mod tests {
                 channel_strategy,
                 window_assigner,
                 state_backend,
-                timer::wheel,
+                timer::wheel(),
             )
         });
 

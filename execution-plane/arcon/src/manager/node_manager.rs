@@ -2,12 +2,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
-    prelude::NodeID,
+    prelude::{state, NodeID},
     stream::{
         channel::strategy::ChannelStrategy,
         node::{Node, NodeMetrics},
         operator::Operator,
     },
+    timer::TimerBackend,
     util::SafelySendableFn,
 };
 use fxhash::FxHashMap;
@@ -51,9 +52,11 @@ impl Port for NodeManagerPort {
 /// ```
 #[allow(dead_code)]
 #[derive(ComponentDefinition)]
-pub struct NodeManager<OP>
+pub struct NodeManager<OP, B, T>
 where
-    OP: Operator + 'static,
+    OP: Operator<B> + 'static,
+    B: state::Backend,
+    T: TimerBackend<OP::TimerState>,
 {
     /// Component Context
     ctx: ComponentContext<Self>,
@@ -72,7 +75,7 @@ where
     /// Monotonically increasing Node ID index
     node_index: u32,
     /// Nodes this manager controls
-    nodes: FxHashMap<NodeID, Arc<Component<Node<OP>>>>,
+    nodes: FxHashMap<NodeID, Arc<Component<Node<OP, B, T>>>>,
     /// Metrics per Node
     node_metrics: FxHashMap<NodeID, NodeMetrics>,
     /// Port reference to the previous NodeManager in the pipeline stage
@@ -89,14 +92,16 @@ where
         NodeID,
         Vec<NodeID>,
         ChannelStrategy<OP::OUT>,
-    ) -> Node<OP>,
+    ) -> Node<OP, B, T>,
     #[cfg(feature = "arcon_tui")]
     tui_ref: ActorRefStrong<MetricReport>,
 }
 
-impl<OP> NodeManager<OP>
+impl<OP, B, T> NodeManager<OP, B, T>
 where
-    OP: Operator + 'static,
+    OP: Operator<B> + 'static,
+    B: state::Backend,
+    T: TimerBackend<OP::TimerState>,
 {
     pub fn new(
         node_description: String,
@@ -105,13 +110,13 @@ where
             NodeID,
             Vec<NodeID>,
             ChannelStrategy<OP::OUT>,
-        ) -> Node<OP>,
+        ) -> Node<OP, B, T>,
         in_channels: Vec<NodeID>,
-        node_comps: Vec<Arc<Component<Node<OP>>>>,
+        node_comps: Vec<Arc<Component<Node<OP, B, T>>>>,
         prev_manager: Option<RequiredRef<NodeManagerPort>>,
         next_manager: Option<RequiredRef<NodeManagerPort>>,
         #[cfg(feature = "arcon_tui")] tui_ref: ActorRefStrong<MetricReport>,
-    ) -> NodeManager<OP> {
+    ) -> NodeManager<OP, B, T> {
         let total_nodes = node_comps.len() as u32;
         let mut nodes_map = FxHashMap::default();
         for (i, node) in node_comps.into_iter().enumerate() {
@@ -137,9 +142,11 @@ where
     }
 }
 
-impl<OP> Provide<ControlPort> for NodeManager<OP>
+impl<OP, B, T> Provide<ControlPort> for NodeManager<OP, B, T>
 where
-    OP: Operator + 'static,
+    OP: Operator<B> + 'static,
+    B: state::Backend,
+    T: TimerBackend<OP::TimerState>,
 {
     fn handle(&mut self, event: ControlEvent) {
         match event {
@@ -164,9 +171,11 @@ where
     }
 }
 
-impl<OP> Provide<NodeManagerPort> for NodeManager<OP>
+impl<OP, B, T> Provide<NodeManagerPort> for NodeManager<OP, B, T>
 where
-    OP: Operator + 'static,
+    OP: Operator<B> + 'static,
+    B: state::Backend,
+    T: TimerBackend<OP::TimerState>,
 {
     fn handle(&mut self, event: NodeEvent) {
         debug!(self.ctx.log(), "Got Event {:?}", event);
@@ -189,18 +198,22 @@ where
     }
 }
 
-impl<OP> Require<NodeManagerPort> for NodeManager<OP>
+impl<OP, B, T> Require<NodeManagerPort> for NodeManager<OP, B, T>
 where
-    OP: Operator + 'static,
+    OP: Operator<B> + 'static,
+    B: state::Backend,
+    T: TimerBackend<OP::TimerState>,
 {
     fn handle(&mut self, _: Never) {
         unreachable!(crate::data::ArconNever::IS_UNREACHABLE);
     }
 }
 
-impl<OP> Actor for NodeManager<OP>
+impl<OP, B, T> Actor for NodeManager<OP, B, T>
 where
-    OP: Operator + 'static,
+    OP: Operator<B> + 'static,
+    B: state::Backend,
+    T: TimerBackend<OP::TimerState>,
 {
     type Message = NodeEvent;
     fn receive_local(&mut self, _: Self::Message) {}
