@@ -1,8 +1,8 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 use crate::{
-    error::*, serialization::protobuf, Handle, Metakey, Reducer, ReducerOps, ReducerState, Rocks,
-    Value,
+    error::*, rocks::default_write_opts, serialization::protobuf, Handle, Metakey, Reducer,
+    ReducerOps, ReducerState, Rocks, Value,
 };
 use rocksdb::{merge_operator::MergeFn, MergeOperands};
 
@@ -42,7 +42,9 @@ impl ReducerOps for Rocks {
         let cf = backend.get_cf_handle(handle.id)?;
         // See the make_reducer_merge function in this module. Its result is set as the merging
         // operator for this state.
-        Ok(backend.db.merge_cf(cf, key, serialized)?)
+        Ok(backend
+            .db
+            .merge_cf_opt(cf, key, serialized, &default_write_opts())?)
     }
 }
 

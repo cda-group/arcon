@@ -7,7 +7,7 @@ use crate::{
 use custom_debug::CustomDebug;
 use rocksdb::{
     checkpoint::Checkpoint, ColumnFamily, ColumnFamilyDescriptor, DBPinnableSlice, Options,
-    SliceTransform, WriteBatch, DB,
+    SliceTransform, WriteBatch, WriteOptions, DB,
 };
 use std::{
     collections::{HashMap, HashSet},
@@ -40,6 +40,13 @@ struct InitializedRocksDb {
     options: HashMap<String, Options>,
 }
 
+// we use epochs, so WAL is useless for us
+fn default_write_opts() -> WriteOptions {
+    let mut res = WriteOptions::default();
+    res.disable_wal(true);
+    res
+}
+
 impl InitializedRocksDb {
     fn get_cf_handle(&self, cf_name: impl AsRef<str>) -> Result<&ColumnFamily> {
         let cf_name = cf_name.as_ref();
@@ -66,12 +73,12 @@ impl InitializedRocksDb {
         value: impl AsRef<[u8]>,
     ) -> Result<()> {
         let cf = self.get_cf_handle(cf_name)?;
-        Ok(self.db.put_cf(cf, key, value)?)
+        Ok(self.db.put_cf_opt(cf, key, value, &default_write_opts())?)
     }
 
     fn remove(&mut self, cf: impl AsRef<str>, key: impl AsRef<[u8]>) -> Result<()> {
         let cf = self.get_cf_handle(cf)?;
-        Ok(self.db.delete_cf(cf, key)?)
+        Ok(self.db.delete_cf_opt(cf, key, &default_write_opts())?)
     }
 
     fn remove_prefix(&mut self, cf: impl AsRef<str>, prefix: impl AsRef<[u8]>) -> Result<()> {
@@ -108,7 +115,7 @@ impl InitializedRocksDb {
         let mut wb = WriteBatch::default();
         wb.delete_range_cf(cf, start, &end)?;
 
-        self.db.write(wb)?;
+        self.db.write_opt(wb, &default_write_opts())?;
 
         Ok(())
     }
