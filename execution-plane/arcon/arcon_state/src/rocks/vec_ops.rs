@@ -3,6 +3,7 @@
 use crate::{
     error::*,
     handles::BoxedIteratorOfResult,
+    rocks::default_write_opts,
     serialization::{fixed_bytes, fixed_bytes::FixedBytes, protobuf},
     Handle, Metakey, Rocks, Value, VecOps, VecState,
 };
@@ -36,7 +37,9 @@ impl VecOps for Rocks {
         let cf = backend.get_cf_handle(handle.id)?;
         // See the vec_merge function in this module. It is set as the merge operator for every
         // vec state.
-        Ok(backend.db.merge_cf(cf, key, serialized)?)
+        Ok(backend
+            .db
+            .merge_cf_opt(cf, key, serialized, &default_write_opts())?)
     }
 
     fn vec_get<T: Value, IK: Metakey, N: Metakey>(
@@ -146,7 +149,9 @@ impl VecOps for Rocks {
         fixed_bytes::serialize_into(&mut serialized.as_mut_slice(), &len)?;
 
         let cf = backend.get_cf_handle(handle.id)?;
-        backend.db.merge_cf(cf, key, serialized)?;
+        backend
+            .db
+            .merge_cf_opt(cf, key, serialized, &default_write_opts())?;
 
         Ok(())
     }
