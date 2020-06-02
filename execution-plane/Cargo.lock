@@ -1241,7 +1241,7 @@ dependencies = [
 [[package]]
 name = "kompact"
 version = "0.9.0"
-source = "git+https://github.com/kompics/kompact.git#a0322a4e8660dbd95bc632389f4ab28673b7dd1a"
+source = "git+https://github.com/kompics/kompact.git#509b3ac3fb39bd852057072d37c3703d717cb48c"
 dependencies = [
  "arc-swap 0.3.11",
  "as_num",
@@ -1277,7 +1277,7 @@ dependencies = [
 [[package]]
 name = "kompact-actor-derive"
 version = "0.9.0"
-source = "git+https://github.com/kompics/kompact.git#a0322a4e8660dbd95bc632389f4ab28673b7dd1a"
+source = "git+https://github.com/kompics/kompact.git#509b3ac3fb39bd852057072d37c3703d717cb48c"
 dependencies = [
  "proc-macro2 1.0.10",
  "quote 1.0.4",
@@ -1287,7 +1287,7 @@ dependencies = [
 [[package]]
 name = "kompact-component-derive"
 version = "0.9.0"
-source = "git+https://github.com/kompics/kompact.git#a0322a4e8660dbd95bc632389f4ab28673b7dd1a"
+source = "git+https://github.com/kompics/kompact.git#509b3ac3fb39bd852057072d37c3703d717cb48c"
 dependencies = [
  "proc-macro2 1.0.10",
  "quote 1.0.4",
@@ -2699,7 +2699,7 @@ version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3bfd5b7557925ce778ff9b9ef90e3ade34c524b5ff10e239c69a42d546d2af56"
 dependencies = [
- "rand 0.7.3",
+ "rand 0.6.5",
 ]
 
 [[package]]
