@@ -35,7 +35,7 @@ where
     IN: ArconType,
 {
     ctx: ComponentContext<Self>,
-    pub sink_port: ProvidedPort<SinkPort, Self>,
+    pub sink_port: ProvidedPort<SinkPort>,
     done: Option<KPromise<QueryResult>>,
     start: std::time::Instant,
     last_total_recv: u64,

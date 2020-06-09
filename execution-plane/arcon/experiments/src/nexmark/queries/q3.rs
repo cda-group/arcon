@@ -7,7 +7,8 @@ use crate::nexmark::{
     Auction, Event, NEXMarkEvent, Person,
 };
 use arcon::{
-    prelude::*, state::InMemory, stream::operator::function::FlatMap, timer, timer::TimerBackend,
+    pipeline::DynamicNode, prelude::*, state::InMemory, stream::operator::function::FlatMap, timer,
+    timer::TimerBackend,
 };
 use serde::{Deserialize, Serialize};
 
@@ -72,6 +73,7 @@ impl Query for QueryThree {
         debug_mode: bool,
         nexmark_config: NEXMarkConfig,
         pipeline: &mut ArconPipeline,
+        state_backend_type: state::BackendType,
     ) -> QueryTimer {
         let watermark_interval = pipeline.arcon_conf().watermark_interval;
         let pool_info = pipeline.get_pool_info();
@@ -96,6 +98,7 @@ impl Query for QueryThree {
             NodeID::new(0),
             in_channels.clone(),
             channel_strategy,
+            state_backend_type,
         );
 
         let node_comps =
@@ -143,11 +146,8 @@ pub fn q3_node(
     id: NodeID,
     in_channels: Vec<NodeID>,
     channel_strategy: ChannelStrategy<Q3Result>,
-) -> Node<
-    impl Operator<InMemory, IN = PersonOrAuction, OUT = Q3Result, TimerState = ArconNever>,
-    InMemory,
-    impl TimerBackend<ArconNever>,
-> {
+    state_backend_type: state::BackendType,
+) -> DynamicNode<PersonOrAuction> {
     // SELECT person.name, person.city,
     //      person.state, open_auction.id
     // FROM open_auction, person, item
@@ -241,7 +241,7 @@ pub fn q3_node(
         }
     }
 
-    Node::new(
+    Box::new(Node::new(
         descriptor,
         id,
         in_channels,
@@ -249,5 +249,5 @@ pub fn q3_node(
         FlatMap::stateful(Q3State::new(), &flatmap_fn),
         InMemory::create("flatmap".as_ref()).unwrap(),
         timer::none(),
-    )
+    ))
 }

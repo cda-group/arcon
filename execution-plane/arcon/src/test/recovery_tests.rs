@@ -8,7 +8,8 @@ use std::{
     fs::File,
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
-    sync::Mutex,
+    sync::{mpsc, Mutex},
+    time::Duration,
 };
 use tempfile::NamedTempFile;
 
@@ -107,10 +108,12 @@ fn run_pipeline<SB: state::Backend>(
         pool_info.clone(),
     ));
 
+    let (crash_tx, crash_rx) = mpsc::sync_channel(1);
     let crash_after = Mutex::new(crash_after);
     let map_fn = move |x: NormaliseElements| -> i64 {
         let mut crash_after = crash_after.lock().unwrap();
         if *crash_after == 0 {
+            crash_tx.send(()).unwrap();
             panic!("expected panic!")
         }
         *crash_after -= 1;
@@ -203,7 +206,9 @@ fn run_pipeline<SB: state::Backend>(
     window_node_ref.tell(watermark(20, 1));
     window_node_ref.tell(epoch(3, 1));
 
-    std::thread::sleep(std::time::Duration::from_secs(1));
+    crash_rx
+        .recv_timeout(Duration::from_secs(10))
+        .expect("Did not crash in 10 seconds");
 
     pipeline.shutdown();
 
@@ -270,7 +275,7 @@ fn test_sled_recovery_pipeline() {
 #[test]
 // flakey, sometimes passes, sometimes hangs, sometimes fails. But usually works as expected
 // when debugging :(
-#[ignore]
+// #[ignore]
 fn test_faster_recovery_pipeline() {
     run_test::<state::Faster>()
 }

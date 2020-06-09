@@ -99,7 +99,7 @@ where
     /// Component context
     ctx: ComponentContext<Self>,
     /// Port for NodeManager
-    pub(crate) node_manager_port: RequiredPort<NodeManagerPort, Self>,
+    pub(crate) node_manager_port: RequiredPort<NodeManagerPort>,
     /// Node descriptor
     descriptor: NodeDescriptor,
     /// A Node identifier

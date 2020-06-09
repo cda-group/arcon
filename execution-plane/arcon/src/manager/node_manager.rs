@@ -66,7 +66,7 @@ where
     /// e.g., window_sliding_avg_price
     node_description: String,
     /// Port for incoming local events
-    manager_port: ProvidedPort<NodeManagerPort, Self>,
+    manager_port: ProvidedPort<NodeManagerPort>,
     /// Current Node parallelism
     node_parallelism: usize,
     /// Max Node parallelism
@@ -93,6 +93,7 @@ where
         NodeID,
         Vec<NodeID>,
         ChannelStrategy<OUT>,
+        state::BackendType,
     ) -> DynamicNode<IN>,
     #[cfg(feature = "arcon_tui")]
     tui_ref: ActorRefStrong<MetricReport>,
@@ -110,6 +111,7 @@ where
             NodeID,
             Vec<NodeID>,
             ChannelStrategy<OUT>,
+            state::BackendType,
         ) -> DynamicNode<IN>,
         in_channels: Vec<NodeID>,
         node_comps: Vec<CreatedDynamicNode<IN>>,
@@ -157,10 +159,12 @@ where
 
                 let manager_port = &mut self.manager_port;
                 // For each node, connect its NodeManagerPort to NodeManager
-                for (_, node) in &self.nodes {
-                    &node.on_definition(|cd| {
-                        let p = &mut cd.node_manager_port;
-                        biconnect_ports::<NodeManagerPort, _, _>(manager_port, p);
+                for (node_id, node) in &self.nodes {
+                    &node.on_dyn_definition(|cd| {
+                        let p = cd
+                            .get_required_port()
+                            .expect("Couldn't find a required NodeManagerPort on node");
+                        biconnect_ports(manager_port, p);
                     });
                 }
             }

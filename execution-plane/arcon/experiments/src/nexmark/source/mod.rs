@@ -24,8 +24,8 @@ where
     T: TimerBackend<ArconNever>,
 {
     ctx: ComponentContext<Self>,
-    loopback_send: RequiredPort<LoopbackPort, Self>,
-    loopback_receive: ProvidedPort<LoopbackPort, Self>,
+    loopback_send: RequiredPort<LoopbackPort>,
+    loopback_receive: ProvidedPort<LoopbackPort>,
     source_ctx: SourceContext<OP, B, T>,
     nexmark_config: NEXMarkConfig,
     timer: ::std::time::Instant,

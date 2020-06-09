@@ -29,11 +29,11 @@ pub struct ArconPipeline {
 }
 
 /// A Node with operator type, state backend type, and timer type erased
-pub type DynamicNode<IN> = Box<dyn ErasedComponentDefinition<ArconMessage<IN>>>;
+pub type DynamicNode<IN> = Box<dyn CreateErased<ArconMessage<IN>>>;
 /// Result of creating a [`DynamicNode`] in a [`KompactSystem`](kompact::KompactSystem)
 pub type CreatedDynamicNode<IN> = Arc<dyn AbstractComponent<Message = ArconMessage<IN>>>;
 /// A Source with operator type, state backend type, and timer type erased
-pub type DynamicSource = Box<dyn ErasedComponentDefinition<()>>;
+pub type DynamicSource = Box<dyn CreateErased<()>>;
 
 impl ArconPipeline {
     /// Creates a new ArconPipeline using the default ArconConf
@@ -136,6 +136,7 @@ impl ArconPipeline {
             NodeID,
             Vec<NodeID>,
             ChannelStrategy<OUT>,
+            state::BackendType,
         ) -> DynamicNode<IN>,
         in_channels: Vec<NodeID>,
         nodes: Vec<DynamicNode<IN>>,

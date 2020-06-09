@@ -92,13 +92,12 @@ pub fn q1_node(
 fn start_source(
     nexmark_config: NEXMarkConfig,
     pipeline: &mut ArconPipeline,
-    state_backend_type: BackendType,
+    state_backend_type: state::BackendType,
     sink_port_opt: Option<ProvidedRef<SinkPort>>,
     mapper_ref: ActorRefStrong<ArconMessage<Bid>>,
 ) -> QueryTimer {
     let state_backend = state_backend_type;
     let watermark_interval = pipeline.arcon_conf().watermark_interval;
-    let mut system = pipeline.system();
     // Define source context
     let channel_strategy = ChannelStrategy::Forward(Forward::new(
         Channel::Local(mapper_ref),
@@ -115,5 +114,10 @@ fn start_source(
         timer::none(),
     );
 
-    super::source(sink_port_opt, nexmark_config, source_context, &mut system)
+    super::source(
+        sink_port_opt,
+        nexmark_config,
+        source_context,
+        pipeline.system(),
+    )
 }

@@ -49,11 +49,11 @@ struct Opts {
     /// state backend type
     #[structopt(
         long,
-        possible_values = StateBackendType::STR_VARIANTS,
+        possible_values = state::BackendType::STR_VARIANTS,
         case_insensitive = true,
         default_value = "InMemory"
     )]
-    state_backend_type: StateBackendType,
+    state_backend_type: state::BackendType,
 }
 
 fn main() {
