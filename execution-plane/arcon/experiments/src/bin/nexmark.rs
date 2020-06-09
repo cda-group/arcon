@@ -8,14 +8,14 @@ extern crate log;
 extern crate prettytable;
 
 use anyhow::Result;
-use arcon::prelude::{ArconConf, ArconPipeline};
+use arcon::prelude::{ArconConf, ArconPipeline, *};
 use experiments::nexmark::{config::*, queries, queries::Query};
 use queries::{q1::QueryOne, q3::QueryThree};
 use std::{
     fs::metadata,
     path::{Path, PathBuf},
 };
-use structopt::StructOpt;
+use structopt::{clap::arg_enum, StructOpt};
 
 const DEFAULT_NEXMARK_CONFIG: &str = "nexmark_config.toml";
 
@@ -36,6 +36,14 @@ struct Opts {
     /// NEXMark query
     #[structopt(short = "q", long)]
     query: Option<u8>,
+    /// State backend type
+    #[structopt(
+        long,
+        possible_values = StateBackendType::STR_VARIANTS,
+        case_insensitive = true,
+        default_value = "InMemory"
+    )]
+    state_backend_type: state::BackendType,
 }
 
 fn main() {
@@ -47,6 +55,7 @@ fn main() {
         mut tui,
         mut debug,
         query,
+        state_backend_type,
     } = Opts::from_args();
 
     if debug {
@@ -57,7 +66,14 @@ fn main() {
         debug = false;
     }
 
-    if let Err(err) = run(query, &nexmark_config, arcon_config, tui, debug) {
+    if let Err(err) = run(
+        query,
+        &nexmark_config,
+        arcon_config,
+        tui,
+        debug,
+        state_backend_type,
+    ) {
         error!("{}", err.to_string());
     }
 }
@@ -68,6 +84,7 @@ fn run(
     arcon_config_path: Option<PathBuf>,
     tui: bool,
     debug_mode: bool,
+    state_backend_type: StateBackendType,
 ) -> Result<()> {
     let nexmark_config_file: PathBuf = {
         let md = metadata(&nexmark_config_path)?;

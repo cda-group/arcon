@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
+    pipeline::{CreatedDynamicNode, DynamicNode},
     prelude::{state, NodeID},
     stream::{
         channel::strategy::ChannelStrategy,
@@ -10,6 +11,7 @@ use crate::{
     },
     timer::TimerBackend,
     util::SafelySendableFn,
+    ArconType,
 };
 use fxhash::FxHashMap;
 use kompact::prelude::*;
@@ -52,11 +54,10 @@ impl Port for NodeManagerPort {
 /// ```
 #[allow(dead_code)]
 #[derive(ComponentDefinition)]
-pub struct NodeManager<OP, B, T>
+pub struct NodeManager<IN, OUT>
 where
-    OP: Operator<B> + 'static,
-    B: state::Backend,
-    T: TimerBackend<OP::TimerState>,
+    IN: ArconType,
+    OUT: ArconType,
 {
     /// Component Context
     ctx: ComponentContext<Self>,
@@ -75,7 +76,7 @@ where
     /// Monotonically increasing Node ID index
     node_index: u32,
     /// Nodes this manager controls
-    nodes: FxHashMap<NodeID, Arc<Component<Node<OP, B, T>>>>,
+    nodes: FxHashMap<NodeID, CreatedDynamicNode<IN>>,
     /// Metrics per Node
     node_metrics: FxHashMap<NodeID, NodeMetrics>,
     /// Port reference to the previous NodeManager in the pipeline stage
@@ -91,17 +92,16 @@ where
         String,
         NodeID,
         Vec<NodeID>,
-        ChannelStrategy<OP::OUT>,
-    ) -> Node<OP, B, T>,
+        ChannelStrategy<OUT>,
+    ) -> DynamicNode<IN>,
     #[cfg(feature = "arcon_tui")]
     tui_ref: ActorRefStrong<MetricReport>,
 }
 
-impl<OP, B, T> NodeManager<OP, B, T>
+impl<IN, OUT> NodeManager<IN, OUT>
 where
-    OP: Operator<B> + 'static,
-    B: state::Backend,
-    T: TimerBackend<OP::TimerState>,
+    IN: ArconType,
+    OUT: ArconType,
 {
     pub fn new(
         node_description: String,
@@ -109,14 +109,14 @@ where
             String,
             NodeID,
             Vec<NodeID>,
-            ChannelStrategy<OP::OUT>,
-        ) -> Node<OP, B, T>,
+            ChannelStrategy<OUT>,
+        ) -> DynamicNode<IN>,
         in_channels: Vec<NodeID>,
-        node_comps: Vec<Arc<Component<Node<OP, B, T>>>>,
+        node_comps: Vec<CreatedDynamicNode<IN>>,
         prev_manager: Option<RequiredRef<NodeManagerPort>>,
         next_manager: Option<RequiredRef<NodeManagerPort>>,
         #[cfg(feature = "arcon_tui")] tui_ref: ActorRefStrong<MetricReport>,
-    ) -> NodeManager<OP, B, T> {
+    ) -> NodeManager<IN, OUT> {
         let total_nodes = node_comps.len() as u32;
         let mut nodes_map = FxHashMap::default();
         for (i, node) in node_comps.into_iter().enumerate() {
@@ -142,11 +142,10 @@ where
     }
 }
 
-impl<OP, B, T> Provide<ControlPort> for NodeManager<OP, B, T>
+impl<IN, OUT> Provide<ControlPort> for NodeManager<IN, OUT>
 where
-    OP: Operator<B> + 'static,
-    B: state::Backend,
-    T: TimerBackend<OP::TimerState>,
+    IN: ArconType,
+    OUT: ArconType,
 {
     fn handle(&mut self, event: ControlEvent) {
         match event {
@@ -171,11 +170,10 @@ where
     }
 }
 
-impl<OP, B, T> Provide<NodeManagerPort> for NodeManager<OP, B, T>
+impl<IN, OUT> Provide<NodeManagerPort> for NodeManager<IN, OUT>
 where
-    OP: Operator<B> + 'static,
-    B: state::Backend,
-    T: TimerBackend<OP::TimerState>,
+    IN: ArconType,
+    OUT: ArconType,
 {
     fn handle(&mut self, event: NodeEvent) {
         debug!(self.ctx.log(), "Got Event {:?}", event);
@@ -198,22 +196,20 @@ where
     }
 }
 
-impl<OP, B, T> Require<NodeManagerPort> for NodeManager<OP, B, T>
+impl<IN, OUT> Require<NodeManagerPort> for NodeManager<IN, OUT>
 where
-    OP: Operator<B> + 'static,
-    B: state::Backend,
-    T: TimerBackend<OP::TimerState>,
+    IN: ArconType,
+    OUT: ArconType,
 {
     fn handle(&mut self, _: Never) {
         unreachable!(crate::data::ArconNever::IS_UNREACHABLE);
     }
 }
 
-impl<OP, B, T> Actor for NodeManager<OP, B, T>
+impl<IN, OUT> Actor for NodeManager<IN, OUT>
 where
-    OP: Operator<B> + 'static,
-    B: state::Backend,
-    T: TimerBackend<OP::TimerState>,
+    IN: ArconType,
+    OUT: ArconType,
 {
     type Message = NodeEvent;
     fn receive_local(&mut self, _: Self::Message) {}

@@ -15,21 +15,7 @@ use experiments::{
     EnrichedItem, Item,
 };
 use std::{fs, sync::Arc};
-use structopt::{clap::arg_enum, StructOpt};
-
-arg_enum! {
-    #[derive(Clone, Debug)]
-    enum StateBackendType {
-        InMemory,
-        Rocks,
-        Sled,
-        Faster,
-        MeteredInMemory,
-        MeteredRocks,
-        MeteredSled,
-        MeteredFaster,
-    }
-}
+use structopt::StructOpt;
 
 #[derive(StructOpt, Debug, Clone)]
 struct Opts {
@@ -63,7 +49,7 @@ struct Opts {
     /// state backend type
     #[structopt(
         long,
-        possible_values = &StateBackendType::variants(),
+        possible_values = StateBackendType::STR_VARIANTS,
         case_insensitive = true,
         default_value = "InMemory"
     )]
@@ -101,24 +87,16 @@ fn main() {
     }
 
     match state_backend_type {
-        StateBackendType::InMemory => exec!(InMemory),
-        StateBackendType::Rocks => exec!(Rocks),
-        StateBackendType::Sled => exec!(Sled),
-        StateBackendType::Faster => {
-            #[cfg(not(target_os = "linux"))]
-            panic!("Faster backend is not supported on this OS");
-            #[cfg(target_os = "linux")]
-            exec!(Faster)
-        }
-        StateBackendType::MeteredInMemory => exec!(Metered<InMemory>),
-        StateBackendType::MeteredRocks => exec!(Metered<Rocks>),
-        StateBackendType::MeteredSled => exec!(Metered<Sled>),
-        StateBackendType::MeteredFaster => {
-            #[cfg(not(target_os = "linux"))]
-            panic!("Metered<Faster> backend is not supported on this OS");
-            #[cfg(target_os = "linux")]
-            exec!(Metered<Faster>)
-        }
+        state::BackendType::InMemory => exec!(InMemory),
+        state::BackendType::Rocks => exec!(Rocks),
+        state::BackendType::Sled => exec!(Sled),
+        #[cfg(target_os = "linux")]
+        state::BackendType::Faster => exec!(Faster),
+        state::BackendType::MeteredInMemory => exec!(Metered<InMemory>),
+        state::BackendType::MeteredRocks => exec!(Metered<Rocks>),
+        state::BackendType::MeteredSled => exec!(Metered<Sled>),
+        #[cfg(target_os = "linux")]
+        state::BackendType::MeteredFaster => exec!(Metered<Faster>),
     }
 }
 

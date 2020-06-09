@@ -35,6 +35,7 @@ pub trait Query {
         debug_mode: bool,
         nexmark_config: NEXMarkConfig,
         pipeline: &mut ArconPipeline,
+        state_backend_type: state::BackendType,
     ) -> QueryTimer;
 }
 

@@ -1241,7 +1241,7 @@ dependencies = [
 [[package]]
 name = "kompact"
 version = "0.9.0"
-source = "git+https://github.com/kompics/kompact.git#509b3ac3fb39bd852057072d37c3703d717cb48c"
+source = "git+https://github.com/kompics/kompact.git#9304eaa21a34a6a8abc33bb09c439584a548c5f4"
 dependencies = [
  "arc-swap 0.3.11",
  "as_num",
@@ -1264,6 +1264,7 @@ dependencies = [
  "mio 0.7.0",
  "num_cpus",
  "oncemutex",
+ "owning_ref",
  "rustc_version",
  "sequence_trie",
  "serde",
@@ -1277,7 +1278,7 @@ dependencies = [
 [[package]]
 name = "kompact-actor-derive"
 version = "0.9.0"
-source = "git+https://github.com/kompics/kompact.git#509b3ac3fb39bd852057072d37c3703d717cb48c"
+source = "git+https://github.com/kompics/kompact.git#9304eaa21a34a6a8abc33bb09c439584a548c5f4"
 dependencies = [
  "proc-macro2 1.0.10",
  "quote 1.0.4",
@@ -1287,7 +1288,7 @@ dependencies = [
 [[package]]
 name = "kompact-component-derive"
 version = "0.9.0"
-source = "git+https://github.com/kompics/kompact.git#509b3ac3fb39bd852057072d37c3703d717cb48c"
+source = "git+https://github.com/kompics/kompact.git#9304eaa21a34a6a8abc33bb09c439584a548c5f4"
 dependencies = [
  "proc-macro2 1.0.10",
  "quote 1.0.4",
@@ -1625,6 +1626,15 @@ name = "oorandom"
 version = "11.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94af325bc33c7f60191be4e2c984d48aaa21e2854f473b85398344b60c9b6358"
+
+[[package]]
+name = "owning_ref"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6ff55baddef9e4ad00f88b6c743a2a8062d4c6ade126c2a528644b8e444d52ce"
+dependencies = [
+ "stable_deref_trait",
+]
 
 [[package]]
 name = "parking_lot"
@@ -2434,6 +2444,12 @@ dependencies = [
  "redox_syscall",
  "winapi 0.3.8",
 ]
+
+[[package]]
+name = "stable_deref_trait"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dba1a27d3efae4351c8051072d619e3ade2820635c3958d826bfea39d59b54c8"
 
 [[package]]
 name = "static_assertions"
