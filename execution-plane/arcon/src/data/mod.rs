@@ -454,7 +454,7 @@ impl PartialEq for ArconF64 {
 #[derive(Clone, PartialEq, Eq)]
 pub enum ArconNever {}
 impl ArconNever {
-    pub const IS_UNREACHABLE: &'static str = "The Never type cannot be instantiated!";
+    pub const IS_UNREACHABLE: &'static str = "The ArconNever type cannot be instantiated!";
 }
 impl ArconType for ArconNever {
     const UNSAFE_SER_ID: SerId = ser_id::NEVER_ID;

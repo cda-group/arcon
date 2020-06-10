@@ -439,7 +439,7 @@ where
                 ArconEvent::Death(s) => {
                     // We are instructed to shutdown....
                     self.channel_strategy.borrow_mut().add(ArconEvent::Death(s));
-                    // TODO: invoke shutdown operations...
+                    self.ctx.suicide(); // TODO: is suicide enough?
                 }
             }
         }

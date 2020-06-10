@@ -5,7 +5,7 @@
 use crate::tui::{component::TuiComponent, widgets::node::Node as TuiNode};
 use crate::{
     allocator::ArconAllocator, buffer::event::PoolInfo, conf::ArconConf, manager::node_manager::*,
-    prelude::*, timer::TimerBackend, util::SafelySendableFn,
+    prelude::*, util::SafelySendableFn,
 };
 use fxhash::FxHashMap;
 use kompact::{component::AbstractComponent, prelude::KompactSystem};

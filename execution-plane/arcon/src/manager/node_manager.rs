@@ -4,18 +4,12 @@
 use crate::{
     pipeline::{CreatedDynamicNode, DynamicNode},
     prelude::{state, NodeID},
-    stream::{
-        channel::strategy::ChannelStrategy,
-        node::{Node, NodeMetrics},
-        operator::Operator,
-    },
-    timer::TimerBackend,
+    stream::{channel::strategy::ChannelStrategy, node::NodeMetrics},
     util::SafelySendableFn,
     ArconType,
 };
 use fxhash::FxHashMap;
 use kompact::prelude::*;
-use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 pub struct MetricReport {
@@ -163,7 +157,8 @@ where
                     &node.on_dyn_definition(|cd| {
                         let p = cd
                             .get_required_port()
-                            .expect("Couldn't find a required NodeManagerPort on node");
+                            .ok_or_else(|| format!("NodeId: {:?}", node_id))
+                            .expect("Couldn't find a required NodeManagerPort");
                         biconnect_ports(manager_port, p);
                     });
                 }

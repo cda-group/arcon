@@ -18,7 +18,7 @@ use std::{
     fs::metadata,
     path::{Path, PathBuf},
 };
-use structopt::{clap::arg_enum, StructOpt};
+use structopt::StructOpt;
 
 const DEFAULT_NEXMARK_CONFIG: &str = "nexmark_config.toml";
 

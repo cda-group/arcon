@@ -7,7 +7,7 @@ use crate::nexmark::{
     sink::SinkPort,
     Bid, Event, NEXMarkEvent,
 };
-use arcon::{pipeline::DynamicNode, prelude::*, state::InMemory, timer::TimerBackend};
+use arcon::{pipeline::DynamicNode, prelude::*};
 
 // Filter out events that are bids using a FilterMap operator
 #[inline(always)]
@@ -78,15 +78,17 @@ pub fn q1_node(
         bid.price = (bid.price * 89) / 100;
     }
 
-    Box::new(Node::new(
-        descriptor,
-        id,
-        in_channels,
-        channel_strategy,
-        MapInPlace::new(&map_fn),
-        InMemory::create("map".as_ref()).unwrap(),
-        timer::none(),
-    ))
+    state::with_backend_type!(state_backend_type, |SB| {
+        Box::new(Node::new(
+            descriptor,
+            id,
+            in_channels,
+            channel_strategy,
+            MapInPlace::new(&map_fn),
+            SB::create("map".as_ref()).unwrap(),
+            timer::none(),
+        )) as DynamicNode<Bid>
+    })
 }
 
 fn start_source(
@@ -96,7 +98,6 @@ fn start_source(
     sink_port_opt: Option<ProvidedRef<SinkPort>>,
     mapper_ref: ActorRefStrong<ArconMessage<Bid>>,
 ) -> QueryTimer {
-    let state_backend = state_backend_type;
     let watermark_interval = pipeline.arcon_conf().watermark_interval;
     // Define source context
     let channel_strategy = ChannelStrategy::Forward(Forward::new(
@@ -105,19 +106,21 @@ fn start_source(
         pipeline.get_pool_info(),
     ));
 
-    let source_context = SourceContext::new(
-        watermark_interval,
-        None, // no timestamp extractor
-        channel_strategy,
-        FlatMap::new(&bid_filter_map),
-        InMemory::create("src".as_ref()).unwrap(),
-        timer::none(),
-    );
+    state::with_backend_type!(state_backend_type, |SB| {
+        let source_context = SourceContext::new(
+            watermark_interval,
+            None, // no timestamp extractor
+            channel_strategy,
+            FlatMap::new(&bid_filter_map),
+            SB::create("src".as_ref()).unwrap(),
+            timer::none(),
+        );
 
-    super::source(
-        sink_port_opt,
-        nexmark_config,
-        source_context,
-        pipeline.system(),
-    )
+        super::source(
+            sink_port_opt,
+            nexmark_config,
+            source_context,
+            pipeline.system(),
+        )
+    })
 }
