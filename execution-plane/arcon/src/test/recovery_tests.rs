@@ -73,7 +73,7 @@ fn run_pipeline<SB: state::Backend>(
     conf: ArconConf,
     should_crash: bool,
 ) -> Result<(), ()> {
-    let timeout = std::time::Duration::from_millis(500);
+    let timeout = std::time::Duration::from_millis(1000);
     let mut pipeline = crate::pipeline::ArconPipeline::with_conf(conf);
     let pool_info = pipeline.get_pool_info();
     let checkpoint_dir = pipeline.arcon_conf().checkpoint_dir.clone();
