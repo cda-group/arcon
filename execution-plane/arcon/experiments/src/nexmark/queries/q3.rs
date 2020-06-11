@@ -3,11 +3,11 @@
 
 use crate::nexmark::{
     config::NEXMarkConfig,
-    queries::{Query, QueryTimer},
+    queries::{Query, QueryTimer, StateMetricsPrinter, StateMetricsThief},
     sink::SinkPort,
     Auction, Event, NEXMarkEvent, Person,
 };
-use arcon::{pipeline::DynamicNode, prelude::*, stream::operator::function::FlatMap, timer};
+use arcon::{pipeline::DynamicNode, prelude::*, stream::operator::function::FlatMap};
 use serde::{Deserialize, Serialize};
 
 // SELECT person.name, person.city,
@@ -72,7 +72,7 @@ impl Query for QueryThree {
         nexmark_config: NEXMarkConfig,
         pipeline: &mut ArconPipeline,
         state_backend_type: state::BackendType,
-    ) -> QueryTimer {
+    ) -> (QueryTimer, Vec<StateMetricsPrinter>) {
         // Define sink
         let (sink_ref, sink_port_opt) = super::sink::<Q3Result>(debug_mode, pipeline.system());
         let channel_strategy = ChannelStrategy::Forward(Forward::new(
@@ -86,7 +86,7 @@ impl Query for QueryThree {
         let in_channels = vec![NodeID::new(1)];
 
         let node_description = String::from("stateful_flatmap_node");
-        let node_one = q3_node(
+        let (node_one, flatmap_node_state_metrics_thief) = q3_node(
             node_description.clone(),
             NodeID::new(0),
             in_channels.clone(),
@@ -94,17 +94,53 @@ impl Query for QueryThree {
             state_backend_type,
         );
 
-        let node_comps =
-            pipeline.create_node_manager(node_description, &q3_node, in_channels, vec![node_one]);
+        fn q3_node_discard_thief(
+            descriptor: String,
+            id: NodeID,
+            in_channels: Vec<NodeID>,
+            channel_strategy: ChannelStrategy<Q3Result>,
+            state_backend_type: state::BackendType,
+        ) -> DynamicNode<PersonOrAuction> {
+            q3_node(
+                descriptor,
+                id,
+                in_channels,
+                channel_strategy,
+                state_backend_type,
+            )
+            .0
+        }
+
+        let node_comps = pipeline.create_node_manager(
+            node_description,
+            &q3_node_discard_thief,
+            in_channels,
+            vec![node_one],
+        );
         let flatmapper_ref = node_comps.get(0).unwrap().actor_ref().hold().expect("fail");
 
-        start_source(
+        let timer = start_source(
             nexmark_config,
             pipeline,
             state_backend_type,
             sink_port_opt,
             flatmapper_ref,
-        )
+        );
+
+        let map_node_printers = node_comps.into_iter().map(move |n| {
+            let own_thief_fn = flatmap_node_state_metrics_thief.clone();
+            Box::new(move || {
+                if let Some(m) = own_thief_fn(n) {
+                    println!("\nState statistics for the flatmap node (min, avg, and max in ns)");
+                    println!("{}", m.summary())
+                }
+            }) as StateMetricsPrinter
+        });
+
+        // TODO: also print source state metrics
+        let printers = map_node_printers.collect();
+
+        (timer, printers)
     }
 }
 
@@ -130,7 +166,10 @@ pub fn q3_node(
     in_channels: Vec<NodeID>,
     channel_strategy: ChannelStrategy<Q3Result>,
     state_backend_type: state::BackendType,
-) -> DynamicNode<PersonOrAuction> {
+) -> (
+    DynamicNode<PersonOrAuction>,
+    StateMetricsThief<PersonOrAuction>,
+) {
     // SELECT person.name, person.city,
     //      person.state, open_auction.id
     // FROM open_auction, person, item
@@ -225,15 +264,22 @@ pub fn q3_node(
     }
 
     state::with_backend_type!(state_backend_type, |SB| {
-        Box::new(Node::new(
+        let node = Node::new(
             descriptor,
             id,
             in_channels,
             channel_strategy,
             FlatMap::stateful(Q3State::new(), &flatmap_fn),
-            SB::create("flatmap".as_ref()).unwrap(),
+            SB::create("target/flatmap".as_ref()).unwrap(),
             timer::none(),
-        )) as DynamicNode<PersonOrAuction>
+        );
+
+        let state_metrics_thief = super::make_state_metrics_thief(&node);
+
+        (
+            Box::new(node) as DynamicNode<PersonOrAuction>,
+            state_metrics_thief,
+        )
     })
 }
 
@@ -258,7 +304,7 @@ fn start_source(
             None, // no timestamp extractor
             channel_strategy,
             FlatMap::new(&person_or_auction_filter_map),
-            SB::create("src".as_ref()).unwrap(),
+            SB::create("target/src".as_ref()).unwrap(),
             timer::none(),
         );
 

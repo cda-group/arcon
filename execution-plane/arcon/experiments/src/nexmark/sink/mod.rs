@@ -102,9 +102,10 @@ where
                 ArconEvent::Death(_) => {
                     let time = self.start.elapsed();
                     let current_time = self.get_current_time();
-                    let throughput = (self.total_recv - self.last_total_recv)
-                        / (current_time - self.last_time)
-                        * 1000;
+                    let delta_t = current_time - self.last_time;
+                    // to prevent division by zero on systems with low clock granularity
+                    let delta_t = if delta_t == 0 { 1 } else { delta_t };
+                    let throughput = (self.total_recv - self.last_total_recv) / delta_t * 1000;
                     let promise = self.done.take().expect("No promise to reply to?");
                     promise
                         .fulfil(QueryResult::new(time, throughput as f64))

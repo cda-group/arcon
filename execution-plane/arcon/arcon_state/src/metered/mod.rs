@@ -28,7 +28,7 @@ pub struct Metrics {
 }
 
 impl Metrics {
-    fn new(cap: usize) -> Metrics {
+    pub fn new(cap: usize) -> Metrics {
         Metrics {
             num_pushed: 0,
             storage: vec![DataPoint::default(); cap].into_boxed_slice(),

@@ -2,13 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // A simple pipeline to profile arcon.
 // Can be used to identify performance regressions..
-#[cfg(target_os = "linux")]
-use arcon::state::Faster;
-use arcon::{
-    prelude::*,
-    state::{metered::Metrics, InMemory, Metered, Rocks, Sled},
-    timer,
-};
+use arcon::{prelude::*, state::metered::Metrics, timer};
 use experiments::{
     get_items, square_root_newton,
     throughput_sink::{Run, ThroughputSink},
@@ -70,34 +64,17 @@ fn main() {
         state_backend_type,
     } = Opts::from_args();
 
-    macro_rules! exec {
-        ($SB:ty) => {
-            exec::<$SB>(
-                scaling_factor,
-                collection_size,
-                batch_size,
-                kompact_threads,
-                log_frequency,
-                kompact_throughput,
-                dedicated,
-                pinned,
-                log_throughput,
-            )
-        };
-    }
-
-    match state_backend_type {
-        state::BackendType::InMemory => exec!(InMemory),
-        state::BackendType::Rocks => exec!(Rocks),
-        state::BackendType::Sled => exec!(Sled),
-        #[cfg(target_os = "linux")]
-        state::BackendType::Faster => exec!(Faster),
-        state::BackendType::MeteredInMemory => exec!(Metered<InMemory>),
-        state::BackendType::MeteredRocks => exec!(Metered<Rocks>),
-        state::BackendType::MeteredSled => exec!(Metered<Sled>),
-        #[cfg(target_os = "linux")]
-        state::BackendType::MeteredFaster => exec!(Metered<Faster>),
-    }
+    state::with_backend_type!(state_backend_type, |SB| exec::<SB>(
+        scaling_factor,
+        collection_size,
+        batch_size,
+        kompact_threads,
+        log_frequency,
+        kompact_throughput,
+        dedicated,
+        pinned,
+        log_throughput,
+    ));
 }
 
 // CollectionSource -> Map Node -> ThroughputSink

@@ -3,7 +3,7 @@
 
 use crate::nexmark::{
     config::NEXMarkConfig,
-    queries::{Query, QueryTimer},
+    queries::{Query, QueryTimer, StateMetricsPrinter, StateMetricsThief},
     sink::SinkPort,
     Bid, Event, NEXMarkEvent,
 };
@@ -30,7 +30,7 @@ impl Query for QueryOne {
         nexmark_config: NEXMarkConfig,
         pipeline: &mut ArconPipeline,
         state_backend_type: state::BackendType,
-    ) -> QueryTimer {
+    ) -> (QueryTimer, Vec<StateMetricsPrinter>) {
         // Define sink
         let (sink_ref, sink_port_opt) = super::sink::<Bid>(debug_mode, pipeline.system());
         let sink_channel = Channel::Local(sink_ref);
@@ -44,7 +44,7 @@ impl Query for QueryOne {
         let in_channels = vec![NodeID::new(1)];
 
         let node_description = String::from("map_node");
-        let node_one = q1_node(
+        let (node_one, map_node_state_metrics_thief) = q1_node(
             node_description.clone(),
             NodeID::new(0),
             in_channels.clone(),
@@ -52,17 +52,53 @@ impl Query for QueryOne {
             state_backend_type,
         );
 
-        let node_comps =
-            pipeline.create_node_manager(node_description, &q1_node, in_channels, vec![node_one]);
+        fn q1_node_discard_thief(
+            descriptor: String,
+            id: NodeID,
+            in_channels: Vec<NodeID>,
+            channel_strategy: ChannelStrategy<Bid>,
+            state_backend_type: state::BackendType,
+        ) -> DynamicNode<Bid> {
+            q1_node(
+                descriptor,
+                id,
+                in_channels,
+                channel_strategy,
+                state_backend_type,
+            )
+            .0
+        }
+
+        let node_comps = pipeline.create_node_manager(
+            node_description,
+            &q1_node_discard_thief,
+            in_channels,
+            vec![node_one],
+        );
         let mapper_ref = node_comps[0].actor_ref().hold().expect("fail");
 
-        start_source(
+        let timer = start_source(
             nexmark_config,
             pipeline,
             state_backend_type,
             sink_port_opt,
             mapper_ref,
-        )
+        );
+
+        let map_node_printers = node_comps.into_iter().map(move |n| {
+            let own_thief_fn = map_node_state_metrics_thief.clone();
+            Box::new(move || {
+                if let Some(m) = own_thief_fn(n) {
+                    println!("\nState statistics for the map node (min, avg, and max in ns)");
+                    println!("{}", m.summary())
+                }
+            }) as StateMetricsPrinter
+        });
+
+        // TODO: also print source state metrics
+        let printers = map_node_printers.collect();
+
+        (timer, printers)
     }
 }
 
@@ -72,22 +108,26 @@ pub fn q1_node(
     in_channels: Vec<NodeID>,
     channel_strategy: ChannelStrategy<Bid>,
     state_backend_type: state::BackendType,
-) -> DynamicNode<Bid> {
+) -> (DynamicNode<Bid>, StateMetricsThief<Bid>) {
     #[inline(always)]
     fn map_fn(bid: &mut Bid) {
         bid.price = (bid.price * 89) / 100;
     }
 
     state::with_backend_type!(state_backend_type, |SB| {
-        Box::new(Node::new(
+        let node = Node::new(
             descriptor,
             id,
             in_channels,
             channel_strategy,
             MapInPlace::new(&map_fn),
-            SB::create("map".as_ref()).unwrap(),
+            SB::create("target/map".as_ref()).unwrap(),
             timer::none(),
-        )) as DynamicNode<Bid>
+        );
+
+        let state_metrics_thief = super::make_state_metrics_thief::<Bid, _, _, _>(&node);
+
+        (Box::new(node) as DynamicNode<Bid>, state_metrics_thief)
     })
 }
 
@@ -112,7 +152,7 @@ fn start_source(
             None, // no timestamp extractor
             channel_strategy,
             FlatMap::new(&bid_filter_map),
-            SB::create("src".as_ref()).unwrap(),
+            SB::create("target/src".as_ref()).unwrap(),
             timer::none(),
         );
 

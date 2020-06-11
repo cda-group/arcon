@@ -124,7 +124,7 @@ fn run(
 
     info!("{:?}\n", pipeline.arcon_conf());
 
-    let pipeline_timer = match nexmark_config.query {
+    let (pipeline_timer, state_metrics_printers) = match nexmark_config.query {
         NEXMarkQuery::CurrencyConversion => {
             info!("Running CurrencyConversion query");
             QueryOne::run(
@@ -157,6 +157,9 @@ fn run(
                 res.events_per_sec.to_string()
             ]);
             table.printstd();
+            for smp in state_metrics_printers {
+                smp();
+            }
         } else {
             pipeline.await_termination();
         }
