@@ -73,7 +73,7 @@ fn run_pipeline<SB: state::Backend>(
     conf: ArconConf,
     should_crash: bool,
 ) -> Result<(), ()> {
-    let timeout = std::time::Duration::from_millis(1000);
+    let timeout = std::time::Duration::from_millis(2000);
     let mut pipeline = crate::pipeline::ArconPipeline::with_conf(conf);
     let pool_info = pipeline.get_pool_info();
     let checkpoint_dir = pipeline.arcon_conf().checkpoint_dir.clone();
@@ -229,8 +229,8 @@ fn run_pipeline<SB: state::Backend>(
 
     if should_crash {
         crash_rx
-            .recv_timeout(Duration::from_secs(10))
-            .expect("Did not crash in 10 seconds");
+            .recv_timeout(Duration::from_secs(20))
+            .expect("Did not crash in 20 seconds");
 
         // wait for the output file to be flushed
         std::thread::sleep(Duration::from_millis(1000));
