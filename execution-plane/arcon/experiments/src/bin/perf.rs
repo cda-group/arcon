@@ -2,34 +2,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // A simple pipeline to profile arcon.
 // Can be used to identify performance regressions..
-#[cfg(target_os = "linux")]
-use arcon::state::Faster;
-use arcon::{
-    prelude::*,
-    state::{metered::Metrics, InMemory, Metered, Rocks, Sled},
-    timer,
-};
+use arcon::{prelude::*, state::metered::Metrics, timer};
 use experiments::{
     get_items, square_root_newton,
     throughput_sink::{Run, ThroughputSink},
     EnrichedItem, Item,
 };
 use std::{fs, sync::Arc};
-use structopt::{clap::arg_enum, StructOpt};
-
-arg_enum! {
-    #[derive(Clone, Debug)]
-    enum StateBackendType {
-        InMemory,
-        Rocks,
-        Sled,
-        Faster,
-        MeteredInMemory,
-        MeteredRocks,
-        MeteredSled,
-        MeteredFaster,
-    }
-}
+use structopt::StructOpt;
 
 #[derive(StructOpt, Debug, Clone)]
 struct Opts {
@@ -63,11 +43,11 @@ struct Opts {
     /// state backend type
     #[structopt(
         long,
-        possible_values = &StateBackendType::variants(),
+        possible_values = state::BackendType::STR_VARIANTS,
         case_insensitive = true,
         default_value = "InMemory"
     )]
-    state_backend_type: StateBackendType,
+    state_backend_type: state::BackendType,
 }
 
 fn main() {
@@ -84,42 +64,17 @@ fn main() {
         state_backend_type,
     } = Opts::from_args();
 
-    macro_rules! exec {
-        ($SB:ty) => {
-            exec::<$SB>(
-                scaling_factor,
-                collection_size,
-                batch_size,
-                kompact_threads,
-                log_frequency,
-                kompact_throughput,
-                dedicated,
-                pinned,
-                log_throughput,
-            )
-        };
-    }
-
-    match state_backend_type {
-        StateBackendType::InMemory => exec!(InMemory),
-        StateBackendType::Rocks => exec!(Rocks),
-        StateBackendType::Sled => exec!(Sled),
-        StateBackendType::Faster => {
-            #[cfg(not(target_os = "linux"))]
-            panic!("Faster backend is not supported on this OS");
-            #[cfg(target_os = "linux")]
-            exec!(Faster)
-        }
-        StateBackendType::MeteredInMemory => exec!(Metered<InMemory>),
-        StateBackendType::MeteredRocks => exec!(Metered<Rocks>),
-        StateBackendType::MeteredSled => exec!(Metered<Sled>),
-        StateBackendType::MeteredFaster => {
-            #[cfg(not(target_os = "linux"))]
-            panic!("Metered<Faster> backend is not supported on this OS");
-            #[cfg(target_os = "linux")]
-            exec!(Metered<Faster>)
-        }
-    }
+    state::with_backend_type!(state_backend_type, |SB| exec::<SB>(
+        scaling_factor,
+        collection_size,
+        batch_size,
+        kompact_threads,
+        log_frequency,
+        kompact_throughput,
+        dedicated,
+        pinned,
+        log_throughput,
+    ));
 }
 
 // CollectionSource -> Map Node -> ThroughputSink

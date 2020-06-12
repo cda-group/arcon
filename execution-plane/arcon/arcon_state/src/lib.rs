@@ -362,3 +362,101 @@ pub use self::faster::Faster;
 pub mod sled;
 #[cfg(feature = "sled")]
 pub use self::sled::Sled;
+
+#[derive(PartialEq, Eq, Copy, Clone, Debug)]
+pub enum BackendType {
+    InMemory,
+    MeteredInMemory,
+    #[cfg(feature = "rocks")]
+    Rocks,
+    #[cfg(feature = "rocks")]
+    MeteredRocks,
+    #[cfg(feature = "sled")]
+    Sled,
+    #[cfg(feature = "sled")]
+    MeteredSled,
+    #[cfg(all(feature = "faster", target_os = "linux"))]
+    Faster,
+    #[cfg(all(feature = "faster", target_os = "linux"))]
+    MeteredFaster,
+}
+
+impl fmt::Display for BackendType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl BackendType {
+    pub const VARIANTS: &'static [BackendType] = {
+        use BackendType::*;
+        &[
+            InMemory,
+            MeteredInMemory,
+            #[cfg(feature = "rocks")]
+            Rocks,
+            #[cfg(feature = "rocks")]
+            MeteredRocks,
+            #[cfg(feature = "sled")]
+            Sled,
+            #[cfg(feature = "sled")]
+            MeteredSled,
+            #[cfg(all(feature = "faster", target_os = "linux"))]
+            Faster,
+            #[cfg(all(feature = "faster", target_os = "linux"))]
+            MeteredFaster,
+        ]
+    };
+
+    pub const STR_VARIANTS: &'static [&'static str] = {
+        &[
+            "InMemory",
+            "MeteredInMemory",
+            #[cfg(feature = "rocks")]
+            "Rocks",
+            #[cfg(feature = "rocks")]
+            "MeteredRocks",
+            #[cfg(feature = "sled")]
+            "Sled",
+            #[cfg(feature = "sled")]
+            "MeteredSled",
+            #[cfg(all(feature = "faster", target_os = "linux"))]
+            "Faster",
+            #[cfg(all(feature = "faster", target_os = "linux"))]
+            "MeteredFaster",
+        ]
+    };
+}
+
+use std::str::FromStr;
+impl FromStr for BackendType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        use BackendType::*;
+        match s {
+            x if x.eq_ignore_ascii_case("InMemory") => Ok(InMemory),
+            x if x.eq_ignore_ascii_case("MeteredInMemory") => Ok(MeteredInMemory),
+            #[cfg(feature = "rocks")]
+            x if x.eq_ignore_ascii_case("Rocks") => Ok(Rocks),
+            #[cfg(feature = "rocks")]
+            x if x.eq_ignore_ascii_case("MeteredRocks") => Ok(MeteredRocks),
+            #[cfg(feature = "sled")]
+            x if x.eq_ignore_ascii_case("Sled") => Ok(Sled),
+            #[cfg(feature = "sled")]
+            x if x.eq_ignore_ascii_case("MeteredSled") => Ok(MeteredSled),
+            #[cfg(all(feature = "faster", target_os = "linux"))]
+            x if x.eq_ignore_ascii_case("Faster") => Ok(Faster),
+            #[cfg(all(feature = "faster", target_os = "linux"))]
+            x if x.eq_ignore_ascii_case("MeteredFaster") => Ok(MeteredFaster),
+            _ => Err(format!(
+                "valid values: {}",
+                BackendType::VARIANTS
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )),
+        }
+    }
+}

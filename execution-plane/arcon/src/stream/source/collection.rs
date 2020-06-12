@@ -23,8 +23,8 @@ where
     T: TimerBackend<OP::TimerState>,
 {
     ctx: ComponentContext<Self>,
-    loopback_send: RequiredPort<LoopbackPort, Self>,
-    loopback_receive: ProvidedPort<LoopbackPort, Self>,
+    loopback_send: RequiredPort<LoopbackPort>,
+    loopback_receive: ProvidedPort<LoopbackPort>,
     pub source_ctx: SourceContext<OP, B, T>,
     collection: Vec<OP::IN>,
     counter: usize,

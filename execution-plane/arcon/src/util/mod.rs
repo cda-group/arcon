@@ -5,6 +5,7 @@
 pub mod io;
 
 pub mod prost_helpers;
+pub mod system_killer;
 
 use std::time::{SystemTime, UNIX_EPOCH};
 

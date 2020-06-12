@@ -5,10 +5,10 @@
 use crate::tui::{component::TuiComponent, widgets::node::Node as TuiNode};
 use crate::{
     allocator::ArconAllocator, buffer::event::PoolInfo, conf::ArconConf, manager::node_manager::*,
-    prelude::*, timer::TimerBackend, util::SafelySendableFn,
+    prelude::*, util::SafelySendableFn,
 };
 use fxhash::FxHashMap;
-use kompact::prelude::KompactSystem;
+use kompact::{component::AbstractComponent, prelude::KompactSystem};
 use std::sync::{Arc, Mutex};
 
 /// A struct meant to simplify the creation of an Arcon Pipeline
@@ -27,6 +27,13 @@ pub struct ArconPipeline {
     #[cfg(feature = "arcon_tui")]
     arcon_event_receiver: Arc<crossbeam_channel::Receiver<TuiNode>>,
 }
+
+/// A Node with operator type, state backend type, and timer type erased
+pub type DynamicNode<IN> = Box<dyn CreateErased<ArconMessage<IN>>>;
+/// Result of creating a [`DynamicNode`] in a [`KompactSystem`](kompact::KompactSystem)
+pub type CreatedDynamicNode<IN> = Arc<dyn AbstractComponent<Message = ArconMessage<IN>>>;
+/// A Source with operator type, state backend type, and timer type erased
+pub type DynamicSource = Box<dyn CreateErased<()>>;
 
 impl ArconPipeline {
     /// Creates a new ArconPipeline using the default ArconConf
@@ -121,28 +128,28 @@ impl ArconPipeline {
     }
 
     /// Adds a NodeManager to the Arcon Pipeline
-    pub fn create_node_manager<OP, B, T>(
+    pub fn create_node_manager<IN, OUT>(
         &mut self,
         node_description: String,
         node_fn: &'static dyn SafelySendableFn(
             NodeDescriptor,
             NodeID,
             Vec<NodeID>,
-            ChannelStrategy<OP::OUT>,
-        ) -> Node<OP, B, T>,
+            ChannelStrategy<OUT>,
+            state::BackendType,
+        ) -> DynamicNode<IN>,
         in_channels: Vec<NodeID>,
-        nodes: Vec<Node<OP, B, T>>,
-    ) -> Vec<Arc<Component<Node<OP, B, T>>>>
+        nodes: Vec<DynamicNode<IN>>,
+    ) -> Vec<CreatedDynamicNode<IN>>
     where
-        OP: Operator<B> + 'static,
-        B: state::Backend,
-        T: TimerBackend<OP::TimerState>,
+        IN: ArconType,
+        OUT: ArconType,
     {
         let timeout = std::time::Duration::from_millis(500);
         let mut node_comps = Vec::with_capacity(nodes.len());
         // Create Node components
         for node in nodes {
-            let node_comp = self.system.create(|| node);
+            let node_comp = self.system.create_erased(node);
             self.system
                 .start_notify(&node_comp)
                 .wait_timeout(timeout)

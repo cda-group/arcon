@@ -1,14 +1,15 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::{prelude::*, timer};
+use crate::{prelude::*, timer, util::system_killer::SystemKiller};
 use std::{
     collections::HashMap,
     fs,
     fs::File,
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
-    sync::Mutex,
+    sync::{mpsc, Mutex},
+    time::Duration,
 };
 use tempfile::NamedTempFile;
 
@@ -65,27 +66,42 @@ fn backend<SB: state::Backend>(
 }
 
 #[allow(dead_code)]
-/// manually sent events -> Window -> Map -> LocalFileSink
+/// manually sent events -> Window -> Map -> LocalFileSink -> SystemKiller
 fn run_pipeline<SB: state::Backend>(
     state_dir: &Path,
     sink_path: &Path,
     conf: ArconConf,
-    crash_after: u32,
+    should_crash: bool,
 ) -> Result<(), ()> {
-    let timeout = std::time::Duration::from_millis(500);
+    let timeout = std::time::Duration::from_millis(2000);
     let mut pipeline = crate::pipeline::ArconPipeline::with_conf(conf);
     let pool_info = pipeline.get_pool_info();
     let checkpoint_dir = pipeline.arcon_conf().checkpoint_dir.clone();
     let _ = fs::create_dir(&checkpoint_dir);
     let system = &pipeline.system();
 
+    // Create System Killer
+    let system_killer = system.create(|| SystemKiller::new());
+    system
+        .start_notify(&system_killer)
+        .wait_timeout(timeout)
+        .expect("system killer never started!");
+
     // Create Sink Component
+    let system_killer_ref = system_killer
+        .actor_ref()
+        .hold()
+        .expect("failed to fetch strong ref");
     let file_sink_node = system.create(|| {
         Node::new(
             "sink_node".into(),
             4.into(),
             vec![3.into()],
-            ChannelStrategy::Mute,
+            ChannelStrategy::Forward(Forward::new(
+                Channel::Local(system_killer_ref),
+                NodeID::new(4),
+                pool_info.clone(),
+            )),
             LocalFileSink::new(sink_path),
             backend::<SB>(state_dir, &checkpoint_dir, 4),
             timer::none(),
@@ -107,10 +123,12 @@ fn run_pipeline<SB: state::Backend>(
         pool_info.clone(),
     ));
 
-    let crash_after = Mutex::new(crash_after);
+    let (crash_tx, crash_rx) = mpsc::sync_channel(1);
+    let crash_after = Mutex::new(if should_crash { 2 } else { 100 });
     let map_fn = move |x: NormaliseElements| -> i64 {
         let mut crash_after = crash_after.lock().unwrap();
         if *crash_after == 0 {
+            crash_tx.send(()).unwrap();
             panic!("expected panic!")
         }
         *crash_after -= 1;
@@ -184,6 +202,10 @@ fn run_pipeline<SB: state::Backend>(
         ArconMessage::epoch(epoch, sender.into())
     }
 
+    fn death(message: String, sender: u32) -> ArconMessage<i64> {
+        ArconMessage::death(message, sender.into())
+    }
+
     let window_node_ref = window_node.actor_ref();
     window_node_ref.tell(element(1, 10, 1));
     window_node_ref.tell(element(2, 11, 1));
@@ -203,9 +225,21 @@ fn run_pipeline<SB: state::Backend>(
     window_node_ref.tell(watermark(20, 1));
     window_node_ref.tell(epoch(3, 1));
 
-    std::thread::sleep(std::time::Duration::from_secs(1));
+    window_node_ref.tell(death("We're finished, shut it down!".into(), 1));
 
-    pipeline.shutdown();
+    if should_crash {
+        crash_rx
+            .recv_timeout(Duration::from_secs(20))
+            .expect("Did not crash in 20 seconds");
+
+        // wait for the output file to be flushed
+        std::thread::sleep(Duration::from_millis(1000));
+        pipeline.shutdown();
+    } else {
+        // if we didn't crash, the death message should trickle down to the SystemKiller
+        // so let's await the pipeline termination
+        pipeline.await_termination();
+    }
 
     // check if any of the nodes panicked
     if window_node.is_faulty() || map_node.is_faulty() || file_sink_node.is_faulty() {
@@ -229,7 +263,7 @@ fn run_test<SB: state::Backend>() {
     let sink_file = NamedTempFile::new().unwrap();
     let sink_path = sink_file.path();
 
-    run_pipeline::<SB>(test_dir, sink_path, conf.clone(), 2).unwrap_err();
+    run_pipeline::<SB>(test_dir, sink_path, conf.clone(), true).unwrap_err();
     {
         // Check results from the sink file!
         let file = File::open(sink_file.path()).expect("no such file");
@@ -242,7 +276,7 @@ fn run_test<SB: state::Backend>() {
         assert_eq!(result, vec![9, 8]); // partial result after panic
     }
 
-    run_pipeline::<SB>(test_dir, sink_path, conf, 100).unwrap();
+    run_pipeline::<SB>(test_dir, sink_path, conf, false).unwrap();
 
     // Check results from the sink file!
     let buf = BufReader::new(sink_file);
@@ -268,9 +302,6 @@ fn test_sled_recovery_pipeline() {
 
 #[cfg(all(feature = "arcon_faster", target_os = "linux"))]
 #[test]
-// flakey, sometimes passes, sometimes hangs, sometimes fails. But usually works as expected
-// when debugging :(
-#[ignore]
 fn test_faster_recovery_pipeline() {
     run_test::<state::Faster>()
 }
