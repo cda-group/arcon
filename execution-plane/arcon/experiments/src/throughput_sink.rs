@@ -33,7 +33,7 @@ where
     A: ArconType,
 {
     ctx: ComponentContext<Self>,
-    pub sink_port: ProvidedPort<SinkPort, Self>,
+    pub sink_port: ProvidedPort<SinkPort>,
     done: Option<KPromise<Duration>>,
     start: std::time::Instant,
     log_on: bool,

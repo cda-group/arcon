@@ -8,13 +8,37 @@ use crate::nexmark::{
     NEXMarkEvent,
 };
 
-use arcon::prelude::*;
-use std::time::Duration;
+use arcon::{pipeline::CreatedDynamicNode, prelude::*, timer::TimerBackend};
+use std::{rc::Rc, time::Duration};
 
 pub mod q1;
 pub mod q3;
 
 type QueryTimer = Option<KFuture<QueryResult>>;
+type StateMetricsThief<T> = Rc<dyn Fn(CreatedDynamicNode<T>) -> Option<state::metered::Metrics>>;
+type StateMetricsPrinter = Box<dyn FnOnce()>;
+
+// `node` is important for type inference! some of the types here can potentially be unnameable!
+fn make_state_metrics_thief<IN, O, B, T>(_node: &Node<O, B, T>) -> StateMetricsThief<IN>
+where
+    IN: ArconType,
+    B: state::Backend,
+    O: Operator<B>,
+    T: TimerBackend<O::TimerState>,
+{
+    Rc::new(|dyn_node: CreatedDynamicNode<IN>| {
+        dyn_node
+            .as_any()
+            .downcast_ref::<Component<Node<O, B, T>>>()
+            .unwrap()
+            .on_definition(|n| {
+                n.state_backend.inner.get_mut().metrics().map(|m| {
+                    // we leave vastly shorter metrics in place of the ones we stole
+                    std::mem::replace(m, state::metered::Metrics::new(256))
+                })
+            })
+    })
+}
 
 #[derive(Debug, Clone)]
 pub struct QueryResult {
@@ -35,7 +59,8 @@ pub trait Query {
         debug_mode: bool,
         nexmark_config: NEXMarkConfig,
         pipeline: &mut ArconPipeline,
-    ) -> QueryTimer;
+        state_backend_type: state::BackendType,
+    ) -> (QueryTimer, Vec<StateMetricsPrinter>);
 }
 
 pub fn sink<A: ArconType>(
@@ -66,14 +91,16 @@ pub fn sink<A: ArconType>(
     }
 }
 
-pub fn source<OP>(
+pub fn source<OP, B, T>(
     sink_port_opt: Option<ProvidedRef<SinkPort>>,
     nexmark_config: NEXMarkConfig,
-    source_context: SourceContext<OP>,
+    source_context: SourceContext<OP, B, T>,
     system: &mut KompactSystem,
 ) -> QueryTimer
 where
-    OP: Operator<IN = NEXMarkEvent> + 'static,
+    OP: Operator<B, IN = NEXMarkEvent, TimerState = ArconNever> + 'static,
+    B: state::Backend,
+    T: TimerBackend<ArconNever>,
 {
     let nexmark_source_comp =
         system.create_dedicated(move || NEXMarkSource::new(nexmark_config, source_context));

@@ -6,7 +6,7 @@
 use anyhow::{Context, Result};
 use serde::*;
 use serde_repr::*;
-use std::f64::consts::PI;
+use std::{f64::consts::PI, path::Path};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum RateShape {
@@ -111,9 +111,10 @@ impl NEXMarkConfig {
             .unwrap()
     }
 
-    pub fn load(path: &str) -> Result<NEXMarkConfig> {
+    pub fn load(path: impl AsRef<Path>) -> Result<NEXMarkConfig> {
+        let path = path.as_ref();
         let data = std::fs::read_to_string(path)
-            .with_context(|| format!("Failed to read config from {}", path))?;
+            .with_context(|| format!("Failed to read config from {}", path.display()))?;
         toml::from_str(&data).map_err(|e| anyhow!("failed to parse toml with err {}", e))
     }
 
@@ -187,6 +188,16 @@ pub enum NEXMarkQuery {
     CurrencyConversion = 1,
     LocalItemSuggestion = 3,
     // TODO: add more..
+}
+
+impl NEXMarkQuery {
+    pub fn new(i: u8) -> Result<Self> {
+        match i {
+            1 => Ok(NEXMarkQuery::CurrencyConversion),
+            3 => Ok(NEXMarkQuery::LocalItemSuggestion),
+            x => bail!("Wrong NEXMark query: {}", x),
+        }
+    }
 }
 
 // Default Values

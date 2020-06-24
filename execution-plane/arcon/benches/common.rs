@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use arcon::prelude::*;
-use arcon_error::*;
 use std::time::{Duration, Instant};
 
 #[derive(Debug)]
@@ -33,7 +32,7 @@ impl Port for ExperimentPort {
 #[derive(ComponentDefinition)]
 pub struct NodeReceiver<A: ArconType> {
     ctx: ComponentContext<Self>,
-    pub experiment_port: ProvidedPort<ExperimentPort, Self>,
+    pub experiment_port: ProvidedPort<ExperimentPort>,
     done: Option<KPromise<Duration>>,
     remaining_recv: u64,
     start: Instant,

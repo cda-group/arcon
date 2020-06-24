@@ -1,170 +1,84 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
-
 // A simple pipeline to profile arcon.
 // Can be used to identify performance regressions..
-
-#[macro_use]
-extern crate clap;
-
-use arcon::{prelude::*, timer};
-use clap::{App, AppSettings, Arg, SubCommand};
+use arcon::{prelude::*, state::metered::Metrics, timer};
 use experiments::{
     get_items, square_root_newton,
     throughput_sink::{Run, ThroughputSink},
     EnrichedItem, Item,
 };
-use std::usize;
+use std::{fs, sync::Arc};
+use structopt::StructOpt;
 
-fn main() {
-    let kompact_threads_arg = Arg::with_name("t")
-        .required(false)
-        .default_value("4")
-        .takes_value(true)
-        .long("Threads for the KompactSystem")
-        .short("t")
-        .help("Threads for the KompactSystem");
-
-    let batch_size_arg = Arg::with_name("b")
-        .required(false)
-        .default_value("1024")
-        .takes_value(true)
-        .long("Batch size for ChannelStrategy")
-        .short("b")
-        .help("Batch size for ChannelStrategy");
-
-    let collection_size_arg = Arg::with_name("z")
-        .required(false)
-        .default_value("10000000")
-        .takes_value(true)
-        .long("Amount of items for the collection source")
-        .short("z")
-        .help("Amount of items for the collection source");
-
-    let kompact_throughput_arg = Arg::with_name("k")
-        .required(false)
-        .default_value("50")
-        .takes_value(true)
-        .long("Kompact cfg throughput")
-        .short("k")
-        .help("kompact cfg throughput");
-
-    let log_frequency_arg = Arg::with_name("f")
-        .required(false)
-        .default_value("100000")
-        .takes_value(true)
-        .long("How often we log throughput")
-        .short("f")
-        .help("throughput log freq");
-
-    let scaling_factor_arg = Arg::with_name("s")
-        .required(false)
-        .default_value("1")
-        .takes_value(true)
-        .long("workload scaling")
-        .short("s")
-        .help("workload scaling");
-
-    let matches = App::new("Perf")
-        .setting(AppSettings::ColoredHelp)
-        .version(crate_version!())
-        .setting(AppSettings::SubcommandRequired)
-        .arg(
-            Arg::with_name("d")
-                .help("dedicated mode")
-                .long("dedicated")
-                .short("d"),
-        )
-        .arg(
-            Arg::with_name("p")
-                .help("dedicated-pinned mode")
-                .long("dedicated-pinned")
-                .short("p"),
-        )
-        .arg(
-            Arg::with_name("log")
-                .help("log-throughput")
-                .long("log pipeline throughput")
-                .short("log"),
-        )
-        .subcommand(
-            SubCommand::with_name("run")
-                .setting(AppSettings::ColoredHelp)
-                .arg(&kompact_throughput_arg)
-                .arg(&kompact_threads_arg)
-                .arg(&batch_size_arg)
-                .arg(&log_frequency_arg)
-                .arg(&collection_size_arg)
-                .arg(&scaling_factor_arg)
-                .about("Run Perf"),
-        )
-        .get_matches_from(fetch_args());
-
-    let dedicated: bool = matches.is_present("d");
-    let pinned: bool = matches.is_present("p");
-    let log_throughput: bool = matches.is_present("log");
-
-    match matches.subcommand() {
-        ("run", Some(arg_matches)) => {
-            let log_freq = arg_matches
-                .value_of("f")
-                .expect("Should not happen as there is a default")
-                .parse::<u64>()
-                .unwrap();
-
-            let batch_size = arg_matches
-                .value_of("b")
-                .expect("Should not happen as there is a default")
-                .parse::<u64>()
-                .unwrap();
-
-            let collection_size = arg_matches
-                .value_of("z")
-                .expect("Should not happen as there is a default")
-                .parse::<usize>()
-                .unwrap();
-
-            let kompact_throughput = arg_matches
-                .value_of("k")
-                .expect("Should not happen as there is a default")
-                .parse::<u64>()
-                .unwrap();
-
-            let scaling_factor = arg_matches
-                .value_of("s")
-                .expect("Should not happen as there is a default")
-                .parse::<u64>()
-                .unwrap();
-            let kompact_threads = arg_matches
-                .value_of("t")
-                .expect("Should not happen as there is a default")
-                .parse::<usize>()
-                .unwrap();
-
-            exec(
-                scaling_factor,
-                collection_size,
-                batch_size,
-                kompact_threads,
-                log_freq,
-                kompact_throughput,
-                dedicated,
-                pinned,
-                log_throughput,
-            );
-        }
-        _ => {
-            panic!("Wrong arg");
-        }
-    }
+#[derive(StructOpt, Debug, Clone)]
+struct Opts {
+    /// Number of threads for KompactSystem
+    #[structopt(short = "t", long, default_value = "4")]
+    kompact_threads: usize,
+    /// Batch size for ChannelStrategy
+    #[structopt(short = "b", long, default_value = "1024")]
+    batch_size: u64,
+    /// Amount of items for the collection source
+    #[structopt(short = "z", long, default_value = "10000000")]
+    collection_size: usize,
+    /// Kompact cfg throughput
+    #[structopt(short = "k", long, default_value = "50")]
+    kompact_throughput: u64,
+    /// How often we log throughput
+    #[structopt(short = "f", long, default_value = "100000")]
+    log_frequency: u64,
+    /// workload scaling
+    #[structopt(short = "s", long, default_value = "1")]
+    scaling_factor: u64,
+    /// dedicated mode
+    #[structopt(short = "d", long)]
+    dedicated: bool,
+    /// dedicated-pinned mode
+    #[structopt(short = "p", long = "dedicated-pinned")]
+    pinned: bool,
+    /// dedicated-pinned mode
+    #[structopt(short = "l", long)]
+    log_throughput: bool,
+    /// state backend type
+    #[structopt(
+        long,
+        possible_values = state::BackendType::STR_VARIANTS,
+        case_insensitive = true,
+        default_value = "InMemory"
+    )]
+    state_backend_type: state::BackendType,
 }
 
-fn fetch_args() -> Vec<String> {
-    std::env::args().collect()
+fn main() {
+    let Opts {
+        kompact_threads,
+        batch_size,
+        collection_size,
+        kompact_throughput,
+        log_frequency,
+        scaling_factor,
+        dedicated,
+        pinned,
+        log_throughput,
+        state_backend_type,
+    } = Opts::from_args();
+
+    state::with_backend_type!(state_backend_type, |SB| exec::<SB>(
+        scaling_factor,
+        collection_size,
+        batch_size,
+        kompact_threads,
+        log_frequency,
+        kompact_throughput,
+        dedicated,
+        pinned,
+        log_throughput,
+    ));
 }
 
 // CollectionSource -> Map Node -> ThroughputSink
-fn exec(
+fn exec<SB: state::Backend>(
     scaling_factor: u64,
     collection_size: usize,
     batch_size: u64,
@@ -175,7 +89,13 @@ fn exec(
     pinned: bool,
     log_throughput: bool,
 ) {
-    let core_ids = arcon::prelude::get_core_ids().unwrap();
+    let arcon_config = ArconConf::default(); // TODO: make an actual pipeline out of this
+    let _ = fs::remove_dir_all(&arcon_config.checkpoint_dir);
+    fs::create_dir_all(&arcon_config.checkpoint_dir).unwrap();
+    let _ = fs::remove_dir_all(&arcon_config.state_dir);
+    fs::create_dir_all(&arcon_config.state_dir).unwrap();
+
+    let core_ids = get_core_ids().unwrap();
     // So we don't pin on cores that the Kompact workers also pinned to.
     let mut core_counter: usize = kompact_threads;
     let timeout = std::time::Duration::from_millis(500);
@@ -225,14 +145,20 @@ fn exec(
         pool_info.clone(),
     ));
 
+    let sb_config = state::Config {
+        live_state_base_path: arcon_config.state_dir.clone(),
+        checkpoints_base_path: arcon_config.checkpoint_dir.clone(),
+        backend_ids: vec![1.to_string(), 2.to_string()],
+    };
+
     let node = Node::new(
         String::from("map_node"),
         1.into(),
         vec![2.into()],
         channel_strategy,
         Map::new(&map_fn),
-        Box::new(InMemory::new("perf".as_ref()).unwrap()),
-        timer::none,
+        SB::restore_or_create(&sb_config, 1.to_string()).unwrap(),
+        timer::none(),
     );
 
     let map_node = if dedicated {
@@ -274,9 +200,9 @@ fn exec(
         watermark_interval,
         None, // no timestamp extractor
         channel_strategy,
-        Map::<Item, Item>::new(&mapper),
-        Box::new(InMemory::new("test".as_ref()).unwrap()),
-        timer::none,
+        Map::new(&mapper),
+        SB::restore_or_create(&sb_config, 2.to_string()).unwrap(),
+        timer::none(),
     );
 
     // Collection for source
@@ -311,7 +237,63 @@ fn exec(
 
     // wait for sink to return completion msg.
     let res = future.wait();
-    println!("Execution took {:?} milliseconds", res.as_millis());
+    println!("=== Execution took {:?} milliseconds ===", res.as_millis());
+    print_state_backend_metrics(source, map_node);
 
     pipeline.shutdown();
+}
+
+trait HasMetrics: ComponentDefinition + ActorRaw + Sized + 'static {
+    fn get_metrics(&mut self) -> Option<&mut Metrics>;
+    fn backend_name(&self) -> &'static str;
+}
+
+impl<OP, B, T> HasMetrics for Node<OP, B, T>
+where
+    OP: Operator<B>,
+    B: state::Backend,
+    T: timer::TimerBackend<OP::TimerState>,
+{
+    fn get_metrics(&mut self) -> Option<&mut Metrics> {
+        self.state_backend.inner.get_mut().metrics()
+    }
+
+    fn backend_name(&self) -> &'static str {
+        std::any::type_name::<B>()
+    }
+}
+
+impl<OP, B, T> HasMetrics for CollectionSource<OP, B, T>
+where
+    OP: Operator<B>,
+    B: state::Backend,
+    T: timer::TimerBackend<OP::TimerState>,
+{
+    fn get_metrics(&mut self) -> Option<&mut Metrics> {
+        self.source_ctx.state_backend.get_mut().metrics()
+    }
+
+    fn backend_name(&self) -> &'static str {
+        std::any::type_name::<B>()
+    }
+}
+
+fn print_state_backend_metrics(
+    source: Arc<Component<impl HasMetrics>>,
+    map_node: Arc<Component<impl HasMetrics>>,
+) {
+    let mut source_def = source.definition().lock().unwrap();
+    let mut map_def = map_node.definition().lock().unwrap();
+    let name = source_def.backend_name();
+
+    let (source_metrics, map_metrics) = match (source_def.get_metrics(), map_def.get_metrics()) {
+        (Some(s), Some(m)) => (s, m),
+        _ => return,
+    };
+
+    println!("State backend metrics for `{}`", name);
+    println!("\nmin, avg, and max are measured in nanoseconds\n\nSource node metrics");
+    println!("{}\n", source_metrics.summary());
+    println!("Map node metrics");
+    println!("{}", map_metrics.summary());
 }

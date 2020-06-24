@@ -1,16 +1,15 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::{prelude::*, timer};
-use once_cell::sync::Lazy;
+use crate::{prelude::*, timer, util::system_killer::SystemKiller};
 use std::{
-    any::TypeId,
     collections::HashMap,
     fs,
     fs::File,
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
-    sync::RwLock,
+    sync::{mpsc, Mutex},
+    time::Duration,
 };
 use tempfile::NamedTempFile;
 
@@ -23,15 +22,11 @@ pub struct NormaliseElements {
 }
 
 #[allow(dead_code)]
-static PANIC_COUNTDOWN: Lazy<RwLock<HashMap<TypeId, u32>>> =
-    Lazy::new(|| RwLock::new(HashMap::new()));
-
-#[allow(dead_code)]
-fn backend<SB: StateBackend>(
+fn backend<SB: state::Backend>(
     state_dir: &Path,
     checkpoints_dir: &Path,
     node_id: u32,
-) -> Box<dyn StateBackend> {
+) -> state::BackendContainer<SB> {
     let mut running_dir: PathBuf = state_dir.into();
     running_dir.push(format!("running_{}", node_id));
     let _ = fs::remove_dir_all(&running_dir); // ignore possible NotFound error
@@ -64,36 +59,52 @@ fn backend<SB: StateBackend>(
                 epoch = epoch
             ));
 
-            Box::new(SB::restore(&running_dir, &checkpoint_path).unwrap())
+            SB::restore(&running_dir, &checkpoint_path).unwrap()
         }
-        None => Box::new(SB::new(&running_dir).unwrap()),
+        None => SB::create(&running_dir).unwrap(),
     }
 }
 
 #[allow(dead_code)]
-/// manually sent events -> Window -> Map -> LocalFileSink
-fn run_pipeline<SB: StateBackend>(
+/// manually sent events -> Window -> Map -> LocalFileSink -> SystemKiller
+fn run_pipeline<SB: state::Backend>(
     state_dir: &Path,
     sink_path: &Path,
     conf: ArconConf,
+    should_crash: bool,
 ) -> Result<(), ()> {
-    let timeout = std::time::Duration::from_millis(500);
+    let timeout = std::time::Duration::from_millis(2000);
     let mut pipeline = crate::pipeline::ArconPipeline::with_conf(conf);
     let pool_info = pipeline.get_pool_info();
     let checkpoint_dir = pipeline.arcon_conf().checkpoint_dir.clone();
     let _ = fs::create_dir(&checkpoint_dir);
     let system = &pipeline.system();
 
+    // Create System Killer
+    let system_killer = system.create(|| SystemKiller::new());
+    system
+        .start_notify(&system_killer)
+        .wait_timeout(timeout)
+        .expect("system killer never started!");
+
     // Create Sink Component
+    let system_killer_ref = system_killer
+        .actor_ref()
+        .hold()
+        .expect("failed to fetch strong ref");
     let file_sink_node = system.create(|| {
         Node::new(
             "sink_node".into(),
             4.into(),
             vec![3.into()],
-            ChannelStrategy::Mute,
+            ChannelStrategy::Forward(Forward::new(
+                Channel::Local(system_killer_ref),
+                NodeID::new(4),
+                pool_info.clone(),
+            )),
             LocalFileSink::new(sink_path),
             backend::<SB>(state_dir, &checkpoint_dir, 4),
-            timer::none,
+            timer::none(),
         )
     });
     system
@@ -112,17 +123,18 @@ fn run_pipeline<SB: StateBackend>(
         pool_info.clone(),
     ));
 
-    fn map_fn<SB: 'static>(x: NormaliseElements) -> i64 {
-        let t = TypeId::of::<SB>();
-
-        let panic_countdown = *PANIC_COUNTDOWN.read().unwrap().get(&t).unwrap_or(&0);
-        if panic_countdown == 0 {
+    let (crash_tx, crash_rx) = mpsc::sync_channel(1);
+    let crash_after = Mutex::new(if should_crash { 2 } else { 100 });
+    let map_fn = move |x: NormaliseElements| -> i64 {
+        let mut crash_after = crash_after.lock().unwrap();
+        if *crash_after == 0 {
+            crash_tx.send(()).unwrap();
             panic!("expected panic!")
         }
-        *PANIC_COUNTDOWN.write().unwrap().entry(t).or_insert(1) -= 1;
+        *crash_after -= 1;
 
         x.data.iter().map(|x| x + 3).sum()
-    }
+    };
 
     let map_node = system.create(|| {
         Node::new(
@@ -130,9 +142,9 @@ fn run_pipeline<SB: StateBackend>(
             3.into(),
             vec![2.into()],
             channel_strategy,
-            Map::<NormaliseElements, i64>::new(&map_fn::<SB>),
+            Map::new(map_fn),
             backend::<SB>(state_dir, &checkpoint_dir, 3),
-            timer::none,
+            timer::none(),
         )
     });
 
@@ -150,10 +162,9 @@ fn run_pipeline<SB: StateBackend>(
         NormaliseElements { data }
     }
 
-    let mut window_state_backend = backend::<SB>(state_dir, &checkpoint_dir, 2);
+    let window_state_backend = backend::<SB>(state_dir, &checkpoint_dir, 2);
 
-    let window: Box<dyn Window<i64, NormaliseElements>> =
-        Box::new(AppenderWindow::new(&window_fn, &mut *window_state_backend));
+    let window = AppenderWindow::new(&window_fn);
 
     let map_node_ref = map_node.actor_ref().hold().expect("Failed to fetch ref");
     let channel_strategy = ChannelStrategy::Forward(Forward::new(
@@ -168,16 +179,9 @@ fn run_pipeline<SB: StateBackend>(
             2.into(),
             vec![1.into()],
             channel_strategy,
-            EventTimeWindowAssigner::<i64, NormaliseElements>::new(
-                window,
-                2,
-                2,
-                0,
-                false,
-                &mut *window_state_backend,
-            ),
+            EventTimeWindowAssigner::new(window, 2, 2, 0, false),
             window_state_backend,
-            timer::wheel,
+            timer::wheel(),
         )
     });
     system
@@ -196,6 +200,10 @@ fn run_pipeline<SB: StateBackend>(
 
     fn epoch(epoch: u64, sender: u32) -> ArconMessage<i64> {
         ArconMessage::epoch(epoch, sender.into())
+    }
+
+    fn death(message: String, sender: u32) -> ArconMessage<i64> {
+        ArconMessage::death(message, sender.into())
     }
 
     let window_node_ref = window_node.actor_ref();
@@ -217,9 +225,21 @@ fn run_pipeline<SB: StateBackend>(
     window_node_ref.tell(watermark(20, 1));
     window_node_ref.tell(epoch(3, 1));
 
-    std::thread::sleep(std::time::Duration::from_secs(1));
+    window_node_ref.tell(death("We're finished, shut it down!".into(), 1));
 
-    pipeline.shutdown();
+    if should_crash {
+        crash_rx
+            .recv_timeout(Duration::from_secs(20))
+            .expect("Did not crash in 20 seconds");
+
+        // wait for the output file to be flushed
+        std::thread::sleep(Duration::from_millis(1000));
+        pipeline.shutdown();
+    } else {
+        // if we didn't crash, the death message should trickle down to the SystemKiller
+        // so let's await the pipeline termination
+        pipeline.await_termination();
+    }
 
     // check if any of the nodes panicked
     if window_node.is_faulty() || map_node.is_faulty() || file_sink_node.is_faulty() {
@@ -230,9 +250,7 @@ fn run_pipeline<SB: StateBackend>(
 }
 
 #[allow(dead_code)]
-fn run_test<SB: StateBackend>() {
-    let t = TypeId::of::<SB>();
-
+fn run_test<SB: state::Backend>() {
     let test_dir = tempfile::tempdir().unwrap();
     let test_dir = test_dir.path();
 
@@ -245,8 +263,7 @@ fn run_test<SB: StateBackend>() {
     let sink_file = NamedTempFile::new().unwrap();
     let sink_path = sink_file.path();
 
-    PANIC_COUNTDOWN.write().unwrap().insert(t, 2); // reaches zero quite quickly
-    run_pipeline::<SB>(test_dir, sink_path, conf.clone()).unwrap_err();
+    run_pipeline::<SB>(test_dir, sink_path, conf.clone(), true).unwrap_err();
     {
         // Check results from the sink file!
         let file = File::open(sink_file.path()).expect("no such file");
@@ -259,8 +276,7 @@ fn run_test<SB: StateBackend>() {
         assert_eq!(result, vec![9, 8]); // partial result after panic
     }
 
-    PANIC_COUNTDOWN.write().unwrap().insert(t, 100); // won't reach zero
-    run_pipeline::<SB>(test_dir, sink_path, conf).unwrap();
+    run_pipeline::<SB>(test_dir, sink_path, conf, false).unwrap();
 
     // Check results from the sink file!
     let buf = BufReader::new(sink_file);
@@ -275,18 +291,17 @@ fn run_test<SB: StateBackend>() {
 #[cfg(feature = "arcon_rocksdb")]
 #[test]
 fn test_rocks_recovery_pipeline() {
-    run_test::<RocksDb>()
+    run_test::<state::Rocks>()
 }
 
 #[cfg(all(feature = "arcon_sled", feature = "arcon_sled_checkpoints"))]
 #[test]
 fn test_sled_recovery_pipeline() {
-    run_test::<Sled>()
+    run_test::<state::Sled>()
 }
 
 #[cfg(all(feature = "arcon_faster", target_os = "linux"))]
 #[test]
-#[ignore]
 fn test_faster_recovery_pipeline() {
-    run_test::<Faster>()
+    run_test::<state::Faster>()
 }

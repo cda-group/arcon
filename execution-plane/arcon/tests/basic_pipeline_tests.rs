@@ -7,7 +7,11 @@
 #![allow(bare_trait_objects)]
 extern crate arcon;
 
-use arcon::{prelude::*, timer};
+use arcon::{
+    prelude::*,
+    state::{Backend, InMemory},
+    timer,
+};
 use std::{
     fs::File,
     io::{BufRead, BufReader},
@@ -55,8 +59,8 @@ fn normalise_pipeline_test() {
             vec![3.into()],
             ChannelStrategy::Mute,
             LocalFileSink::new(&sink_path),
-            Box::new(InMemory::new("test5".as_ref()).unwrap()),
-            timer::none,
+            InMemory::create("test5".as_ref()).unwrap(),
+            timer::none(),
         )
     });
     system
@@ -83,9 +87,9 @@ fn normalise_pipeline_test() {
             3.into(),
             vec![2.into()],
             channel_strategy,
-            Map::<NormaliseElements, i64>::new(&map_fn),
-            Box::new(InMemory::new("test4".as_ref()).unwrap()),
-            timer::none,
+            Map::new(&map_fn),
+            InMemory::create("test4".as_ref()).unwrap(),
+            timer::none(),
         )
     });
 
@@ -104,10 +108,9 @@ fn normalise_pipeline_test() {
         NormaliseElements { data }
     }
 
-    let mut state_backend_2 = Box::new(InMemory::new("test2".as_ref()).unwrap());
+    let state_backend_2 = InMemory::create("test2".as_ref()).unwrap();
 
-    let window: Box<dyn Window<i64, NormaliseElements>> =
-        Box::new(AppenderWindow::new(&window_fn, &mut *state_backend_2));
+    let window = AppenderWindow::new(&window_fn);
 
     let node_3_actor_ref = node_3.actor_ref().hold().expect("Failed to fetch ref");
     let channel_strategy = ChannelStrategy::Forward(Forward::new(
@@ -122,16 +125,9 @@ fn normalise_pipeline_test() {
             2.into(),
             vec![1.into()],
             channel_strategy,
-            EventTimeWindowAssigner::<i64, NormaliseElements>::new(
-                window,
-                2,
-                2,
-                0,
-                false,
-                &mut *state_backend_2,
-            ),
+            EventTimeWindowAssigner::new(window, 2, 2, 0, false),
             state_backend_2,
-            timer::wheel,
+            timer::wheel(),
         )
     });
     system
@@ -162,9 +158,9 @@ fn normalise_pipeline_test() {
         watermark_interval,
         Some(&timestamp_extractor),
         channel_strategy,
-        Map::<SourceData, i64>::new(&source_map),
-        Box::new(InMemory::new("test".as_ref()).unwrap()),
-        timer::none,
+        Map::new(&source_map),
+        InMemory::create("test".as_ref()).unwrap(),
+        timer::none(),
     );
 
     let mut collection: Vec<SourceData> = Vec::new();

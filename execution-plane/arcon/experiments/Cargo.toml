@@ -4,9 +4,20 @@ version = "0.1.0"
 authors = ["Max Meldrum <mmeldrum@kth.se>"]
 edition = "2018"
 
+[dependencies.arcon]
+path = "../"
+features = [
+    "thread_pinning",
+    "arcon_serde",
+    "arcon_tui",
+
+    "arcon_rocksdb",
+    "arcon_sled",
+    "arcon_faster",
+]
+
 [dependencies]
-arcon = { path = "../", features = ["thread_pinning", "arcon_serde", "arcon_tui"]}
-clap = "2.33.0"
+structopt = "0.3.14"
 log = "0.4"
 pretty_env_logger = "0.3"
 anyhow = "1.0"

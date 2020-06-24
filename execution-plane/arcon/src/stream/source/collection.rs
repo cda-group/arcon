@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use super::SourceContext;
-use crate::stream::operator::Operator;
+use crate::{prelude::state, stream::operator::Operator, timer::TimerBackend};
 use kompact::prelude::*;
 
 const RESCHEDULE_EVERY: usize = 500000;
@@ -16,23 +16,27 @@ impl Port for LoopbackPort {
 }
 
 #[derive(ComponentDefinition, Actor)]
-pub struct CollectionSource<OP>
+pub struct CollectionSource<OP, B, T>
 where
-    OP: Operator + 'static,
+    OP: Operator<B> + 'static,
+    B: state::Backend,
+    T: TimerBackend<OP::TimerState>,
 {
     ctx: ComponentContext<Self>,
-    loopback_send: RequiredPort<LoopbackPort, Self>,
-    loopback_receive: ProvidedPort<LoopbackPort, Self>,
-    source_ctx: SourceContext<OP>,
+    loopback_send: RequiredPort<LoopbackPort>,
+    loopback_receive: ProvidedPort<LoopbackPort>,
+    pub source_ctx: SourceContext<OP, B, T>,
     collection: Vec<OP::IN>,
     counter: usize,
 }
 
-impl<OP> CollectionSource<OP>
+impl<OP, B, T> CollectionSource<OP, B, T>
 where
-    OP: Operator + 'static,
+    OP: Operator<B> + 'static,
+    B: state::Backend,
+    T: TimerBackend<OP::TimerState>,
 {
-    pub fn new(collection: Vec<OP::IN>, source_ctx: SourceContext<OP>) -> Self {
+    pub fn new(collection: Vec<OP::IN>, source_ctx: SourceContext<OP, B, T>) -> Self {
         CollectionSource {
             ctx: ComponentContext::new(),
             loopback_send: RequiredPort::new(),
@@ -62,9 +66,11 @@ where
     }
 }
 
-impl<OP> Provide<ControlPort> for CollectionSource<OP>
+impl<OP, B, T> Provide<ControlPort> for CollectionSource<OP, B, T>
 where
-    OP: Operator + 'static,
+    OP: Operator<B> + 'static,
+    B: state::Backend,
+    T: TimerBackend<OP::TimerState>,
 {
     fn handle(&mut self, event: ControlEvent) {
         if let ControlEvent::Start = event {
@@ -75,18 +81,22 @@ where
     }
 }
 
-impl<OP> Provide<LoopbackPort> for CollectionSource<OP>
+impl<OP, B, T> Provide<LoopbackPort> for CollectionSource<OP, B, T>
 where
-    OP: Operator + 'static,
+    OP: Operator<B> + 'static,
+    B: state::Backend,
+    T: TimerBackend<OP::TimerState>,
 {
     fn handle(&mut self, _event: ContinueSending) {
         self.process_collection();
     }
 }
 
-impl<OP> Require<LoopbackPort> for CollectionSource<OP>
+impl<OP, B, T> Require<LoopbackPort> for CollectionSource<OP, B, T>
 where
-    OP: Operator + 'static,
+    OP: Operator<B> + 'static,
+    B: state::Backend,
+    T: TimerBackend<OP::TimerState>,
 {
     fn handle(&mut self, _event: Never) {
         unreachable!("Never type has no instance");
@@ -102,7 +112,7 @@ mod tests {
         data::ArconMessage,
         pipeline::ArconPipeline,
         prelude::{Channel, ChannelStrategy, DebugNode, Filter, Forward},
-        state_backend::{in_memory::InMemory, StateBackend},
+        state::{Backend, InMemory},
         timer,
     };
 
@@ -134,9 +144,9 @@ mod tests {
             watermark_interval,
             None, // no timestamp extractor
             channel_strategy,
-            Filter::<u64>::new(&filter_fn),
-            Box::new(InMemory::new("test".as_ref()).unwrap()),
-            timer::none,
+            Filter::new(&filter_fn),
+            InMemory::create("test".as_ref()).unwrap(),
+            timer::none(),
         );
 
         // Generate collection
