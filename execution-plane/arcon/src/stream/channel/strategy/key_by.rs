@@ -7,6 +7,7 @@ use crate::{
     prelude::*,
     stream::channel::strategy::send,
 };
+use kompact::prelude::ComponentDefinition;
 use std::collections::HashMap;
 
 /// A hash based partitioner
@@ -62,7 +63,10 @@ where
     }
 
     #[inline]
-    pub fn add(&mut self, event: ArconEvent<A>) {
+    pub fn add<CD>(&mut self, event: ArconEvent<A>, source: &CD)
+    where
+        CD: ComponentDefinition + Sized + 'static,
+    {
         match &event {
             ArconEvent::Element(element) => {
                 let hash = element.data.get_key() as u32;
@@ -75,7 +79,7 @@ where
                             events: buffer.reader(),
                             sender: self.sender_id,
                         };
-                        send(chan, msg);
+                        send(chan, msg, source);
                         // set new writer
                         *buffer = self.buffer_pool.get();
                         let _ = buffer.push(e.into());
@@ -89,19 +93,22 @@ where
                 for (_, (_, buffer)) in self.buffer_map.iter_mut() {
                     buffer.push(event.clone().into());
                 }
-                self.flush();
+                self.flush(source);
             }
         }
     }
 
     #[inline]
-    pub fn flush(&mut self) {
+    pub fn flush<CD>(&mut self, source: &CD)
+    where
+        CD: ComponentDefinition + Sized + 'static,
+    {
         for (_, (ref channel, buffer)) in self.buffer_map.iter_mut() {
             let msg = ArconMessage {
                 events: buffer.reader(),
                 sender: self.sender_id,
             };
-            send(channel, msg);
+            send(channel, msg, source);
             // get a new writer
             *buffer = self.buffer_pool.get();
         }

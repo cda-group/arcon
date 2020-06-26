@@ -8,6 +8,7 @@ use crate::{
     timer::TimerBackend,
 };
 use kompact::prelude::*;
+use std::cell::RefCell;
 use std::{
     fs::File,
     io::{BufRead, BufReader},
@@ -23,7 +24,7 @@ where
     T: TimerBackend<OP::TimerState>,
 {
     ctx: ComponentContext<Self>,
-    source_ctx: SourceContext<OP, B, T>,
+    source_ctx: RefCell<SourceContext<OP, B, T>>,
     file_path: String,
 }
 
@@ -37,7 +38,7 @@ where
     pub fn new(file_path: String, source_ctx: SourceContext<OP, B, T>) -> Self {
         LocalFileSource {
             ctx: ComponentContext::new(),
-            source_ctx,
+            source_ctx: RefCell::new(source_ctx),
             file_path,
         }
     }
@@ -45,17 +46,18 @@ where
         if let Ok(f) = File::open(&self.file_path) {
             let reader = BufReader::new(f);
             let mut counter: u64 = 0;
-            let interval = self.source_ctx.watermark_interval;
+            let mut source_ctx = self.source_ctx.borrow_mut();
+            let interval = source_ctx.watermark_interval;
             for line in reader.lines() {
                 match line {
                     Ok(l) => {
                         if let Ok(data) = l.parse::<OP::IN>() {
-                            let elem = self.source_ctx.extract_element(data);
-                            self.source_ctx.process(elem);
+                            let elem = source_ctx.extract_element(data);
+                            source_ctx.process(elem);
                             counter += 1;
 
                             if counter == interval {
-                                self.source_ctx.generate_watermark();
+                                source_ctx.generate_watermark(self);
                                 counter = 0;
                             }
                         } else {
@@ -72,7 +74,7 @@ where
                 }
             }
             // We are done, generate a watermark...
-            self.source_ctx.generate_watermark();
+            source_ctx.generate_watermark(self);
         } else {
             error!(self.ctx.log(), "Unable to open file {}", self.file_path);
         }

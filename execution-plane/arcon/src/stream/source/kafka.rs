@@ -10,7 +10,7 @@ use rdkafka::{
     message::*,
     topic_partition_list::Offset,
 };
-use std::{collections::HashMap, time::Duration};
+use std::{cell::RefCell, collections::HashMap, time::Duration};
 
 /*
     KafkaSource: work in progress
@@ -22,7 +22,7 @@ where
     OUT: ArconType + ::serde::Serialize + ::serde::de::DeserializeOwned,
 {
     ctx: ComponentContext<Self>,
-    channel_strategy: ChannelStrategy<OUT>,
+    channel_strategy: RefCell<ChannelStrategy<OUT>>,
     bootstrap_server: String,
     topic: String,
     offset: Offset,
@@ -65,7 +65,7 @@ where
                 }
                 KafkaSource {
                     ctx: ComponentContext::new(),
-                    channel_strategy,
+                    channel_strategy: RefCell::new(channel_strategy),
                     bootstrap_server,
                     topic,
                     offset: Offset::from_raw(offset),
@@ -87,20 +87,23 @@ where
     pub fn output_event(&mut self, data: OUT, ts: Option<u64>) -> () {
         match ts {
             Some(time) => {
-                self.channel_strategy
-                    .add(ArconEvent::Element(ArconElement::with_timestamp(
-                        data, time,
-                    )))
+                self.channel_strategy.borrow_mut().add(
+                    ArconEvent::Element(ArconElement::with_timestamp(data, time)),
+                    self,
+                );
             }
-            None => self
-                .channel_strategy
-                .add(ArconEvent::Element(ArconElement::new(data))),
+            None => {
+                self.channel_strategy
+                    .borrow_mut()
+                    .add(ArconEvent::Element(ArconElement::new(data)), self);
+            }
         }
     }
     pub fn output_watermark(&mut self) -> () {
         let ts = self.max_timestamp;
         self.channel_strategy
-            .add(ArconEvent::Watermark(Watermark::new(ts)));
+            .borrow_mut()
+            .add(ArconEvent::Watermark(Watermark::new(ts)), self);
     }
     pub fn commit_epoch(&mut self, epoch: &u64) -> () {
         if let Some(commit_offset) = self.epoch_offset.get(epoch) {
@@ -127,7 +130,8 @@ where
     pub fn new_epoch(&mut self) -> () {
         self.epoch_offset.insert(self.epoch, self.offset);
         self.channel_strategy
-            .add(ArconEvent::Epoch(Epoch::new(self.epoch)));
+            .borrow_mut()
+            .add(ArconEvent::Epoch(Epoch::new(self.epoch)), self);
         self.epoch = self.epoch + 1;
     }
 

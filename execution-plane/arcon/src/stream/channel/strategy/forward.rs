@@ -6,6 +6,7 @@ use crate::{
     prelude::*,
     stream::channel::{strategy::send, Channel},
 };
+use kompact::prelude::ComponentDefinition;
 
 /// `Forward` is a one-to-one channel strategy between two components
 #[allow(dead_code)]
@@ -51,11 +52,14 @@ where
     }
 
     #[inline]
-    pub fn add(&mut self, event: ArconEvent<A>) {
+    pub fn add<CD>(&mut self, event: ArconEvent<A>, source: &CD)
+    where
+        CD: ComponentDefinition + Sized + 'static,
+    {
         if let ArconEvent::Element(_) = &event {
             if let Some(e) = self.curr_buffer.push(event.into()) {
                 // buffer is full, flush.
-                self.flush();
+                self.flush(source);
                 self.curr_buffer.push(e.into());
             }
         } else {
@@ -64,23 +68,26 @@ where
             // TODO: bit ugly..
 
             if let Some(e) = self.curr_buffer.push(event.into()) {
-                self.flush();
+                self.flush(source);
                 self.curr_buffer.push(e.into());
-                self.flush();
+                self.flush(source);
             } else {
-                self.flush();
+                self.flush(source);
             }
         }
     }
 
     #[inline]
-    pub fn flush(&mut self) {
+    pub fn flush<CD>(&mut self, source: &CD) 
+    where
+        CD: ComponentDefinition + Sized + 'static,
+    {
         let reader = self.curr_buffer.reader();
         let msg = ArconMessage {
             events: reader,
             sender: self.sender_id,
         };
-        send(&self.channel, msg);
+        send(&self.channel, msg, source);
 
         // TODO: Should probably not busy wait here..
         self.curr_buffer = self.buffer_pool.get();

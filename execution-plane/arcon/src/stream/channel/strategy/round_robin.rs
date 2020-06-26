@@ -6,6 +6,7 @@ use crate::{
     data::{ArconEvent, ArconEventWrapper, ArconMessage, ArconType, NodeID},
     stream::channel::{strategy::send, Channel},
 };
+use kompact::prelude::ComponentDefinition;
 
 /// A strategy that sends message downstream in a Round-Robin fashion
 pub struct RoundRobin<A>
@@ -59,11 +60,14 @@ where
     }
 
     #[inline]
-    pub fn add(&mut self, event: ArconEvent<A>) {
+    pub fn add<CD>(&mut self, event: ArconEvent<A>, source: &CD)
+    where
+        CD: ComponentDefinition + Sized + 'static,
+    {
         if let ArconEvent::Element(_) = &event {
             if let Some(e) = self.curr_buffer.push(event.into()) {
                 // buffer is full, flush.
-                self.flush();
+                self.flush(source);
                 self.curr_buffer.push(e.into());
             }
         } else {
@@ -71,24 +75,27 @@ where
             // Send downstream as soon as possible
 
             if let Some(e) = self.curr_buffer.push(event.into()) {
-                self.flush();
+                self.flush(source);
                 self.curr_buffer.push(e.into());
-                self.flush();
+                self.flush(source);
             } else {
-                self.flush();
+                self.flush(source);
             }
         }
     }
 
     #[inline]
-    pub fn flush(&mut self) {
+    pub fn flush<CD>(&mut self, source: &CD) 
+    where
+        CD: ComponentDefinition + Sized + 'static,
+    {
         if let Some(channel) = self.channels.get(self.curr_index) {
             let reader = self.curr_buffer.reader();
             let msg = ArconMessage {
                 events: reader,
                 sender: self.sender_id,
             };
-            send(&channel, msg);
+            send(&channel, msg, source);
 
             self.curr_index += 1;
 

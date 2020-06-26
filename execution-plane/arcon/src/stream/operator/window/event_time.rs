@@ -181,7 +181,7 @@ where
         &self,
         element: ArconElement<IN>,
         mut ctx: OperatorContext<Self, B, impl TimerBackend<WindowEvent>>,
-    ) {
+    ) -> Vec<ArconEvent<Self::OUT>> {
         let ts = element.timestamp.unwrap_or(1);
 
         let time = ctx.current_time();
@@ -190,7 +190,7 @@ where
 
         if ts < ts_lower_bound {
             // Late arrival: early return
-            return;
+            return vec![];
         }
 
         let mut state = self.state.activate(ctx.state_session);
@@ -248,27 +248,18 @@ where
                 }
             }
         }
+
+        return vec![]
     }
 
-    fn handle_watermark(
-        &self,
-        _w: Watermark,
-        _ctx: OperatorContext<Self, B, impl TimerBackend<WindowEvent>>,
-    ) {
-    }
-
-    fn handle_epoch(
-        &self,
-        _epoch: Epoch,
-        _ctx: OperatorContext<Self, B, impl TimerBackend<WindowEvent>>,
-    ) {
-    }
+    crate::ignore_watermark!(B);
+    crate::ignore_epoch!(B);
 
     fn handle_timeout(
         &self,
         timeout: Self::TimerState,
         ctx: OperatorContext<Self, B, impl TimerBackend<WindowEvent>>,
-    ) -> () {
+    ) -> Option<Vec<ArconEvent<Self::OUT>>> {
         let WindowEvent {
             key,
             index,
@@ -290,7 +281,7 @@ where
             .expect("active window remove error");
 
         let window_result = ArconEvent::Element(ArconElement::with_timestamp(e, timestamp));
-        ctx.channel_strategy.add(window_result);
+        Some(vec![window_result])
     }
 }
 

@@ -6,6 +6,7 @@ use crate::{
     data::{ArconEvent, ArconEventWrapper, ArconMessage, ArconType, NodeID},
     stream::channel::{strategy::send, Channel},
 };
+use kompact::prelude::ComponentDefinition;
 
 /// A Broadcast strategy for one-to-many message sending
 #[allow(dead_code)]
@@ -60,26 +61,32 @@ where
     }
 
     #[inline]
-    pub fn add(&mut self, event: ArconEvent<A>) {
+    pub fn add<CD>(&mut self, event: ArconEvent<A>, source: &CD)
+    where
+        CD: ComponentDefinition + Sized + 'static,
+    {
         if let ArconEvent::Element(_) = &event {
             if let Some(e) = self.curr_buffer.push(event.into()) {
                 // buffer is full, flush.
-                self.flush();
+                self.flush(source);
                 self.curr_buffer.push(e.into());
             }
         } else {
             if let Some(e) = self.curr_buffer.push(event.into()) {
-                self.flush();
+                self.flush(source);
                 self.curr_buffer.push(e.into());
-                self.flush();
+                self.flush(source);
             } else {
-                self.flush();
+                self.flush(source);
             }
         }
     }
 
     #[inline]
-    pub fn flush(&mut self) {
+    pub fn flush<CD>(&mut self, source: &CD)
+    where
+        CD: ComponentDefinition + Sized + 'static,
+    {
         for (i, channel) in self.channels.iter().enumerate() {
             if i == self.channels.len() - 1 {
                 // This is the last channel, thus we can use curr_buffer
@@ -88,7 +95,7 @@ where
                     events: reader,
                     sender: self.sender_id,
                 };
-                send(channel, msg);
+                send(channel, msg, source);
             } else {
                 // Get a new writer
                 let mut writer = self.buffer_pool.get();
@@ -98,7 +105,7 @@ where
                     events: writer.reader(),
                     sender: self.sender_id,
                 };
-                send(channel, msg);
+                send(channel, msg, source);
             }
         }
         // We are finished, set a new BufferWriter to curr_buffer

@@ -9,6 +9,7 @@
 
 #![feature(unboxed_closures)]
 
+extern crate arcon_error as error;
 // Enable use of arcon_macros within this crate
 #[cfg_attr(test, macro_use)]
 extern crate arcon_macros;
@@ -21,9 +22,6 @@ pub use crate::data::{ArconType, VersionId};
 pub use fxhash::FxHasher;
 pub use kompact::prelude::SerId;
 pub use twox_hash::XxHash64;
-
-#[macro_use]
-extern crate arcon_error as error;
 
 // Public Interface
 
@@ -87,7 +85,7 @@ pub mod prelude {
                     broadcast::Broadcast, forward::Forward, key_by::KeyBy, round_robin::RoundRobin,
                     ChannelStrategy,
                 },
-                Channel, DispatcherSource,
+                Channel,
             },
             node::{debug::DebugNode, Node, NodeDescriptor},
             operator::{

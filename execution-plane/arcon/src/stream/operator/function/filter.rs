@@ -82,36 +82,22 @@ where
     fn handle_element(
         &self,
         element: ArconElement<IN>,
-        mut ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) {
+        ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
+    ) -> Vec<ArconEvent<Self::OUT>> {
         let Filter { state, udf, .. } = self;
 
         // the first thing the udf will pretty much always do is to activate the state
         // we cannot do that out here, because rustc's buggy
         // https://github.com/rust-lang/rust/issues/62529
         if udf(&element.data, state, ctx.state_session) {
-            ctx.output(ArconEvent::Element(element));
+            vec![ArconEvent::Element(element)]
+        } else {
+            vec![]
         }
     }
-
-    fn handle_watermark(
-        &self,
-        _w: Watermark,
-        _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) -> () {
-    }
-    fn handle_epoch(
-        &self,
-        _epoch: Epoch,
-        _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) {
-    }
-    fn handle_timeout(
-        &self,
-        _timeout: Self::TimerState,
-        _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) {
-    }
+    crate::ignore_watermark!(B);
+    crate::ignore_epoch!(B);
+    crate::ignore_timeout!(B);
 }
 
 #[cfg(test)]

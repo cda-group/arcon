@@ -123,11 +123,7 @@ where
 // Just a shorthand to avoid repeating the OperatorContext construction everywhere
 macro_rules! make_context {
     ($sel:ident, $sess:ident) => {
-        OperatorContext::new(
-            &mut *$sel.channel_strategy.borrow_mut(),
-            $sess,
-            &mut *$sel.timer_backend.borrow_mut(),
-        )
+        OperatorContext::new($sess, &mut *$sel.timer_backend.borrow_mut())
     };
 }
 
@@ -310,6 +306,7 @@ where
             let mut state = self.state.activate(sb_session);
             match event.unwrap() {
                 ArconEvent::Element(e) => {
+                    // MAX: why is this here?
                     if e.timestamp.unwrap_or(u64::max_value())
                         <= state
                             .watermarks()
@@ -321,8 +318,14 @@ where
                     }
 
                     drop(state);
-                    self.operator
-                        .handle_element(e, make_context!(self, sb_session));
+
+                    let mut strategy = self.channel_strategy.borrow_mut();
+                    for e in self
+                        .operator
+                        .handle_element(e, make_context!(self, sb_session))
+                    {
+                        strategy.add(e, self);
+                    }
                 }
                 ArconEvent::Watermark(w) => {
                     if w <= state
@@ -370,9 +373,16 @@ where
                         // Update the stored watermark
                         state.current_watermark().set(new_watermark)?;
                         drop(state);
+
                         // Handle the watermark
-                        self.operator
-                            .handle_watermark(new_watermark, make_context!(self, sb_session));
+                        if let Some(wm_events) = self
+                            .operator
+                            .handle_watermark(new_watermark, make_context!(self, sb_session))
+                        {
+                            for e in wm_events {
+                                self.channel_strategy.borrow_mut().add(e, self);
+                            }
+                        }
 
                         let timeouts = self
                             .timer_backend
@@ -380,8 +390,14 @@ where
                             .advance_to(new_watermark.timestamp, sb_session);
 
                         for timeout in timeouts {
-                            self.operator
-                                .handle_timeout(timeout, make_context!(self, sb_session));
+                            if let Some(timeout_events) = self
+                                .operator
+                                .handle_timeout(timeout, make_context!(self, sb_session))
+                            {
+                                for e in timeout_events {
+                                    self.channel_strategy.borrow_mut().add(e, self);
+                                }
+                            }
                         }
 
                         let mut metrics = self.metrics.borrow_mut();
@@ -392,7 +408,7 @@ where
                         // Forward the watermark
                         self.channel_strategy
                             .borrow_mut()
-                            .add(ArconEvent::Watermark(new_watermark));
+                            .add(ArconEvent::Watermark(new_watermark), self);
 
                         // increment watermark counter
                         metrics.watermark_counter.inc();
@@ -416,8 +432,15 @@ where
                         state.current_epoch().set(e)?;
                         drop(state);
 
-                        self.operator
-                            .handle_epoch(e, make_context!(self, sb_session));
+                        // handle epoch
+                        if let Some(epoch_events) = self
+                            .operator
+                            .handle_epoch(e, make_context!(self, sb_session))
+                        {
+                            for e in epoch_events {
+                                self.channel_strategy.borrow_mut().add(e, self);
+                            }
+                        }
                         self.timer_backend.borrow_mut().handle_epoch(e, sb_session);
 
                         // store the state
@@ -428,7 +451,9 @@ where
                         metrics.epoch = e;
 
                         // forward the epoch
-                        self.channel_strategy.borrow_mut().add(ArconEvent::Epoch(e));
+                        self.channel_strategy
+                            .borrow_mut()
+                            .add(ArconEvent::Epoch(e), self);
 
                         // increment epoch counter
                         metrics.epoch_counter.inc();
@@ -438,7 +463,9 @@ where
                 }
                 ArconEvent::Death(s) => {
                     // We are instructed to shutdown....
-                    self.channel_strategy.borrow_mut().add(ArconEvent::Death(s));
+                    self.channel_strategy
+                        .borrow_mut()
+                        .add(ArconEvent::Death(s), self);
                     self.ctx.suicide(); // TODO: is suicide enough?
                 }
             }

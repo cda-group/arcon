@@ -89,37 +89,22 @@ where
     fn handle_element(
         &self,
         element: ArconElement<IN>,
-        mut ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) {
+        ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
+    ) -> Vec<ArconEvent<Self::OUT>> {
         let result = (self.udf)(element.data, &self.state, ctx.state_session);
+        // TODO: with capacity
+        let mut events = Vec::new();
         for item in result {
-            ctx.output(ArconEvent::Element(ArconElement {
+            events.push(ArconEvent::Element(ArconElement {
                 data: item,
                 timestamp: element.timestamp,
             }));
         }
+        events
     }
-
-    fn handle_watermark(
-        &self,
-        _w: Watermark,
-        _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) {
-    }
-
-    fn handle_epoch(
-        &self,
-        _epoch: Epoch,
-        _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) {
-    }
-
-    fn handle_timeout(
-        &self,
-        _timeout: Self::TimerState,
-        _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) {
-    }
+    crate::ignore_watermark!(B);
+    crate::ignore_epoch!(B);
+    crate::ignore_timeout!(B);
 }
 
 #[cfg(test)]

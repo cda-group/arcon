@@ -13,6 +13,7 @@ use std::{
     str::{from_utf8, FromStr},
     time::Duration,
 };
+use std::cell::RefCell;
 
 pub enum SocketKind {
     Tcp,
@@ -28,7 +29,7 @@ where
     T: TimerBackend<OP::TimerState>,
 {
     ctx: ComponentContext<Self>,
-    source_ctx: SourceContext<OP, B, T>,
+    source_ctx: RefCell<SourceContext<OP, B, T>>,
     sock_addr: SocketAddr,
     sock_kind: SocketKind,
 }
@@ -48,7 +49,7 @@ where
         assert!(source_ctx.watermark_interval > 0);
         SocketSource {
             ctx: ComponentContext::new(),
-            source_ctx,
+            source_ctx: RefCell::new(source_ctx),
             sock_addr,
             sock_kind,
         }
@@ -65,13 +66,13 @@ where
     fn handle(&mut self, event: ControlEvent) {
         if let ControlEvent::Start = event {
             let system = self.ctx.system();
-
+            let watermark_interval = self.source_ctx.borrow_mut().watermark_interval;
             // Schedule periodic watermark generation
             self.schedule_periodic(
                 Duration::from_secs(0),
-                Duration::from_secs(self.source_ctx.watermark_interval),
+                Duration::from_secs(watermark_interval),
                 move |self_c, _| {
-                    self_c.source_ctx.generate_watermark();
+                    self_c.source_ctx.borrow_mut().generate_watermark(self_c);
                 },
             );
 
@@ -101,11 +102,12 @@ where
     fn receive_local(&mut self, msg: Self::Message) {
         match msg {
             IOMessage::Bytes(bytes) => {
+                let mut source_ctx = self.source_ctx.borrow_mut();
                 debug!(self.ctx.log(), "{:?}", bytes);
                 if let Ok(byte_string) = from_utf8(&bytes) {
                     if let Ok(in_data) = byte_string.trim().parse::<OP::IN>() {
-                        let elem = self.source_ctx.extract_element(in_data);
-                        self.source_ctx.process(elem);
+                        let elem = source_ctx.extract_element(in_data);
+                        source_ctx.process(elem);
                     } else {
                         error!(self.ctx.log(), "Unable to parse string {}", byte_string);
                     }

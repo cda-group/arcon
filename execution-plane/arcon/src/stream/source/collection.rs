@@ -4,6 +4,7 @@
 use super::SourceContext;
 use crate::{prelude::state, stream::operator::Operator, timer::TimerBackend};
 use kompact::prelude::*;
+use std::cell::RefCell;
 
 const RESCHEDULE_EVERY: usize = 500000;
 
@@ -25,8 +26,8 @@ where
     ctx: ComponentContext<Self>,
     loopback_send: RequiredPort<LoopbackPort>,
     loopback_receive: ProvidedPort<LoopbackPort>,
-    pub source_ctx: SourceContext<OP, B, T>,
-    collection: Vec<OP::IN>,
+    pub source_ctx: RefCell<SourceContext<OP, B, T>>,
+    collection: RefCell<Vec<OP::IN>>,
     counter: usize,
 }
 
@@ -41,27 +42,29 @@ where
             ctx: ComponentContext::new(),
             loopback_send: RequiredPort::new(),
             loopback_receive: ProvidedPort::new(),
-            source_ctx,
-            collection,
+            source_ctx: RefCell::new(source_ctx),
+            collection: RefCell::new(collection),
             counter: 0,
         }
     }
     fn process_collection(&mut self) {
-        let drain_to = RESCHEDULE_EVERY.min(self.collection.len());
-        for record in self.collection.drain(..drain_to) {
-            let elem = self.source_ctx.extract_element(record);
-            self.source_ctx.process(elem);
+        let mut collection = self.collection.borrow_mut();
+        let drain_to = RESCHEDULE_EVERY.min(collection.len());
+        let mut source_ctx = self.source_ctx.borrow_mut();
+        for record in collection.drain(..drain_to) {
+            let elem = source_ctx.extract_element(record);
+            source_ctx.process(elem);
 
             self.counter += 1;
-            if (self.counter as u64) == self.source_ctx.watermark_interval {
-                self.source_ctx.generate_watermark();
+            if (self.counter as u64) == source_ctx.watermark_interval {
+                source_ctx.generate_watermark(self);
                 self.counter = 0;
             }
         }
-        if !self.collection.is_empty() {
+        if !collection.is_empty() {
             self.loopback_send.trigger(ContinueSending);
         } else {
-            self.source_ctx.generate_watermark();
+            source_ctx.generate_watermark(self);
         }
     }
 }

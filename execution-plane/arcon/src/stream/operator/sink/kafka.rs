@@ -96,28 +96,20 @@ where
         &self,
         element: ArconElement<IN>,
         _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) {
+    ) -> Vec<ArconEvent<Self::OUT>> {
         self.buffer.borrow_mut().push(element);
+        vec![]
     }
-    fn handle_watermark(
-        &self,
-        _w: Watermark,
-        _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) {
-    }
+    crate::ignore_watermark!(B);
+    crate::ignore_timeout!(B);
+
     fn handle_epoch(
         &self,
         _epoch: Epoch,
         _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) {
+    ) -> Option<Vec<ArconEvent<Self::OUT>>> {
         self.commit_buffer();
-    }
-
-    fn handle_timeout(
-        &self,
-        _timeout: Self::TimerState,
-        _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) {
+        None
     }
 }
 
