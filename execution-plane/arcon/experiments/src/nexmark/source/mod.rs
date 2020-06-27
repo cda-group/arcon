@@ -4,6 +4,7 @@
 use crate::nexmark::{config::NEXMarkConfig, NEXMarkEvent};
 use arcon::{prelude::*, timer::TimerBackend};
 use rand::{rngs::SmallRng, FromEntropy};
+use std::cell::RefCell;
 
 const RESCHEDULE_EVERY: usize = 500000;
 
@@ -26,7 +27,7 @@ where
     ctx: ComponentContext<Self>,
     loopback_send: RequiredPort<LoopbackPort>,
     loopback_receive: ProvidedPort<LoopbackPort>,
-    source_ctx: SourceContext<OP, B, T>,
+    source_ctx: RefCell<SourceContext<OP, B, T>>,
     nexmark_config: NEXMarkConfig,
     timer: ::std::time::Instant,
     events_so_far: u32,
@@ -52,7 +53,7 @@ where
             ctx: ComponentContext::new(),
             loopback_send: RequiredPort::new(),
             loopback_receive: ProvidedPort::new(),
-            source_ctx,
+            source_ctx: RefCell::new(source_ctx),
             nexmark_config,
             timer,
             events_so_far: 0,
@@ -64,6 +65,7 @@ where
     pub fn process(&mut self) {
         let mut rng = SmallRng::from_entropy();
         let mut iter_counter = 0;
+        let mut source_ctx = self.source_ctx.borrow_mut();
 
         while iter_counter < RESCHEDULE_EVERY && self.events_so_far < self.nexmark_config.num_events
         {
@@ -73,14 +75,14 @@ where
                 &mut self.nexmark_config,
             );
 
-            let elem = self.source_ctx.extract_element(next_event);
+            let elem = source_ctx.extract_element(next_event);
             debug!(self.ctx().log(), "Created elem {:?}", elem);
-            self.source_ctx.process(elem);
+            source_ctx.process(elem, self);
             self.events_so_far += 1;
 
             self.watermark_counter += 1;
-            if self.watermark_counter == self.source_ctx.watermark_interval {
-                self.source_ctx.generate_watermark();
+            if self.watermark_counter == source_ctx.watermark_interval {
+                source_ctx.generate_watermark(self);
                 self.watermark_counter = 0;
             }
 
@@ -92,11 +94,11 @@ where
         } else {
             // We are finished ...
             // Set watermark to max value to ensure everything triggers...
-            self.source_ctx.watermark_update(u64::max_value());
-            self.source_ctx.generate_watermark();
+            source_ctx.watermark_update(u64::max_value());
+            source_ctx.generate_watermark(self);
             // send death msg
-            self.source_ctx
-                .generate_death(String::from("nexmark_finished"));
+            source_ctx
+                .generate_death(String::from("nexmark_finished"), self);
             info!(
                 self.ctx().log(),
                 "Finished generating {} events", self.nexmark_config.num_events

@@ -78,7 +78,7 @@ where
     }
 
     #[inline]
-    pub fn flush<CD>(&mut self, source: &CD) 
+    pub fn flush<CD>(&mut self, source: &CD)
     where
         CD: ComponentDefinition + Sized + 'static,
     {
@@ -114,11 +114,13 @@ mod tests {
         let mut channel_strategy: ChannelStrategy<Input> =
             ChannelStrategy::Forward(Forward::new(Channel::Local(actor_ref), 1.into(), pool_info));
 
-        for _i in 0..total_msgs {
-            let elem = ArconElement::new(Input { id: 1 });
-            let _ = channel_strategy.add(ArconEvent::Element(elem));
-        }
-        channel_strategy.flush();
+        comp.on_definition(|cd| {
+            for _i in 0..total_msgs {
+                let elem = ArconElement::new(Input { id: 1 });
+                let _ = channel_strategy.add(ArconEvent::Element(elem), cd);
+            }
+            channel_strategy.flush(cd);
+        });
 
         std::thread::sleep(std::time::Duration::from_secs(1));
         {

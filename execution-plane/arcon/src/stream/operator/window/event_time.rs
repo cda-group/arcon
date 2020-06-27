@@ -6,7 +6,7 @@ use crate::{
         state::{Backend, Bundle, Handle, MapState, RegistrationToken, Session, ValueState},
         *,
     },
-    stream::operator::{window::WindowContext, OperatorContext},
+    stream::operator::{window::WindowContext, EventVec, OperatorContext},
     timer::TimerBackend,
 };
 use prost::Message;
@@ -181,7 +181,7 @@ where
         &self,
         element: ArconElement<IN>,
         mut ctx: OperatorContext<Self, B, impl TimerBackend<WindowEvent>>,
-    ) -> Vec<ArconEvent<Self::OUT>> {
+    ) -> EventVec<Self::OUT> {
         let ts = element.timestamp.unwrap_or(1);
 
         let time = ctx.current_time();
@@ -190,7 +190,7 @@ where
 
         if ts < ts_lower_bound {
             // Late arrival: early return
-            return vec![];
+            return smallvec![];
         }
 
         let mut state = self.state.activate(ctx.state_session);
@@ -249,7 +249,7 @@ where
             }
         }
 
-        return vec![]
+        smallvec![]
     }
 
     crate::ignore_watermark!(B);
@@ -259,7 +259,7 @@ where
         &self,
         timeout: Self::TimerState,
         ctx: OperatorContext<Self, B, impl TimerBackend<WindowEvent>>,
-    ) -> Option<Vec<ArconEvent<Self::OUT>>> {
+    ) -> Option<EventVec<Self::OUT>> {
         let WindowEvent {
             key,
             index,
@@ -281,7 +281,7 @@ where
             .expect("active window remove error");
 
         let window_result = ArconEvent::Element(ArconElement::with_timestamp(e, timestamp));
-        Some(vec![window_result])
+        Some(smallvec![window_result])
     }
 }
 

@@ -8,8 +8,8 @@ use crate::{
     timer::TimerBackend,
 };
 use kompact::prelude::*;
-use std::cell::RefCell;
 use std::{
+    cell::RefCell,
     fs::File,
     io::{BufRead, BufReader},
     str::FromStr,
@@ -53,7 +53,7 @@ where
                     Ok(l) => {
                         if let Ok(data) = l.parse::<OP::IN>() {
                             let elem = source_ctx.extract_element(data);
-                            source_ctx.process(elem);
+                            source_ctx.process(elem, self);
                             counter += 1;
 
                             if counter == interval {

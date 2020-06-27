@@ -1,7 +1,11 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::{prelude::*, stream::operator::OperatorContext, timer::TimerBackend};
+use crate::{
+    prelude::*,
+    stream::operator::{EventVec, OperatorContext},
+    timer::TimerBackend,
+};
 use arcon_state::{RegistrationToken, Session};
 use futures::executor::block_on;
 use rdkafka::{
@@ -96,9 +100,9 @@ where
         &self,
         element: ArconElement<IN>,
         _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) -> Vec<ArconEvent<Self::OUT>> {
+    ) -> EventVec<Self::OUT> {
         self.buffer.borrow_mut().push(element);
-        vec![]
+        smallvec![]
     }
     crate::ignore_watermark!(B);
     crate::ignore_timeout!(B);
@@ -107,7 +111,7 @@ where
         &self,
         _epoch: Epoch,
         _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) -> Option<Vec<ArconEvent<Self::OUT>>> {
+    ) -> Option<EventVec<Self::OUT>> {
         self.commit_buffer();
         None
     }

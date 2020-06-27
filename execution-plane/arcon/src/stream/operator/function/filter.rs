@@ -4,7 +4,7 @@
 use crate::{
     data::{ArconElement, ArconEvent, ArconNever, ArconType, Epoch, Watermark},
     prelude::state,
-    stream::operator::{Operator, OperatorContext},
+    stream::operator::{EventVec, Operator, OperatorContext},
     timer::TimerBackend,
     util::SafelySendableFn,
 };
@@ -83,16 +83,16 @@ where
         &self,
         element: ArconElement<IN>,
         ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) -> Vec<ArconEvent<Self::OUT>> {
+    ) -> EventVec<Self::OUT> {
         let Filter { state, udf, .. } = self;
 
         // the first thing the udf will pretty much always do is to activate the state
         // we cannot do that out here, because rustc's buggy
         // https://github.com/rust-lang/rust/issues/62529
         if udf(&element.data, state, ctx.state_session) {
-            vec![ArconEvent::Element(element)]
+            smallvec![ArconEvent::Element(element)]
         } else {
-            vec![]
+            smallvec![]
         }
     }
     crate::ignore_watermark!(B);

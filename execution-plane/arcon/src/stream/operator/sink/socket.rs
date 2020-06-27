@@ -1,7 +1,11 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::{prelude::*, stream::operator::OperatorContext, timer::TimerBackend};
+use crate::{
+    prelude::*,
+    stream::operator::{EventVec, OperatorContext},
+    timer::TimerBackend,
+};
 use ::serde::Serialize;
 use bytes::Bytes;
 use futures::{channel, executor::block_on, SinkExt, StreamExt};
@@ -92,7 +96,7 @@ where
         &self,
         e: ArconElement<IN>,
         _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) -> Vec<ArconEvent<Self::OUT>> {
+    ) -> EventVec<Self::OUT> {
         let mut tx = self.tx_channel.clone();
         let fmt_data = {
             if let Ok(mut json) = serde_json::to_string(&e.data) {
@@ -113,7 +117,7 @@ where
         };
         self.runtime_handle.spawn(req_dispatch);
 
-        vec![]
+        smallvec![]
     }
     crate::ignore_watermark!(B);
     crate::ignore_epoch!(B);

@@ -129,15 +129,18 @@ where
 
     /// Calls a transformation function on the source data to generate outgoing ArconEvent<OUT>
     #[inline]
-    pub fn process(&mut self, data: ArconElement<OP::IN>) {
+    pub fn process<CD>(&mut self, data: ArconElement<OP::IN>, source: &CD)
+    where
+        CD: ComponentDefinition + Sized + 'static,
+    {
         let mut session = self.state_backend.session();
-        self.operator.handle_element(
+        let events = self.operator.handle_element(
             data,
-            OperatorContext::new(
-                &mut session,
-                &mut self.timer_backend,
-            ),
+            OperatorContext::new(&mut session, &mut self.timer_backend),
         );
+        for event in events {
+            self.channel_strategy.add(event, source);
+        }
     }
 
     /// Build ArconElement

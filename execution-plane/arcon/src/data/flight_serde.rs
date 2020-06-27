@@ -311,8 +311,7 @@ mod test {
             comp_id.into(),
         ]));
 
-        let dispatcher_ref = local.dispatcher_ref();
-        let channel = Channel::Remote(remote_path, serde, dispatcher_ref.into());
+        let channel = Channel::Remote(remote_path, serde);
         let mut channel_strategy: ChannelStrategy<ArconDataTest> =
             ChannelStrategy::Forward(Forward::new(channel, 1.into(), pool_info));
 
@@ -322,12 +321,15 @@ mod test {
             price: PRICE,
         };
         let element = ArconElement::new(data.clone());
-        channel_strategy.add(ArconEvent::Element(element.clone()));
-        channel_strategy.add(ArconEvent::Element(element.clone()));
-        channel_strategy.flush();
-        channel_strategy.add(ArconEvent::Element(element.clone()));
-        channel_strategy.add(ArconEvent::Element(element));
-        channel_strategy.flush();
+
+        comp.on_definition(|cd| {
+            channel_strategy.add(ArconEvent::Element(element.clone()), cd);
+            channel_strategy.add(ArconEvent::Element(element.clone()), cd);
+            channel_strategy.add(ArconEvent::Element(element.clone()), cd);
+            channel_strategy.add(ArconEvent::Element(element), cd);
+            channel_strategy.flush(cd);
+        });
+
         std::thread::sleep(timeout);
 
         let data;

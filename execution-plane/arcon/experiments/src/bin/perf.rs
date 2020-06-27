@@ -270,7 +270,11 @@ where
     T: timer::TimerBackend<OP::TimerState>,
 {
     fn get_metrics(&mut self) -> Option<&mut Metrics> {
-        self.source_ctx.state_backend.get_mut().metrics()
+        self.source_ctx
+            .get_mut()
+            .state_backend
+            .get_mut()
+            .metrics()
     }
 
     fn backend_name(&self) -> &'static str {

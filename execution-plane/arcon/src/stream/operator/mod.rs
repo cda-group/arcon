@@ -13,6 +13,10 @@ use crate::{
     timer::TimerBackend,
 };
 use prost::Message;
+use smallvec::SmallVec;
+
+/// Type alias for a vector of events where 8 of them may be stored inline.
+pub type EventVec<T> = SmallVec<[ArconEvent<T>; 8]>;
 
 /// Defines the methods an `Operator` must implement
 pub trait Operator<B: state::Backend>: Send + Sized {
@@ -33,28 +37,28 @@ pub trait Operator<B: state::Backend>: Send + Sized {
         &self,
         element: ArconElement<Self::IN>,
         ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) -> Vec<ArconEvent<Self::OUT>>;
+    ) -> EventVec<Self::OUT>;
 
     /// Determines how the `Operator` processes Watermarks
     fn handle_watermark(
         &self,
         watermark: Watermark,
         ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) -> Option<Vec<ArconEvent<Self::OUT>>>;
+    ) -> Option<EventVec<Self::OUT>>;
 
     /// Determines how the `Operator` processes an Epoch marker
     fn handle_epoch(
         &self,
         epoch: Epoch,
         ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) -> Option<Vec<ArconEvent<Self::OUT>>>;
+    ) -> Option<EventVec<Self::OUT>>;
 
     /// Determines how the `Operator` handles timeouts it registered earlier when they are triggered
     fn handle_timeout(
         &self,
         timeout: Self::TimerState,
         ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) -> Option<Vec<ArconEvent<Self::OUT>>>;
+    ) -> Option<EventVec<Self::OUT>>;
 }
 
 #[macro_export]
@@ -64,7 +68,7 @@ macro_rules! ignore_watermark {
             &self,
             _w: Watermark,
             _ctx: OperatorContext<Self, $backend, impl TimerBackend<Self::TimerState>>,
-        ) -> Option<Vec<ArconEvent<Self::OUT>>> {
+        ) -> Option<EventVec<Self::OUT>> {
             None
         }
     };
@@ -77,7 +81,7 @@ macro_rules! ignore_epoch {
             &self,
             _epoch: Epoch,
             _ctx: OperatorContext<Self, $backend, impl TimerBackend<Self::TimerState>>,
-        ) -> Option<Vec<ArconEvent<Self::OUT>>> {
+        ) -> Option<EventVec<Self::OUT>> {
             None
         }
     };
@@ -90,7 +94,7 @@ macro_rules! ignore_timeout {
             &self,
             _timeout: Self::TimerState,
             _ctx: OperatorContext<Self, $backend, impl TimerBackend<Self::TimerState>>,
-        ) -> Option<Vec<ArconEvent<Self::OUT>>> {
+        ) -> Option<EventVec<Self::OUT>> {
             None
         }
     };

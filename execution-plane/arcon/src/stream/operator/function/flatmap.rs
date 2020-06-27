@@ -4,7 +4,7 @@
 use crate::{
     data::{ArconElement, ArconEvent, ArconNever, ArconType, Epoch, Watermark},
     prelude::state,
-    stream::operator::{Operator, OperatorContext},
+    stream::operator::{EventVec, Operator, OperatorContext},
     timer::TimerBackend,
     util::SafelySendableFn,
 };
@@ -90,10 +90,9 @@ where
         &self,
         element: ArconElement<IN>,
         ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) -> Vec<ArconEvent<Self::OUT>> {
+    ) -> EventVec<Self::OUT> {
         let result = (self.udf)(element.data, &self.state, ctx.state_session);
-        // TODO: with capacity
-        let mut events = Vec::new();
+        let mut events = EventVec::new();
         for item in result {
             events.push(ArconEvent::Element(ArconElement {
                 data: item,

@@ -163,10 +163,15 @@ mod tests {
             inputs.push(ArconEvent::Element(elem));
         }
 
-        for input in inputs {
-            let _ = channel_strategy.add(input);
-        }
-        let _ = channel_strategy.flush();
+        // take one comp as channel source
+        // just for testing...
+        let comp = &comps[0];
+        comp.on_definition(|cd| {
+            for input in inputs {
+                let _ = channel_strategy.add(input, cd);
+            }
+            let _ = channel_strategy.flush(cd);
+        });
 
         std::thread::sleep(std::time::Duration::from_secs(1));
 

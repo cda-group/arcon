@@ -53,7 +53,7 @@ where
         let mut source_ctx = self.source_ctx.borrow_mut();
         for record in collection.drain(..drain_to) {
             let elem = source_ctx.extract_element(record);
-            source_ctx.process(elem);
+            source_ctx.process(elem, self);
 
             self.counter += 1;
             if (self.counter as u64) == source_ctx.watermark_interval {

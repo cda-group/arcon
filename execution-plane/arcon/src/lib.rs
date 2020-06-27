@@ -9,6 +9,8 @@
 
 #![feature(unboxed_closures)]
 
+#[macro_use]
+extern crate smallvec;
 extern crate arcon_error as error;
 // Enable use of arcon_macros within this crate
 #[cfg_attr(test, macro_use)]

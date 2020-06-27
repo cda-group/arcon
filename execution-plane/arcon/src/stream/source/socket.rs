@@ -9,11 +9,11 @@ use crate::{
 };
 use kompact::prelude::*;
 use std::{
+    cell::RefCell,
     net::SocketAddr,
     str::{from_utf8, FromStr},
     time::Duration,
 };
-use std::cell::RefCell;
 
 pub enum SocketKind {
     Tcp,
@@ -107,7 +107,7 @@ where
                 if let Ok(byte_string) = from_utf8(&bytes) {
                     if let Ok(in_data) = byte_string.trim().parse::<OP::IN>() {
                         let elem = source_ctx.extract_element(in_data);
-                        source_ctx.process(elem);
+                        source_ctx.process(elem, self);
                     } else {
                         error!(self.ctx.log(), "Unable to parse string {}", byte_string);
                     }

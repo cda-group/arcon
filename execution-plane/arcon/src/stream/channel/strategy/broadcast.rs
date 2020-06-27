@@ -155,12 +155,16 @@ mod tests {
         let mut channel_strategy: ChannelStrategy<Input> =
             ChannelStrategy::Broadcast(Broadcast::new(channels, NodeID::new(1), pool_info));
 
-        for _i in 0..total_msgs {
-            let elem = ArconElement::new(Input { id: 1 });
-            // Just assume it is all sent from same comp
-            channel_strategy.add(ArconEvent::Element(elem));
-        }
-        channel_strategy.flush();
+        // take one comp as channel source
+        // just for testing...
+        let comp = &comps[0];
+        comp.on_definition(|cd| {
+            for _i in 0..total_msgs {
+                let elem = ArconElement::new(Input { id: 1 });
+                let _ = channel_strategy.add(ArconEvent::Element(elem), cd);
+            }
+            channel_strategy.flush(cd);
+        });
 
         std::thread::sleep(std::time::Duration::from_secs(1));
 
