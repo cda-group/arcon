@@ -310,7 +310,6 @@ where
             let mut state = self.state.activate(sb_session);
             match event.unwrap() {
                 ArconEvent::Element(e) => {
-                    // MAX: why is this here?
                     if e.timestamp.unwrap_or(u64::max_value())
                         <= state
                             .watermarks()

@@ -1,11 +1,7 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::{
-    prelude::*,
-    stream::operator::OperatorContext,
-    timer::TimerBackend,
-};
+use crate::{prelude::*, stream::operator::OperatorContext, timer::TimerBackend};
 use arcon_state::{RegistrationToken, Session};
 use futures::executor::block_on;
 use rdkafka::{
@@ -115,7 +111,8 @@ where
         _source: &CD,
         _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
     ) where
-        CD: ComponentDefinition + Sized + 'static, {
+        CD: ComponentDefinition + Sized + 'static,
+    {
         self.commit_buffer();
     }
 }

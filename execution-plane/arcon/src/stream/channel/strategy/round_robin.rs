@@ -6,7 +6,7 @@ use crate::{
     data::{ArconEvent, ArconEventWrapper, ArconMessage, ArconType, NodeID},
     stream::channel::{strategy::send, Channel},
 };
-use kompact::prelude::ComponentDefinition;
+use kompact::prelude::{ComponentDefinition, SerError};
 
 /// A strategy that sends message downstream in a Round-Robin fashion
 pub struct RoundRobin<A>
@@ -95,7 +95,10 @@ where
                 events: reader,
                 sender: self.sender_id,
             };
-            send(&channel, msg, source);
+            if let Err(SerError::BufferError(err)) = send(channel, msg, source) {
+                // TODO: Figure out how to get more space for `tell_serialised`
+                panic!(format!("Buffer Error {}", err));
+            };
 
             self.curr_index += 1;
 

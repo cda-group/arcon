@@ -62,7 +62,6 @@ mod tui;
 /// Internal Arcon Utilities
 mod util;
 
-
 /// A module containing test utilities such as a global ArconAllocator
 #[cfg(test)]
 pub mod test_utils {

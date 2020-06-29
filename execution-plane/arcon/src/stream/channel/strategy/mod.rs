@@ -8,7 +8,7 @@ use crate::{
     },
     stream::channel::Channel,
 };
-use kompact::prelude::ComponentDefinition;
+use kompact::prelude::{ComponentDefinition, SerError};
 
 pub mod broadcast;
 pub mod forward;
@@ -83,7 +83,7 @@ where
 ///
 /// The message may be sent to a local or remote component
 #[inline]
-fn send<A, CD>(channel: &Channel<A>, message: ArconMessage<A>, source: &CD)
+fn send<A, CD>(channel: &Channel<A>, message: ArconMessage<A>, source: &CD) -> Result<(), SerError>
 where
     A: ArconType,
     CD: ComponentDefinition + Sized + 'static,
@@ -91,17 +91,15 @@ where
     match channel {
         Channel::Local(actor_ref) => {
             actor_ref.tell(message);
+            Ok(())
         }
         Channel::Remote(actor_path, FlightSerde::Unsafe) => {
             let unsafe_msg = UnsafeSerde(message.into());
-            // TODO: Handle potential errors
-            // source.allocate_more?
-            let _ = actor_path.tell_serialised(unsafe_msg, source);
+            actor_path.tell_serialised(unsafe_msg, source)
         }
         Channel::Remote(actor_path, FlightSerde::Reliable) => {
             let reliable_msg = ReliableSerde(message.into());
-            // TODO: Handle potential errors
-            let _ = actor_path.tell_serialised(reliable_msg, source);
+            actor_path.tell_serialised(reliable_msg, source)
         }
     }
 }

@@ -6,7 +6,7 @@ use crate::{
     data::{ArconEvent, ArconEventWrapper, ArconMessage, ArconType, NodeID},
     stream::channel::{strategy::send, Channel},
 };
-use kompact::prelude::ComponentDefinition;
+use kompact::prelude::{ComponentDefinition, SerError};
 
 /// A Broadcast strategy for one-to-many message sending
 #[allow(dead_code)]
@@ -95,7 +95,10 @@ where
                     events: reader,
                     sender: self.sender_id,
                 };
-                send(channel, msg, source);
+                if let Err(SerError::BufferError(err)) = send(channel, msg, source) {
+                    // TODO: Figure out how to get more space for `tell_serialised`
+                    panic!(format!("Buffer Error {}", err));
+                };
             } else {
                 // Get a new writer
                 let mut writer = self.buffer_pool.get();
@@ -105,7 +108,10 @@ where
                     events: writer.reader(),
                     sender: self.sender_id,
                 };
-                send(channel, msg, source);
+                if let Err(SerError::BufferError(err)) = send(channel, msg, source) {
+                    // TODO: Figure out how to get more space for `tell_serialised`
+                    panic!(format!("Buffer Error {}", err));
+                };
             }
         }
         // We are finished, set a new BufferWriter to curr_buffer

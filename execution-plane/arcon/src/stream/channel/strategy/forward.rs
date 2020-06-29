@@ -6,7 +6,7 @@ use crate::{
     prelude::*,
     stream::channel::{strategy::send, Channel},
 };
-use kompact::prelude::ComponentDefinition;
+use kompact::prelude::{ComponentDefinition, SerError};
 
 /// `Forward` is a one-to-one channel strategy between two components
 #[allow(dead_code)]
@@ -87,7 +87,11 @@ where
             events: reader,
             sender: self.sender_id,
         };
-        send(&self.channel, msg, source);
+
+        if let Err(SerError::BufferError(err)) = send(&self.channel, msg, source) {
+            // TODO: Figure out how to get more space for `tell_serialised`
+            panic!(format!("Buffer Error {}", err));
+        };
 
         // TODO: Should probably not busy wait here..
         self.curr_buffer = self.buffer_pool.get();

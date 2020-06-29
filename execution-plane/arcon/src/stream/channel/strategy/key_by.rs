@@ -8,7 +8,7 @@ use crate::{
     stream::channel::strategy::send,
 };
 use fxhash::FxHashMap;
-use kompact::prelude::ComponentDefinition;
+use kompact::prelude::{ComponentDefinition, SerError};
 
 /// A Channel Strategy for Keyed Data Streams
 ///
@@ -89,7 +89,13 @@ where
                 if let Some((chan, buffer)) = self.buffer_map.get_mut(&index) {
                     if let Some(e) = buffer.push(event.into()) {
                         // buffer is full
-                        Self::flush_buffer(self.sender_id, &mut self.buffer_pool, chan, buffer, source);
+                        Self::flush_buffer(
+                            self.sender_id,
+                            &mut self.buffer_pool,
+                            chan,
+                            buffer,
+                            source,
+                        );
                         // This push should now not fail
                         let _ = buffer.push(e);
                     }
@@ -102,7 +108,13 @@ where
                 for (_, (chan, buffer)) in self.buffer_map.iter_mut() {
                     if let Some(e) = buffer.push(event.clone().into()) {
                         // buffer is full...
-                        Self::flush_buffer(self.sender_id, &mut self.buffer_pool, chan, buffer, source);
+                        Self::flush_buffer(
+                            self.sender_id,
+                            &mut self.buffer_pool,
+                            chan,
+                            buffer,
+                            source,
+                        );
                         // This push should now not fail
                         let _ = buffer.push(e);
                     }
@@ -118,7 +130,13 @@ where
         CD: ComponentDefinition + Sized + 'static,
     {
         for (_, (ref channel, buffer)) in self.buffer_map.iter_mut() {
-            Self::flush_buffer(self.sender_id, &mut self.buffer_pool, channel, buffer, source);
+            Self::flush_buffer(
+                self.sender_id,
+                &mut self.buffer_pool,
+                channel,
+                buffer,
+                source,
+            );
         }
     }
 
@@ -137,7 +155,10 @@ where
             events: writer.reader(),
             sender: sender_id,
         };
-        send(channel, msg, source);
+        if let Err(SerError::BufferError(err)) = send(channel, msg, source) {
+            // TODO: Figure out how to get more space for `tell_serialised`
+            panic!(format!("Buffer Error {}", err));
+        };
         // set a new writer
         *writer = buffer_pool.get();
     }

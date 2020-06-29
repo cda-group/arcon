@@ -8,8 +8,8 @@ use crate::{
     timer::TimerBackend,
     util::SafelySendableFn,
 };
-use std::marker::PhantomData;
 use kompact::prelude::ComponentDefinition;
+use std::marker::PhantomData;
 
 /// An Arcon operator for performing an in-place map
 ///
