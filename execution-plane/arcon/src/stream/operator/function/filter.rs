@@ -4,11 +4,12 @@
 use crate::{
     data::{ArconElement, ArconEvent, ArconNever, ArconType, Epoch, Watermark},
     prelude::state,
-    stream::operator::{EventVec, Operator, OperatorContext},
+    stream::operator::{Operator, OperatorContext},
     timer::TimerBackend,
     util::SafelySendableFn,
 };
 use std::marker::PhantomData;
+use kompact::prelude::ComponentDefinition;
 
 /// IN: Input Event
 /// F: closure type
@@ -79,20 +80,21 @@ where
 
     fn init(&mut self, _session: &mut state::Session<B>) {}
 
-    fn handle_element(
+    fn handle_element<CD>(
         &self,
         element: ArconElement<IN>,
-        ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) -> EventVec<Self::OUT> {
+        source: &CD,
+        mut ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
+    ) where
+        CD: ComponentDefinition + Sized + 'static,
+    {
         let Filter { state, udf, .. } = self;
 
         // the first thing the udf will pretty much always do is to activate the state
         // we cannot do that out here, because rustc's buggy
         // https://github.com/rust-lang/rust/issues/62529
         if udf(&element.data, state, ctx.state_session) {
-            smallvec![ArconEvent::Element(element)]
-        } else {
-            smallvec![]
+            ctx.output(ArconEvent::Element(element), source);
         }
     }
     crate::ignore_watermark!(B);

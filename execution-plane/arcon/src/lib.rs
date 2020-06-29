@@ -9,8 +9,6 @@
 
 #![feature(unboxed_closures)]
 
-#[macro_use]
-extern crate smallvec;
 extern crate arcon_error as error;
 // Enable use of arcon_macros within this crate
 #[cfg_attr(test, macro_use)]
@@ -21,8 +19,11 @@ pub use arcon_macros::*;
 
 // Imports below are exposed for #[derive(Arcon)]
 pub use crate::data::{ArconType, VersionId};
+#[doc(hidden)]
 pub use fxhash::FxHasher;
+#[doc(hidden)]
 pub use kompact::prelude::SerId;
+#[doc(hidden)]
 pub use twox_hash::XxHash64;
 
 // Public Interface

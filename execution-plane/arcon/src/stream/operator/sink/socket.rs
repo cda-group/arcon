@@ -3,7 +3,7 @@
 
 use crate::{
     prelude::*,
-    stream::operator::{EventVec, OperatorContext},
+    stream::operator::OperatorContext,
     timer::TimerBackend,
 };
 use ::serde::Serialize;
@@ -92,18 +92,20 @@ where
         ()
     }
 
-    fn handle_element(
+    fn handle_element<CD>(
         &self,
-        e: ArconElement<IN>,
+        element: ArconElement<Self::IN>,
+        _source: &CD,
         _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) -> EventVec<Self::OUT> {
+    ) where
+        CD: ComponentDefinition + Sized + 'static, {
         let mut tx = self.tx_channel.clone();
         let fmt_data = {
-            if let Ok(mut json) = serde_json::to_string(&e.data) {
+            if let Ok(mut json) = serde_json::to_string(&element.data) {
                 json += "\n";
                 json
             } else {
-                format!("{:?}\n", e.data)
+                format!("{:?}\n", element.data)
             }
         };
         let bytes = Bytes::from(fmt_data);
@@ -116,8 +118,6 @@ where
             }
         };
         self.runtime_handle.spawn(req_dispatch);
-
-        smallvec![]
     }
     crate::ignore_watermark!(B);
     crate::ignore_epoch!(B);

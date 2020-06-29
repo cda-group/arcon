@@ -4,11 +4,12 @@
 use crate::{
     data::{ArconElement, ArconEvent, ArconNever, ArconType, Epoch, Watermark},
     prelude::state,
-    stream::operator::{EventVec, Operator, OperatorContext},
+    stream::operator::{Operator, OperatorContext},
     timer::TimerBackend,
     util::SafelySendableFn,
 };
 use std::marker::PhantomData;
+use kompact::prelude::ComponentDefinition;
 
 /// An Arcon operator for performing an in-place map
 ///
@@ -75,14 +76,17 @@ where
 
     fn init(&mut self, _session: &mut state::Session<B>) {}
 
-    fn handle_element(
+    fn handle_element<CD>(
         &self,
         element: ArconElement<IN>,
-        ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) -> EventVec<Self::OUT> {
+        source: &CD,
+        mut ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
+    ) where
+        CD: ComponentDefinition + Sized + 'static,
+    {
         let mut elem = element;
         (self.udf)(&mut elem.data, &self.state, ctx.state_session);
-        smallvec![ArconEvent::Element(elem)]
+        ctx.output(ArconEvent::Element(elem), source);
     }
     crate::ignore_watermark!(B);
     crate::ignore_epoch!(B);

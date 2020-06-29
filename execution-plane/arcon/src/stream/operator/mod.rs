@@ -10,13 +10,11 @@ pub mod window;
 use crate::{
     data::{ArconElement, ArconEvent, ArconType, Epoch, Watermark},
     prelude::state,
+    stream::channel::strategy::ChannelStrategy,
     timer::TimerBackend,
 };
+use kompact::prelude::ComponentDefinition;
 use prost::Message;
-use smallvec::SmallVec;
-
-/// Type alias for a vector of events where 8 of them may be stored inline.
-pub type EventVec<T> = SmallVec<[ArconEvent<T>; 8]>;
 
 /// Defines the methods an `Operator` must implement
 pub trait Operator<B: state::Backend>: Send + Sized {
@@ -33,43 +31,53 @@ pub trait Operator<B: state::Backend>: Send + Sized {
     fn init(&mut self, session: &mut state::Session<B>);
 
     /// Determines how the `Operator` processes Elements
-    fn handle_element(
+    fn handle_element<CD>(
         &self,
         element: ArconElement<Self::IN>,
+        source: &CD,
         ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) -> EventVec<Self::OUT>;
+    ) where
+        CD: ComponentDefinition + Sized + 'static;
 
     /// Determines how the `Operator` processes Watermarks
-    fn handle_watermark(
+    fn handle_watermark<CD>(
         &self,
         watermark: Watermark,
+        source: &CD,
         ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) -> Option<EventVec<Self::OUT>>;
+    ) where
+        CD: ComponentDefinition + Sized + 'static;
 
     /// Determines how the `Operator` processes an Epoch marker
-    fn handle_epoch(
+    fn handle_epoch<CD>(
         &self,
         epoch: Epoch,
+        source: &CD,
         ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) -> Option<EventVec<Self::OUT>>;
+    ) where
+        CD: ComponentDefinition + Sized + 'static;
 
     /// Determines how the `Operator` handles timeouts it registered earlier when they are triggered
-    fn handle_timeout(
+    fn handle_timeout<CD>(
         &self,
         timeout: Self::TimerState,
+        source: &CD,
         ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) -> Option<EventVec<Self::OUT>>;
+    ) where
+        CD: ComponentDefinition + Sized + 'static;
 }
 
 #[macro_export]
 macro_rules! ignore_watermark {
     ($backend:ty) => {
-        fn handle_watermark(
+        fn handle_watermark<CD>(
             &self,
-            _w: Watermark,
-            _ctx: OperatorContext<Self, $backend, impl TimerBackend<Self::TimerState>>,
-        ) -> Option<EventVec<Self::OUT>> {
-            None
+            _watermark: Watermark,
+            _source: &CD,
+            _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
+        ) where
+            CD: ComponentDefinition + Sized + 'static,
+        {
         }
     };
 }
@@ -77,12 +85,14 @@ macro_rules! ignore_watermark {
 #[macro_export]
 macro_rules! ignore_epoch {
     ($backend:ty) => {
-        fn handle_epoch(
+        fn handle_epoch<CD>(
             &self,
             _epoch: Epoch,
-            _ctx: OperatorContext<Self, $backend, impl TimerBackend<Self::TimerState>>,
-        ) -> Option<EventVec<Self::OUT>> {
-            None
+            _source: &CD,
+            _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
+        ) where
+            CD: ComponentDefinition + Sized + 'static,
+        {
         }
     };
 }
@@ -90,49 +100,66 @@ macro_rules! ignore_epoch {
 #[macro_export]
 macro_rules! ignore_timeout {
     ($backend:ty) => {
-        fn handle_timeout(
+        fn handle_timeout<CD>(
             &self,
             _timeout: Self::TimerState,
-            _ctx: OperatorContext<Self, $backend, impl TimerBackend<Self::TimerState>>,
-        ) -> Option<EventVec<Self::OUT>> {
-            None
+            _source: &CD,
+            _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
+        ) where
+            CD: ComponentDefinition + Sized + 'static,
+        {
         }
     };
 }
 
-pub struct OperatorContext<'s, 'b, 't, OP, B, T>
+pub struct OperatorContext<'c, 's, 'b, 't, OP, B, T>
 where
     OP: Operator<B>,
     B: state::Backend,
     T: TimerBackend<OP::TimerState>,
 {
+    channel_strategy: &'c mut ChannelStrategy<OP::OUT>,
     pub state_session: &'s mut state::Session<'b, B>,
     timer_backend: &'t mut T,
-    _marker: std::marker::PhantomData<OP>,
 }
 
-impl<'s, 'b, 't, OP, B, T> OperatorContext<'s, 'b, 't, OP, B, T>
+impl<'c, 's, 'b, 't, OP, B, T> OperatorContext<'c, 's, 'b, 't, OP, B, T>
 where
     OP: Operator<B>,
     B: state::Backend,
     T: TimerBackend<OP::TimerState>,
 {
     #[inline]
-    pub fn new(state_session: &'s mut state::Session<'b, B>, timer_backend: &'t mut T) -> Self {
+    pub fn new(
+        channel_strategy: &'c mut ChannelStrategy<OP::OUT>,
+        state_session: &'s mut state::Session<'b, B>,
+        timer_backend: &'t mut T,
+    ) -> Self {
         OperatorContext {
+            channel_strategy,
             state_session,
             timer_backend,
-            _marker: std::marker::PhantomData,
         }
+    }
+
+    /// Add an event to the channel strategy
+    #[inline]
+    pub fn output<CD>(&mut self, event: ArconEvent<OP::OUT>, source: &CD)
+    where
+        CD: ComponentDefinition + Sized + 'static,
+    {
+        self.channel_strategy.add(event, source)
     }
 
     // These are just simpler versions of the TimerBackend API.
     // This way we don't have to manage the passing of the state_backend everywhere.
 
+    #[inline]
     pub fn current_time(&mut self) -> u64 {
         self.timer_backend.current_time(self.state_session)
     }
 
+    #[inline]
     pub fn schedule_after(
         &mut self,
         delay: u64,
@@ -142,6 +169,7 @@ where
             .schedule_after(delay, entry, self.state_session)
     }
 
+    #[inline]
     pub fn schedule_at(&mut self, time: u64, entry: OP::TimerState) -> Result<(), OP::TimerState> {
         self.timer_backend
             .schedule_at(time, entry, self.state_session)

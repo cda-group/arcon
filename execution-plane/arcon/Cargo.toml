@@ -43,7 +43,6 @@ twox-hash = "1.5.0"
 crossbeam-utils = "0.7"
 num_cpus = "1.0"
 hocon = {version = "0.3", default-features = false, features = ["serde-support"]}
-smallvec = "1.4.0"
 
 # Serialisation
 abomonation = "0.7.3"
@@ -103,10 +102,6 @@ harness = false
 
 [[bench]]
 name = "serde"
-harness = false
-
-[[bench]]
-name = "flight_serde"
 harness = false
 
 [[bench]]

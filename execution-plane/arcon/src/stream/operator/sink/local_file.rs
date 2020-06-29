@@ -1,11 +1,7 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::{
-    prelude::*,
-    stream::operator::{EventVec, OperatorContext},
-    timer::TimerBackend,
-};
+use crate::{prelude::*, stream::operator::OperatorContext, timer::TimerBackend};
 use arcon_state::{RegistrationToken, Session};
 use std::{
     cell::RefCell,
@@ -57,15 +53,17 @@ where
 
     fn init(&mut self, _session: &mut Session<B>) {}
 
-    fn handle_element(
+    fn handle_element<CD>(
         &self,
         element: ArconElement<IN>,
+        _source: &CD,
         _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) -> EventVec<Self::OUT> {
+    ) where
+        CD: ComponentDefinition + Sized + 'static,
+    {
         if let Err(err) = writeln!(self.file.borrow_mut(), "{:?}", element.data) {
             eprintln!("Error while writing to file sink {}", err.to_string());
         }
-        smallvec![]
     }
     crate::ignore_watermark!(B);
     crate::ignore_epoch!(B);

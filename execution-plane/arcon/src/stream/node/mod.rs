@@ -123,7 +123,11 @@ where
 // Just a shorthand to avoid repeating the OperatorContext construction everywhere
 macro_rules! make_context {
     ($sel:ident, $sess:ident) => {
-        OperatorContext::new($sess, &mut *$sel.timer_backend.borrow_mut())
+        OperatorContext::new(
+            &mut *$sel.channel_strategy.borrow_mut(),
+            $sess,
+            &mut *$sel.timer_backend.borrow_mut(),
+        )
     };
 }
 
@@ -319,13 +323,8 @@ where
 
                     drop(state);
 
-                    let mut strategy = self.channel_strategy.borrow_mut();
-                    for e in self
-                        .operator
-                        .handle_element(e, make_context!(self, sb_session))
-                    {
-                        strategy.add(e, self);
-                    }
+                    self.operator
+                        .handle_element(e, self, make_context!(self, sb_session));
                 }
                 ArconEvent::Watermark(w) => {
                     if w <= state
@@ -375,14 +374,11 @@ where
                         drop(state);
 
                         // Handle the watermark
-                        if let Some(wm_events) = self
-                            .operator
-                            .handle_watermark(new_watermark, make_context!(self, sb_session))
-                        {
-                            for e in wm_events {
-                                self.channel_strategy.borrow_mut().add(e, self);
-                            }
-                        }
+                        self.operator.handle_watermark(
+                            new_watermark,
+                            self,
+                            make_context!(self, sb_session),
+                        );
 
                         let timeouts = self
                             .timer_backend
@@ -390,14 +386,11 @@ where
                             .advance_to(new_watermark.timestamp, sb_session);
 
                         for timeout in timeouts {
-                            if let Some(timeout_events) = self
-                                .operator
-                                .handle_timeout(timeout, make_context!(self, sb_session))
-                            {
-                                for e in timeout_events {
-                                    self.channel_strategy.borrow_mut().add(e, self);
-                                }
-                            }
+                            self.operator.handle_timeout(
+                                timeout,
+                                self,
+                                make_context!(self, sb_session),
+                            );
                         }
 
                         let mut metrics = self.metrics.borrow_mut();
@@ -433,14 +426,9 @@ where
                         drop(state);
 
                         // handle epoch
-                        if let Some(epoch_events) = self
-                            .operator
-                            .handle_epoch(e, make_context!(self, sb_session))
-                        {
-                            for e in epoch_events {
-                                self.channel_strategy.borrow_mut().add(e, self);
-                            }
-                        }
+                        self.operator
+                            .handle_epoch(e, self, make_context!(self, sb_session));
+
                         self.timer_backend.borrow_mut().handle_epoch(e, sb_session);
 
                         // store the state

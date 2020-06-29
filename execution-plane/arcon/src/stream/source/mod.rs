@@ -134,13 +134,15 @@ where
         CD: ComponentDefinition + Sized + 'static,
     {
         let mut session = self.state_backend.session();
-        let events = self.operator.handle_element(
+        self.operator.handle_element(
             data,
-            OperatorContext::new(&mut session, &mut self.timer_backend),
+            source,
+            OperatorContext::new(
+                &mut self.channel_strategy,
+                &mut session,
+                &mut self.timer_backend,
+            ),
         );
-        for event in events {
-            self.channel_strategy.add(event, source);
-        }
     }
 
     /// Build ArconElement

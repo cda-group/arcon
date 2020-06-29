@@ -96,7 +96,6 @@ dependencies = [
  "sled",
  "slog",
  "smallbox",
- "smallvec",
  "static_assertions",
  "tempfile",
  "tokio",

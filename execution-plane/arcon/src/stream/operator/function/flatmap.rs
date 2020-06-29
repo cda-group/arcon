@@ -4,10 +4,11 @@
 use crate::{
     data::{ArconElement, ArconEvent, ArconNever, ArconType, Epoch, Watermark},
     prelude::state,
-    stream::operator::{EventVec, Operator, OperatorContext},
+    stream::operator::{Operator, OperatorContext},
     timer::TimerBackend,
     util::SafelySendableFn,
 };
+use kompact::prelude::ComponentDefinition;
 use std::marker::PhantomData;
 
 /// IN: input event
@@ -86,20 +87,23 @@ where
 
     fn init(&mut self, _session: &mut state::Session<B>) {}
 
-    fn handle_element(
+    fn handle_element<CD>(
         &self,
         element: ArconElement<IN>,
-        ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) -> EventVec<Self::OUT> {
+        source: &CD,
+        mut ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
+    ) where
+        CD: ComponentDefinition + Sized + 'static,
+    {
         let result = (self.udf)(element.data, &self.state, ctx.state_session);
-        let mut events = EventVec::new();
         for item in result {
-            events.push(ArconEvent::Element(ArconElement {
+            let event = ArconEvent::Element(ArconElement {
                 data: item,
                 timestamp: element.timestamp,
-            }));
+            });
+
+            ctx.output(event, source);
         }
-        events
     }
     crate::ignore_watermark!(B);
     crate::ignore_epoch!(B);

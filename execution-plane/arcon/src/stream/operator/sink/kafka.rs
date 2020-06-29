@@ -3,7 +3,7 @@
 
 use crate::{
     prelude::*,
-    stream::operator::{EventVec, OperatorContext},
+    stream::operator::OperatorContext,
     timer::TimerBackend,
 };
 use arcon_state::{RegistrationToken, Session};
@@ -96,24 +96,27 @@ where
         ()
     }
 
-    fn handle_element(
+    fn handle_element<CD>(
         &self,
         element: ArconElement<IN>,
+        _source: &CD,
         _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) -> EventVec<Self::OUT> {
+    ) where
+        CD: ComponentDefinition + Sized + 'static,
+    {
         self.buffer.borrow_mut().push(element);
-        smallvec![]
     }
     crate::ignore_watermark!(B);
     crate::ignore_timeout!(B);
 
-    fn handle_epoch(
+    fn handle_epoch<CD>(
         &self,
         _epoch: Epoch,
+        _source: &CD,
         _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) -> Option<EventVec<Self::OUT>> {
+    ) where
+        CD: ComponentDefinition + Sized + 'static, {
         self.commit_buffer();
-        None
     }
 }
 
