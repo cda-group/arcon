@@ -294,7 +294,6 @@ mod tests {
     use crate::{
         state::InMemory,
         stream::channel::{strategy::forward::*, Channel},
-        tests::Item,
         timer,
     };
     use kompact::prelude::Component;
@@ -306,7 +305,7 @@ mod tests {
         slide: u64,
         late: u64,
     ) -> (
-        ActorRefStrong<ArconMessage<Item>>,
+        ActorRefStrong<ArconMessage<u64>>,
         Arc<Component<DebugNode<u64>>>,
     ) {
         let mut pipeline = ArconPipeline::new();
@@ -324,7 +323,7 @@ mod tests {
             pool_info,
         ));
 
-        fn appender_fn(u: &[Item]) -> u64 {
+        fn appender_fn(u: &[u64]) -> u64 {
             u.len() as u64
         }
 
@@ -347,7 +346,7 @@ mod tests {
 
         system.start(&window_node);
 
-        let win_ref: ActorRefStrong<ArconMessage<Item>> = window_node
+        let win_ref: ActorRefStrong<ArconMessage<u64>> = window_node
             .actor_ref()
             .hold()
             .expect("failed to get strong ref");
@@ -364,14 +363,14 @@ mod tests {
     fn wait(time: u64) {
         thread::sleep(time::Duration::from_secs(time));
     }
-    fn watermark(time: u64) -> ArconMessage<Item> {
+    fn watermark(time: u64) -> ArconMessage<u64> {
         ArconMessage::watermark(time, 0.into())
     }
-    fn timestamped_event(ts: u64) -> ArconMessage<Item> {
-        ArconMessage::element(Item { id: 1, price: 1 }, Some(ts), 0.into())
+    fn timestamped_event(ts: u64) -> ArconMessage<u64> {
+        ArconMessage::element(1u64, Some(ts), 0.into())
     }
-    fn timestamped_keyed_event(ts: u64, id: u64) -> ArconMessage<Item> {
-        ArconMessage::element(Item { id, price: 1 }, Some(ts), 0.into())
+    fn timestamped_keyed_event(ts: u64, id: u64) -> ArconMessage<u64> {
+        ArconMessage::element(id, Some(ts), 0.into())
     }
 
     // Tests:

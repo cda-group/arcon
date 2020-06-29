@@ -7,6 +7,7 @@ pub mod function;
 pub mod sink;
 /// Available window operators
 pub mod window;
+
 use crate::{
     data::{ArconElement, ArconEvent, ArconType, Epoch, Watermark},
     prelude::state,
@@ -67,6 +68,7 @@ pub trait Operator<B: state::Backend>: Send + Sized {
         CD: ComponentDefinition + Sized + 'static;
 }
 
+/// Helper macro to implement an empty ´handle_watermark` function
 #[macro_export]
 macro_rules! ignore_watermark {
     ($backend:ty) => {
@@ -74,7 +76,7 @@ macro_rules! ignore_watermark {
             &self,
             _watermark: Watermark,
             _source: &CD,
-            _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
+            _ctx: OperatorContext<Self, $backend, impl TimerBackend<Self::TimerState>>,
         ) where
             CD: ComponentDefinition + Sized + 'static,
         {
@@ -82,6 +84,7 @@ macro_rules! ignore_watermark {
     };
 }
 
+/// Helper macro to implement an empty ´handle_epoch` function
 #[macro_export]
 macro_rules! ignore_epoch {
     ($backend:ty) => {
@@ -89,7 +92,7 @@ macro_rules! ignore_epoch {
             &self,
             _epoch: Epoch,
             _source: &CD,
-            _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
+            _ctx: OperatorContext<Self, $backend, impl TimerBackend<Self::TimerState>>,
         ) where
             CD: ComponentDefinition + Sized + 'static,
         {
@@ -97,6 +100,7 @@ macro_rules! ignore_epoch {
     };
 }
 
+/// Helper macro to implement an empty ´handle_timeout` function
 #[macro_export]
 macro_rules! ignore_timeout {
     ($backend:ty) => {
@@ -104,7 +108,7 @@ macro_rules! ignore_timeout {
             &self,
             _timeout: Self::TimerState,
             _source: &CD,
-            _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
+            _ctx: OperatorContext<Self, $backend, impl TimerBackend<Self::TimerState>>,
         ) where
             CD: ComponentDefinition + Sized + 'static,
         {

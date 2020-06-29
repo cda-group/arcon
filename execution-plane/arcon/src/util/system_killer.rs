@@ -34,7 +34,8 @@ impl Actor for SystemKiller {
 ignore_control!(SystemKiller);
 
 impl SystemKiller {
-    pub(crate) fn new() -> SystemKiller {
+    #[allow(dead_code)]
+    pub fn new() -> SystemKiller {
         SystemKiller {
             ctx: ComponentContext::new(),
         }
