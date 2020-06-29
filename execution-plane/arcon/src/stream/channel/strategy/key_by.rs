@@ -7,21 +7,27 @@ use crate::{
     prelude::*,
     stream::channel::strategy::send,
 };
-use std::collections::HashMap;
+use fxhash::FxHashMap;
 
-/// A hash based partitioner
+/// A Channel Strategy for Keyed Data Streams
+///
+/// Data is split onto a contiguous key space containing N key ranges.
 pub struct KeyBy<A>
 where
     A: ArconType,
 {
     /// A buffer pool of EventBuffer's
     buffer_pool: BufferPool<ArconEventWrapper<A>>,
-    /// Used to hash % modulo
-    parallelism: u32,
+    /// The highest possible key value
+    ///
+    /// This should not be set too low or ridiculously high
+    max_key: u64,
+    /// Number of ranges on the contiguous key space
+    key_ranges: u64,
     /// An identifier that is embedded with outgoing messages
     sender_id: NodeID,
-    /// A map with hashed indexes and their respective Channel/Buffer
-    buffer_map: HashMap<usize, (Channel<A>, BufferWriter<ArconEventWrapper<A>>)>,
+    /// A map with a key range id and its respective Channel/Buffer
+    buffer_map: FxHashMap<usize, (Channel<A>, BufferWriter<ArconEventWrapper<A>>)>,
     /// Struct holding information regarding the BufferPool
     _pool_info: PoolInfo,
 }
@@ -30,9 +36,14 @@ impl<A> KeyBy<A>
 where
     A: ArconType,
 {
-    /// Creates a KeyBy strategy with Rust's default hasher
-    pub fn new(channels: Vec<Channel<A>>, sender_id: NodeID, pool_info: PoolInfo) -> KeyBy<A> {
-        let channels_len: u32 = channels.len() as u32;
+    /// Creates a KeyBy strategy
+    pub fn new(
+        max_key: u64,
+        channels: Vec<Channel<A>>,
+        sender_id: NodeID,
+        pool_info: PoolInfo,
+    ) -> KeyBy<A> {
+        let channels_len: u64 = channels.len() as u64;
         assert!(
             channels.len() < pool_info.capacity,
             "Strategy must be initialised with a pool capacity larger than amount of channels"
@@ -44,7 +55,7 @@ where
         )
         .expect("failed to initialise BufferPool");
 
-        let mut buffer_map = HashMap::new();
+        let mut buffer_map = FxHashMap::default();
         for (i, channel) in channels.into_iter().enumerate() {
             let writer = buffer_pool
                 .try_get()
@@ -54,7 +65,8 @@ where
 
         KeyBy {
             buffer_pool,
-            parallelism: channels_len,
+            key_ranges: channels_len,
+            max_key,
             sender_id,
             buffer_map,
             _pool_info: pool_info,
@@ -65,20 +77,17 @@ where
     pub fn add(&mut self, event: ArconEvent<A>) {
         match &event {
             ArconEvent::Element(element) => {
-                let hash = element.data.get_key() as u32;
-                let index = (hash % self.parallelism) as usize;
+                // Get key placement
+                let key = element.data.get_key() % self.max_key;
+                // Calculate which key range index is responsible for this key
+                let index = (key * self.key_ranges / self.max_key) as usize;
+
                 if let Some((chan, buffer)) = self.buffer_map.get_mut(&index) {
                     if let Some(e) = buffer.push(event.into()) {
-                        // buffer is full, flush.
-                        // NOTE: we are just flushing a single buffer
-                        let msg = ArconMessage {
-                            events: buffer.reader(),
-                            sender: self.sender_id,
-                        };
-                        send(chan, msg);
-                        // set new writer
-                        *buffer = self.buffer_pool.get();
-                        let _ = buffer.push(e.into());
+                        // buffer is full
+                        Self::flush_buffer(self.sender_id, &mut self.buffer_pool, chan, buffer);
+                        // This push should now not fail
+                        let _ = buffer.push(e);
                     }
                 } else {
                     panic!("Bad KeyBy setup");
@@ -86,8 +95,13 @@ where
             }
             _ => {
                 // Push watermark/epoch into all outgoing buffers
-                for (_, (_, buffer)) in self.buffer_map.iter_mut() {
-                    buffer.push(event.clone().into());
+                for (_, (chan, buffer)) in self.buffer_map.iter_mut() {
+                    if let Some(e) = buffer.push(event.clone().into()) {
+                        // buffer is full...
+                        Self::flush_buffer(self.sender_id, &mut self.buffer_pool, chan, buffer);
+                        // This push should now not fail
+                        let _ = buffer.push(e);
+                    }
                 }
                 self.flush();
             }
@@ -97,14 +111,25 @@ where
     #[inline]
     pub fn flush(&mut self) {
         for (_, (ref channel, buffer)) in self.buffer_map.iter_mut() {
-            let msg = ArconMessage {
-                events: buffer.reader(),
-                sender: self.sender_id,
-            };
-            send(channel, msg);
-            // get a new writer
-            *buffer = self.buffer_pool.get();
+            Self::flush_buffer(self.sender_id, &mut self.buffer_pool, channel, buffer);
         }
+    }
+
+    // Helper function to reduce duplication of code...
+    #[inline(always)]
+    fn flush_buffer(
+        sender_id: NodeID,
+        buffer_pool: &mut BufferPool<ArconEventWrapper<A>>,
+        channel: &Channel<A>,
+        writer: &mut BufferWriter<ArconEventWrapper<A>>,
+    ) {
+        let msg = ArconMessage {
+            events: writer.reader(),
+            sender: sender_id,
+        };
+        send(channel, msg);
+        // set a new writer
+        *writer = buffer_pool.get();
     }
 
     #[inline]
@@ -142,15 +167,16 @@ mod tests {
             comps.push(comp);
         }
 
+        let max_key = 256;
         let mut channel_strategy =
-            ChannelStrategy::KeyBy(KeyBy::new(channels, NodeID::new(1), pool_info));
+            ChannelStrategy::KeyBy(KeyBy::new(max_key, channels, NodeID::new(1), pool_info));
 
         let mut rng = rand::thread_rng();
 
         let mut inputs: Vec<ArconEvent<Input>> = Vec::new();
         for _i in 0..total_msgs {
             let input = Input {
-                id: rng.gen_range(0, 100),
+                id: rng.gen_range(0, 100000),
             };
             let elem = ArconElement::new(input);
             inputs.push(ArconEvent::Element(elem));
