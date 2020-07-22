@@ -154,12 +154,12 @@ mod tests {
         map_ref.tell(msg);
 
         std::thread::sleep(std::time::Duration::from_secs(1));
-        {
-            let comp_inspect = &comp.definition().lock().unwrap();
-            assert_eq!(comp_inspect.data.len(), 2);
-            assert_eq!(comp_inspect.data[0].data, 16);
-            assert_eq!(comp_inspect.data[1].data, 17);
-        }
+        comp.on_definition(|cd| {
+            assert_eq!(cd.data.len(), 2);
+            assert_eq!(cd.data[0].data, 16);
+            assert_eq!(cd.data[1].data, 17);
+        });
+
         pipeline.shutdown();
     }
 }

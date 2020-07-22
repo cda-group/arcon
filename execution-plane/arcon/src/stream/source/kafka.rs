@@ -64,7 +64,7 @@ where
                     );
                 }
                 KafkaSource {
-                    ctx: ComponentContext::new(),
+                    ctx: ComponentContext::uninitialised(),
                     channel_strategy: RefCell::new(channel_strategy),
                     bootstrap_server,
                     topic,
@@ -199,7 +199,8 @@ where
         }
         // Schedule next batch
         self.schedule_once(Duration::from_millis(1000), move |self_c, _| {
-            self_c.receive()
+            self_c.receive();
+            Handled::Ok
         });
 
         // Output watermark and manage Epochs.
@@ -213,19 +214,13 @@ where
     }
 }
 
-impl<OUT> Provide<ControlPort> for KafkaSource<OUT>
+impl<OUT> ComponentLifecycle for KafkaSource<OUT>
 where
     OUT: ArconType + ::serde::Serialize + ::serde::de::DeserializeOwned,
 {
-    fn handle(&mut self, event: ControlEvent) -> () {
-        match event {
-            ControlEvent::Start => {
-                self.receive();
-            }
-            _ => {
-                error!(self.ctx.log(), "bad ControlEvent");
-            }
-        }
+    fn on_start(&mut self) -> Handled {
+        self.receive();
+        Handled::Ok
     }
 }
 
@@ -234,8 +229,12 @@ where
     OUT: ArconType + ::serde::Serialize + ::serde::de::DeserializeOwned,
 {
     type Message = Box<dyn Any + Send>;
-    fn receive_local(&mut self, _msg: Self::Message) {}
-    fn receive_network(&mut self, _msg: NetMessage) {}
+    fn receive_local(&mut self, _msg: Self::Message) -> Handled {
+        unreachable!();
+    }
+    fn receive_network(&mut self, _msg: NetMessage) -> Handled {
+        unreachable!();
+    }
 }
 
 // (Max) Disabling this until further notice

@@ -37,7 +37,7 @@ where
 {
     pub fn new(file_path: String, source_ctx: SourceContext<OP, B, T>) -> Self {
         LocalFileSource {
-            ctx: ComponentContext::new(),
+            ctx: ComponentContext::uninitialised(),
             source_ctx: RefCell::new(source_ctx),
             file_path,
         }
@@ -81,17 +81,16 @@ where
     }
 }
 
-impl<OP, B, T> Provide<ControlPort> for LocalFileSource<OP, B, T>
+impl<OP, B, T> ComponentLifecycle for LocalFileSource<OP, B, T>
 where
     OP: Operator<B> + 'static,
     OP::IN: FromStr,
     B: state::Backend,
     T: TimerBackend<OP::TimerState>,
 {
-    fn handle(&mut self, event: ControlEvent) {
-        if let ControlEvent::Start = event {
-            self.process_file();
-        }
+    fn on_start(&mut self) -> Handled {
+        self.process_file();
+        Handled::Ok
     }
 }
 
@@ -105,7 +104,7 @@ where
     type Message = Never;
     type Deserialiser = Never;
 
-    fn receive(&mut self, _sender: Option<ActorPath>, _msg: Self::Message) {
+    fn receive(&mut self, _sender: Option<ActorPath>, _msg: Self::Message) -> Handled {
         unreachable!(ArconNever::IS_UNREACHABLE);
     }
 }
@@ -180,12 +179,13 @@ mod tests {
         system.start(&source);
         wait(1);
 
-        let sink_inspect = sink.definition().lock().unwrap();
-        assert_eq!(&sink_inspect.data.len(), &(50 as usize));
-        for item in &sink_inspect.data {
-            // all elements should have been mapped + 5
-            assert_eq!(item.data, 128);
-        }
+        sink.on_definition(|cd| {
+            assert_eq!(&cd.data.len(), &(50 as usize));
+            for item in &cd.data {
+                // all elements should have been mapped + 5
+                assert_eq!(item.data, 128);
+            }
+        });
     }
 
     #[test]
@@ -230,11 +230,12 @@ mod tests {
         system.start(&source);
         wait(1);
 
-        let sink_inspect = sink.definition().lock().unwrap();
-        assert_eq!(&sink_inspect.data.len(), &(source_elements as usize));
-        for i in 0..source_elements {
-            let expected: ArconF64 = ArconF64::new(i as f64 + 0.5);
-            assert_eq!(sink_inspect.data[i].data, expected);
-        }
+        sink.on_definition(|cd| {
+            assert_eq!(&cd.data.len(), &(source_elements as usize));
+            for i in 0..source_elements {
+                let expected: ArconF64 = ArconF64::new(i as f64 + 0.5);
+                assert_eq!(cd.data[i].data, expected);
+            }
+        });
     }
 }

@@ -169,8 +169,9 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_secs(1));
 
         for comp in comps {
-            let comp_inspect = &comp.definition().lock().unwrap();
-            assert_eq!(comp_inspect.data.len() as u64, total_msgs / components);
+            comp.on_definition(|cd| {
+                assert_eq!(cd.data.len() as u64, total_msgs / components);
+            });
         }
 
         pipeline.shutdown();

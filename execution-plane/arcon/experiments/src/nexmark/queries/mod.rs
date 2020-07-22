@@ -110,7 +110,7 @@ where
     // we are not running in debug mode.
     let fn_return = {
         if let Some(sink_port) = sink_port_opt {
-            let (promise, future) = kpromise();
+            let (promise, future) = promise();
             system.trigger_r(Run::new(promise), &sink_port);
             Some(future)
         } else {

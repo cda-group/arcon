@@ -20,7 +20,7 @@ pub struct DataPoint {
 }
 
 /// Collection of datapoints. When full it'll start overwriting the oldest entries
-#[derive(CustomDebug)]
+#[derive(CustomDebug, Clone)]
 pub struct Metrics {
     num_pushed: usize,
     #[debug(skip)]

@@ -227,8 +227,9 @@ mod tests {
 
         // Each of the 8 components should at least get some hits
         for comp in comps {
-            let comp_inspect = &comp.definition().lock().unwrap();
-            assert!(comp_inspect.data.len() > 0);
+            comp.on_definition(|cd| {
+                assert!(cd.data.len() > 0);
+            });
         }
         pipeline.shutdown();
     }

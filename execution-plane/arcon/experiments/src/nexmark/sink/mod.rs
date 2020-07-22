@@ -49,8 +49,8 @@ where
 {
     pub fn new() -> Self {
         NEXMarkSink {
-            ctx: ComponentContext::new(),
-            sink_port: ProvidedPort::new(),
+            ctx: ComponentContext::uninitialised(),
+            sink_port: ProvidedPort::uninitialised(),
             done: None,
             start: std::time::Instant::now(),
             last_total_recv: 0,
@@ -69,12 +69,12 @@ where
     }
 }
 
-impl<IN> Provide<ControlPort> for NEXMarkSink<IN>
+impl<IN> ComponentLifecycle for NEXMarkSink<IN>
 where
     IN: ArconType,
 {
-    fn handle(&mut self, event: ControlEvent) {
-        if let ControlEvent::Start = event {}
+    fn on_start(&mut self) -> Handled {
+        Handled::Ok
     }
 }
 
@@ -82,10 +82,11 @@ impl<IN> Provide<SinkPort> for NEXMarkSink<IN>
 where
     IN: ArconType,
 {
-    fn handle(&mut self, event: Run) -> () {
+    fn handle(&mut self, event: Run) -> Handled {
         self.done = Some(event.promise);
         self.start = std::time::Instant::now();
         self.last_time = self.get_current_time();
+        Handled::Ok
     }
 }
 
@@ -94,7 +95,7 @@ where
     IN: ArconType,
 {
     type Message = ArconMessage<IN>;
-    fn receive_local(&mut self, msg: Self::Message) {
+    fn receive_local(&mut self, msg: Self::Message) -> Handled {
         let total_events = msg.events.len();
         self.total_recv += total_events as u64;
         for msg in msg.events {
@@ -114,6 +115,9 @@ where
                 _ => {}
             }
         }
+        Handled::Ok
     }
-    fn receive_network(&mut self, _msg: NetMessage) {}
+    fn receive_network(&mut self, _msg: NetMessage) -> Handled {
+        Handled::Ok
+    }
 }

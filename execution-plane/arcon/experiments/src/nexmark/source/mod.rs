@@ -50,9 +50,9 @@ where
         nexmark_config.base_time_ns = elapsed_ns as u32;
         let duration_ns: u64 = nexmark_config.stream_timeout * 1_000_000_000;
         NEXMarkSource {
-            ctx: ComponentContext::new(),
-            loopback_send: RequiredPort::new(),
-            loopback_receive: ProvidedPort::new(),
+            ctx: ComponentContext::uninitialised(),
+            loopback_send: RequiredPort::uninitialised(),
+            loopback_receive: ProvidedPort::uninitialised(),
             source_ctx: RefCell::new(source_ctx),
             nexmark_config,
             timer,
@@ -97,8 +97,7 @@ where
             source_ctx.watermark_update(u64::max_value());
             source_ctx.generate_watermark(self);
             // send death msg
-            source_ctx
-                .generate_death(String::from("nexmark_finished"), self);
+            source_ctx.generate_death(String::from("nexmark_finished"), self);
             info!(
                 self.ctx().log(),
                 "Finished generating {} events", self.nexmark_config.num_events
@@ -107,18 +106,17 @@ where
     }
 }
 
-impl<OP, B, T> Provide<ControlPort> for NEXMarkSource<OP, B, T>
+impl<OP, B, T> ComponentLifecycle for NEXMarkSource<OP, B, T>
 where
     OP: Operator<B, IN = NEXMarkEvent, TimerState = ArconNever> + 'static,
     B: state::Backend,
     T: TimerBackend<ArconNever>,
 {
-    fn handle(&mut self, event: ControlEvent) {
-        if let ControlEvent::Start = event {
-            let shared = self.loopback_receive.share();
-            self.loopback_send.connect(shared);
-            self.loopback_send.trigger(ContinueSending);
-        }
+    fn on_start(&mut self) -> Handled {
+        let shared = self.loopback_receive.share();
+        self.loopback_send.connect(shared);
+        self.loopback_send.trigger(ContinueSending);
+        Handled::Ok
     }
 }
 
@@ -128,8 +126,9 @@ where
     B: state::Backend,
     T: TimerBackend<ArconNever>,
 {
-    fn handle(&mut self, _event: ContinueSending) {
+    fn handle(&mut self, _event: ContinueSending) -> Handled {
         self.process();
+        Handled::Ok
     }
 }
 
@@ -139,7 +138,7 @@ where
     B: state::Backend,
     T: TimerBackend<ArconNever>,
 {
-    fn handle(&mut self, _event: Never) {
+    fn handle(&mut self, _event: Never) -> Handled {
         unreachable!("Never type has no instance");
     }
 }
@@ -151,6 +150,11 @@ where
     T: TimerBackend<ArconNever>,
 {
     type Message = ();
-    fn receive_local(&mut self, _msg: Self::Message) {}
-    fn receive_network(&mut self, _msg: NetMessage) {}
+    fn receive_local(&mut self, _msg: Self::Message) -> Handled {
+        unreachable!();
+    }
+
+    fn receive_network(&mut self, _msg: NetMessage) -> Handled {
+        unreachable!();
+    }
 }

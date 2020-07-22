@@ -332,12 +332,10 @@ mod test {
 
         std::thread::sleep(timeout);
 
-        let data;
-        {
-            let comp_inspect = &comp.definition().lock().unwrap();
-            assert_eq!(comp_inspect.data.len() as u64, 4);
-            data = comp_inspect.data.clone();
-        }
+        let data = comp.on_definition(|cd| {
+            assert_eq!(cd.data.len() as u64, 4);
+            cd.data.clone()
+        });
 
         let _ = local.shutdown();
         let _ = remote.shutdown();

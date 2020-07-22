@@ -232,7 +232,7 @@ fn exec<SB: state::Backend>(
         .expect("source never started!");
 
     // Set up start time at Sink
-    let (promise, future) = kpromise();
+    let (promise, future) = promise();
     system.trigger_r(Run::new(promise), &sink_port);
 
     // wait for sink to return completion msg.
@@ -286,11 +286,10 @@ fn print_state_backend_metrics(
     source: Arc<Component<impl HasMetrics>>,
     map_node: Arc<Component<impl HasMetrics>>,
 ) {
-    let mut source_def = source.definition().lock().unwrap();
-    let mut map_def = map_node.definition().lock().unwrap();
-    let name = source_def.backend_name();
+    let (name, source_metrics) = source.on_definition(|cd| (cd.backend_name().clone(), cd.get_metrics().cloned()));
+    let map_metrics  = map_node.on_definition(|cd| cd.get_metrics().cloned());
 
-    let (source_metrics, map_metrics) = match (source_def.get_metrics(), map_def.get_metrics()) {
+    let (source_metrics, map_metrics) = match (source_metrics, map_metrics) {
         (Some(s), Some(m)) => (s, m),
         _ => return,
     };

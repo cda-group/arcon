@@ -27,7 +27,7 @@ where
 {
     pub fn new() -> DebugNode<IN> {
         DebugNode {
-            ctx: ComponentContext::new(),
+            ctx: ComponentContext::uninitialised(),
             data: Vec::new(),
             watermarks: Vec::new(),
             epochs: Vec::new(),
@@ -65,22 +65,13 @@ where
     }
 }
 
-impl<IN> Provide<ControlPort> for DebugNode<IN>
+impl<IN> ComponentLifecycle for DebugNode<IN>
 where
     IN: ArconType,
 {
-    fn handle(&mut self, event: ControlEvent) {
-        match event {
-            ControlEvent::Start => {
-                debug!(self.ctx.log(), "Started Arcon DebugNode");
-            }
-            ControlEvent::Stop => {
-                // TODO
-            }
-            ControlEvent::Kill => {
-                // TODO
-            }
-        }
+    fn on_start(&mut self) -> Handled {
+        debug!(self.ctx.log(), "Started Arcon DebugNode");
+        Handled::Ok
     }
 }
 
@@ -90,10 +81,11 @@ where
 {
     type Message = ArconMessage<IN>;
 
-    fn receive_local(&mut self, msg: Self::Message) {
+    fn receive_local(&mut self, msg: Self::Message) -> Handled {
         self.handle_events(msg.events);
+        Handled::Ok
     }
-    fn receive_network(&mut self, msg: NetMessage) {
+    fn receive_network(&mut self, msg: NetMessage) -> Handled {
         let unsafe_id = IN::UNSAFE_SER_ID;
         let reliable_id = IN::RELIABLE_SER_ID;
         let ser_id = *msg.ser_id();
@@ -120,5 +112,6 @@ where
             }
             Err(e) => error!(self.ctx.log(), "Error ArconNetworkMessage: {:?}", e),
         }
+        Handled::Ok
     }
 }

@@ -176,8 +176,9 @@ mod tests {
 
         // Each of the 8 components should have the same amount of msgs..
         for comp in comps {
-            let comp_inspect = &comp.definition().lock().unwrap();
-            assert_eq!(comp_inspect.data.len() as u64, total_msgs);
+            comp.on_definition(|cd| {
+                assert_eq!(cd.data.len() as u64, total_msgs);
+            });
         }
         pipeline.shutdown();
     }

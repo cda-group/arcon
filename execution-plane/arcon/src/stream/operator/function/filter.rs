@@ -161,10 +161,10 @@ mod tests {
         filter_ref.tell(msg);
 
         std::thread::sleep(std::time::Duration::from_secs(1));
-        {
-            let comp_inspect = &comp.definition().lock().unwrap();
-            assert_eq!(comp_inspect.data.len(), 2);
-        }
+        comp.on_definition(|cd| {
+            assert_eq!(cd.data.len(), 2);
+        });
+
         pipeline.shutdown();
     }
 }

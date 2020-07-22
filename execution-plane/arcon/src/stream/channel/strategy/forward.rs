@@ -127,10 +127,9 @@ mod tests {
         });
 
         std::thread::sleep(std::time::Duration::from_secs(1));
-        {
-            let comp_inspect = &comp.definition().lock().unwrap();
-            assert_eq!(comp_inspect.data.len(), total_msgs);
-        }
+        comp.on_definition(|cd| {
+            assert_eq!(cd.data.len() as u64, total_msgs);
+        });
         let _ = pipeline.shutdown();
     }
 }

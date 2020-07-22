@@ -389,16 +389,16 @@ mod tests {
         wait(1);
         assigner_ref.tell(watermark(moment + 12));
         wait(1);
-        let sink_inspect = sink.definition().lock().unwrap();
-
-        let r1 = &sink_inspect.data.len();
-        assert_eq!(r1, &3); // 3 windows received
-        let r2 = &sink_inspect.data[0].data;
-        assert_eq!(r2, &2); // 1st window for key 1 has 2 elements
-        let r3 = &sink_inspect.data[1].data;
-        assert_eq!(r3, &3); // 2nd window receieved, key 2, has 3 elements
-        let r4 = &sink_inspect.data[2].data;
-        assert_eq!(r4, &1); // 3rd window receieved, for key 3, has 1 elements
+        sink.on_definition(|cd| {
+            let r1 = &cd.data.len();
+            assert_eq!(r1, &3); // 3 windows received
+            let r2 = &cd.data[0].data;
+            assert_eq!(r2, &2); // 1st window for key 1 has 2 elements
+            let r3 = &cd.data[1].data;
+            assert_eq!(r3, &3); // 2nd window receieved, key 2, has 3 elements
+            let r4 = &cd.data[2].data;
+            assert_eq!(r4, &1); // 3rd window receieved, for key 3, has 1 elements
+        });
     }
 
     #[test]
@@ -416,11 +416,12 @@ mod tests {
         assigner_ref.tell(timestamped_event(moment));
         wait(1);
         // Inspect and assert
-        let sink_inspect = sink.definition().lock().unwrap();
-        let r1 = &sink_inspect.data[0].data;
-        assert_eq!(r1, &2);
-        let r2 = &sink_inspect.data.len();
-        assert_eq!(r2, &1);
+        sink.on_definition(|cd| {
+            let r1 = &cd.data[0].data;
+            assert_eq!(r1, &2);
+            let r2 = &cd.data.len();
+            assert_eq!(r2, &1);
+        });
     }
     #[test]
     fn window_too_late_late_arrival() {
@@ -436,10 +437,11 @@ mod tests {
         assigner_ref.tell(timestamped_event(moment));
         wait(1);
         // Inspect and assert
-        let sink_inspect = sink.definition().lock().unwrap();
-        let r0 = &sink_inspect.data[0].data;
-        assert_eq!(&sink_inspect.data.len(), &(1 as usize));
-        assert_eq!(r0, &2);
+        sink.on_definition(|cd| {
+            let r0 = &cd.data[0].data;
+            assert_eq!(&cd.data.len(), &(1 as usize));
+            assert_eq!(r0, &2);
+        });
     }
     #[test]
     fn window_very_long_windows_1() {
@@ -457,10 +459,11 @@ mod tests {
         // Should only materialize first window
         assigner_ref.tell(watermark(moment + 19999));
         wait(1);
-        let sink_inspect = sink.definition().lock().unwrap();
-        let r0 = &sink_inspect.data[0].data;
-        assert_eq!(r0, &1);
-        assert_eq!(&sink_inspect.data.len(), &(1 as usize));
+        sink.on_definition(|cd| {
+            let r0 = &cd.data[0].data;
+            assert_eq!(r0, &1);
+            assert_eq!(&cd.data.len(), &(1 as usize));
+        });
     }
     #[test]
     fn window_very_long_windows_2() {
@@ -478,12 +481,13 @@ mod tests {
         // Should only materialize first window
         assigner_ref.tell(watermark(moment + 20000));
         wait(1);
-        let sink_inspect = sink.definition().lock().unwrap();
-        let r0 = &sink_inspect.data[0].data;
-        assert_eq!(r0, &1);
-        assert_eq!(&sink_inspect.data.len(), &(2 as usize));
-        let r1 = &sink_inspect.data[1].data;
-        assert_eq!(r1, &1);
+        sink.on_definition(|cd| {
+            let r0 = &cd.data[0].data;
+            assert_eq!(r0, &1);
+            assert_eq!(&cd.data.len(), &(2 as usize));
+            let r1 = &cd.data[1].data;
+            assert_eq!(r1, &1);
+        });
     }
     #[test]
     fn window_overlapping() {
@@ -497,15 +501,15 @@ mod tests {
         assigner_ref.tell(timestamped_event(moment + 6));
         assigner_ref.tell(watermark(moment + 23));
         wait(1);
-        //wait(1);
         // Inspect and assert
-        let sink_inspect = sink.definition().lock().unwrap();
-        let r2 = &sink_inspect.data.len();
-        assert_eq!(r2, &2);
-        let r0 = &sink_inspect.data[0].data;
-        assert_eq!(r0, &3);
-        let r1 = &sink_inspect.data[1].data;
-        assert_eq!(r1, &2);
+        sink.on_definition(|cd| {
+            let r2 = &cd.data.len();
+            assert_eq!(r2, &2);
+            let r0 = &cd.data[0].data;
+            assert_eq!(r0, &3);
+            let r1 = &cd.data[1].data;
+            assert_eq!(r1, &2);
+        });
     }
     #[test]
     fn window_empty() {
@@ -515,11 +519,12 @@ mod tests {
         assigner_ref.tell(watermark(now() + 1));
         assigner_ref.tell(watermark(now() + 7));
         wait(1);
-        let sink_inspect = sink.definition().lock().unwrap();
-        // The number of windows is hard to assert with dynamic window starts
-        //assert_eq!(&sink_inspect.data.len(), &(1 as usize));
-        // We should've receieved at least one window which is empty
-        let r0 = &sink_inspect.data.len();
-        assert_eq!(r0, &0);
+        sink.on_definition(|cd| {
+            // The number of windows is hard to assert with dynamic window starts
+            //assert_eq!(&sink_inspect.data.len(), &(1 as usize));
+            // We should've receieved at least one window which is empty
+            let r0 = &cd.data.len();
+            assert_eq!(r0, &0);
+        });
     }
 }

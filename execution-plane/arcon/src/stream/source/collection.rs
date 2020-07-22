@@ -39,9 +39,9 @@ where
 {
     pub fn new(collection: Vec<OP::IN>, source_ctx: SourceContext<OP, B, T>) -> Self {
         CollectionSource {
-            ctx: ComponentContext::new(),
-            loopback_send: RequiredPort::new(),
-            loopback_receive: ProvidedPort::new(),
+            ctx: ComponentContext::uninitialised(),
+            loopback_send: RequiredPort::uninitialised(),
+            loopback_receive: ProvidedPort::uninitialised(),
             source_ctx: RefCell::new(source_ctx),
             collection: RefCell::new(collection),
             counter: 0,
@@ -69,18 +69,17 @@ where
     }
 }
 
-impl<OP, B, T> Provide<ControlPort> for CollectionSource<OP, B, T>
+impl<OP, B, T> ComponentLifecycle for CollectionSource<OP, B, T>
 where
     OP: Operator<B> + 'static,
     B: state::Backend,
     T: TimerBackend<OP::TimerState>,
 {
-    fn handle(&mut self, event: ControlEvent) {
-        if let ControlEvent::Start = event {
-            let shared = self.loopback_receive.share();
-            self.loopback_send.connect(shared);
-            self.loopback_send.trigger(ContinueSending);
-        }
+    fn on_start(&mut self) -> Handled {
+        let shared = self.loopback_receive.share();
+        self.loopback_send.connect(shared);
+        self.loopback_send.trigger(ContinueSending);
+        Handled::Ok
     }
 }
 
@@ -90,8 +89,9 @@ where
     B: state::Backend,
     T: TimerBackend<OP::TimerState>,
 {
-    fn handle(&mut self, _event: ContinueSending) {
+    fn handle(&mut self, _event: ContinueSending) -> Handled {
         self.process_collection();
+        Handled::Ok
     }
 }
 
@@ -101,7 +101,7 @@ where
     B: state::Backend,
     T: TimerBackend<OP::TimerState>,
 {
-    fn handle(&mut self, _event: Never) {
+    fn handle(&mut self, _event: Never) -> Handled {
         unreachable!("Never type has no instance");
     }
 }
@@ -163,17 +163,16 @@ mod tests {
         // Wait a bit in order for all results to come in...
         std::thread::sleep(std::time::Duration::from_secs(1));
 
-        {
-            let sink_inspect = sink.definition().lock().unwrap();
-            let data_len = sink_inspect.data.len();
-            let watermark_len = sink_inspect.watermarks.len();
+        sink.on_definition(|cd| {
+            let data_len = cd.data.len();
+            let watermark_len = cd.watermarks.len();
 
             assert_eq!(
                 watermark_len as u64,
                 (collection_elements / watermark_interval) + 1 // One more is generated after the loop
             );
             assert_eq!(data_len, 1000);
-        }
+        });
 
         pipeline.shutdown();
     }
