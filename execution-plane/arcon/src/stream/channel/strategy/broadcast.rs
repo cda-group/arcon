@@ -6,6 +6,7 @@ use crate::{
     data::{ArconEvent, ArconEventWrapper, ArconMessage, ArconType, NodeID},
     stream::channel::{strategy::send, Channel},
 };
+use kompact::prelude::{ComponentDefinition, SerError};
 
 /// A Broadcast strategy for one-to-many message sending
 #[allow(dead_code)]
@@ -60,26 +61,32 @@ where
     }
 
     #[inline]
-    pub fn add(&mut self, event: ArconEvent<A>) {
+    pub fn add<CD>(&mut self, event: ArconEvent<A>, source: &CD)
+    where
+        CD: ComponentDefinition + Sized + 'static,
+    {
         if let ArconEvent::Element(_) = &event {
             if let Some(e) = self.curr_buffer.push(event.into()) {
                 // buffer is full, flush.
-                self.flush();
+                self.flush(source);
                 self.curr_buffer.push(e.into());
             }
         } else {
             if let Some(e) = self.curr_buffer.push(event.into()) {
-                self.flush();
+                self.flush(source);
                 self.curr_buffer.push(e.into());
-                self.flush();
+                self.flush(source);
             } else {
-                self.flush();
+                self.flush(source);
             }
         }
     }
 
     #[inline]
-    pub fn flush(&mut self) {
+    pub fn flush<CD>(&mut self, source: &CD)
+    where
+        CD: ComponentDefinition + Sized + 'static,
+    {
         for (i, channel) in self.channels.iter().enumerate() {
             if i == self.channels.len() - 1 {
                 // This is the last channel, thus we can use curr_buffer
@@ -88,7 +95,10 @@ where
                     events: reader,
                     sender: self.sender_id,
                 };
-                send(channel, msg);
+                if let Err(SerError::BufferError(err)) = send(channel, msg, source) {
+                    // TODO: Figure out how to get more space for `tell_serialised`
+                    panic!(format!("Buffer Error {}", err));
+                };
             } else {
                 // Get a new writer
                 let mut writer = self.buffer_pool.get();
@@ -98,7 +108,10 @@ where
                     events: writer.reader(),
                     sender: self.sender_id,
                 };
-                send(channel, msg);
+                if let Err(SerError::BufferError(err)) = send(channel, msg, source) {
+                    // TODO: Figure out how to get more space for `tell_serialised`
+                    panic!(format!("Buffer Error {}", err));
+                };
             }
         }
         // We are finished, set a new BufferWriter to curr_buffer
@@ -148,19 +161,24 @@ mod tests {
         let mut channel_strategy: ChannelStrategy<Input> =
             ChannelStrategy::Broadcast(Broadcast::new(channels, NodeID::new(1), pool_info));
 
-        for _i in 0..total_msgs {
-            let elem = ArconElement::new(Input { id: 1 });
-            // Just assume it is all sent from same comp
-            channel_strategy.add(ArconEvent::Element(elem));
-        }
-        channel_strategy.flush();
+        // take one comp as channel source
+        // just for testing...
+        let comp = &comps[0];
+        comp.on_definition(|cd| {
+            for _i in 0..total_msgs {
+                let elem = ArconElement::new(Input { id: 1 });
+                let _ = channel_strategy.add(ArconEvent::Element(elem), cd);
+            }
+            channel_strategy.flush(cd);
+        });
 
         std::thread::sleep(std::time::Duration::from_secs(1));
 
         // Each of the 8 components should have the same amount of msgs..
         for comp in comps {
-            let comp_inspect = &comp.definition().lock().unwrap();
-            assert_eq!(comp_inspect.data.len() as u64, total_msgs);
+            comp.on_definition(|cd| {
+                assert_eq!(cd.data.len() as u64, total_msgs);
+            });
         }
         pipeline.shutdown();
     }

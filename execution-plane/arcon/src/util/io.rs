@@ -59,7 +59,7 @@ impl IO {
             .unwrap();
 
         IO {
-            ctx: ComponentContext::new(),
+            ctx: ComponentContext::uninitialised(),
             _handle: th,
         }
     }
@@ -121,20 +121,22 @@ impl IO {
             .unwrap();
 
         IO {
-            ctx: ComponentContext::new(),
+            ctx: ComponentContext::uninitialised(),
             _handle: th,
         }
     }
 }
 
-impl Provide<ControlPort> for IO {
-    fn handle(&mut self, _event: ControlEvent) {}
-}
+ignore_lifecycle!(IO);
 
 impl Actor for IO {
     type Message = ();
-    fn receive_local(&mut self, _msg: Self::Message) {}
-    fn receive_network(&mut self, _msg: NetMessage) {}
+    fn receive_local(&mut self, _msg: Self::Message) -> Handled {
+        unreachable!();
+    }
+    fn receive_network(&mut self, _msg: NetMessage) -> Handled {
+        unreachable!();
+    }
 }
 
 #[cfg(test)]
@@ -158,7 +160,7 @@ pub mod tests {
     impl IOSource {
         pub fn new(sock_addr: SocketAddr, kind: IOKind) -> IOSource {
             IOSource {
-                ctx: ComponentContext::new(),
+                ctx: ComponentContext::uninitialised(),
                 kind,
                 sock_addr,
                 received: 0,
@@ -169,7 +171,7 @@ pub mod tests {
     impl Actor for IOSource {
         type Message = IOMessage;
 
-        fn receive_local(&mut self, msg: Self::Message) {
+        fn receive_local(&mut self, msg: Self::Message) -> Handled {
             match msg {
                 IOMessage::Bytes(bytes) => {
                     debug!(self.ctx.log(), "{:?}", bytes);
@@ -182,26 +184,28 @@ pub mod tests {
                     error!(self.ctx.log(), " Sock IO Error");
                 }
             }
+            Handled::Ok
         }
 
-        fn receive_network(&mut self, _msg: NetMessage) {}
+        fn receive_network(&mut self, _msg: NetMessage) -> Handled {
+            Handled::Ok
+        }
     }
 
-    impl Provide<ControlPort> for IOSource {
-        fn handle(&mut self, event: ControlEvent) {
-            if let ControlEvent::Start = event {
-                let system = self.ctx.system();
-                match self.kind {
-                    IOKind::Tcp => {
-                        let comp = system.create(move || IO::tcp(self.sock_addr, self.actor_ref()));
-                        system.start(&comp);
-                    }
-                    IOKind::Udp => {
-                        let comp = system.create(move || IO::udp(self.sock_addr, self.actor_ref()));
-                        system.start(&comp);
-                    }
+    impl ComponentLifecycle for IOSource {
+        fn on_start(&mut self) -> Handled {
+            let system = self.ctx.system();
+            match self.kind {
+                IOKind::Tcp => {
+                    let comp = system.create(move || IO::tcp(self.sock_addr, self.actor_ref()));
+                    system.start(&comp);
+                }
+                IOKind::Udp => {
+                    let comp = system.create(move || IO::udp(self.sock_addr, self.actor_ref()));
+                    system.start(&comp);
                 }
             }
+            Handled::Ok
         }
     }
 
@@ -224,8 +228,9 @@ pub mod tests {
         std::thread::sleep(std::time::Duration::from_millis(50));
 
         // Our IOSource should have received 1 msg, that is, "hello"
-        let source = io_source.definition().lock().unwrap();
-        assert_eq!(source.received, 1);
+        io_source.on_definition(|cd| {
+            assert_eq!(cd.received, 1);
+        });
     }
 
     #[test]
@@ -248,7 +253,8 @@ pub mod tests {
         Runtime::new().unwrap().block_on(client);
 
         std::thread::sleep(std::time::Duration::from_millis(100));
-        let source = io_source.definition().lock().unwrap();
-        assert_eq!(source.received, 1);
+        io_source.on_definition(|cd| {
+            assert_eq!(cd.received, 1);
+        });
     }
 }

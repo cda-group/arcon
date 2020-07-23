@@ -120,9 +120,9 @@ where
             nodes_map.insert(node_id, node);
         }
         NodeManager {
-            ctx: ComponentContext::new(),
+            ctx: ComponentContext::uninitialised(),
             node_description,
-            manager_port: ProvidedPort::new(),
+            manager_port: ProvidedPort::uninitialised(),
             node_parallelism: total_nodes as usize,
             max_node_parallelism: (num_cpus::get() * 2) as usize,
             in_channels,
@@ -138,34 +138,29 @@ where
     }
 }
 
-impl<IN, OUT> Provide<ControlPort> for NodeManager<IN, OUT>
+impl<IN, OUT> ComponentLifecycle for NodeManager<IN, OUT>
 where
     IN: ArconType,
     OUT: ArconType,
 {
-    fn handle(&mut self, event: ControlEvent) {
-        match event {
-            ControlEvent::Start => {
-                info!(
-                    self.ctx.log(),
-                    "Started NodeManager for {}", self.node_description
-                );
+    fn on_start(&mut self) -> Handled {
+        info!(
+            self.ctx.log(),
+            "Started NodeManager for {}", self.node_description
+        );
 
-                let manager_port = &mut self.manager_port;
-                // For each node, connect its NodeManagerPort to NodeManager
-                for (node_id, node) in &self.nodes {
-                    &node.on_dyn_definition(|cd| {
-                        let p = cd
-                            .get_required_port()
-                            .ok_or_else(|| format!("NodeId: {:?}", node_id))
-                            .expect("Couldn't find a required NodeManagerPort");
-                        biconnect_ports(manager_port, p);
-                    });
-                }
-            }
-            ControlEvent::Kill => {}
-            ControlEvent::Stop => {}
+        let manager_port = &mut self.manager_port;
+        // For each node, connect its NodeManagerPort to NodeManager
+        for (node_id, node) in &self.nodes {
+            &node.on_dyn_definition(|cd| {
+                let p = cd
+                    .get_required_port()
+                    .ok_or_else(|| format!("NodeId: {:?}", node_id))
+                    .expect("Couldn't find a required NodeManagerPort");
+                biconnect_ports(manager_port, p);
+            });
         }
+        Handled::Ok
     }
 }
 
@@ -174,7 +169,7 @@ where
     IN: ArconType,
     OUT: ArconType,
 {
-    fn handle(&mut self, event: NodeEvent) {
+    fn handle(&mut self, event: NodeEvent) -> Handled {
         debug!(self.ctx.log(), "Got Event {:?}", event);
         match event {
             NodeEvent::Metrics(id, metrics) => {
@@ -192,6 +187,7 @@ where
                 self.node_metrics.insert(id, metrics);
             }
         }
+        Handled::Ok
     }
 }
 
@@ -200,7 +196,7 @@ where
     IN: ArconType,
     OUT: ArconType,
 {
-    fn handle(&mut self, _: Never) {
+    fn handle(&mut self, _: Never) -> Handled {
         unreachable!(crate::data::ArconNever::IS_UNREACHABLE);
     }
 }
@@ -211,6 +207,10 @@ where
     OUT: ArconType,
 {
     type Message = NodeEvent;
-    fn receive_local(&mut self, _: Self::Message) {}
-    fn receive_network(&mut self, _: NetMessage) {}
+    fn receive_local(&mut self, _: Self::Message) -> Handled {
+        unreachable!();
+    }
+    fn receive_network(&mut self, _: NetMessage) -> Handled {
+        unreachable!();
+    }
 }

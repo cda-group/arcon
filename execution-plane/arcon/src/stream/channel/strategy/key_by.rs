@@ -8,6 +8,7 @@ use crate::{
     stream::channel::strategy::send,
 };
 use fxhash::FxHashMap;
+use kompact::prelude::{ComponentDefinition, SerError};
 
 /// A Channel Strategy for Keyed Data Streams
 ///
@@ -74,7 +75,10 @@ where
     }
 
     #[inline]
-    pub fn add(&mut self, event: ArconEvent<A>) {
+    pub fn add<CD>(&mut self, event: ArconEvent<A>, source: &CD)
+    where
+        CD: ComponentDefinition + Sized + 'static,
+    {
         match &event {
             ArconEvent::Element(element) => {
                 // Get key placement
@@ -85,7 +89,13 @@ where
                 if let Some((chan, buffer)) = self.buffer_map.get_mut(&index) {
                     if let Some(e) = buffer.push(event.into()) {
                         // buffer is full
-                        Self::flush_buffer(self.sender_id, &mut self.buffer_pool, chan, buffer);
+                        Self::flush_buffer(
+                            self.sender_id,
+                            &mut self.buffer_pool,
+                            chan,
+                            buffer,
+                            source,
+                        );
                         // This push should now not fail
                         let _ = buffer.push(e);
                     }
@@ -98,36 +108,57 @@ where
                 for (_, (chan, buffer)) in self.buffer_map.iter_mut() {
                     if let Some(e) = buffer.push(event.clone().into()) {
                         // buffer is full...
-                        Self::flush_buffer(self.sender_id, &mut self.buffer_pool, chan, buffer);
+                        Self::flush_buffer(
+                            self.sender_id,
+                            &mut self.buffer_pool,
+                            chan,
+                            buffer,
+                            source,
+                        );
                         // This push should now not fail
                         let _ = buffer.push(e);
                     }
                 }
-                self.flush();
+                self.flush(source);
             }
         }
     }
 
     #[inline]
-    pub fn flush(&mut self) {
+    pub fn flush<CD>(&mut self, source: &CD)
+    where
+        CD: ComponentDefinition + Sized + 'static,
+    {
         for (_, (ref channel, buffer)) in self.buffer_map.iter_mut() {
-            Self::flush_buffer(self.sender_id, &mut self.buffer_pool, channel, buffer);
+            Self::flush_buffer(
+                self.sender_id,
+                &mut self.buffer_pool,
+                channel,
+                buffer,
+                source,
+            );
         }
     }
 
     // Helper function to reduce duplication of code...
     #[inline(always)]
-    fn flush_buffer(
+    fn flush_buffer<CD>(
         sender_id: NodeID,
         buffer_pool: &mut BufferPool<ArconEventWrapper<A>>,
         channel: &Channel<A>,
         writer: &mut BufferWriter<ArconEventWrapper<A>>,
-    ) {
+        source: &CD,
+    ) where
+        CD: ComponentDefinition + Sized + 'static,
+    {
         let msg = ArconMessage {
             events: writer.reader(),
             sender: sender_id,
         };
-        send(channel, msg);
+        if let Err(SerError::BufferError(err)) = send(channel, msg, source) {
+            // TODO: Figure out how to get more space for `tell_serialised`
+            panic!(format!("Buffer Error {}", err));
+        };
         // set a new writer
         *writer = buffer_pool.get();
     }
@@ -182,17 +213,23 @@ mod tests {
             inputs.push(ArconEvent::Element(elem));
         }
 
-        for input in inputs {
-            let _ = channel_strategy.add(input);
-        }
-        let _ = channel_strategy.flush();
+        // take one comp as channel source
+        // just for testing...
+        let comp = &comps[0];
+        comp.on_definition(|cd| {
+            for input in inputs {
+                let _ = channel_strategy.add(input, cd);
+            }
+            let _ = channel_strategy.flush(cd);
+        });
 
         std::thread::sleep(std::time::Duration::from_secs(1));
 
         // Each of the 8 components should at least get some hits
         for comp in comps {
-            let comp_inspect = &comp.definition().lock().unwrap();
-            assert!(comp_inspect.data.len() > 0);
+            comp.on_definition(|cd| {
+                assert!(cd.data.len() > 0);
+            });
         }
         pipeline.shutdown();
     }

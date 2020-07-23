@@ -8,6 +8,7 @@ use crate::{
     timer::TimerBackend,
     util::SafelySendableFn,
 };
+use kompact::prelude::ComponentDefinition;
 use std::marker::PhantomData;
 
 /// IN: Input Event
@@ -81,39 +82,24 @@ where
 
     fn init(&mut self, _session: &mut state::Session<B>) {}
 
-    fn handle_element(
+    fn handle_element<CD>(
         &self,
         element: ArconElement<IN>,
+        source: &CD,
         mut ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) {
+    ) where
+        CD: ComponentDefinition + Sized + 'static,
+    {
         let result = (self.udf)(element.data, &self.state, ctx.state_session);
         let out_elem = ArconElement {
             data: result,
             timestamp: element.timestamp,
         };
-        ctx.output(ArconEvent::Element(out_elem));
+        ctx.output(ArconEvent::Element(out_elem), source);
     }
-
-    fn handle_watermark(
-        &self,
-        _w: Watermark,
-        _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) {
-    }
-
-    fn handle_epoch(
-        &self,
-        _epoch: Epoch,
-        _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) {
-    }
-
-    fn handle_timeout(
-        &self,
-        _timeout: Self::TimerState,
-        _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) {
-    }
+    crate::ignore_watermark!(B);
+    crate::ignore_epoch!(B);
+    crate::ignore_timeout!(B);
 }
 
 #[cfg(test)]
@@ -168,12 +154,12 @@ mod tests {
         map_ref.tell(msg);
 
         std::thread::sleep(std::time::Duration::from_secs(1));
-        {
-            let comp_inspect = &comp.definition().lock().unwrap();
-            assert_eq!(comp_inspect.data.len(), 2);
-            assert_eq!(comp_inspect.data[0].data, 16);
-            assert_eq!(comp_inspect.data[1].data, 17);
-        }
+        comp.on_definition(|cd| {
+            assert_eq!(cd.data.len(), 2);
+            assert_eq!(cd.data[0].data, 16);
+            assert_eq!(cd.data[1].data, 17);
+        });
+
         pipeline.shutdown();
     }
 }

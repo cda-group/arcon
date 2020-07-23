@@ -9,21 +9,26 @@
 
 #![feature(unboxed_closures)]
 
+extern crate arcon_error as error;
 // Enable use of arcon_macros within this crate
 #[cfg_attr(test, macro_use)]
 extern crate arcon_macros;
 extern crate self as arcon;
+
 #[doc(hidden)]
 pub use arcon_macros::*;
+#[doc(hidden)]
+pub use arcon_state as state;
 
 // Imports below are exposed for #[derive(Arcon)]
+#[doc(hidden)]
 pub use crate::data::{ArconType, VersionId};
+#[doc(hidden)]
 pub use fxhash::FxHasher;
+#[doc(hidden)]
 pub use kompact::prelude::SerId;
+#[doc(hidden)]
 pub use twox_hash::XxHash64;
-
-#[macro_use]
-extern crate arcon_error as error;
 
 // Public Interface
 
@@ -87,7 +92,7 @@ pub mod prelude {
                     broadcast::Broadcast, forward::Forward, key_by::KeyBy, round_robin::RoundRobin,
                     ChannelStrategy,
                 },
-                Channel, DispatcherSource,
+                Channel,
             },
             node::{debug::DebugNode, Node, NodeDescriptor},
             operator::{
@@ -122,21 +127,4 @@ pub mod prelude {
     };
     #[cfg(feature = "rayon")]
     pub use rayon::prelude::*;
-}
-
-pub use arcon_state as state;
-
-#[cfg(test)]
-pub(crate) mod tests {
-    use super::*;
-
-    #[cfg_attr(feature = "arcon_serde", derive(serde::Serialize, serde::Deserialize))]
-    #[derive(Arcon, prost::Message, Clone, abomonation_derive::Abomonation)]
-    #[arcon(unsafe_ser_id = 104, reliable_ser_id = 105, version = 1, keys = "id")]
-    pub struct Item {
-        #[prost(uint64, tag = "1")]
-        pub id: u64,
-        #[prost(uint32, tag = "2")]
-        pub price: u32,
-    }
 }

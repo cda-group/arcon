@@ -105,9 +105,5 @@ name = "serde"
 harness = false
 
 [[bench]]
-name = "flight_serde"
-harness = false
-
-[[bench]]
 name = "hash"
 harness = false

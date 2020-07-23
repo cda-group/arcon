@@ -8,6 +8,7 @@ use crate::{
     timer::TimerBackend,
     util::SafelySendableFn,
 };
+use kompact::prelude::ComponentDefinition;
 use std::marker::PhantomData;
 
 /// An Arcon operator for performing an in-place map
@@ -75,32 +76,19 @@ where
 
     fn init(&mut self, _session: &mut state::Session<B>) {}
 
-    fn handle_element(
+    fn handle_element<CD>(
         &self,
         element: ArconElement<IN>,
+        source: &CD,
         mut ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) {
+    ) where
+        CD: ComponentDefinition + Sized + 'static,
+    {
         let mut elem = element;
         (self.udf)(&mut elem.data, &self.state, ctx.state_session);
-        ctx.output(ArconEvent::Element(elem));
+        ctx.output(ArconEvent::Element(elem), source);
     }
-
-    fn handle_watermark(
-        &self,
-        _w: Watermark,
-        _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) {
-    }
-    fn handle_epoch(
-        &self,
-        _epoch: Epoch,
-        _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) {
-    }
-    fn handle_timeout(
-        &self,
-        _timeout: Self::TimerState,
-        _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) {
-    }
+    crate::ignore_watermark!(B);
+    crate::ignore_epoch!(B);
+    crate::ignore_timeout!(B);
 }

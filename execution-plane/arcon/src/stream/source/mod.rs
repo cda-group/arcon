@@ -11,6 +11,7 @@ use crate::{
     timer::TimerBackend,
     util::SafelySendableFn,
 };
+use kompact::prelude::ComponentDefinition;
 
 pub mod collection;
 #[cfg(feature = "kafka")]
@@ -86,7 +87,10 @@ where
 
     /// Generates a Watermark event and sends it downstream
     #[inline]
-    pub fn generate_watermark(&mut self) {
+    pub fn generate_watermark<CD>(&mut self, source: &CD)
+    where
+        CD: ComponentDefinition + Sized + 'static,
+    {
         let wm_event: ArconEvent<OP::OUT> = {
             if self.has_timestamp_extractor() {
                 ArconEvent::Watermark(Watermark::new(self.current_watermark))
@@ -97,13 +101,16 @@ where
             }
         };
 
-        self.channel_strategy.add(wm_event);
+        self.channel_strategy.add(wm_event, source);
     }
 
     /// Generates a Death event and sends it downstream
     #[inline]
-    pub fn generate_death(&mut self, msg: String) {
-        self.channel_strategy.add(ArconEvent::Death(msg));
+    pub fn generate_death<CD>(&mut self, msg: String, source: &CD)
+    where
+        CD: ComponentDefinition + Sized + 'static,
+    {
+        self.channel_strategy.add(ArconEvent::Death(msg), source);
     }
 
     /// Helper to know whether to use SystemTime or EventTime
@@ -122,10 +129,14 @@ where
 
     /// Calls a transformation function on the source data to generate outgoing ArconEvent<OUT>
     #[inline]
-    pub fn process(&mut self, data: ArconElement<OP::IN>) {
+    pub fn process<CD>(&mut self, data: ArconElement<OP::IN>, source: &CD)
+    where
+        CD: ComponentDefinition + Sized + 'static,
+    {
         let mut session = self.state_backend.session();
         self.operator.handle_element(
             data,
+            source,
             OperatorContext::new(
                 &mut self.channel_strategy,
                 &mut session,

@@ -221,8 +221,8 @@ where
         drop(sb_session);
 
         Node {
-            ctx: ComponentContext::new(),
-            node_manager_port: RequiredPort::new(),
+            ctx: ComponentContext::uninitialised(),
+            node_manager_port: RequiredPort::uninitialised(),
             descriptor,
             id,
             channel_strategy,
@@ -321,8 +321,9 @@ where
                     }
 
                     drop(state);
+
                     self.operator
-                        .handle_element(e, make_context!(self, sb_session));
+                        .handle_element(e, self, make_context!(self, sb_session));
                 }
                 ArconEvent::Watermark(w) => {
                     if w <= state
@@ -370,9 +371,13 @@ where
                         // Update the stored watermark
                         state.current_watermark().set(new_watermark)?;
                         drop(state);
+
                         // Handle the watermark
-                        self.operator
-                            .handle_watermark(new_watermark, make_context!(self, sb_session));
+                        self.operator.handle_watermark(
+                            new_watermark,
+                            self,
+                            make_context!(self, sb_session),
+                        );
 
                         let timeouts = self
                             .timer_backend
@@ -380,8 +385,11 @@ where
                             .advance_to(new_watermark.timestamp, sb_session);
 
                         for timeout in timeouts {
-                            self.operator
-                                .handle_timeout(timeout, make_context!(self, sb_session));
+                            self.operator.handle_timeout(
+                                timeout,
+                                self,
+                                make_context!(self, sb_session),
+                            );
                         }
 
                         let mut metrics = self.metrics.borrow_mut();
@@ -392,7 +400,7 @@ where
                         // Forward the watermark
                         self.channel_strategy
                             .borrow_mut()
-                            .add(ArconEvent::Watermark(new_watermark));
+                            .add(ArconEvent::Watermark(new_watermark), self);
 
                         // increment watermark counter
                         metrics.watermark_counter.inc();
@@ -416,8 +424,10 @@ where
                         state.current_epoch().set(e)?;
                         drop(state);
 
+                        // handle epoch
                         self.operator
-                            .handle_epoch(e, make_context!(self, sb_session));
+                            .handle_epoch(e, self, make_context!(self, sb_session));
+
                         self.timer_backend.borrow_mut().handle_epoch(e, sb_session);
 
                         // store the state
@@ -428,7 +438,9 @@ where
                         metrics.epoch = e;
 
                         // forward the epoch
-                        self.channel_strategy.borrow_mut().add(ArconEvent::Epoch(e));
+                        self.channel_strategy
+                            .borrow_mut()
+                            .add(ArconEvent::Epoch(e), self);
 
                         // increment epoch counter
                         metrics.epoch_counter.inc();
@@ -438,7 +450,9 @@ where
                 }
                 ArconEvent::Death(s) => {
                     // We are instructed to shutdown....
-                    self.channel_strategy.borrow_mut().add(ArconEvent::Death(s));
+                    self.channel_strategy
+                        .borrow_mut()
+                        .add(ArconEvent::Death(s), self);
                     self.ctx.suicide(); // TODO: is suicide enough?
                 }
             }
@@ -494,44 +508,36 @@ where
     }
 }
 
-impl<OP, B, T> Provide<ControlPort> for Node<OP, B, T>
+impl<OP, B, T> ComponentLifecycle for Node<OP, B, T>
 where
     OP: Operator<B> + 'static,
     B: state::Backend,
     T: TimerBackend<OP::TimerState>,
 {
-    fn handle(&mut self, event: ControlEvent) {
-        match event {
-            ControlEvent::Start => {
-                debug!(
-                    self.ctx.log(),
-                    "Started Arcon Node {} with Node ID {:?}", self.descriptor, self.id
-                );
+    fn on_start(&mut self) -> Handled {
+        debug!(
+            self.ctx.log(),
+            "Started Arcon Node {} with Node ID {:?}", self.descriptor, self.id
+        );
 
-                // Start periodic timer reporting Node metrics
-                if let Some(interval) = &self.ctx().config()["node_metrics_interval"].as_i64() {
-                    let time_dur = std::time::Duration::from_millis(*interval as u64);
-                    self.schedule_periodic(time_dur, time_dur, |c_self, _id| {
-                        c_self.node_manager_port.trigger(NodeEvent::Metrics(
-                            c_self.id,
-                            c_self.metrics.borrow().clone(),
-                        ));
-                    });
-                }
+        // Start periodic timer reporting Node metrics
+        if let Some(interval) = &self.ctx().config()["node_metrics_interval"].as_i64() {
+            let time_dur = std::time::Duration::from_millis(*interval as u64);
+            self.schedule_periodic(time_dur, time_dur, |c_self, _id| {
+                c_self.node_manager_port.trigger(NodeEvent::Metrics(
+                    c_self.id,
+                    c_self.metrics.borrow().clone(),
+                ));
+                Handled::Ok
+            });
+        }
 
-                if self.state_backend.get_mut().was_restored() {
-                    if let Err(e) = self.after_state_save(&mut self.state_backend.session()) {
-                        error!(self.ctx.log(), "restoration error: {}", e);
-                    }
-                }
-            }
-            ControlEvent::Stop => {
-                // TODO
-            }
-            ControlEvent::Kill => {
-                // TODO
+        if self.state_backend.get_mut().was_restored() {
+            if let Err(e) = self.after_state_save(&mut self.state_backend.session()) {
+                error!(self.ctx.log(), "restoration error: {}", e);
             }
         }
+        Handled::Ok
     }
 }
 
@@ -541,7 +547,7 @@ where
     B: state::Backend,
     T: TimerBackend<OP::TimerState>,
 {
-    fn handle(&mut self, _: Never) {
+    fn handle(&mut self, _: Never) -> Handled {
         unreachable!("Never can't be instantiated!");
     }
 }
@@ -551,8 +557,9 @@ where
     B: state::Backend,
     T: TimerBackend<OP::TimerState>,
 {
-    fn handle(&mut self, e: NodeEvent) {
-        trace!(self.log(), "Ignoring node event: {:?}", e)
+    fn handle(&mut self, e: NodeEvent) -> Handled {
+        trace!(self.log(), "Ignoring node event: {:?}", e);
+        Handled::Ok
     }
 }
 
@@ -564,12 +571,13 @@ where
 {
     type Message = ArconMessage<OP::IN>;
 
-    fn receive_local(&mut self, msg: Self::Message) {
+    fn receive_local(&mut self, msg: Self::Message) -> Handled {
         if let Err(err) = self.handle_message(msg) {
             error!(self.ctx.log(), "Failed to handle message: {}", err);
         }
+        Handled::Ok
     }
-    fn receive_network(&mut self, msg: NetMessage) {
+    fn receive_network(&mut self, msg: NetMessage) -> Handled {
         let unsafe_id = OP::IN::UNSAFE_SER_ID;
         let reliable_id = OP::IN::RELIABLE_SER_ID;
         let ser_id = *msg.ser_id();
@@ -598,6 +606,7 @@ where
             }
             Err(e) => error!(self.ctx.log(), "Error ArconNetworkMessage: {:?}", e),
         }
+        Handled::Ok
     }
 }
 
@@ -673,12 +682,12 @@ mod tests {
         node_ref.tell(watermark(1, 1));
 
         wait(1);
-        let sink_inspect = sink.definition().lock().unwrap();
-
-        let data_len = sink_inspect.data.len();
-        let watermark_len = sink_inspect.watermarks.len();
-        assert_eq!(watermark_len, 0);
-        assert_eq!(data_len, 0);
+        sink.on_definition(|cd| {
+            let data_len = cd.data.len();
+            let watermark_len = cd.watermarks.len();
+            assert_eq!(watermark_len, 0);
+            assert_eq!(data_len, 0);
+        });
     }
 
     #[test]
@@ -689,12 +698,12 @@ mod tests {
         node_ref.tell(watermark(1, 3));
 
         wait(1);
-        let sink_inspect = sink.definition().lock().unwrap();
-
-        let data_len = sink_inspect.data.len();
-        let watermark_len = sink_inspect.watermarks.len();
-        assert_eq!(watermark_len, 1);
-        assert_eq!(data_len, 0);
+        sink.on_definition(|cd| {
+            let data_len = cd.data.len();
+            let watermark_len = cd.watermarks.len();
+            assert_eq!(watermark_len, 1);
+            assert_eq!(data_len, 0);
+        });
     }
 
     #[test]
@@ -707,11 +716,11 @@ mod tests {
         node_ref.tell(watermark(4, 3));
 
         wait(1);
-        let sink_inspect = sink.definition().lock().unwrap();
-
-        let watermark_len = sink_inspect.watermarks.len();
-        assert_eq!(watermark_len, 1);
-        assert_eq!(sink_inspect.watermarks[0].timestamp, 2u64);
+        sink.on_definition(|cd| {
+            let watermark_len = cd.watermarks.len();
+            assert_eq!(watermark_len, 1);
+            assert_eq!(cd.watermarks[0].timestamp, 2u64);
+        });
     }
 
     #[test]
@@ -727,14 +736,14 @@ mod tests {
         node_ref.tell(death(2)); // send death marker on unblocked channel to flush
 
         wait(1);
-        let sink_inspect = sink.definition().lock().unwrap();
-
-        let data_len = sink_inspect.data.len();
-        let epoch_len = sink_inspect.epochs.len();
-        assert_eq!(epoch_len, 0);
-        assert_eq!(sink_inspect.data[0].data, 1i32);
-        assert_eq!(sink_inspect.data[1].data, 3i32);
-        assert_eq!(data_len, 2);
+        sink.on_definition(|cd| {
+            let data_len = cd.data.len();
+            let epoch_len = cd.epochs.len();
+            assert_eq!(epoch_len, 0);
+            assert_eq!(cd.data[0].data, 1i32);
+            assert_eq!(cd.data[1].data, 3i32);
+            assert_eq!(data_len, 2);
+        });
     }
 
     #[test]
@@ -752,15 +761,15 @@ mod tests {
 
         node_ref.tell(death(3)); // send death marker on unblocked channel to flush
         wait(1);
-        let sink_inspect = sink.definition().lock().unwrap();
-
-        let data_len = sink_inspect.data.len();
-        let epoch_len = sink_inspect.epochs.len();
-        assert_eq!(epoch_len, 0); // no epochs should've completed
-        assert_eq!(sink_inspect.data[0].data, 11i32);
-        assert_eq!(sink_inspect.data[1].data, 21i32);
-        assert_eq!(sink_inspect.data[2].data, 31i32);
-        assert_eq!(data_len, 3);
+        sink.on_definition(|cd| {
+            let data_len = cd.data.len();
+            let epoch_len = cd.epochs.len();
+            assert_eq!(epoch_len, 0); // no epochs should've completed
+            assert_eq!(cd.data[0].data, 11i32);
+            assert_eq!(cd.data[1].data, 21i32);
+            assert_eq!(cd.data[2].data, 31i32);
+            assert_eq!(data_len, 3);
+        });
     }
 
     #[test]
@@ -783,17 +792,17 @@ mod tests {
 
         node_ref.tell(death(3)); // send death marker on unblocked channel to flush
         wait(1);
-        let sink_inspect = sink.definition().lock().unwrap();
-
-        let data_len = sink_inspect.data.len();
-        let epoch_len = sink_inspect.epochs.len();
-        assert_eq!(epoch_len, 2); // 3 epochs should've completed
-        assert_eq!(sink_inspect.data[0].data, 11i32);
-        assert_eq!(sink_inspect.data[1].data, 21i32);
-        assert_eq!(sink_inspect.data[2].data, 31i32);
-        assert_eq!(sink_inspect.data[3].data, 12i32); // First message in epoch1
-        assert_eq!(sink_inspect.data[4].data, 13i32); // First message in epoch2
-        assert_eq!(sink_inspect.data[5].data, 22i32); // 2nd message in epoch2
-        assert_eq!(data_len, 6);
+        sink.on_definition(|cd| {
+            let data_len = cd.data.len();
+            let epoch_len = cd.epochs.len();
+            assert_eq!(epoch_len, 2); // 3 epochs should've completed
+            assert_eq!(cd.data[0].data, 11i32);
+            assert_eq!(cd.data[1].data, 21i32);
+            assert_eq!(cd.data[2].data, 31i32);
+            assert_eq!(cd.data[3].data, 12i32); // First message in epoch1
+            assert_eq!(cd.data[4].data, 13i32); // First message in epoch2
+            assert_eq!(cd.data[5].data, 22i32); // 2nd message in epoch2
+            assert_eq!(data_len, 6);
+        });
     }
 }

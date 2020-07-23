@@ -8,6 +8,7 @@ use crate::{
     },
     stream::channel::Channel,
 };
+use kompact::prelude::{ComponentDefinition, SerError};
 
 pub mod broadcast;
 pub mod forward;
@@ -39,23 +40,29 @@ where
 {
     /// Add event to outgoing buffer
     #[inline]
-    pub fn add(&mut self, event: ArconEvent<A>) {
+    pub fn add<CD>(&mut self, event: ArconEvent<A>, source: &CD)
+    where
+        CD: ComponentDefinition + Sized + 'static,
+    {
         match self {
-            ChannelStrategy::Forward(s) => s.add(event),
-            ChannelStrategy::Broadcast(s) => s.add(event),
-            ChannelStrategy::KeyBy(s) => s.add(event),
-            ChannelStrategy::RoundRobin(s) => s.add(event),
+            ChannelStrategy::Forward(s) => s.add(event, source),
+            ChannelStrategy::Broadcast(s) => s.add(event, source),
+            ChannelStrategy::KeyBy(s) => s.add(event, source),
+            ChannelStrategy::RoundRobin(s) => s.add(event, source),
             ChannelStrategy::Mute => (),
         }
     }
     /// Flush batch of events out
     #[inline]
-    pub fn flush(&mut self) {
+    pub fn flush<CD>(&mut self, source: &CD)
+    where
+        CD: ComponentDefinition + Sized + 'static,
+    {
         match self {
-            ChannelStrategy::Forward(s) => s.flush(),
-            ChannelStrategy::Broadcast(s) => s.flush(),
-            ChannelStrategy::KeyBy(s) => s.flush(),
-            ChannelStrategy::RoundRobin(s) => s.flush(),
+            ChannelStrategy::Forward(s) => s.flush(source),
+            ChannelStrategy::Broadcast(s) => s.flush(source),
+            ChannelStrategy::KeyBy(s) => s.flush(source),
+            ChannelStrategy::RoundRobin(s) => s.flush(source),
             ChannelStrategy::Mute => (),
         }
     }
@@ -76,21 +83,23 @@ where
 ///
 /// The message may be sent to a local or remote component
 #[inline]
-fn send<A>(channel: &Channel<A>, message: ArconMessage<A>)
+fn send<A, CD>(channel: &Channel<A>, message: ArconMessage<A>, source: &CD) -> Result<(), SerError>
 where
     A: ArconType,
+    CD: ComponentDefinition + Sized + 'static,
 {
     match channel {
         Channel::Local(actor_ref) => {
             actor_ref.tell(message);
+            Ok(())
         }
-        Channel::Remote(actor_path, FlightSerde::Unsafe, dispatcher_source) => {
+        Channel::Remote(actor_path, FlightSerde::Unsafe) => {
             let unsafe_msg = UnsafeSerde(message.into());
-            actor_path.tell(unsafe_msg, dispatcher_source);
+            actor_path.tell_serialised(unsafe_msg, source)
         }
-        Channel::Remote(actor_path, FlightSerde::Reliable, dispatcher_source) => {
+        Channel::Remote(actor_path, FlightSerde::Reliable) => {
             let reliable_msg = ReliableSerde(message.into());
-            actor_path.tell(reliable_msg, dispatcher_source);
+            actor_path.tell_serialised(reliable_msg, source)
         }
     }
 }

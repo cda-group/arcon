@@ -9,6 +9,7 @@ use crate::{
 };
 use kompact::prelude::*;
 use std::{
+    cell::RefCell,
     fs::File,
     io::{BufRead, BufReader},
     str::FromStr,
@@ -23,7 +24,7 @@ where
     T: TimerBackend<OP::TimerState>,
 {
     ctx: ComponentContext<Self>,
-    source_ctx: SourceContext<OP, B, T>,
+    source_ctx: RefCell<SourceContext<OP, B, T>>,
     file_path: String,
 }
 
@@ -36,8 +37,8 @@ where
 {
     pub fn new(file_path: String, source_ctx: SourceContext<OP, B, T>) -> Self {
         LocalFileSource {
-            ctx: ComponentContext::new(),
-            source_ctx,
+            ctx: ComponentContext::uninitialised(),
+            source_ctx: RefCell::new(source_ctx),
             file_path,
         }
     }
@@ -45,17 +46,18 @@ where
         if let Ok(f) = File::open(&self.file_path) {
             let reader = BufReader::new(f);
             let mut counter: u64 = 0;
-            let interval = self.source_ctx.watermark_interval;
+            let mut source_ctx = self.source_ctx.borrow_mut();
+            let interval = source_ctx.watermark_interval;
             for line in reader.lines() {
                 match line {
                     Ok(l) => {
                         if let Ok(data) = l.parse::<OP::IN>() {
-                            let elem = self.source_ctx.extract_element(data);
-                            self.source_ctx.process(elem);
+                            let elem = source_ctx.extract_element(data);
+                            source_ctx.process(elem, self);
                             counter += 1;
 
                             if counter == interval {
-                                self.source_ctx.generate_watermark();
+                                source_ctx.generate_watermark(self);
                                 counter = 0;
                             }
                         } else {
@@ -72,24 +74,23 @@ where
                 }
             }
             // We are done, generate a watermark...
-            self.source_ctx.generate_watermark();
+            source_ctx.generate_watermark(self);
         } else {
             error!(self.ctx.log(), "Unable to open file {}", self.file_path);
         }
     }
 }
 
-impl<OP, B, T> Provide<ControlPort> for LocalFileSource<OP, B, T>
+impl<OP, B, T> ComponentLifecycle for LocalFileSource<OP, B, T>
 where
     OP: Operator<B> + 'static,
     OP::IN: FromStr,
     B: state::Backend,
     T: TimerBackend<OP::TimerState>,
 {
-    fn handle(&mut self, event: ControlEvent) {
-        if let ControlEvent::Start = event {
-            self.process_file();
-        }
+    fn on_start(&mut self) -> Handled {
+        self.process_file();
+        Handled::Ok
     }
 }
 
@@ -103,7 +104,7 @@ where
     type Message = Never;
     type Deserialiser = Never;
 
-    fn receive(&mut self, _sender: Option<ActorPath>, _msg: Self::Message) {
+    fn receive(&mut self, _sender: Option<ActorPath>, _msg: Self::Message) -> Handled {
         unreachable!(ArconNever::IS_UNREACHABLE);
     }
 }
@@ -178,12 +179,13 @@ mod tests {
         system.start(&source);
         wait(1);
 
-        let sink_inspect = sink.definition().lock().unwrap();
-        assert_eq!(&sink_inspect.data.len(), &(50 as usize));
-        for item in &sink_inspect.data {
-            // all elements should have been mapped + 5
-            assert_eq!(item.data, 128);
-        }
+        sink.on_definition(|cd| {
+            assert_eq!(&cd.data.len(), &(50 as usize));
+            for item in &cd.data {
+                // all elements should have been mapped + 5
+                assert_eq!(item.data, 128);
+            }
+        });
     }
 
     #[test]
@@ -228,11 +230,12 @@ mod tests {
         system.start(&source);
         wait(1);
 
-        let sink_inspect = sink.definition().lock().unwrap();
-        assert_eq!(&sink_inspect.data.len(), &(source_elements as usize));
-        for i in 0..source_elements {
-            let expected: ArconF64 = ArconF64::new(i as f64 + 0.5);
-            assert_eq!(sink_inspect.data[i].data, expected);
-        }
+        sink.on_definition(|cd| {
+            assert_eq!(&cd.data.len(), &(source_elements as usize));
+            for i in 0..source_elements {
+                let expected: ArconF64 = ArconF64::new(i as f64 + 0.5);
+                assert_eq!(cd.data[i].data, expected);
+            }
+        });
     }
 }

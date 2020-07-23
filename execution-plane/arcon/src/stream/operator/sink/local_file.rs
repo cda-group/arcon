@@ -53,33 +53,21 @@ where
 
     fn init(&mut self, _session: &mut Session<B>) {}
 
-    fn handle_element(
+    fn handle_element<CD>(
         &self,
         element: ArconElement<IN>,
+        _source: &CD,
         _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) {
+    ) where
+        CD: ComponentDefinition + Sized + 'static,
+    {
         if let Err(err) = writeln!(self.file.borrow_mut(), "{:?}", element.data) {
             eprintln!("Error while writing to file sink {}", err.to_string());
         }
     }
-    fn handle_watermark(
-        &self,
-        _w: Watermark,
-        _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) {
-    }
-    fn handle_epoch(
-        &self,
-        _epoch: Epoch,
-        _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) {
-    }
-    fn handle_timeout(
-        &self,
-        _timeout: Self::TimerState,
-        _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) {
-    }
+    crate::ignore_watermark!(B);
+    crate::ignore_epoch!(B);
+    crate::ignore_timeout!(B);
 }
 
 #[cfg(test)]

@@ -10,7 +10,6 @@ features = [
     "thread_pinning",
     "arcon_serde",
     "arcon_tui",
-
     "arcon_rocksdb",
     "arcon_sled",
     "arcon_faster",

@@ -9,6 +9,7 @@ use crate::{
 };
 use kompact::prelude::*;
 use std::{
+    cell::RefCell,
     net::SocketAddr,
     str::{from_utf8, FromStr},
     time::Duration,
@@ -28,7 +29,7 @@ where
     T: TimerBackend<OP::TimerState>,
 {
     ctx: ComponentContext<Self>,
-    source_ctx: SourceContext<OP, B, T>,
+    source_ctx: RefCell<SourceContext<OP, B, T>>,
     sock_addr: SocketAddr,
     sock_kind: SocketKind,
 }
@@ -47,45 +48,45 @@ where
     ) -> Self {
         assert!(source_ctx.watermark_interval > 0);
         SocketSource {
-            ctx: ComponentContext::new(),
-            source_ctx,
+            ctx: ComponentContext::uninitialised(),
+            source_ctx: RefCell::new(source_ctx),
             sock_addr,
             sock_kind,
         }
     }
 }
 
-impl<OP, B, T> Provide<ControlPort> for SocketSource<OP, B, T>
+impl<OP, B, T> ComponentLifecycle for SocketSource<OP, B, T>
 where
     OP: Operator<B> + 'static,
     OP::IN: FromStr,
     B: state::Backend,
     T: TimerBackend<OP::TimerState>,
 {
-    fn handle(&mut self, event: ControlEvent) {
-        if let ControlEvent::Start = event {
-            let system = self.ctx.system();
+    fn on_start(&mut self) -> Handled {
+        let system = self.ctx.system();
+        let watermark_interval = self.source_ctx.borrow_mut().watermark_interval;
+        // Schedule periodic watermark generation
+        self.schedule_periodic(
+            Duration::from_secs(0),
+            Duration::from_secs(watermark_interval),
+            move |self_c, _| {
+                self_c.source_ctx.borrow_mut().generate_watermark(self_c);
+                Handled::Ok
+            },
+        );
 
-            // Schedule periodic watermark generation
-            self.schedule_periodic(
-                Duration::from_secs(0),
-                Duration::from_secs(self.source_ctx.watermark_interval),
-                move |self_c, _| {
-                    self_c.source_ctx.generate_watermark();
-                },
-            );
-
-            match self.sock_kind {
-                SocketKind::Tcp => {
-                    let comp = system.create(move || IO::tcp(self.sock_addr, self.actor_ref()));
-                    system.start(&comp);
-                }
-                SocketKind::Udp => {
-                    let comp = system.create(move || IO::udp(self.sock_addr, self.actor_ref()));
-                    system.start(&comp);
-                }
+        match self.sock_kind {
+            SocketKind::Tcp => {
+                let comp = system.create(move || IO::tcp(self.sock_addr, self.actor_ref()));
+                system.start(&comp);
+            }
+            SocketKind::Udp => {
+                let comp = system.create(move || IO::udp(self.sock_addr, self.actor_ref()));
+                system.start(&comp);
             }
         }
+        Handled::Ok
     }
 }
 
@@ -98,14 +99,15 @@ where
 {
     type Message = IOMessage;
 
-    fn receive_local(&mut self, msg: Self::Message) {
+    fn receive_local(&mut self, msg: Self::Message) -> Handled {
         match msg {
             IOMessage::Bytes(bytes) => {
+                let mut source_ctx = self.source_ctx.borrow_mut();
                 debug!(self.ctx.log(), "{:?}", bytes);
                 if let Ok(byte_string) = from_utf8(&bytes) {
                     if let Ok(in_data) = byte_string.trim().parse::<OP::IN>() {
-                        let elem = self.source_ctx.extract_element(in_data);
-                        self.source_ctx.process(elem);
+                        let elem = source_ctx.extract_element(in_data);
+                        source_ctx.process(elem, self);
                     } else {
                         error!(self.ctx.log(), "Unable to parse string {}", byte_string);
                     }
@@ -114,10 +116,12 @@ where
             IOMessage::SockClosed => info!(self.ctx.log(), "Sock connection closed"),
             IOMessage::SockErr => error!(self.ctx.log(), "Sock IO Error"),
         }
+        Handled::Ok
     }
 
-    fn receive_network(&mut self, _msg: NetMessage) {
+    fn receive_network(&mut self, _msg: NetMessage) -> Handled {
         error!(self.ctx.log(), "Got unexpected message");
+        Handled::Ok
     }
 }
 
@@ -188,10 +192,11 @@ mod tests {
         Runtime::new().unwrap().block_on(client);
 
         wait(1);
-        let sink_inspect = sink.definition().lock().unwrap();
-        assert_eq!(sink_inspect.data.len(), (1 as usize));
-        let r0 = &sink_inspect.data[0];
-        assert_eq!(r0.data, 77);
+        sink.on_definition(|cd| {
+            assert_eq!(cd.data.len(), (1 as usize));
+            let r0 = &cd.data[0];
+            assert_eq!(r0.data, 77);
+        });
     }
 
     #[test]
@@ -259,8 +264,9 @@ mod tests {
         Runtime::new().unwrap().block_on(client);
 
         wait(1);
-        let sink_inspect = sink.definition().lock().unwrap();
-        assert_eq!(sink_inspect.data.len(), (1 as usize));
-        assert_eq!(sink_inspect.watermarks.last().unwrap().timestamp, 1);
+        sink.on_definition(|cd| {
+            assert_eq!(cd.data.len(), (1 as usize));
+            assert_eq!(cd.watermarks.last().unwrap().timestamp, 1);
+        });
     }
 }

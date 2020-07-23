@@ -88,18 +88,21 @@ where
         ()
     }
 
-    fn handle_element(
+    fn handle_element<CD>(
         &self,
-        e: ArconElement<IN>,
+        element: ArconElement<Self::IN>,
+        _source: &CD,
         _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) {
+    ) where
+        CD: ComponentDefinition + Sized + 'static,
+    {
         let mut tx = self.tx_channel.clone();
         let fmt_data = {
-            if let Ok(mut json) = serde_json::to_string(&e.data) {
+            if let Ok(mut json) = serde_json::to_string(&element.data) {
                 json += "\n";
                 json
             } else {
-                format!("{:?}\n", e.data)
+                format!("{:?}\n", element.data)
             }
         };
         let bytes = Bytes::from(fmt_data);
@@ -113,25 +116,9 @@ where
         };
         self.runtime_handle.spawn(req_dispatch);
     }
-    fn handle_watermark(
-        &self,
-        _w: Watermark,
-        _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) {
-    }
-    fn handle_epoch(
-        &self,
-        _epoch: Epoch,
-        _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) {
-    }
-
-    fn handle_timeout(
-        &self,
-        _timeout: Self::TimerState,
-        _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) {
-    }
+    crate::ignore_watermark!(B);
+    crate::ignore_epoch!(B);
+    crate::ignore_timeout!(B);
 }
 
 #[cfg(test)]

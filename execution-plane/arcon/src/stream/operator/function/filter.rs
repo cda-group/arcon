@@ -8,6 +8,7 @@ use crate::{
     timer::TimerBackend,
     util::SafelySendableFn,
 };
+use kompact::prelude::ComponentDefinition;
 use std::marker::PhantomData;
 
 /// IN: Input Event
@@ -79,39 +80,26 @@ where
 
     fn init(&mut self, _session: &mut state::Session<B>) {}
 
-    fn handle_element(
+    fn handle_element<CD>(
         &self,
         element: ArconElement<IN>,
+        source: &CD,
         mut ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) {
+    ) where
+        CD: ComponentDefinition + Sized + 'static,
+    {
         let Filter { state, udf, .. } = self;
 
         // the first thing the udf will pretty much always do is to activate the state
         // we cannot do that out here, because rustc's buggy
         // https://github.com/rust-lang/rust/issues/62529
         if udf(&element.data, state, ctx.state_session) {
-            ctx.output(ArconEvent::Element(element));
+            ctx.output(ArconEvent::Element(element), source);
         }
     }
-
-    fn handle_watermark(
-        &self,
-        _w: Watermark,
-        _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) -> () {
-    }
-    fn handle_epoch(
-        &self,
-        _epoch: Epoch,
-        _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) {
-    }
-    fn handle_timeout(
-        &self,
-        _timeout: Self::TimerState,
-        _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) {
-    }
+    crate::ignore_watermark!(B);
+    crate::ignore_epoch!(B);
+    crate::ignore_timeout!(B);
 }
 
 #[cfg(test)]
@@ -173,10 +161,10 @@ mod tests {
         filter_ref.tell(msg);
 
         std::thread::sleep(std::time::Duration::from_secs(1));
-        {
-            let comp_inspect = &comp.definition().lock().unwrap();
-            assert_eq!(comp_inspect.data.len(), 2);
-        }
+        comp.on_definition(|cd| {
+            assert_eq!(cd.data.len(), 2);
+        });
+
         pipeline.shutdown();
     }
 }

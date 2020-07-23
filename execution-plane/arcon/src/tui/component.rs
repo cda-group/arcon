@@ -18,19 +18,17 @@ pub struct TuiComponent {
 impl TuiComponent {
     pub fn new(sender: Sender<Node>) -> TuiComponent {
         TuiComponent {
-            ctx: ComponentContext::new(),
+            ctx: ComponentContext::uninitialised(),
             sender,
         }
     }
 }
 
-impl Provide<ControlPort> for TuiComponent {
-    fn handle(&mut self, _: ControlEvent) {}
-}
+ignore_lifecycle!(TuiComponent);
 
 impl Actor for TuiComponent {
     type Message = MetricReport;
-    fn receive_local(&mut self, mut msg: Self::Message) {
+    fn receive_local(&mut self, mut msg: Self::Message) -> Handled {
         let node = Node {
             description: msg.descriptor,
             id: msg.id.id,
@@ -43,6 +41,10 @@ impl Actor for TuiComponent {
         };
 
         self.sender.send(node).unwrap();
+
+        Handled::Ok
     }
-    fn receive_network(&mut self, _: NetMessage) {}
+    fn receive_network(&mut self, _: NetMessage) -> Handled {
+        Handled::Ok
+    }
 }

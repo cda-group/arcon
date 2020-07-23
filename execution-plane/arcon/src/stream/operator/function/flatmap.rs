@@ -8,6 +8,7 @@ use crate::{
     timer::TimerBackend,
     util::SafelySendableFn,
 };
+use kompact::prelude::ComponentDefinition;
 use std::marker::PhantomData;
 
 /// IN: input event
@@ -86,40 +87,27 @@ where
 
     fn init(&mut self, _session: &mut state::Session<B>) {}
 
-    fn handle_element(
+    fn handle_element<CD>(
         &self,
         element: ArconElement<IN>,
+        source: &CD,
         mut ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) {
+    ) where
+        CD: ComponentDefinition + Sized + 'static,
+    {
         let result = (self.udf)(element.data, &self.state, ctx.state_session);
         for item in result {
-            ctx.output(ArconEvent::Element(ArconElement {
+            let event = ArconEvent::Element(ArconElement {
                 data: item,
                 timestamp: element.timestamp,
-            }));
+            });
+
+            ctx.output(event, source);
         }
     }
-
-    fn handle_watermark(
-        &self,
-        _w: Watermark,
-        _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) {
-    }
-
-    fn handle_epoch(
-        &self,
-        _epoch: Epoch,
-        _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) {
-    }
-
-    fn handle_timeout(
-        &self,
-        _timeout: Self::TimerState,
-        _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) {
-    }
+    crate::ignore_watermark!(B);
+    crate::ignore_epoch!(B);
+    crate::ignore_timeout!(B);
 }
 
 #[cfg(test)]
@@ -172,10 +160,10 @@ mod tests {
         flatmap_ref.tell(msg);
 
         std::thread::sleep(std::time::Duration::from_secs(1));
-        {
-            let comp_inspect = &comp.definition().lock().unwrap();
-            assert_eq!(comp_inspect.data.len(), 6);
-        }
+
+        comp.on_definition(|cd| {
+            assert_eq!(cd.data.len(), 6);
+        });
         pipeline.shutdown();
     }
 
@@ -241,10 +229,11 @@ mod tests {
         flatmap_ref.tell(msg);
 
         std::thread::sleep(std::time::Duration::from_secs(1));
-        {
-            let comp_inspect = &comp.definition().lock().unwrap();
-            assert_eq!(comp_inspect.data.len(), 6);
-        }
+
+        comp.on_definition(|cd| {
+            assert_eq!(cd.data.len(), 6);
+        });
+
         pipeline.shutdown();
     }
 }

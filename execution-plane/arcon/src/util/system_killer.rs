@@ -12,7 +12,7 @@ pub struct SystemKiller {
 impl Actor for SystemKiller {
     type Message = ArconMessage<ArconNever>;
 
-    fn receive_local(&mut self, msg: Self::Message) -> () {
+    fn receive_local(&mut self, msg: Self::Message) -> Handled {
         for ev in msg.events.as_slice() {
             let ev = ev.unwrap_ref();
             match ev {
@@ -24,19 +24,22 @@ impl Actor for SystemKiller {
                 _ => trace!(self.log(), "Ignoring non-death event: {:?}", ev),
             }
         }
+        Handled::Ok
     }
 
-    fn receive_network(&mut self, _msg: NetMessage) -> () {
+    fn receive_network(&mut self, _msg: NetMessage) -> Handled {
         // TODO: for now we ignore all network messages
+        Handled::Ok
     }
 }
 
-ignore_control!(SystemKiller);
+ignore_lifecycle!(SystemKiller);
 
 impl SystemKiller {
+    #[allow(dead_code)]
     pub fn new() -> SystemKiller {
         SystemKiller {
-            ctx: ComponentContext::new(),
+            ctx: ComponentContext::uninitialised(),
         }
     }
 }

@@ -53,8 +53,8 @@ where
 {
     pub fn new(log_freq: u64, log_on: bool, expected_msgs: u64) -> Self {
         ThroughputSink {
-            ctx: ComponentContext::new(),
-            sink_port: ProvidedPort::new(),
+            ctx: ComponentContext::uninitialised(),
+            sink_port: ProvidedPort::uninitialised(),
             done: None,
             start: std::time::Instant::now(),
             log_on,
@@ -132,11 +132,13 @@ where
     }
 }
 
-impl<A> Provide<ControlPort> for ThroughputSink<A>
+impl<A> ComponentLifecycle for ThroughputSink<A>
 where
     A: ArconType,
 {
-    fn handle(&mut self, _event: ControlEvent) -> () {}
+    fn on_start(&mut self) -> Handled {
+        Handled::Ok
+    }
 }
 
 impl<A> Actor for ThroughputSink<A>
@@ -145,11 +147,12 @@ where
 {
     type Message = ArconMessage<A>;
 
-    fn receive_local(&mut self, msg: Self::Message) {
+    fn receive_local(&mut self, msg: Self::Message) -> Handled {
         self.handle_msg(msg);
+        Handled::Ok
     }
 
-    fn receive_network(&mut self, _msg: NetMessage) {
+    fn receive_network(&mut self, _msg: NetMessage) -> Handled {
         panic!("only local exec");
     }
 }
@@ -158,8 +161,9 @@ impl<A> Provide<SinkPort> for ThroughputSink<A>
 where
     A: ArconType + 'static,
 {
-    fn handle(&mut self, event: Run) -> () {
+    fn handle(&mut self, event: Run) -> Handled {
         self.done = Some(event.promise);
         self.start = std::time::Instant::now();
+        Handled::Ok
     }
 }

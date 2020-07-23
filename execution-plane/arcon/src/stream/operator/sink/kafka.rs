@@ -92,32 +92,28 @@ where
         ()
     }
 
-    fn handle_element(
+    fn handle_element<CD>(
         &self,
         element: ArconElement<IN>,
+        _source: &CD,
         _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) {
+    ) where
+        CD: ComponentDefinition + Sized + 'static,
+    {
         self.buffer.borrow_mut().push(element);
     }
-    fn handle_watermark(
-        &self,
-        _w: Watermark,
-        _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) {
-    }
-    fn handle_epoch(
+    crate::ignore_watermark!(B);
+    crate::ignore_timeout!(B);
+
+    fn handle_epoch<CD>(
         &self,
         _epoch: Epoch,
+        _source: &CD,
         _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) {
+    ) where
+        CD: ComponentDefinition + Sized + 'static,
+    {
         self.commit_buffer();
-    }
-
-    fn handle_timeout(
-        &self,
-        _timeout: Self::TimerState,
-        _ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) {
     }
 }
 
