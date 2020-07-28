@@ -16,6 +16,8 @@ default = []
 rocks = ["rocksdb"]
 faster = ["faster-rs", "serde"]
 sled_checkpoints = ["sled"]
+# adds iteration features to the FASTER backend, but also makes it slower
+slower_faster = []
 
 [dependencies]
 prost = { git = "https://github.com/Max-Meldrum/prost.git", branch = "derive_generics" }

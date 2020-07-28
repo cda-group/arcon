@@ -149,6 +149,7 @@ impl Faster {
         }
     }
 
+    #[cfg(feature = "slower_faster")]
     fn vec_remove(&mut self, key: &Vec<u8>, to_remove: Vec<u8>) -> Result<()> {
         let status = self.db.rmw(
             key,
@@ -186,6 +187,7 @@ impl Faster {
         }
     }
 
+    #[cfg(feature = "slower_faster")]
     fn vec_push_if_absent(&mut self, key: &Vec<u8>, to_push: Vec<u8>) -> Result<()> {
         let status = self.db.rmw(
             key,
@@ -333,6 +335,7 @@ impl Backend for Faster {
             .with_disk(live_path.to_str().with_context(|| InvalidPath {
                 path: live_path.to_path_buf(),
             })?)
+            .set_pre_allocate_log(true)
             .build()?;
 
         Ok(BackendContainer::new(Faster {
@@ -596,5 +599,9 @@ pub mod tests {
         assert_eq!(&three, b"3");
     }
 
-    common_state_tests!(TestDb::new());
+    #[cfg(not(feature = "slower_faster"))]
+    common_state_tests!(TestDb::new(), true);
+
+    #[cfg(feature = "slower_faster")]
+    common_state_tests!(TestDb::new(), false);
 }
