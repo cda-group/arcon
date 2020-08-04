@@ -21,6 +21,8 @@ pub mod handles;
 pub mod macros;
 pub mod ops;
 pub mod serialization;
+pub mod index;
+mod hint;
 
 #[cfg(test)]
 #[macro_use]
@@ -34,8 +36,8 @@ pub use crate::{
 pub trait Value: prost::Message + Default + Clone + 'static {}
 impl<T> Value for T where T: prost::Message + Default + Clone + 'static {}
 
-pub trait Key: prost::Message + Default + 'static {}
-impl<T> Key for T where T: prost::Message + Default + 'static {}
+pub trait Key: prost::Message + Default + Clone + 'static {}
+impl<T> Key for T where T: prost::Message + Default + Clone + 'static {}
 
 pub trait Metakey: FixedBytes + Copy + Clone + Send + Sync + 'static {}
 impl<T> Metakey for T where T: FixedBytes + Copy + Clone + Send + Sync + 'static {}
