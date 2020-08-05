@@ -137,7 +137,6 @@ fn hash(c: &mut Criterion) {
     group.finish()
 }
 
-
 #[cfg(feature = "rocks")]
 fn read_small_rocks(b: &mut Bencher, capacity: usize, mod_factor: f32) {
     read_small(BackendType::Rocks, b, capacity, mod_factor);

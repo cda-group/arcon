@@ -19,10 +19,10 @@ pub mod error;
 pub mod handles;
 #[macro_use]
 pub mod macros;
+mod hint;
+pub mod index;
 pub mod ops;
 pub mod serialization;
-pub mod index;
-mod hint;
 
 #[cfg(test)]
 #[macro_use]

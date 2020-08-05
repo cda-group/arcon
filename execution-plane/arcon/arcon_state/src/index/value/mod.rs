@@ -1,8 +1,8 @@
+// Copyright (c) 2020, KTH Royal Institute of Technology.
+// SPDX-License-Identifier: AGPL-3.0-only
+
 use crate::{
-    error::*,
-    handles::Handle,
-    index::IndexOps,
-    Backend, BackendContainer, Value, ValueState,
+    error::*, handles::Handle, index::IndexOps, Backend, BackendContainer, Value, ValueState,
 };
 use std::rc::Rc;
 

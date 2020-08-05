@@ -1,8 +1,9 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-pub mod value;
+pub mod appender;
 pub mod hash;
+pub mod value;
 
 use crate::error::Result;
 

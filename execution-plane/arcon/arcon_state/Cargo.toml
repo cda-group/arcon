@@ -47,3 +47,7 @@ harness = false
 [[bench]]
 name = "hash"
 harness = false
+
+[[bench]]
+name = "appender"
+harness = false

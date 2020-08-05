@@ -1,0 +1,66 @@
+// Copyright (c) 2020, KTH Royal Institute of Technology.
+// SPDX-License-Identifier: AGPL-3.0-only
+
+use arcon_state::{index::appender::AppenderIndex, Backend, *};
+use criterion::{criterion_group, criterion_main, Bencher, BenchmarkId, Criterion};
+use tempfile::tempdir;
+
+const CAPACITY: [usize; 3] = [512, 4096, 10024];
+const WINDOW_SIZE: usize = 10024;
+
+fn appender(c: &mut Criterion) {
+    let mut group = c.benchmark_group("appender");
+
+    for capacity in CAPACITY.iter() {
+        let window_size = WINDOW_SIZE;
+        let description = format!("capacity: {}", capacity);
+        #[cfg(feature = "rocks")]
+        group.bench_with_input(
+            BenchmarkId::new("Mean Index Rocks Backed", description.clone()),
+            &(window_size, capacity),
+            |b, (window_size, &capacity)| index_mean_rocks(b, *window_size, capacity),
+        );
+        #[cfg(feature = "sled")]
+        group.bench_with_input(
+            BenchmarkId::new("Mean Index Sled Backed", description.clone()),
+            &(window_size, capacity),
+            |b, (window_size, &capacity)| index_mean_sled(b, *window_size, capacity),
+        );
+    }
+
+    group.finish()
+}
+
+#[cfg(feature = "rocks")]
+fn index_mean_rocks(b: &mut Bencher, window_size: usize, capacity: usize) {
+    appender_mean_index(BackendType::Rocks, window_size, capacity, b);
+}
+#[cfg(feature = "sled")]
+fn index_mean_sled(b: &mut Bencher, window_size: usize, capacity: usize) {
+    appender_mean_index(BackendType::Sled, window_size, capacity, b);
+}
+
+#[inline(always)]
+fn mean(numbers: &Vec<u64>) -> f32 {
+    let sum: u64 = numbers.iter().sum();
+    sum as f32 / numbers.len() as f32
+}
+
+fn appender_mean_index(backend: BackendType, window_size: usize, capacity: usize, b: &mut Bencher) {
+    let dir = tempdir().unwrap();
+    with_backend_type!(backend, |B| {
+        let backend = B::create(dir.as_ref()).unwrap();
+        let mut appender_index: AppenderIndex<u64, B> =
+            AppenderIndex::new("_valueindex", capacity, std::rc::Rc::new(backend));
+        b.iter(|| {
+            for i in 0..window_size {
+                let _ = appender_index.append(i as u64).unwrap();
+            }
+            let consumed = appender_index.consume().unwrap();
+            mean(&consumed)
+        });
+    });
+}
+
+criterion_group!(benches, appender);
+criterion_main!(benches);

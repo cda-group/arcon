@@ -4,17 +4,13 @@
 // Modifications Copyright (c) KTH Royal Institute of Technology
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use core::alloc::Layout;
-use core::hint;
-use core::iter::FusedIterator;
-use core::marker::PhantomData;
-use core::mem;
-use core::ptr::NonNull;
+use core::{alloc::Layout, hint, iter::FusedIterator, marker::PhantomData, mem, ptr::NonNull};
 use std::alloc::{alloc, dealloc, handle_alloc_error};
 
-use crate::hint::{likely, unlikely};
-use crate::index::hash::bitmask::BitMask;
-use crate::index::hash::imp::Group;
+use crate::{
+    hint::{likely, unlikely},
+    index::hash::{bitmask::BitMask, imp::Group},
+};
 
 /// Augments `AllocErr` with a `CapacityOverflow` variant.
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -700,8 +696,8 @@ impl<T> RawTable<T> {
                 let bucket = self.bucket(index);
 
                 if self.growth_left == 0 {
-                  // If there is no space left, then actually "erase" it.
-                  self.erase_by_index(index);
+                    // If there is no space left, then actually "erase" it.
+                    self.erase_by_index(index);
                 }
 
                 // Set bucket to safe
