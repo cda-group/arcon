@@ -111,7 +111,7 @@ where
     /// The function will evict a bucket if the table is above the given
     /// modification threshold.
     #[inline]
-    fn insert(&self, k: K, v: V) -> Option<V> {
+    fn insert(&self, k: K, v: V) -> Result<Option<V>> {
         let hash = make_hash(&self.hash_builder, &k);
         let table = self.raw_table_mut();
         unsafe {
@@ -119,24 +119,23 @@ where
             // replace it with new one. Otherwise, insert the
             // new entry.
             if let Some(item) = table.find_mut(hash, |x| k.eq(&x.0)) {
-                Some(std::mem::replace(&mut item.as_mut().1, v))
+                Ok(Some(std::mem::replace(&mut item.as_mut().1, v)))
             } else {
                 // If we are above the modification threshold, then
-                // move a modified entry to the RawStore.
+                // move a modified entry to the backend.
                 if table.above_mod_threshold() {
                     let bucket = table.evict_mod_bucket(hash);
                     let &(ref key, ref value) = bucket.as_ref();
-                    // TODO: handle err?
-                    let _ = self.backend_put(key.clone(), value.clone());
+                    self.backend_put(key.clone(), value.clone())?;
                 }
                 // continue with insert
                 table.insert(hash, (k, v));
-                None
+                Ok(None)
             }
         }
     }
 
-    /// Internal helper to get a value from the RawStore
+    /// Internal helper to get a value from the Backend
     #[inline]
     fn backend_get(&self, k: &K) -> Result<Option<V>> {
         let mut sb_session = self.backend.session();
@@ -144,7 +143,7 @@ where
         state.get(k)
     }
 
-    /// Internal helper to put a key-value record into the RawStore
+    /// Internal helper to put a key-value record into the Backend
     #[inline]
     fn backend_put(&self, k: K, v: V) -> Result<()> {
         let mut sb_session = self.backend.session();
@@ -206,39 +205,35 @@ where
     }
 
     #[inline(always)]
-    pub fn get(&self, key: &K) -> Option<&V> {
+    pub fn get(&self, key: &K) -> Result<Option<&V>> {
         let entry = self.table_get(key);
 
         // Return early if we have a match on our RawTable
         if entry.is_some() {
-            return entry;
+            return Ok(entry);
         }
 
-        // Attempt to find the value in the RawStore
-        if let Ok(entry_opt) = self.backend_get(key) {
-            if let Some(v) = entry_opt {
-                // Insert the value back into the index
-                let _ = self.insert(key.clone(), v);
-                // Kinda silly but run table_get again to get the referenced value.
-                // Cannot return a referenced value created in the function itself...
-                self.table_get(key)
-            } else {
-                // The key does not exist
-                return None;
-            }
+        // Attempt to find the value in the Backend
+        let entry_opt = self.backend_get(key)?;
+        if let Some(v) = entry_opt {
+            // Insert the value back into the index
+            self.insert(key.clone(), v)?;
+            // Kinda silly but run table_get again to get the referenced value.
+            // Cannot return a referenced value created in the function itself...
+            Ok(self.table_get(key))
         } else {
-            // TODO: Match on error and see if there is something that can be done?
-            // otherwise panic?
-            panic!("Unexpected error");
+            // The key does not exist
+            Ok(None)
         }
     }
     #[inline(always)]
-    pub fn put(&mut self, key: K, value: V) {
-        let _ = self.insert(key, value);
+    pub fn put(&mut self, key: K, value: V) -> Result<()> {
+        self.insert(key, value)?;
+        Ok(())
     }
 
     #[inline(always)]
-    pub fn rmw<F: Sized>(&mut self, key: &K, mut f: F) -> bool
+    pub fn rmw<F: Sized>(&mut self, key: &K, mut f: F) -> Result<bool>
     where
         F: FnMut(&mut V),
     {
@@ -255,29 +250,27 @@ where
                     let hash = make_hash(&self.hash_builder, &key);
                     let bucket = table.evict_mod_bucket(hash);
                     let &(ref key, ref value) = bucket.as_ref();
-                    // TODO: handle err?
-                    let _ = self.backend_put(key.clone(), value.clone());
+                    self.backend_put(key.clone(), value.clone())?;
                 };
             }
 
             // indicate that the operation was successful
-            return true;
+            return Ok(true);
         }
 
-        // Attempt to find the value in the RawStore
-        if let Ok(entry_opt) = self.backend_get(key) {
-            if let Some(mut value) = entry_opt {
-                // run the rmw op on the value
-                f(&mut value);
-                // insert the value into the RawTable
-                let _ = self.insert(key.clone(), value);
-                // indicate that the operation was successful
-                return true;
-            }
+        // Attempt to find the value in the Backend
+        let entry_opt = self.backend_get(key)?;
+        if let Some(mut value) = entry_opt {
+            // run the rmw op on the value
+            f(&mut value);
+            // insert the value into the RawTable
+            self.insert(key.clone(), value)?;
+            // indicate that the operation was successful
+            return Ok(true);
+        } else {
+            // return false as the rmw operation did not modify the given key
+            return Ok(false);
         }
-
-        // return false as the rmw operation did not modify the given key
-        return false;
     }
 }
 
@@ -317,7 +310,22 @@ mod tests {
         for i in 0..1024 {
             hash_index.put(i as u64, i as u64);
             let key: u64 = i as u64;
-            assert_eq!(hash_index.get(&key), Some(&key));
+            assert_eq!(hash_index.get(&key).unwrap(), Some(&key));
+        }
+        for i in 0..1024 {
+            let key: u64 = i as u64;
+            assert_eq!(
+                hash_index
+                    .rmw(&key, |v| {
+                        *v += 1;
+                    })
+                    .unwrap(),
+                true
+            );
+        }
+        for i in 0..1024 {
+            let key: u64 = i as u64;
+            assert_eq!(hash_index.get(&key).unwrap(), Some(&(key + 1)));
         }
         assert_eq!(hash_index.persist().is_ok(), true);
     }

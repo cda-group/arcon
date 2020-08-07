@@ -52,7 +52,7 @@ fn index_rolling_counter(backend: BackendType, b: &mut Bencher) {
                 });
             }
             // simulate an epoch and persist the value index
-            let _ = value_index.persist();
+            value_index.persist()
         });
     });
 }
