@@ -9,7 +9,13 @@ use std::{
     hash::{BuildHasher, Hash, Hasher},
 };
 
-use crate::{error::*, handles::Handle, hint::unlikely, index::IndexOps, Key, MapState, Value};
+use crate::{
+    error::*,
+    handles::Handle,
+    hint::unlikely,
+    index::IndexOps,
+    Key, MapState, Value,
+};
 
 cfg_if::cfg_if! {
     // Use the SSE2 implementation if possible: it allows us to scan 16 buckets
@@ -126,6 +132,7 @@ where
                 if table.above_mod_threshold() {
                     let bucket = table.evict_mod_bucket(hash);
                     let &(ref key, ref value) = bucket.as_ref();
+                    // BLOOM?
                     self.backend_put(key.clone(), value.clone())?;
                 }
                 // continue with insert
@@ -149,6 +156,27 @@ where
         let mut sb_session = self.backend.session();
         let mut state = self.handle.activate(&mut sb_session);
         state.fast_insert(k, v)
+    }
+
+    /// Internal helper to delete a key-value record from the Backend
+    ///
+    /// This version returns the deleted value if it existed before
+    #[inline]
+    fn backend_remove(&self, k: &K) -> Result<Option<V>> {
+        let mut sb_session = self.backend.session();
+        let mut state = self.handle.activate(&mut sb_session);
+        state.remove(k)
+    }
+
+
+    /// Internal helper to delete a key-value record from the Backend
+    ///
+    /// This version does not return a possible old value
+    #[inline]
+    fn backend_remove_fast(&self, k: &K) -> Result<()> {
+        let mut sb_session = self.backend.session();
+        let mut state = self.handle.activate(&mut sb_session);
+        state.fast_remove(k)
     }
 
     #[inline]
@@ -203,40 +231,90 @@ where
     pub fn capacity(&self) -> usize {
         self.raw_table().capacity()
     }
+    /// Remove a value by Key
+    #[inline(always)]
+    pub fn erase(&mut self, k: &K) -> Result<()> {
+        // (1). Probe RawTable and erase if it exists
+        // (2). Delete from Backend
 
+        let table = self.raw_table_mut();
+        let hash = make_hash(&self.hash_builder, &k);
+        unsafe {
+            if let Some(item) = table.find(hash, |x| k.eq(x.0.borrow())) {
+                table.erase(item)
+            }
+        };
+        self.backend_remove_fast(k)
+    }
+
+    /// Remove a value by Key and return existing item if found
+    #[inline(always)]
+    pub fn remove(&mut self, k: &K) -> Result<Option<V>> {
+        // (1). Probe RawTable and Remove if it exists
+        // (2). Delete from Backend
+
+        let table = self.raw_table_mut();
+        let hash = make_hash(&self.hash_builder, &k);
+
+        unsafe {
+            match table.find(hash, |x| k.eq(x.0.borrow())) {
+                Some(item) => {
+                    let value = table.remove(item).1;
+                    self.backend_remove_fast(k)?;
+                    return Ok(Some(value));
+                }
+                None => {
+                    // Key was not found in RawTable, attempt to remove from the backend
+                    return self.backend_remove(k);
+                }
+            }
+        };
+    }
+
+    /// Fetch a value by Key
     #[inline(always)]
     pub fn get(&self, key: &K) -> Result<Option<&V>> {
+        // Attempt to find the value by probing the RawTable
         let entry = self.table_get(key);
 
-        // Return early if we have a match on our RawTable
+        // Return early if we have a match
         if entry.is_some() {
             return Ok(entry);
         }
 
         // Attempt to find the value in the Backend
-        let entry_opt = self.backend_get(key)?;
-        if let Some(v) = entry_opt {
-            // Insert the value back into the index
-            self.insert(key.clone(), v)?;
-            // Kinda silly but run table_get again to get the referenced value.
-            // Cannot return a referenced value created in the function itself...
-            Ok(self.table_get(key))
-        } else {
-            // The key does not exist
-            Ok(None)
+        match self.backend_get(key)? {
+            Some(v) => {
+                // Insert the value back into the index
+                self.insert(key.clone(), v)?;
+                // Kinda silly but run table_get again to get the referenced value.
+                // Cannot return a referenced value created in the function itself...
+                Ok(self.table_get(key))
+            }
+            None => {
+                // Key does not exist
+                Ok(None)
+            }
         }
     }
+
+    /// Insert a key-value record into the RawTable
     #[inline(always)]
     pub fn put(&mut self, key: K, value: V) -> Result<()> {
         self.insert(key, value)?;
         Ok(())
     }
 
+    /// Read-Modify-Write Operation
+    ///
+    /// The `F` function will execute in-place if the value is found in the RawTable.
+    /// Otherwise, there will be an attempt to find the value in the Backend.
     #[inline(always)]
     pub fn rmw<F: Sized>(&mut self, key: &K, mut f: F) -> Result<bool>
     where
         F: FnMut(&mut V),
     {
+        // Probe the RawTable and modify the record in-place if possible..
         if let Some(mut entry) = self.table_get_mut(key) {
             // run the udf on the data
             f(&mut entry);
@@ -258,18 +336,20 @@ where
             return Ok(true);
         }
 
-        // Attempt to find the value in the Backend
-        let entry_opt = self.backend_get(key)?;
-        if let Some(mut value) = entry_opt {
-            // run the rmw op on the value
-            f(&mut value);
-            // insert the value into the RawTable
-            self.insert(key.clone(), value)?;
-            // indicate that the operation was successful
-            return Ok(true);
-        } else {
-            // return false as the rmw operation did not modify the given key
-            return Ok(false);
+        // Check whether the value is in the backend
+        match self.backend_get(key)? {
+            Some(mut value) => {
+                // run the rmw op on the value
+                f(&mut value);
+                // insert the value into the RawTable
+                self.put(key.clone(), value)?;
+                // indicate that the operation was successful
+                Ok(true)
+            }
+            None => {
+                // return false as the rmw operation did not modify the given key
+                Ok(false)
+            }
         }
     }
 }
@@ -285,6 +365,8 @@ where
         unsafe {
             let mut sb_session = self.backend.session();
             let mut map_state = self.handle.activate(&mut sb_session);
+            // iterate over modified buckets and insert into the backend
+            // TODO: use insert_all?
             for bucket in table.iter_modified() {
                 let &(ref key, ref value) = bucket.as_ref();
                 map_state.fast_insert(key.clone(), value.clone())?;
@@ -308,7 +390,7 @@ mod tests {
         let mut hash_index: HashIndex<u64, u64, InMemory> =
             HashIndex::new("_hashindex", capacity, mod_factor, Rc::new(backend));
         for i in 0..1024 {
-            hash_index.put(i as u64, i as u64);
+            hash_index.put(i as u64, i as u64).unwrap();
             let key: u64 = i as u64;
             assert_eq!(hash_index.get(&key).unwrap(), Some(&key));
         }

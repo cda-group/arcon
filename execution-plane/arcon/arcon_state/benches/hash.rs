@@ -5,7 +5,7 @@ use arcon_state::{
     index::{hash::HashIndex, IndexOps},
     *,
 };
-use criterion::{criterion_group, criterion_main, Bencher, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use itertools::Itertools;
 use once_cell::sync::Lazy;
 use rand::Rng;
@@ -13,15 +13,33 @@ use std::rc::Rc;
 use tempfile::tempdir;
 
 const MOD_FACTORS: [f32; 2] = [0.5, 0.8];
-const CAPACITY: [usize; 2] = [4096, 10024];
+const CAPACITY: [usize; 2] = [8096, 32768]; // Capacity in amount of elements and not as in bytes size..
 const TOTAL_KEYS: u64 = 10000;
 const TOTAL_OPERATIONS: u64 = 100000;
 
-static RANDOM_INDEXES: Lazy<Vec<u64>> = Lazy::new(|| {
+static UNIFORM_KEYS: Lazy<Vec<u64>> = Lazy::new(|| {
     let mut rng = rand::thread_rng();
     let mut indexes = Vec::with_capacity(TOTAL_OPERATIONS as usize);
     for _i in 0..TOTAL_OPERATIONS {
         indexes.push(rng.gen_range(0, TOTAL_KEYS));
+    }
+    indexes
+});
+
+static HOT_KEYS: Lazy<Vec<u64>> = Lazy::new(|| {
+    let mut rng = rand::thread_rng();
+    let mut indexes = Vec::with_capacity(TOTAL_OPERATIONS as usize);
+
+    for _i in 0..(TOTAL_OPERATIONS / 4) {
+        // generate two uniformly random keys
+        let id = rng.gen_range(0, TOTAL_KEYS);
+        indexes.push(id);
+        let next_id = rng.gen_range(0, TOTAL_KEYS);
+        indexes.push(next_id);
+
+        // simulate hot id by pushing the ids in again
+        indexes.push(id);
+        indexes.push(next_id);
     }
     indexes
 });
@@ -85,131 +103,890 @@ fn hash(c: &mut Criterion) {
 
         #[cfg(feature = "rocks")]
         group.bench_with_input(
-            BenchmarkId::new("SmallStruct Random Read Rocks Backed", description.clone()),
+            BenchmarkId::new(
+                "SmallStruct Hot Keys Random Read Rocks Backed",
+                description.clone(),
+            ),
             &(mod_factor, capacity),
             |b, (&mod_factor, &capacity)| {
-                random_read!(b, SmallStruct, BackendType::Rocks, capacity, mod_factor)
-            },
-        );
-        #[cfg(feature = "sled")]
-        group.bench_with_input(
-            BenchmarkId::new("SmallStruct Random Read Sled Backed", description.clone()),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
-                random_read!(b, SmallStruct, BackendType::Sled, capacity, mod_factor)
-            },
-        );
-
-        #[cfg(feature = "rocks")]
-        group.bench_with_input(
-            BenchmarkId::new("LargeStruct Random Read Rocks Backed", description.clone()),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
-                random_read!(b, LargeStruct, BackendType::Rocks, capacity, mod_factor)
-            },
-        );
-
-        #[cfg(feature = "sled")]
-        group.bench_with_input(
-            BenchmarkId::new("LargeStruct Random Read Sled Backed", description.clone()),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
-                random_read!(b, LargeStruct, BackendType::Sled, capacity, mod_factor)
+                random_read!(
+                    HOT_KEYS,
+                    b,
+                    SmallStruct,
+                    BackendType::Rocks,
+                    capacity,
+                    mod_factor
+                )
             },
         );
 
         #[cfg(feature = "rocks")]
         group.bench_with_input(
-            BenchmarkId::new("SmallStruct Insert Rocks Backed", description.clone()),
+            BenchmarkId::new(
+                "SmallStruct Uniform Keys Random Read Rocks Backed",
+                description.clone(),
+            ),
             &(mod_factor, capacity),
             |b, (&mod_factor, &capacity)| {
-                insert!(b, SmallStruct, BackendType::Rocks, capacity, mod_factor)
-            },
-        );
-        #[cfg(feature = "sled")]
-        group.bench_with_input(
-            BenchmarkId::new("SmallStruct Insert Sled Backed", description.clone()),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
-                insert!(b, SmallStruct, BackendType::Sled, capacity, mod_factor)
-            },
-        );
-        #[cfg(feature = "rocks")]
-        group.bench_with_input(
-            BenchmarkId::new("LargeStruct Insert Rocks Backed", description.clone()),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
-                insert!(b, LargeStruct, BackendType::Rocks, capacity, mod_factor)
-            },
-        );
-        #[cfg(feature = "sled")]
-        group.bench_with_input(
-            BenchmarkId::new("LargeStruct Insert Sled Backed", description.clone()),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
-                insert!(b, LargeStruct, BackendType::Sled, capacity, mod_factor)
-            },
-        );
-
-        #[cfg(feature = "rocks")]
-        group.bench_with_input(
-            BenchmarkId::new("RMW SmallStruct Rocks Backed", description.clone()),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
-                rmw!(b, SmallStruct, BackendType::Rocks, capacity, mod_factor)
-            },
-        );
-        #[cfg(feature = "sled")]
-        group.bench_with_input(
-            BenchmarkId::new("RMW SmallStruct Sled Backed", description.clone()),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
-                rmw!(b, SmallStruct, BackendType::Sled, capacity, mod_factor)
-            },
-        );
-
-        #[cfg(feature = "rocks")]
-        group.bench_with_input(
-            BenchmarkId::new("RMW LargeStruct Rocks Backed", description.clone()),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
-                rmw!(b, LargeStruct, BackendType::Rocks, capacity, mod_factor)
+                random_read!(
+                    UNIFORM_KEYS,
+                    b,
+                    SmallStruct,
+                    BackendType::Rocks,
+                    capacity,
+                    mod_factor
+                )
             },
         );
 
         #[cfg(feature = "sled")]
         group.bench_with_input(
-            BenchmarkId::new("RMW LargeStruct Sled Backed", description.clone()),
+            BenchmarkId::new(
+                "SmallStruct Hot Keys Random Read Sled Backed",
+                description.clone(),
+            ),
             &(mod_factor, capacity),
             |b, (&mod_factor, &capacity)| {
-                rmw!(b, LargeStruct, BackendType::Sled, capacity, mod_factor)
+                random_read!(
+                    HOT_KEYS,
+                    b,
+                    SmallStruct,
+                    BackendType::Sled,
+                    capacity,
+                    mod_factor
+                )
+            },
+        );
+
+        #[cfg(feature = "sled")]
+        group.bench_with_input(
+            BenchmarkId::new(
+                "SmallStruct Uniform Keys Random Read Sled Backed",
+                description.clone(),
+            ),
+            &(mod_factor, capacity),
+            |b, (&mod_factor, &capacity)| {
+                random_read!(
+                    UNIFORM_KEYS,
+                    b,
+                    SmallStruct,
+                    BackendType::Sled,
+                    capacity,
+                    mod_factor
+                )
+            },
+        );
+
+        #[cfg(feature = "rocks")]
+        group.bench_with_input(
+            BenchmarkId::new(
+                "LargeStruct Hot Keys Random Read Rocks Backed",
+                description.clone(),
+            ),
+            &(mod_factor, capacity),
+            |b, (&mod_factor, &capacity)| {
+                random_read!(
+                    HOT_KEYS,
+                    b,
+                    LargeStruct,
+                    BackendType::Rocks,
+                    capacity,
+                    mod_factor
+                )
+            },
+        );
+
+        #[cfg(feature = "rocks")]
+        group.bench_with_input(
+            BenchmarkId::new(
+                "LargeStruct Uniform Keys Random Read Rocks Backed",
+                description.clone(),
+            ),
+            &(mod_factor, capacity),
+            |b, (&mod_factor, &capacity)| {
+                random_read!(
+                    UNIFORM_KEYS,
+                    b,
+                    LargeStruct,
+                    BackendType::Rocks,
+                    capacity,
+                    mod_factor
+                )
+            },
+        );
+
+        #[cfg(feature = "sled")]
+        group.bench_with_input(
+            BenchmarkId::new(
+                "LargeStruct Hot Keys Random Read Sled Backed",
+                description.clone(),
+            ),
+            &(mod_factor, capacity),
+            |b, (&mod_factor, &capacity)| {
+                random_read!(
+                    HOT_KEYS,
+                    b,
+                    LargeStruct,
+                    BackendType::Sled,
+                    capacity,
+                    mod_factor
+                )
+            },
+        );
+
+        #[cfg(feature = "sled")]
+        group.bench_with_input(
+            BenchmarkId::new(
+                "LargeStruct Uniform Keys Random Read Sled Backed",
+                description.clone(),
+            ),
+            &(mod_factor, capacity),
+            |b, (&mod_factor, &capacity)| {
+                random_read!(
+                    UNIFORM_KEYS,
+                    b,
+                    LargeStruct,
+                    BackendType::Sled,
+                    capacity,
+                    mod_factor
+                )
+            },
+        );
+
+        #[cfg(feature = "rocks")]
+        group.bench_with_input(
+            BenchmarkId::new(
+                "SmallStruct Insert Hot Keys Rocks Backed",
+                description.clone(),
+            ),
+            &(mod_factor, capacity),
+            |b, (&mod_factor, &capacity)| {
+                insert!(
+                    HOT_KEYS,
+                    b,
+                    SmallStruct,
+                    BackendType::Rocks,
+                    capacity,
+                    mod_factor,
+                    false
+                )
+            },
+        );
+        #[cfg(feature = "rocks")]
+        group.bench_with_input(
+            BenchmarkId::new(
+                "SmallStruct Insert Hot Keys Rocks Backed Full Eviction",
+                description.clone(),
+            ),
+            &(mod_factor, capacity),
+            |b, (&mod_factor, &capacity)| {
+                insert!(
+                    HOT_KEYS,
+                    b,
+                    SmallStruct,
+                    BackendType::Rocks,
+                    capacity,
+                    mod_factor,
+                    true
+                )
+            },
+        );
+        #[cfg(feature = "rocks")]
+        group.bench_with_input(
+            BenchmarkId::new(
+                "SmallStruct Insert Uniform Keys Rocks Backed",
+                description.clone(),
+            ),
+            &(mod_factor, capacity),
+            |b, (&mod_factor, &capacity)| {
+                insert!(
+                    UNIFORM_KEYS,
+                    b,
+                    SmallStruct,
+                    BackendType::Rocks,
+                    capacity,
+                    mod_factor,
+                    false
+                )
+            },
+        );
+        #[cfg(feature = "rocks")]
+        group.bench_with_input(
+            BenchmarkId::new(
+                "SmallStruct Insert Uniform Keys Rocks Backed Full Eviction",
+                description.clone(),
+            ),
+            &(mod_factor, capacity),
+            |b, (&mod_factor, &capacity)| {
+                insert!(
+                    UNIFORM_KEYS,
+                    b,
+                    SmallStruct,
+                    BackendType::Rocks,
+                    capacity,
+                    mod_factor,
+                    true
+                )
+            },
+        );
+
+        #[cfg(feature = "sled")]
+        group.bench_with_input(
+            BenchmarkId::new(
+                "SmallStruct Insert Hot Keys Sled Backed",
+                description.clone(),
+            ),
+            &(mod_factor, capacity),
+            |b, (&mod_factor, &capacity)| {
+                insert!(
+                    HOT_KEYS,
+                    b,
+                    SmallStruct,
+                    BackendType::Sled,
+                    capacity,
+                    mod_factor,
+                    false
+                )
+            },
+        );
+        #[cfg(feature = "sled")]
+        group.bench_with_input(
+            BenchmarkId::new(
+                "SmallStruct Insert Hot Keys Sled Backed Full Eviction",
+                description.clone(),
+            ),
+            &(mod_factor, capacity),
+            |b, (&mod_factor, &capacity)| {
+                insert!(
+                    HOT_KEYS,
+                    b,
+                    SmallStruct,
+                    BackendType::Sled,
+                    capacity,
+                    mod_factor,
+                    true
+                )
+            },
+        );
+
+        #[cfg(feature = "sled")]
+        group.bench_with_input(
+            BenchmarkId::new(
+                "SmallStruct Insert Uniform Keys Sled Backed",
+                description.clone(),
+            ),
+            &(mod_factor, capacity),
+            |b, (&mod_factor, &capacity)| {
+                insert!(
+                    UNIFORM_KEYS,
+                    b,
+                    SmallStruct,
+                    BackendType::Sled,
+                    capacity,
+                    mod_factor,
+                    false
+                )
+            },
+        );
+
+        #[cfg(feature = "sled")]
+        group.bench_with_input(
+            BenchmarkId::new(
+                "SmallStruct Insert Uniform Keys Sled Backed Full Eviction",
+                description.clone(),
+            ),
+            &(mod_factor, capacity),
+            |b, (&mod_factor, &capacity)| {
+                insert!(
+                    UNIFORM_KEYS,
+                    b,
+                    SmallStruct,
+                    BackendType::Sled,
+                    capacity,
+                    mod_factor,
+                    true
+                )
+            },
+        );
+
+        #[cfg(feature = "rocks")]
+        group.bench_with_input(
+            BenchmarkId::new(
+                "LargeStruct Insert Hot Keys Rocks Backed",
+                description.clone(),
+            ),
+            &(mod_factor, capacity),
+            |b, (&mod_factor, &capacity)| {
+                insert!(
+                    HOT_KEYS,
+                    b,
+                    LargeStruct,
+                    BackendType::Rocks,
+                    capacity,
+                    mod_factor,
+                    false
+                )
+            },
+        );
+
+        #[cfg(feature = "rocks")]
+        group.bench_with_input(
+            BenchmarkId::new(
+                "LargeStruct Insert Hot Keys Rocks Backed Full Eviction",
+                description.clone(),
+            ),
+            &(mod_factor, capacity),
+            |b, (&mod_factor, &capacity)| {
+                insert!(
+                    HOT_KEYS,
+                    b,
+                    LargeStruct,
+                    BackendType::Rocks,
+                    capacity,
+                    mod_factor,
+                    true
+                )
+            },
+        );
+
+        #[cfg(feature = "rocks")]
+        group.bench_with_input(
+            BenchmarkId::new(
+                "LargeStruct Insert Uniform Keys Rocks Backed",
+                description.clone(),
+            ),
+            &(mod_factor, capacity),
+            |b, (&mod_factor, &capacity)| {
+                insert!(
+                    UNIFORM_KEYS,
+                    b,
+                    LargeStruct,
+                    BackendType::Rocks,
+                    capacity,
+                    mod_factor,
+                    false
+                )
+            },
+        );
+
+        #[cfg(feature = "rocks")]
+        group.bench_with_input(
+            BenchmarkId::new(
+                "LargeStruct Insert Uniform Keys Rocks Backed Full Eviction",
+                description.clone(),
+            ),
+            &(mod_factor, capacity),
+            |b, (&mod_factor, &capacity)| {
+                insert!(
+                    UNIFORM_KEYS,
+                    b,
+                    LargeStruct,
+                    BackendType::Rocks,
+                    capacity,
+                    mod_factor,
+                    true
+                )
+            },
+        );
+
+        #[cfg(feature = "sled")]
+        group.bench_with_input(
+            BenchmarkId::new(
+                "LargeStruct Insert Hot Keys Sled Backed",
+                description.clone(),
+            ),
+            &(mod_factor, capacity),
+            |b, (&mod_factor, &capacity)| {
+                insert!(
+                    HOT_KEYS,
+                    b,
+                    LargeStruct,
+                    BackendType::Sled,
+                    capacity,
+                    mod_factor,
+                    false
+                )
+            },
+        );
+        #[cfg(feature = "sled")]
+        group.bench_with_input(
+            BenchmarkId::new(
+                "LargeStruct Insert Hot Keys Sled Backed Full Eviction",
+                description.clone(),
+            ),
+            &(mod_factor, capacity),
+            |b, (&mod_factor, &capacity)| {
+                insert!(
+                    HOT_KEYS,
+                    b,
+                    LargeStruct,
+                    BackendType::Sled,
+                    capacity,
+                    mod_factor,
+                    true
+                )
+            },
+        );
+
+        #[cfg(feature = "sled")]
+        group.bench_with_input(
+            BenchmarkId::new(
+                "LargeStruct Insert Uniform Keys Sled Backed",
+                description.clone(),
+            ),
+            &(mod_factor, capacity),
+            |b, (&mod_factor, &capacity)| {
+                insert!(
+                    UNIFORM_KEYS,
+                    b,
+                    LargeStruct,
+                    BackendType::Sled,
+                    capacity,
+                    mod_factor,
+                    false
+                )
+            },
+        );
+        #[cfg(feature = "sled")]
+        group.bench_with_input(
+            BenchmarkId::new(
+                "LargeStruct Insert Uniform Keys Sled Backed Full Eviction",
+                description.clone(),
+            ),
+            &(mod_factor, capacity),
+            |b, (&mod_factor, &capacity)| {
+                insert!(
+                    UNIFORM_KEYS,
+                    b,
+                    LargeStruct,
+                    BackendType::Sled,
+                    capacity,
+                    mod_factor,
+                    true
+                )
+            },
+        );
+
+        #[cfg(feature = "rocks")]
+        group.bench_with_input(
+            BenchmarkId::new("RMW SmallStruct Hot Keys Rocks Backed", description.clone()),
+            &(mod_factor, capacity),
+            |b, (&mod_factor, &capacity)| {
+                rmw!(
+                    HOT_KEYS,
+                    b,
+                    SmallStruct,
+                    BackendType::Rocks,
+                    capacity,
+                    mod_factor,
+                    false
+                )
+            },
+        );
+        #[cfg(feature = "rocks")]
+        group.bench_with_input(
+            BenchmarkId::new(
+                "RMW SmallStruct Uniform Keys Rocks Backed",
+                description.clone(),
+            ),
+            &(mod_factor, capacity),
+            |b, (&mod_factor, &capacity)| {
+                rmw!(
+                    UNIFORM_KEYS,
+                    b,
+                    SmallStruct,
+                    BackendType::Rocks,
+                    capacity,
+                    mod_factor,
+                    false
+                )
+            },
+        );
+
+        #[cfg(feature = "rocks")]
+        group.bench_with_input(
+            BenchmarkId::new(
+                "RMW SmallStruct Hot Keys Rocks Backed Full Eviction",
+                description.clone(),
+            ),
+            &(mod_factor, capacity),
+            |b, (&mod_factor, &capacity)| {
+                rmw!(
+                    HOT_KEYS,
+                    b,
+                    SmallStruct,
+                    BackendType::Rocks,
+                    capacity,
+                    mod_factor,
+                    true
+                )
+            },
+        );
+
+        #[cfg(feature = "rocks")]
+        group.bench_with_input(
+            BenchmarkId::new(
+                "RMW SmallStruct Uniform Keys Rocks Backed Full Eviction",
+                description.clone(),
+            ),
+            &(mod_factor, capacity),
+            |b, (&mod_factor, &capacity)| {
+                rmw!(
+                    UNIFORM_KEYS,
+                    b,
+                    SmallStruct,
+                    BackendType::Rocks,
+                    capacity,
+                    mod_factor,
+                    true
+                )
+            },
+        );
+
+        #[cfg(feature = "sled")]
+        group.bench_with_input(
+            BenchmarkId::new("RMW SmallStruct Hot Keys Sled Backed", description.clone()),
+            &(mod_factor, capacity),
+            |b, (&mod_factor, &capacity)| {
+                rmw!(
+                    HOT_KEYS,
+                    b,
+                    SmallStruct,
+                    BackendType::Sled,
+                    capacity,
+                    mod_factor,
+                    false
+                )
+            },
+        );
+
+        #[cfg(feature = "sled")]
+        group.bench_with_input(
+            BenchmarkId::new(
+                "RMW SmallStruct Uniform Keys Sled Backed",
+                description.clone(),
+            ),
+            &(mod_factor, capacity),
+            |b, (&mod_factor, &capacity)| {
+                rmw!(
+                    UNIFORM_KEYS,
+                    b,
+                    SmallStruct,
+                    BackendType::Sled,
+                    capacity,
+                    mod_factor,
+                    false
+                )
+            },
+        );
+
+        #[cfg(feature = "sled")]
+        group.bench_with_input(
+            BenchmarkId::new(
+                "RMW SmallStruct Hot Keys Sled Backed Full Eviction",
+                description.clone(),
+            ),
+            &(mod_factor, capacity),
+            |b, (&mod_factor, &capacity)| {
+                rmw!(
+                    HOT_KEYS,
+                    b,
+                    SmallStruct,
+                    BackendType::Sled,
+                    capacity,
+                    mod_factor,
+                    true
+                )
+            },
+        );
+
+        #[cfg(feature = "sled")]
+        group.bench_with_input(
+            BenchmarkId::new(
+                "RMW SmallStruct Uniform Keys Sled Backed Full Eviction",
+                description.clone(),
+            ),
+            &(mod_factor, capacity),
+            |b, (&mod_factor, &capacity)| {
+                rmw!(
+                    UNIFORM_KEYS,
+                    b,
+                    SmallStruct,
+                    BackendType::Sled,
+                    capacity,
+                    mod_factor,
+                    true
+                )
+            },
+        );
+
+        #[cfg(feature = "rocks")]
+        group.bench_with_input(
+            BenchmarkId::new("RMW LargeStruct Hot Keys Rocks Backed", description.clone()),
+            &(mod_factor, capacity),
+            |b, (&mod_factor, &capacity)| {
+                rmw!(
+                    HOT_KEYS,
+                    b,
+                    LargeStruct,
+                    BackendType::Rocks,
+                    capacity,
+                    mod_factor,
+                    false
+                )
+            },
+        );
+
+        #[cfg(feature = "rocks")]
+        group.bench_with_input(
+            BenchmarkId::new(
+                "RMW LargeStruct Hot Keys Rocks Backed Full Eviction",
+                description.clone(),
+            ),
+            &(mod_factor, capacity),
+            |b, (&mod_factor, &capacity)| {
+                rmw!(
+                    HOT_KEYS,
+                    b,
+                    LargeStruct,
+                    BackendType::Rocks,
+                    capacity,
+                    mod_factor,
+                    true
+                )
+            },
+        );
+
+        #[cfg(feature = "rocks")]
+        group.bench_with_input(
+            BenchmarkId::new(
+                "RMW LargeStruct Uniform Keys Rocks Backed",
+                description.clone(),
+            ),
+            &(mod_factor, capacity),
+            |b, (&mod_factor, &capacity)| {
+                rmw!(
+                    UNIFORM_KEYS,
+                    b,
+                    LargeStruct,
+                    BackendType::Rocks,
+                    capacity,
+                    mod_factor,
+                    false
+                )
+            },
+        );
+
+        #[cfg(feature = "rocks")]
+        group.bench_with_input(
+            BenchmarkId::new(
+                "RMW LargeStruct Uniform Keys Rocks Backed Full Eviction",
+                description.clone(),
+            ),
+            &(mod_factor, capacity),
+            |b, (&mod_factor, &capacity)| {
+                rmw!(
+                    UNIFORM_KEYS,
+                    b,
+                    LargeStruct,
+                    BackendType::Rocks,
+                    capacity,
+                    mod_factor,
+                    true
+                )
+            },
+        );
+
+        #[cfg(feature = "sled")]
+        group.bench_with_input(
+            BenchmarkId::new("RMW LargeStruct Hot Keys Sled Backed", description.clone()),
+            &(mod_factor, capacity),
+            |b, (&mod_factor, &capacity)| {
+                rmw!(
+                    HOT_KEYS,
+                    b,
+                    LargeStruct,
+                    BackendType::Sled,
+                    capacity,
+                    mod_factor,
+                    false
+                )
+            },
+        );
+
+        #[cfg(feature = "sled")]
+        group.bench_with_input(
+            BenchmarkId::new(
+                "RMW LargeStruct Hot Keys Sled Backed Full Eviction",
+                description.clone(),
+            ),
+            &(mod_factor, capacity),
+            |b, (&mod_factor, &capacity)| {
+                rmw!(
+                    HOT_KEYS,
+                    b,
+                    LargeStruct,
+                    BackendType::Sled,
+                    capacity,
+                    mod_factor,
+                    true
+                )
+            },
+        );
+        #[cfg(feature = "sled")]
+        group.bench_with_input(
+            BenchmarkId::new(
+                "RMW LargeStruct Uniform Keys Sled Backed",
+                description.clone(),
+            ),
+            &(mod_factor, capacity),
+            |b, (&mod_factor, &capacity)| {
+                rmw!(
+                    UNIFORM_KEYS,
+                    b,
+                    LargeStruct,
+                    BackendType::Sled,
+                    capacity,
+                    mod_factor,
+                    false
+                )
+            },
+        );
+        #[cfg(feature = "sled")]
+        group.bench_with_input(
+            BenchmarkId::new(
+                "RMW LargeStruct Uniform Keys Sled Backed Full Eviction",
+                description.clone(),
+            ),
+            &(mod_factor, capacity),
+            |b, (&mod_factor, &capacity)| {
+                rmw!(
+                    UNIFORM_KEYS,
+                    b,
+                    LargeStruct,
+                    BackendType::Sled,
+                    capacity,
+                    mod_factor,
+                    true
+                )
             },
         );
     }
+
+    // Finished with the HashIndex benches
+    // Now onto pure backend stuff..
+
+
+    let unused_param = 0;
     #[cfg(feature = "rocks")]
-    group.bench_function("RMW SmallStruct Pure Rocks", rmw_small_pure_rocks);
-    #[cfg(feature = "sled")]
-    group.bench_function("RMW SmallStruct Pure Sled", rmw_small_pure_sled);
+    group.bench_with_input(
+        BenchmarkId::new("RMW SmallStruct Uniform Keys Pure Rocks", ""),
+        &unused_param,
+        |b, &_| {
+            rmw_pure_backend!(UNIFORM_KEYS, b, SmallStruct, BackendType::Rocks);
+        },
+    );
     #[cfg(feature = "rocks")]
-    group.bench_function("RMW LargeStruct Pure Rocks", rmw_large_pure_rocks);
-    #[cfg(feature = "sled")]
-    group.bench_function("RMW LargeStruct Pure Sled", rmw_large_pure_sled);
+    group.bench_with_input(
+        BenchmarkId::new("RMW SmallStruct Hot Keys Pure Rocks", ""),
+        &unused_param,
+        |b, &_| {
+            rmw_pure_backend!(HOT_KEYS, b, SmallStruct, BackendType::Rocks);
+        },
+    );
+    #[cfg(feature = "rocks")]
+    group.bench_with_input(
+        BenchmarkId::new("RMW LargeStruct Uniform Keys Pure Rocks", ""),
+        &unused_param,
+        |b, &_| {
+            rmw_pure_backend!(UNIFORM_KEYS, b, LargeStruct, BackendType::Rocks);
+        },
+    );
+    #[cfg(feature = "rocks")]
+    group.bench_with_input(
+        BenchmarkId::new("RMW LargeStruct Hot Keys Pure Rocks", ""),
+        &unused_param,
+        |b, &_| {
+            rmw_pure_backend!(HOT_KEYS, b, LargeStruct, BackendType::Rocks);
+        },
+    );
 
     #[cfg(feature = "rocks")]
-    group.bench_function("Random Read SmallStruct Pure Rocks", read_small_pure_rocks);
-    #[cfg(feature = "sled")]
-    group.bench_function("Random Read SmallStruct Pure Sled", read_small_pure_sled);
+    group.bench_with_input(
+        BenchmarkId::new("Random Read SmallStruct Uniform Keys Pure Rocks", ""),
+        &unused_param,
+        |b, &_| {
+            read_pure_backend!(UNIFORM_KEYS, b, SmallStruct, BackendType::Rocks);
+        },
+    );
     #[cfg(feature = "rocks")]
-    group.bench_function("Random Read LargeStruct Pure Rocks", read_large_pure_rocks);
+    group.bench_with_input(
+        BenchmarkId::new("Random Read SmallStruct Hot Keys Pure Rocks", ""),
+        &unused_param,
+        |b, &_| {
+            read_pure_backend!(HOT_KEYS, b, SmallStruct, BackendType::Rocks);
+        },
+    );
+
+    #[cfg(feature = "rocks")]
+    group.bench_with_input(
+        BenchmarkId::new("Random Read LargeStruct Uniform Keys Pure Rocks", ""),
+        &unused_param,
+        |b, &_| {
+            read_pure_backend!(UNIFORM_KEYS, b, LargeStruct, BackendType::Rocks);
+        },
+    );
+
+    #[cfg(feature = "rocks")]
+    group.bench_with_input(
+        BenchmarkId::new("Random Read LargeStruct Hot Keys Pure Rocks", ""),
+        &unused_param,
+        |b, &_| {
+            read_pure_backend!(HOT_KEYS, b, LargeStruct, BackendType::Rocks);
+        },
+    );
+
     #[cfg(feature = "sled")]
-    group.bench_function("Random Read LargeStruct Pure Sled", read_large_pure_sled);
+    group.bench_with_input(
+        BenchmarkId::new("Random Read SmallStruct Uniform Keys Pure Sled", ""),
+        &unused_param,
+        |b, &_| {
+            read_pure_backend!(UNIFORM_KEYS, b, SmallStruct, BackendType::Sled);
+        },
+    );
+    #[cfg(feature = "sled")]
+    group.bench_with_input(
+        BenchmarkId::new("Random Read SmallStruct Hot Keys Pure Sled", ""),
+        &unused_param,
+        |b, &_| {
+            read_pure_backend!(HOT_KEYS, b, SmallStruct, BackendType::Sled);
+        },
+    );
+
+    #[cfg(feature = "sled")]
+    group.bench_with_input(
+        BenchmarkId::new("Random Read LargeStruct Uniform Keys Pure Sled", ""),
+        &unused_param,
+        |b, &_| {
+            read_pure_backend!(UNIFORM_KEYS, b, LargeStruct, BackendType::Sled);
+        },
+    );
+
+    #[cfg(feature = "sled")]
+    group.bench_with_input(
+        BenchmarkId::new("Random Read LargeStruct Hot Keys Pure Sled", ""),
+        &unused_param,
+        |b, &_| {
+            read_pure_backend!(HOT_KEYS, b, LargeStruct, BackendType::Sled);
+        },
+    );
 
     group.finish()
 }
 
 #[macro_export]
 macro_rules! random_read {
-    ($bencher: expr, $type_value:ident, $backend:expr, $capacity:expr, $mod_factor:expr) => {{
+    ($keys: expr, $bencher: expr, $type_value:ident, $backend:expr, $capacity:expr, $mod_factor:expr) => {{
         let dir = tempdir().unwrap();
         with_backend_type!($backend, |B| {
             let backend = B::create(dir.as_ref()).unwrap();
@@ -219,8 +996,9 @@ macro_rules! random_read {
             for i in 0..TOTAL_KEYS {
                 let _ = hash_index.put(i, $type_value::new()).unwrap();
             }
+
             $bencher.iter(|| {
-                for i in RANDOM_INDEXES.iter() {
+                for i in $keys.iter() {
                     assert_eq!(hash_index.get(&i).unwrap().is_some(), true);
                 }
             });
@@ -230,26 +1008,34 @@ macro_rules! random_read {
 
 #[macro_export]
 macro_rules! insert {
-    ($bencher: expr, $type_value:ident, $backend:expr, $capacity:expr, $mod_factor:expr) => {{
+    ($keys: expr, $bencher: expr, $type_value:ident, $backend:expr, $capacity:expr, $mod_factor:expr, $full_eviction:expr) => {{
         let dir = tempdir().unwrap();
         with_backend_type!($backend, |B| {
             let backend = B::create(dir.as_ref()).unwrap();
             let mut hash_index: HashIndex<u64, $type_value, B> =
                 HashIndex::new("_hashindex", $capacity, $mod_factor, Rc::new(backend));
 
-            $bencher.iter(|| {
-                for id in RANDOM_INDEXES.iter() {
-                    let _ = hash_index.put(*id, $type_value::new()).unwrap();
-                }
-                let _ = hash_index.persist().unwrap();
-            });
+            if $full_eviction {
+                $bencher.iter(|| {
+                    for id in $keys.iter() {
+                        let _ = hash_index.put(*id, $type_value::new()).unwrap();
+                    }
+                    let _ = hash_index.persist().unwrap();
+                });
+            } else {
+                $bencher.iter(|| {
+                    for id in $keys.iter() {
+                        let _ = hash_index.put(*id, $type_value::new()).unwrap();
+                    }
+                });
+            }
         });
     }};
 }
 
 #[macro_export]
 macro_rules! rmw {
-    ($bencher: expr, $type_value:ident, $backend:expr, $capacity:expr, $mod_factor:expr) => {{
+    ($keys: expr, $bencher: expr, $type_value:ident, $backend:expr, $capacity:expr, $mod_factor:expr, $full_eviction:expr) => {{
         let dir = tempdir().unwrap();
         with_backend_type!($backend, |B| {
             let backend = B::create(dir.as_ref()).unwrap();
@@ -259,42 +1045,37 @@ macro_rules! rmw {
             for i in 0..TOTAL_KEYS {
                 let _ = hash_index.put(i, $type_value::new()).unwrap();
             }
+            let _ = hash_index.persist().unwrap();
 
-            $bencher.iter(|| {
-                for i in RANDOM_INDEXES.iter() {
-                    hash_index
-                        .rmw(&i, |val| {
-                            val.x2 += 10;
-                        })
-                        .unwrap();
-                }
-                hash_index.persist().unwrap()
-            });
+            if $full_eviction {
+                $bencher.iter(|| {
+                    for i in $keys.iter() {
+                        hash_index
+                            .rmw(&i, |val| {
+                                val.x2 += 10;
+                            })
+                            .unwrap();
+                    }
+                    hash_index.persist().unwrap()
+                });
+            } else {
+                $bencher.iter(|| {
+                    for i in $keys.iter() {
+                        hash_index
+                            .rmw(&i, |val| {
+                                val.x2 += 10;
+                            })
+                            .unwrap();
+                    }
+                });
+            }
         });
     }};
 }
 
-#[cfg(feature = "rocks")]
-fn rmw_small_pure_rocks(b: &mut Bencher) {
-    rmw_pure_backend!(b, SmallStruct, BackendType::Rocks);
-}
-#[cfg(feature = "rocks")]
-fn rmw_large_pure_rocks(b: &mut Bencher) {
-    rmw_pure_backend!(b, LargeStruct, BackendType::Rocks);
-}
-
-#[cfg(feature = "sled")]
-fn rmw_small_pure_sled(b: &mut Bencher) {
-    rmw_pure_backend!(b, SmallStruct, BackendType::Sled);
-}
-#[cfg(feature = "sled")]
-fn rmw_large_pure_sled(b: &mut Bencher) {
-    rmw_pure_backend!(b, LargeStruct, BackendType::Sled);
-}
-
 #[macro_export]
 macro_rules! rmw_pure_backend {
-    ($bencher: expr, $type_value:ident, $backend:expr) => {{
+    ($keys: expr, $bencher: expr, $type_value:ident, $backend:expr) => {{
         let dir = tempdir().unwrap();
         with_backend_type!($backend, |B| {
             let backend = B::create(dir.as_ref()).unwrap();
@@ -312,7 +1093,7 @@ macro_rules! rmw_pure_backend {
             }
 
             $bencher.iter(|| {
-                for i in RANDOM_INDEXES.iter() {
+                for i in $keys.iter() {
                     let mut s = state.get(&i).unwrap().unwrap();
                     s.x2 += 10;
                     state.fast_insert(*i, s).unwrap()
@@ -322,27 +1103,9 @@ macro_rules! rmw_pure_backend {
     }};
 }
 
-#[cfg(feature = "rocks")]
-fn read_small_pure_rocks(b: &mut Bencher) {
-    read_pure_backend!(b, SmallStruct, BackendType::Rocks);
-}
-#[cfg(feature = "rocks")]
-fn read_large_pure_rocks(b: &mut Bencher) {
-    read_pure_backend!(b, LargeStruct, BackendType::Rocks);
-}
-
-#[cfg(feature = "sled")]
-fn read_small_pure_sled(b: &mut Bencher) {
-    read_pure_backend!(b, SmallStruct, BackendType::Sled);
-}
-#[cfg(feature = "sled")]
-fn read_large_pure_sled(b: &mut Bencher) {
-    read_pure_backend!(b, LargeStruct, BackendType::Sled);
-}
-
 #[macro_export]
 macro_rules! read_pure_backend {
-    ($bencher: expr, $type_value:ident, $backend:expr) => {{
+    ($keys: expr, $bencher: expr, $type_value:ident, $backend:expr) => {{
         let dir = tempdir().unwrap();
         with_backend_type!($backend, |B| {
             let backend = B::create(dir.as_ref()).unwrap();
@@ -360,7 +1123,7 @@ macro_rules! read_pure_backend {
             }
 
             $bencher.iter(|| {
-                for i in RANDOM_INDEXES.iter() {
+                for i in $keys.iter() {
                     assert_eq!(state.get(&i).unwrap().is_some(), true);
                 }
             });
@@ -368,5 +1131,14 @@ macro_rules! read_pure_backend {
     }};
 }
 
-criterion_group!(benches, hash);
+fn custom_criterion() -> Criterion {
+    Criterion::default().sample_size(10)
+}
+
+criterion_group! {
+    name = benches;
+    config = custom_criterion();
+    targets = hash,
+}
+
 criterion_main!(benches);

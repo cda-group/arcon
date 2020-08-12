@@ -316,6 +316,10 @@ impl<T> Bucket<T> {
         self.as_ptr().drop_in_place();
     }
     #[inline]
+    pub unsafe fn read(&self) -> T {
+        self.as_ptr().read()
+    }
+    #[inline]
     pub unsafe fn write(&self, val: T) {
         self.as_ptr().write(val);
     }
@@ -463,7 +467,7 @@ impl<T> RawTable<T> {
 
     /// Returns the index of a bucket from a `Bucket`.
     #[inline]
-    pub unsafe fn _bucket_index(&self, bucket: &Bucket<T>) -> usize {
+    unsafe fn bucket_index(&self, bucket: &Bucket<T>) -> usize {
         bucket.to_base_index(self.data_end())
     }
 
@@ -512,6 +516,26 @@ impl<T> RawTable<T> {
         };
         self.set_ctrl(index, ctrl);
         self.items -= 1;
+    }
+
+    /// Erases an element from the table, dropping it in place.
+    #[inline]
+    #[allow(clippy::needless_pass_by_value)]
+    pub unsafe fn erase(&mut self, item: Bucket<T>) {
+        // Erase the element from the table first since drop might panic.
+        let index = self.bucket_index(&item);
+        self.erase_by_index(index);
+        item.drop();
+    }
+
+    /// Removes an element from the table, returning it.
+    #[inline]
+    #[allow(clippy::needless_pass_by_value)]
+    #[allow(deprecated)]
+    pub unsafe fn remove(&mut self, item: Bucket<T>) -> T {
+        let index = self.bucket_index(&item);
+        self.erase_by_index(index);
+        item.read()
     }
 
     /// Returns an iterator for a probe sequence on the table.
