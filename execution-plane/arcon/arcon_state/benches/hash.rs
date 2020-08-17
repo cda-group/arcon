@@ -12,8 +12,8 @@ use rand::Rng;
 use std::rc::Rc;
 use tempfile::tempdir;
 
-const MOD_FACTORS: [f32; 2] = [0.5, 0.8];
-const CAPACITY: [usize; 2] = [8096, 32768]; // Capacity in amount of elements and not as in bytes size..
+const MOD_FACTORS: [f32; 2] = [0.3, 0.8];
+const CAPACITY: [usize; 2] = [5048, 32768]; // Capacity in amount of elements and not as in bytes size..
 const TOTAL_KEYS: u64 = 10000;
 const TOTAL_OPERATIONS: u64 = 100000;
 
@@ -96,6 +96,17 @@ impl LargeStruct {
 fn hash(c: &mut Criterion) {
     let mut group = c.benchmark_group("hash");
     group.throughput(Throughput::Elements(TOTAL_OPERATIONS));
+    use arcon_state::serialization::protobuf::serialize;
+
+    let small_bytes = serialize(&SmallStruct::new()).unwrap();
+    let large_bytes = serialize(&LargeStruct::new()).unwrap();
+
+    // Print some information regarding both serialised size and in-memory
+    // of the structs that we are using.
+    println!("SmallStruct Serialised Bytes Size {}", small_bytes.len());
+    println!("SmallStruct Mem Size {}", std::mem::size_of::<SmallStruct>());
+    println!("LargeStruct Serialised Bytes Size {}", large_bytes.len());
+    println!("LargeStruct Mem Size {}", std::mem::size_of::<LargeStruct>());
 
     for input in MOD_FACTORS.iter().cartesian_product(CAPACITY.iter()) {
         let (mod_factor, capacity) = input;
@@ -104,12 +115,12 @@ fn hash(c: &mut Criterion) {
         #[cfg(feature = "rocks")]
         group.bench_with_input(
             BenchmarkId::new(
-                "SmallStruct Hot Keys Random Read Rocks Backed",
+                "SmallStruct Hot Keys Read Rocks Backed",
                 description.clone(),
             ),
             &(mod_factor, capacity),
             |b, (&mod_factor, &capacity)| {
-                random_read!(
+                read!(
                     HOT_KEYS,
                     b,
                     SmallStruct,
@@ -123,12 +134,12 @@ fn hash(c: &mut Criterion) {
         #[cfg(feature = "rocks")]
         group.bench_with_input(
             BenchmarkId::new(
-                "SmallStruct Uniform Keys Random Read Rocks Backed",
+                "SmallStruct Uniform Keys Read Rocks Backed",
                 description.clone(),
             ),
             &(mod_factor, capacity),
             |b, (&mod_factor, &capacity)| {
-                random_read!(
+                read!(
                     UNIFORM_KEYS,
                     b,
                     SmallStruct,
@@ -142,12 +153,12 @@ fn hash(c: &mut Criterion) {
         #[cfg(feature = "sled")]
         group.bench_with_input(
             BenchmarkId::new(
-                "SmallStruct Hot Keys Random Read Sled Backed",
+                "SmallStruct Hot Keys Read Sled Backed",
                 description.clone(),
             ),
             &(mod_factor, capacity),
             |b, (&mod_factor, &capacity)| {
-                random_read!(
+                read!(
                     HOT_KEYS,
                     b,
                     SmallStruct,
@@ -161,12 +172,12 @@ fn hash(c: &mut Criterion) {
         #[cfg(feature = "sled")]
         group.bench_with_input(
             BenchmarkId::new(
-                "SmallStruct Uniform Keys Random Read Sled Backed",
+                "SmallStruct Uniform Keys Read Sled Backed",
                 description.clone(),
             ),
             &(mod_factor, capacity),
             |b, (&mod_factor, &capacity)| {
-                random_read!(
+                read!(
                     UNIFORM_KEYS,
                     b,
                     SmallStruct,
@@ -180,12 +191,12 @@ fn hash(c: &mut Criterion) {
         #[cfg(feature = "rocks")]
         group.bench_with_input(
             BenchmarkId::new(
-                "LargeStruct Hot Keys Random Read Rocks Backed",
+                "LargeStruct Hot Keys Read Rocks Backed",
                 description.clone(),
             ),
             &(mod_factor, capacity),
             |b, (&mod_factor, &capacity)| {
-                random_read!(
+                read!(
                     HOT_KEYS,
                     b,
                     LargeStruct,
@@ -199,12 +210,12 @@ fn hash(c: &mut Criterion) {
         #[cfg(feature = "rocks")]
         group.bench_with_input(
             BenchmarkId::new(
-                "LargeStruct Uniform Keys Random Read Rocks Backed",
+                "LargeStruct Uniform Keys Read Rocks Backed",
                 description.clone(),
             ),
             &(mod_factor, capacity),
             |b, (&mod_factor, &capacity)| {
-                random_read!(
+                read!(
                     UNIFORM_KEYS,
                     b,
                     LargeStruct,
@@ -218,12 +229,12 @@ fn hash(c: &mut Criterion) {
         #[cfg(feature = "sled")]
         group.bench_with_input(
             BenchmarkId::new(
-                "LargeStruct Hot Keys Random Read Sled Backed",
+                "LargeStruct Hot Keys Read Sled Backed",
                 description.clone(),
             ),
             &(mod_factor, capacity),
             |b, (&mod_factor, &capacity)| {
-                random_read!(
+                read!(
                     HOT_KEYS,
                     b,
                     LargeStruct,
@@ -237,12 +248,12 @@ fn hash(c: &mut Criterion) {
         #[cfg(feature = "sled")]
         group.bench_with_input(
             BenchmarkId::new(
-                "LargeStruct Uniform Keys Random Read Sled Backed",
+                "LargeStruct Uniform Keys Read Sled Backed",
                 description.clone(),
             ),
             &(mod_factor, capacity),
             |b, (&mod_factor, &capacity)| {
-                random_read!(
+                read!(
                     UNIFORM_KEYS,
                     b,
                     LargeStruct,
@@ -913,7 +924,7 @@ fn hash(c: &mut Criterion) {
 
     #[cfg(feature = "rocks")]
     group.bench_with_input(
-        BenchmarkId::new("Random Read SmallStruct Uniform Keys Pure Rocks", ""),
+        BenchmarkId::new("Read SmallStruct Uniform Keys Pure Rocks", ""),
         &unused_param,
         |b, &_| {
             read_pure_backend!(UNIFORM_KEYS, b, SmallStruct, BackendType::Rocks);
@@ -921,7 +932,7 @@ fn hash(c: &mut Criterion) {
     );
     #[cfg(feature = "rocks")]
     group.bench_with_input(
-        BenchmarkId::new("Random Read SmallStruct Hot Keys Pure Rocks", ""),
+        BenchmarkId::new("Read SmallStruct Hot Keys Pure Rocks", ""),
         &unused_param,
         |b, &_| {
             read_pure_backend!(HOT_KEYS, b, SmallStruct, BackendType::Rocks);
@@ -930,7 +941,7 @@ fn hash(c: &mut Criterion) {
 
     #[cfg(feature = "rocks")]
     group.bench_with_input(
-        BenchmarkId::new("Random Read LargeStruct Uniform Keys Pure Rocks", ""),
+        BenchmarkId::new("Read LargeStruct Uniform Keys Pure Rocks", ""),
         &unused_param,
         |b, &_| {
             read_pure_backend!(UNIFORM_KEYS, b, LargeStruct, BackendType::Rocks);
@@ -939,7 +950,7 @@ fn hash(c: &mut Criterion) {
 
     #[cfg(feature = "rocks")]
     group.bench_with_input(
-        BenchmarkId::new("Random Read LargeStruct Hot Keys Pure Rocks", ""),
+        BenchmarkId::new("Read LargeStruct Hot Keys Pure Rocks", ""),
         &unused_param,
         |b, &_| {
             read_pure_backend!(HOT_KEYS, b, LargeStruct, BackendType::Rocks);
@@ -948,7 +959,7 @@ fn hash(c: &mut Criterion) {
 
     #[cfg(feature = "sled")]
     group.bench_with_input(
-        BenchmarkId::new("Random Read SmallStruct Uniform Keys Pure Sled", ""),
+        BenchmarkId::new("Read SmallStruct Uniform Keys Pure Sled", ""),
         &unused_param,
         |b, &_| {
             read_pure_backend!(UNIFORM_KEYS, b, SmallStruct, BackendType::Sled);
@@ -956,7 +967,7 @@ fn hash(c: &mut Criterion) {
     );
     #[cfg(feature = "sled")]
     group.bench_with_input(
-        BenchmarkId::new("Random Read SmallStruct Hot Keys Pure Sled", ""),
+        BenchmarkId::new("Read SmallStruct Hot Keys Pure Sled", ""),
         &unused_param,
         |b, &_| {
             read_pure_backend!(HOT_KEYS, b, SmallStruct, BackendType::Sled);
@@ -965,7 +976,7 @@ fn hash(c: &mut Criterion) {
 
     #[cfg(feature = "sled")]
     group.bench_with_input(
-        BenchmarkId::new("Random Read LargeStruct Uniform Keys Pure Sled", ""),
+        BenchmarkId::new("Read LargeStruct Uniform Keys Pure Sled", ""),
         &unused_param,
         |b, &_| {
             read_pure_backend!(UNIFORM_KEYS, b, LargeStruct, BackendType::Sled);
@@ -974,7 +985,7 @@ fn hash(c: &mut Criterion) {
 
     #[cfg(feature = "sled")]
     group.bench_with_input(
-        BenchmarkId::new("Random Read LargeStruct Hot Keys Pure Sled", ""),
+        BenchmarkId::new("Read LargeStruct Hot Keys Pure Sled", ""),
         &unused_param,
         |b, &_| {
             read_pure_backend!(HOT_KEYS, b, LargeStruct, BackendType::Sled);
@@ -985,7 +996,7 @@ fn hash(c: &mut Criterion) {
 }
 
 #[macro_export]
-macro_rules! random_read {
+macro_rules! read {
     ($keys: expr, $bencher: expr, $type_value:ident, $backend:expr, $capacity:expr, $mod_factor:expr) => {{
         let dir = tempdir().unwrap();
         with_backend_type!($backend, |B| {

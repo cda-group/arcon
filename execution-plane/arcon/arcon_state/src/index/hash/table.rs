@@ -862,6 +862,8 @@ impl<T> RawTable<T> {
 
     /// Returns an iterator over every element in the table that has a meta byte set as MODIFIED.
     /// Note that this iterator will reset every MODIFIED byte to SAFE.
+    ///
+    /// Safety: It is up to the caller to properly persist the buckets from the [ModifiedIterator]
     #[inline]
     pub unsafe fn iter_modified(&mut self) -> ModifiedIterator<T> {
         let data = Bucket::from_base_index(self.data_end(), 0);
