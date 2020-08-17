@@ -46,11 +46,14 @@ fn index_rolling_counter(backend: BackendType, b: &mut Bencher) {
         let mut value_index: ValueIndex<u64, B> =
             ValueIndex::new("_valueindex", std::rc::Rc::new(backend));
         b.iter(|| {
+            let curr_value = value_index.get().unwrap().clone();
             for _i in 0..OPS_PER_EPOCH {
                 value_index.rmw(|v| {
                     *v += 1;
                 });
             }
+            let new_value = value_index.get().unwrap();
+            assert_eq!(new_value, &(curr_value + OPS_PER_EPOCH));
             // simulate an epoch and persist the value index
             value_index.persist()
         });
@@ -109,11 +112,14 @@ fn naive_rolling_counter(backend: BackendType, b: &mut Bencher) {
 
         let mut state = value_handle.activate(&mut session);
         b.iter(|| {
+            let curr_value: u64 = state.get().unwrap().unwrap_or(0);
             for _i in 0..OPS_PER_EPOCH {
                 let mut counter: u64 = state.get().unwrap().unwrap_or(0);
                 counter += 1;
                 state.fast_set(counter).unwrap();
             }
+            let new_value: u64 = state.get().unwrap().unwrap_or(0);
+            assert_eq!(new_value, curr_value + OPS_PER_EPOCH);
         });
     });
 }
@@ -142,9 +148,12 @@ fn specialised_rolling_counter(backend: BackendType, b: &mut Bencher) {
 
         let mut state = agg_handle.activate(&mut session);
         b.iter(|| {
+            let curr_value: u64 = state.get().unwrap();
             for _i in 0..OPS_PER_EPOCH {
                 let _ = state.aggregate(1).unwrap();
             }
+            let new_value: u64 = state.get().unwrap();
+            assert_eq!(new_value, curr_value + OPS_PER_EPOCH);
         });
     });
 }

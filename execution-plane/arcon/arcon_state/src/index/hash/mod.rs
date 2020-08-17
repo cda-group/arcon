@@ -46,10 +46,15 @@ mod table;
 use self::table::RawTable;
 use crate::{Backend, BackendContainer};
 use std::{cell::UnsafeCell, rc::Rc};
+#[cfg(test)]
+use crate::index::hash::table::ModifiedIterator;
 
 // Set FxHash to default as most keys tend to be small
 pub type DefaultHashBuilder = fxhash::FxBuildHasher;
 
+/// A HashIndex suitable for point lookups and in-place
+/// updates of hot values. It holds a handle to a MapState
+/// type where it may persist or fetch data from.
 pub struct HashIndex<K, V, B>
 where
     K: Key,
@@ -132,7 +137,6 @@ where
                 if table.above_mod_threshold() {
                     let bucket = table.evict_mod_bucket(hash);
                     let &(ref key, ref value) = bucket.as_ref();
-                    // BLOOM?
                     self.backend_put(key.clone(), value.clone())?;
                 }
                 // continue with insert
@@ -352,6 +356,13 @@ where
             }
         }
     }
+
+    /// Method only used for testing the ModifiedIterator of RawTable.
+    #[cfg(test)]
+    pub(crate) fn modified_iterator(&mut self) -> ModifiedIterator<(K,V)> {
+        let table = self.raw_table_mut();
+        unsafe { table.iter_modified() }
+    }
 }
 
 impl<K, V, B> IndexOps for HashIndex<K, V, B>
@@ -410,5 +421,50 @@ mod tests {
             assert_eq!(hash_index.get(&key).unwrap(), Some(&(key + 1)));
         }
         assert_eq!(hash_index.persist().is_ok(), true);
+    }
+
+    #[test]
+    fn modified_test() {
+        let backend = crate::InMemory::create(&std::path::Path::new("/tmp/")).unwrap();
+        let mod_factor: f32 = 0.4;
+        let capacity = 10;
+
+        let mut hash_index: HashIndex<u64, u64, InMemory> =
+            HashIndex::new("_hashindex", capacity, mod_factor, Rc::new(backend));
+        for i in 0..10 {
+            hash_index.put(i as u64, i as u64).unwrap();
+        }
+
+        // modified limit is 0.4, while our capacity is 10, the
+        // RawTable will calculate a suitable power of two capacity.
+        // In this case, the underlying capacity is set to 14.
+        // modified limit is thus set to 5 (14*0.4).
+
+        assert_eq!(hash_index.capacity(), 14);
+        assert_eq!(hash_index.modified_iterator().count(), 5);
+
+        // The meta data is reset, so the counter should now be zero
+        assert_eq!(hash_index.modified_iterator().count(), 0);
+
+
+        // Run rmw operation on the following keys and check that they are indeed
+        // returned from our modified_iterator.
+        let rmw_keys  = vec![0, 1, 2];
+        for key in &rmw_keys {
+            assert_eq!(
+                hash_index
+                    .rmw(&key, |v| {
+                        *v += 1;
+                    })
+                    .unwrap(),
+                true
+            );
+        }
+
+        for bucket in hash_index.modified_iterator() {
+            let &(ref key, ref value) = unsafe { bucket.as_ref() };
+            assert_eq!(rmw_keys.contains(key), true);
+            assert_eq!(value, &(key + 1));
+        }
     }
 }
