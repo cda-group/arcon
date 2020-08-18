@@ -104,9 +104,15 @@ fn hash(c: &mut Criterion) {
     // Print some information regarding both serialised size and in-memory
     // of the structs that we are using.
     println!("SmallStruct Serialised Bytes Size {}", small_bytes.len());
-    println!("SmallStruct Mem Size {}", std::mem::size_of::<SmallStruct>());
+    println!(
+        "SmallStruct Mem Size {}",
+        std::mem::size_of::<SmallStruct>()
+    );
     println!("LargeStruct Serialised Bytes Size {}", large_bytes.len());
-    println!("LargeStruct Mem Size {}", std::mem::size_of::<LargeStruct>());
+    println!(
+        "LargeStruct Mem Size {}",
+        std::mem::size_of::<LargeStruct>()
+    );
 
     for input in MOD_FACTORS.iter().cartesian_product(CAPACITY.iter()) {
         let (mod_factor, capacity) = input;
@@ -152,10 +158,7 @@ fn hash(c: &mut Criterion) {
 
         #[cfg(feature = "sled")]
         group.bench_with_input(
-            BenchmarkId::new(
-                "SmallStruct Hot Keys Read Sled Backed",
-                description.clone(),
-            ),
+            BenchmarkId::new("SmallStruct Hot Keys Read Sled Backed", description.clone()),
             &(mod_factor, capacity),
             |b, (&mod_factor, &capacity)| {
                 read!(
@@ -228,10 +231,7 @@ fn hash(c: &mut Criterion) {
 
         #[cfg(feature = "sled")]
         group.bench_with_input(
-            BenchmarkId::new(
-                "LargeStruct Hot Keys Read Sled Backed",
-                description.clone(),
-            ),
+            BenchmarkId::new("LargeStruct Hot Keys Read Sled Backed", description.clone()),
             &(mod_factor, capacity),
             |b, (&mod_factor, &capacity)| {
                 read!(
@@ -886,7 +886,6 @@ fn hash(c: &mut Criterion) {
 
     // Finished with the HashIndex benches
     // Now onto pure backend stuff..
-
 
     let unused_param = 0;
     #[cfg(feature = "rocks")]

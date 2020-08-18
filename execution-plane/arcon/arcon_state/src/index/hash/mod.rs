@@ -9,13 +9,7 @@ use std::{
     hash::{BuildHasher, Hash, Hasher},
 };
 
-use crate::{
-    error::*,
-    handles::Handle,
-    hint::unlikely,
-    index::IndexOps,
-    Key, MapState, Value,
-};
+use crate::{error::*, handles::Handle, hint::unlikely, index::IndexOps, Key, MapState, Value};
 
 cfg_if::cfg_if! {
     // Use the SSE2 implementation if possible: it allows us to scan 16 buckets
@@ -44,10 +38,10 @@ mod bitmask;
 mod table;
 
 use self::table::RawTable;
-use crate::{Backend, BackendContainer};
-use std::{cell::UnsafeCell, rc::Rc};
 #[cfg(test)]
 use crate::index::hash::table::ModifiedIterator;
+use crate::{Backend, BackendContainer};
+use std::{cell::UnsafeCell, rc::Rc};
 
 // Set FxHash to default as most keys tend to be small
 pub type DefaultHashBuilder = fxhash::FxBuildHasher;
@@ -171,7 +165,6 @@ where
         let mut state = self.handle.activate(&mut sb_session);
         state.remove(k)
     }
-
 
     /// Internal helper to delete a key-value record from the Backend
     ///
@@ -359,7 +352,7 @@ where
 
     /// Method only used for testing the ModifiedIterator of RawTable.
     #[cfg(test)]
-    pub(crate) fn modified_iterator(&mut self) -> ModifiedIterator<(K,V)> {
+    pub(crate) fn modified_iterator(&mut self) -> ModifiedIterator<(K, V)> {
         let table = self.raw_table_mut();
         unsafe { table.iter_modified() }
     }
@@ -376,12 +369,10 @@ where
         unsafe {
             let mut sb_session = self.backend.session();
             let mut map_state = self.handle.activate(&mut sb_session);
-            // iterate over modified buckets and insert into the backend
-            // TODO: use insert_all?
-            for bucket in table.iter_modified() {
-                let &(ref key, ref value) = bucket.as_ref();
-                map_state.fast_insert(key.clone(), value.clone())?;
-            }
+            // TODO: This creates a copy of each key-value pair,
+            // as the protobuf serialisation only needs a reference, there
+            // is no point in copying the actual underyling data...
+            map_state.insert_all(table.iter_modified())?;
         };
         Ok(())
     }
@@ -446,10 +437,9 @@ mod tests {
         // The meta data is reset, so the counter should now be zero
         assert_eq!(hash_index.modified_iterator().count(), 0);
 
-
         // Run rmw operation on the following keys and check that they are indeed
         // returned from our modified_iterator.
-        let rmw_keys  = vec![0, 1, 2];
+        let rmw_keys = vec![0, 1, 2];
         for key in &rmw_keys {
             assert_eq!(
                 hash_index
@@ -461,10 +451,9 @@ mod tests {
             );
         }
 
-        for bucket in hash_index.modified_iterator() {
-            let &(ref key, ref value) = unsafe { bucket.as_ref() };
-            assert_eq!(rmw_keys.contains(key), true);
-            assert_eq!(value, &(key + 1));
+        for (key, value) in hash_index.modified_iterator() {
+            assert_eq!(rmw_keys.contains(&key), true);
+            assert_eq!(value, key + 1);
         }
     }
 }

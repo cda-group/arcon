@@ -334,7 +334,7 @@ impl<T> Bucket<T> {
 }
 
 /// A raw hash table with an unsafe API.
-pub struct RawTable<T> {
+pub struct RawTable<T: Clone> {
     // Mask to get an index from a hash value. The value is one less than the
     // number of buckets in the table.
     bucket_mask: usize,
@@ -360,7 +360,7 @@ pub struct RawTable<T> {
     marker: PhantomData<T>,
 }
 
-impl<T> RawTable<T> {
+impl<T: Clone> RawTable<T> {
     /// Creates a new empty hash table without allocating any memory.
     ///
     /// In effect this returns a table with exactly 1 bucket. However we can
@@ -867,7 +867,10 @@ impl<T> RawTable<T> {
     #[inline]
     pub unsafe fn iter_modified(&mut self) -> ModifiedIterator<T> {
         let data = Bucket::from_base_index(self.data_end(), 0);
+        let mod_counter = self.mod_counter;
+        // reset the old one to zero
         self.mod_counter = 0;
+
         ModifiedIterator {
             iter: RawIterModified::new(
                 self.ctrl.as_ptr(),
@@ -875,6 +878,7 @@ impl<T> RawTable<T> {
                 data,
                 self.buckets(),
             ),
+            mod_counter,
         }
     }
 
@@ -892,11 +896,11 @@ impl<T> RawTable<T> {
     }
 }
 
-unsafe impl<T> Send for RawTable<T> where T: Send {}
-unsafe impl<T> Sync for RawTable<T> where T: Sync {}
+unsafe impl<T: Clone> Send for RawTable<T> where T: Send {}
+unsafe impl<T: Clone> Sync for RawTable<T> where T: Sync {}
 
 #[cfg(feature = "nightly")]
-unsafe impl<#[may_dangle] T> Drop for RawTable<T> {
+unsafe impl<#[may_dangle] T: Clone> Drop for RawTable<T> {
     #[inline]
     fn drop(&mut self) {
         if !self.is_empty_singleton() {
@@ -912,7 +916,7 @@ unsafe impl<#[may_dangle] T> Drop for RawTable<T> {
     }
 }
 #[cfg(not(feature = "nightly"))]
-impl<T> Drop for RawTable<T> {
+impl<T: Clone> Drop for RawTable<T> {
     #[inline]
     fn drop(&mut self) {
         if !self.is_empty_singleton() {
@@ -1174,26 +1178,32 @@ impl<T> Iterator for RawIterRange<T> {
 impl<T> FusedIterator for RawIterRange<T> {}
 
 /// Iterator which returns a raw pointer to every full bucket in the table.
-pub struct ModifiedIterator<T> {
+pub struct ModifiedIterator<T: Clone> {
     pub(crate) iter: RawIterModified<T>,
+    mod_counter: usize,
 }
 
-impl<T> Clone for ModifiedIterator<T> {
+impl<T: Clone> Clone for ModifiedIterator<T> {
     #[inline]
     fn clone(&self) -> Self {
         Self {
             iter: self.iter.clone(),
+            mod_counter: self.mod_counter.clone(),
         }
     }
 }
 
-impl<T> Iterator for ModifiedIterator<T> {
-    type Item = Bucket<T>;
+impl<T: Clone> Iterator for ModifiedIterator<T> {
+    type Item = T;
 
     #[inline]
-    fn next(&mut self) -> Option<Bucket<T>> {
-        if let Some(b) = self.iter.next() {
-            Some(b)
+    fn next(&mut self) -> Option<T> {
+        if self.mod_counter == 0 {
+            // Reached zero modified buckets, no point in searching further.
+            None
+        } else if let Some(b) = self.iter.next() {
+            self.mod_counter -= 1;
+            Some(unsafe { b.as_ref().clone() })
         } else {
             None
         }
@@ -1205,8 +1215,8 @@ impl<T> Iterator for ModifiedIterator<T> {
     }
 }
 
-impl<T> ExactSizeIterator for ModifiedIterator<T> {}
-impl<T> FusedIterator for ModifiedIterator<T> {}
+impl<T: Clone> ExactSizeIterator for ModifiedIterator<T> {}
+impl<T: Clone> FusedIterator for ModifiedIterator<T> {}
 
 /// Iterator which returns a raw pointer to every full bucket in the table.
 pub struct RawIter<T> {
