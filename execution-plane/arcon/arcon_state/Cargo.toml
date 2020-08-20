@@ -26,6 +26,7 @@ once_cell = "1.3"
 fxhash = "0.2.1"
 cfg-if = "0.1.10"
 smallbox = { version = "0.8", features = ["coerce"] }
+hierarchical_hash_wheel_timer = "1.0"
 
 serde = { version = "1.0", features = ["serde_derive"], optional = true }
 rocksdb = { git = "https://github.com/mrobakowski/rust-rocksdb.git", branch = "arcon", optional = true } # TODO
@@ -50,4 +51,8 @@ harness = false
 
 [[bench]]
 name = "appender"
+harness = false
+
+[[bench]]
+name = "timer"
 harness = false
