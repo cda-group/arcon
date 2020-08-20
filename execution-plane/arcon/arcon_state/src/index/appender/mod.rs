@@ -7,6 +7,9 @@ use crate::{
 use std::rc::Rc;
 
 /// An Index suitable for Non-associative Windows
+///
+/// A backing [VecState] acts as an overflow vector when
+/// the data no longer fits in the specified in-memory capacity.
 #[derive(Debug)]
 pub struct AppenderIndex<V, B>
 where
@@ -42,16 +45,29 @@ where
     }
 
     #[inline(always)]
+    pub fn len(&self) -> usize {
+        let mem_len = self.elements.len();
+        let mut sb_session = self.backend.session();
+        let state = self.handle.activate(&mut sb_session);
+        let raw_len = state.len().unwrap();
+        mem_len + raw_len
+    }
+
+    /// Clear the vector of elements and its backing overflow [VecState]
+    #[inline(always)]
     pub fn clear(&mut self) -> Result<()> {
+        self.elements.clear();
+
         let mut sb_session = self.backend.session();
         let mut state = self.handle.activate(&mut sb_session);
         state.clear()
     }
 
+    /// Consume the whole batch of data
     #[inline(always)]
     pub fn consume(&mut self) -> Result<Vec<V>> {
         let mut sb_session = self.backend.session();
-        let state = self.handle.activate(&mut sb_session);
+        let mut state = self.handle.activate(&mut sb_session);
 
         // get elements stored in VecState
         let mut stored = state.get()?;
@@ -61,6 +77,9 @@ where
         std::mem::swap(&mut new_vec, &mut self.elements);
         // append the current in-mem elements with the stored ones
         stored.append(&mut new_vec);
+
+        // make sure we clear the backing VecState
+        state.clear()?;
 
         Ok(stored)
     }
@@ -83,9 +102,7 @@ where
     fn persist(&mut self) -> Result<()> {
         let mut sb_session = self.backend.session();
         let mut state = self.handle.activate(&mut sb_session);
-        for elem in self.elements.drain(..) {
-            state.append(elem)?;
-        }
+        state.add_all(self.elements.drain(..))?;
         Ok(())
     }
 }
@@ -105,6 +122,7 @@ mod tests {
         for i in 0..1024 {
             index.append(i as u64).unwrap();
         }
+        assert_eq!(index.len(), 1024);
         let consumed = index.consume().unwrap();
         assert_eq!(consumed.len(), 1024);
         let mut c = 0;

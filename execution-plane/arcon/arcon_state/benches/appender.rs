@@ -5,8 +5,8 @@ use arcon_state::{index::appender::AppenderIndex, Backend, *};
 use criterion::{criterion_group, criterion_main, Bencher, BenchmarkId, Criterion};
 use tempfile::tempdir;
 
-const CAPACITY: [usize; 3] = [512, 4096, 10024];
-const WINDOW_SIZE: usize = 10024;
+const CAPACITY: [usize; 3] = [5048, 12498, 20048];
+const WINDOW_SIZE: usize = 20048;
 
 fn appender(c: &mut Criterion) {
     let mut group = c.benchmark_group("appender");
@@ -27,6 +27,23 @@ fn appender(c: &mut Criterion) {
             |b, (window_size, &capacity)| index_mean_sled(b, *window_size, capacity),
         );
     }
+
+
+    let window_size = WINDOW_SIZE;
+    #[cfg(feature = "sled")]
+    group.bench_with_input(
+        BenchmarkId::new("Mean Index Pure Sled", ""),
+        &(window_size),
+        |b, window_size| appender_mean_pure_backend(BackendType::Sled, *window_size, b),
+    );
+
+    #[cfg(feature = "rocks")]
+    group.bench_with_input(
+        BenchmarkId::new("Mean Index Pure Rocks", ""),
+        &(window_size),
+        |b, window_size| appender_mean_pure_backend(BackendType::Rocks, *window_size, b),
+    );
+
 
     group.finish()
 }
@@ -57,6 +74,30 @@ fn appender_mean_index(backend: BackendType, window_size: usize, capacity: usize
                 let _ = appender_index.append(i as u64).unwrap();
             }
             let consumed = appender_index.consume().unwrap();
+            mean(&consumed)
+        });
+    });
+}
+
+fn appender_mean_pure_backend(backend: BackendType, window_size: usize, b: &mut Bencher) {
+    let dir = tempdir().unwrap();
+    with_backend_type!(backend, |B| {
+        let backend = B::create(dir.as_ref()).unwrap();
+        let mut vec_handle: Handle<VecState<u64>> = Handle::vec("vec");
+        let mut session = backend.session();
+        {
+            let mut rtok = unsafe { RegistrationToken::new(&mut session) };
+            vec_handle.register(&mut rtok);
+        }
+
+        let mut state = vec_handle.activate(&mut session);
+
+        b.iter(|| {
+            for i in 0..window_size {
+                let _ = state.append(i as u64).unwrap();
+            }
+            let consumed = state.get().unwrap();
+            state.clear().unwrap();
             mean(&consumed)
         });
     });
