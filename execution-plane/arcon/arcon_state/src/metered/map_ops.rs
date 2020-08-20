@@ -26,6 +26,13 @@ impl<B: Backend> MapOps for Metered<B> {
             value: V,
         ) -> Result<()>;
 
+        fn map_fast_insert_by_ref<K: Key, V: Value, IK: Metakey, N: Metakey>(
+            &mut self,
+            handle: &Handle<MapState<K, V>, IK, N>,
+            key: &K,
+            value: &V,
+        ) -> Result<()>;
+
         fn map_insert<K: Key, V: Value, IK: Metakey, N: Metakey>(
             &mut self,
             handle: &Handle<MapState<K, V>, IK, N>,
@@ -37,6 +44,12 @@ impl<B: Backend> MapOps for Metered<B> {
             &mut self,
             handle: &Handle<MapState<K, V>, IK, N>,
             key_value_pairs: impl IntoIterator<Item = (K, V)>,
+        ) -> Result<()>;
+
+        fn map_insert_all_by_ref<'a, K: Key, V: Value, IK: Metakey, N: Metakey>(
+            &mut self,
+            handle: &Handle<MapState<K, V>, IK, N>,
+            key_value_pairs: impl IntoIterator<Item = &'a (K, V)>,
         ) -> Result<()>;
 
         fn map_remove<K: Key, V: Value, IK: Metakey, N: Metakey>(

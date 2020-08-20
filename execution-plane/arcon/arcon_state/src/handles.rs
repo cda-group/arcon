@@ -272,29 +272,39 @@ impl<A: Aggregator, IK: Metakey, N: Metakey> Handle<AggregatorState<A>, IK, N> {
 // endregion
 
 impl<B: Backend, S: StateType, IK: Metakey, N: Metakey> ActiveHandle<'_, '_, B, S, IK, N> {
+    #[inline]
     pub fn set_item_key(&mut self, item_key: IK) {
         self.inner.set_item_key(item_key)
     }
+    #[inline]
     pub fn set_namespace(&mut self, namespace: N) {
         self.inner.set_namespace(namespace)
     }
 }
 
 impl<B: Backend, T: Value, IK: Metakey, N: Metakey> ActiveHandle<'_, '_, B, ValueState<T>, IK, N> {
+    #[inline]
     pub fn clear(&mut self) -> Result<()> {
         self.backend.value_clear(self.inner)
     }
 
+    #[inline]
     pub fn get(&self) -> Result<Option<T>> {
         self.backend.value_get(self.inner)
     }
 
+    #[inline]
     pub fn set(&mut self, value: T) -> Result<Option<T>> {
         self.backend.value_set(self.inner, value)
     }
 
+    #[inline]
     pub fn fast_set(&mut self, value: T) -> Result<()> {
         self.backend.value_fast_set(self.inner, value)
+    }
+    #[inline]
+    pub fn fast_set_by_ref(&mut self, value: &T) -> Result<()> {
+        self.backend.value_fast_set_by_ref(self.inner, value)
     }
 }
 
@@ -302,75 +312,114 @@ pub type BoxedIteratorOfResult<'a, T> = Box<dyn Iterator<Item = Result<T>> + 'a>
 impl<B: Backend, K: Key, V: Value, IK: Metakey, N: Metakey>
     ActiveHandle<'_, '_, B, MapState<K, V>, IK, N>
 {
+    #[inline]
     pub fn clear(&mut self) -> Result<()> {
         self.backend.map_clear(self.inner)
     }
 
+    #[inline]
     pub fn get(&self, key: &K) -> Result<Option<V>> {
         self.backend.map_get(self.inner, key)
     }
+
+    #[inline]
+    pub fn fast_insert_by_ref(&mut self, key: &K, value: &V) -> Result<()> {
+        self.backend.map_fast_insert_by_ref(self.inner, key, value)
+    }
+
+    #[inline]
     pub fn fast_insert(&mut self, key: K, value: V) -> Result<()> {
         self.backend.map_fast_insert(self.inner, key, value)
     }
+
+    #[inline]
     pub fn insert(&mut self, key: K, value: V) -> Result<Option<V>> {
         self.backend.map_insert(self.inner, key, value)
     }
+
+    #[inline]
     pub fn insert_all(&mut self, key_value_pairs: impl IntoIterator<Item = (K, V)>) -> Result<()> {
         self.backend.map_insert_all(self.inner, key_value_pairs)
     }
+    #[inline]
+    pub fn insert_all_by_ref<'a>(
+        &mut self,
+        key_value_pairs: impl IntoIterator<Item = &'a (K, V)>,
+    ) -> Result<()> {
+        self.backend
+            .map_insert_all_by_ref(self.inner, key_value_pairs)
+    }
 
+    #[inline]
     pub fn remove(&mut self, key: &K) -> Result<Option<V>> {
         self.backend.map_remove(self.inner, key)
     }
+
+    #[inline]
     pub fn fast_remove(&mut self, key: &K) -> Result<()> {
         self.backend.map_fast_remove(self.inner, key)
     }
+
+    #[inline]
     pub fn contains(&self, key: &K) -> Result<bool> {
         self.backend.map_contains(self.inner, key)
     }
 
     // unboxed iterators would require associated types generic over backend's lifetime
     // TODO: impl this when GATs land on nightly
+    #[inline]
     pub fn iter(&self) -> Result<BoxedIteratorOfResult<(K, V)>> {
         self.backend.map_iter(self.inner)
     }
+    #[inline]
     pub fn keys(&self) -> Result<BoxedIteratorOfResult<K>> {
         self.backend.map_keys(self.inner)
     }
+    #[inline]
     pub fn values(&self) -> Result<BoxedIteratorOfResult<V>> {
         self.backend.map_values(self.inner)
     }
 
+    #[inline]
     pub fn len(&self) -> Result<usize> {
         self.backend.map_len(self.inner)
     }
+    #[inline]
     pub fn is_empty(&self) -> Result<bool> {
         self.backend.map_is_empty(self.inner)
     }
 }
 
 impl<B: Backend, T: Value, IK: Metakey, N: Metakey> ActiveHandle<'_, '_, B, VecState<T>, IK, N> {
+    #[inline]
     pub fn clear(&mut self) -> Result<()> {
         self.backend.vec_clear(self.inner)
     }
+    #[inline]
     pub fn append(&mut self, value: T) -> Result<()> {
         self.backend.vec_append(self.inner, value)
     }
+    #[inline]
     pub fn get(&self) -> Result<Vec<T>> {
         self.backend.vec_get(self.inner)
     }
+    #[inline]
     pub fn iter(&self) -> Result<BoxedIteratorOfResult<T>> {
         self.backend.vec_iter(self.inner)
     }
+    #[inline]
     pub fn set(&mut self, value: Vec<T>) -> Result<()> {
         self.backend.vec_set(self.inner, value)
     }
+    #[inline]
     pub fn add_all(&mut self, values: impl IntoIterator<Item = T>) -> Result<()> {
         self.backend.vec_add_all(self.inner, values)
     }
+    #[inline]
     pub fn is_empty(&self) -> Result<bool> {
         self.backend.vec_is_empty(self.inner)
     }
+    #[inline]
     pub fn len(&self) -> Result<usize> {
         self.backend.vec_len(self.inner)
     }
@@ -379,14 +428,17 @@ impl<B: Backend, T: Value, IK: Metakey, N: Metakey> ActiveHandle<'_, '_, B, VecS
 impl<B: Backend, T: Value, F: Reducer<T>, IK: Metakey, N: Metakey>
     ActiveHandle<'_, '_, B, ReducerState<T, F>, IK, N>
 {
+    #[inline]
     pub fn clear(&mut self) -> Result<()> {
         self.backend.reducer_clear(self.inner)
     }
 
+    #[inline]
     pub fn get(&self) -> Result<Option<T>> {
         self.backend.reducer_get(self.inner)
     }
 
+    #[inline]
     pub fn reduce(&mut self, value: T) -> Result<()> {
         self.backend.reducer_reduce(self.inner, value)
     }
@@ -395,14 +447,17 @@ impl<B: Backend, T: Value, F: Reducer<T>, IK: Metakey, N: Metakey>
 impl<B: Backend, A: Aggregator, IK: Metakey, N: Metakey>
     ActiveHandle<'_, '_, B, AggregatorState<A>, IK, N>
 {
+    #[inline]
     pub fn clear(&mut self) -> Result<()> {
         self.backend.aggregator_clear(self.inner)
     }
 
+    #[inline]
     pub fn get(&self) -> Result<A::Result> {
         self.backend.aggregator_get(self.inner)
     }
 
+    #[inline]
     pub fn aggregate(&mut self, value: A::Input) -> Result<()> {
         self.backend.aggregator_aggregate(self.inner, value)
     }

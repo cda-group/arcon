@@ -131,7 +131,7 @@ where
                 if table.above_mod_threshold() {
                     let bucket = table.evict_mod_bucket(hash);
                     let &(ref key, ref value) = bucket.as_ref();
-                    self.backend_put(key.clone(), value.clone())?;
+                    self.backend_put(key, value)?;
                 }
                 // continue with insert
                 table.insert(hash, (k, v));
@@ -150,10 +150,10 @@ where
 
     /// Internal helper to put a key-value record into the Backend
     #[inline]
-    fn backend_put(&self, k: K, v: V) -> Result<()> {
+    fn backend_put(&self, k: &K, v: &V) -> Result<()> {
         let mut sb_session = self.backend.session();
         let mut state = self.handle.activate(&mut sb_session);
-        state.fast_insert(k, v)
+        state.fast_insert_by_ref(k, v)
     }
 
     /// Internal helper to delete a key-value record from the Backend
@@ -325,7 +325,7 @@ where
                     let hash = make_hash(&self.hash_builder, &key);
                     let bucket = table.evict_mod_bucket(hash);
                     let &(ref key, ref value) = bucket.as_ref();
-                    self.backend_put(key.clone(), value.clone())?;
+                    self.backend_put(key, value)?;
                 };
             }
 
@@ -369,10 +369,7 @@ where
         unsafe {
             let mut sb_session = self.backend.session();
             let mut map_state = self.handle.activate(&mut sb_session);
-            // TODO: This creates a copy of each key-value pair,
-            // as the protobuf serialisation only needs a reference, there
-            // is no point in copying the actual underyling data...
-            map_state.insert_all(table.iter_modified())?;
+            map_state.insert_all_by_ref(table.iter_modified())?;
         };
         Ok(())
     }
@@ -453,7 +450,7 @@ mod tests {
 
         for (key, value) in hash_index.modified_iterator() {
             assert_eq!(rmw_keys.contains(&key), true);
-            assert_eq!(value, key + 1);
+            assert_eq!(value, &(key + 1));
         }
     }
 }

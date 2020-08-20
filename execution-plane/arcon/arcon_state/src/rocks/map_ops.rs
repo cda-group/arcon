@@ -45,6 +45,19 @@ impl MapOps for Rocks {
         Ok(())
     }
 
+    fn map_fast_insert_by_ref<K: Key, V: Value, IK: Metakey, N: Metakey>(
+        &mut self,
+        handle: &Handle<MapState<K, V>, IK, N>,
+        key: &K,
+        value: &V,
+    ) -> Result<()> {
+        let key = handle.serialize_metakeys_and_key(key)?;
+        let serialized = protobuf::serialize(value)?;
+        self.put(handle.id, key, serialized)?;
+
+        Ok(())
+    }
+
     fn map_insert<K: Key, V: Value, IK: Metakey, N: Metakey>(
         &mut self,
         handle: &Handle<MapState<K, V>, IK, N>,
@@ -79,6 +92,24 @@ impl MapOps for Rocks {
         for (user_key, value) in key_value_pairs {
             let key = handle.serialize_metakeys_and_key(&user_key)?;
             let serialized = protobuf::serialize(&value)?;
+            wb.put_cf(cf, key, serialized)?;
+        }
+
+        Ok(backend.db.write_opt(wb, &default_write_opts())?)
+    }
+    fn map_insert_all_by_ref<'a, K: Key, V: Value, IK: Metakey, N: Metakey>(
+        &mut self,
+        handle: &Handle<MapState<K, V>, IK, N>,
+        key_value_pairs: impl IntoIterator<Item = &'a (K, V)>,
+    ) -> Result<()> {
+        let backend = self.initialized_mut()?;
+
+        let mut wb = WriteBatch::default();
+        let cf = backend.get_cf_handle(handle.id)?;
+
+        for (user_key, value) in key_value_pairs {
+            let key = handle.serialize_metakeys_and_key(user_key)?;
+            let serialized = protobuf::serialize(value)?;
             wb.put_cf(cf, key, serialized)?;
         }
 

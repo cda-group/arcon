@@ -244,46 +244,54 @@ macro_rules! with_backend_type {
                 type $type_ident = $crate::in_memory::InMemory;
                 $body
             }
+            /*
             MeteredInMemory => {
                 type $type_ident = $crate::metered::Metered<$crate::in_memory::InMemory>;
                 $body
             }
+            */
             $crate::cfg_if_rocks!(@pat Rocks) => {
                 $crate::cfg_if_rocks! {
                     type $type_ident = $crate::rocks::Rocks;
                     $body
                 }
             }
+            /*
             $crate::cfg_if_rocks!(@pat MeteredRocks) => {
                 $crate::cfg_if_rocks! {
                     type $type_ident = $crate::metered::Metered<$crate::rocks::Rocks>;
                     $body
                 }
             }
+            */
             $crate::cfg_if_sled!(@pat Sled) => {
                 $crate::cfg_if_sled! {
                     type $type_ident = $crate::sled::Sled;
                     $body
                 }
             }
+            /*
             $crate::cfg_if_sled!(@pat MeteredSled) => {
                 $crate::cfg_if_sled! {
                     type $type_ident = $crate::metered::Metered<$crate::sled::Sled>;
                     $body
                 }
             }
+            */
             $crate::cfg_if_faster!(@pat Faster) => {
                 $crate::cfg_if_faster! {
                     type $type_ident = $crate::faster::Faster;
                     $body
                 }
             }
+            /*
             $crate::cfg_if_faster!(@pat MeteredFaster) => {
                 $crate::cfg_if_faster! {
                     type $type_ident = $crate::metered::Metered<$crate::faster::Faster>;
                     $body
                 }
             }
+            */
         }
     }};
 }

@@ -52,4 +52,15 @@ impl ValueOps for InMemory {
         let _old_value = self.get_mut(handle).insert(key, dynamic);
         Ok(())
     }
+
+    fn value_fast_set_by_ref<T: Value, IK: Metakey, N: Metakey>(
+        &mut self,
+        handle: &Handle<ValueState<T>, IK, N>,
+        value: &T,
+    ) -> Result<()> {
+        let key = handle.serialize_metakeys()?;
+        let dynamic = SmallBox::new(value.clone());
+        let _old_value = self.get_mut(handle).insert(key, dynamic);
+        Ok(())
+    }
 }

@@ -51,4 +51,15 @@ impl ValueOps for Sled {
         self.put(handle.id, &key, &serialized)?;
         Ok(())
     }
+
+    fn value_fast_set_by_ref<T: Value, IK: Metakey, N: Metakey>(
+        &mut self,
+        handle: &Handle<ValueState<T>, IK, N>,
+        value: &T,
+    ) -> Result<()> {
+        let key = handle.serialize_metakeys()?;
+        let serialized = protobuf::serialize(value)?;
+        self.put(handle.id, &key, &serialized)?;
+        Ok(())
+    }
 }

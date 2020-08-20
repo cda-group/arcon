@@ -268,6 +268,8 @@ where
     let prefix_size = IK::SIZE + N::SIZE;
 
     let mut opts = Options::default();
+    //opts.set_write_buffer_size(300000);
+    //opts.set_allow_concurrent_memtable_write(false);
     // for map state to work properly, but useful for all the states, so the bloom filters get
     // populated
     opts.set_prefix_extractor(SliceTransform::create_fixed_prefix(prefix_size as usize));

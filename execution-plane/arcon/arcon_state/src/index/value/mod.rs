@@ -46,6 +46,7 @@ where
         }
     }
 
+    /// Clear the data in the index layer, but also the backing ValueState.
     #[inline(always)]
     pub fn clear(&mut self) {
         self.data = None;
@@ -54,17 +55,26 @@ where
         let _ = state.clear();
     }
 
+    /// Access the index value through an Option.
     #[inline(always)]
     pub fn get(&self) -> Option<&V> {
         self.data.as_ref()
     }
 
+    /// Blind insert
+    ///
+    /// Sets the Index data and sets its modify flag to true.
     #[inline(always)]
     pub fn put(&mut self, data: V) {
         self.data = Some(data);
         self.modified = true;
     }
 
+    /// Read-Modify-Write Operation
+    ///
+    /// If the ValueIndex is set, then the function `F`
+    /// is passed a mutable reference to the data. It is then assumed
+    /// that the data has been changed, thus the modified flag is set to true.
     #[inline(always)]
     pub fn rmw<F: Sized>(&mut self, mut f: F) -> bool
     where
@@ -94,7 +104,7 @@ where
             if self.modified {
                 let mut sb_session = self.backend.session();
                 let mut state = self.handle.activate(&mut sb_session);
-                state.fast_set(data.clone())?;
+                state.fast_set_by_ref(data)?;
                 self.modified = false;
             }
         }

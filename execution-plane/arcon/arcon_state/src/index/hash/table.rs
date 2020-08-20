@@ -865,7 +865,7 @@ impl<T: Clone> RawTable<T> {
     ///
     /// Safety: It is up to the caller to properly persist the buckets from the [ModifiedIterator]
     #[inline]
-    pub unsafe fn iter_modified(&mut self) -> ModifiedIterator<T> {
+    pub(crate) unsafe fn iter_modified<'a>(&'a mut self) -> ModifiedIterator<'a, T> {
         let data = Bucket::from_base_index(self.data_end(), 0);
         let mod_counter = self.mod_counter;
         // reset the old one to zero
@@ -879,6 +879,7 @@ impl<T: Clone> RawTable<T> {
                 self.buckets(),
             ),
             mod_counter,
+            _marker: std::marker::PhantomData,
         }
     }
 
@@ -973,20 +974,6 @@ impl<T> RawIterModified<T> {
             meta,
             next_meta,
             meta_end,
-        }
-    }
-}
-
-impl<T> Clone for RawIterModified<T> {
-    #[inline]
-    fn clone(&self) -> Self {
-        Self {
-            data: self.data.clone(),
-            ctrl: self.ctrl,
-            meta: self.meta,
-            next_meta: self.next_meta,
-            current_group: self.current_group,
-            meta_end: self.meta_end,
         }
     }
 }
@@ -1178,32 +1165,23 @@ impl<T> Iterator for RawIterRange<T> {
 impl<T> FusedIterator for RawIterRange<T> {}
 
 /// Iterator which returns a raw pointer to every full bucket in the table.
-pub struct ModifiedIterator<T: Clone> {
+pub struct ModifiedIterator<'a, T: Clone> {
     pub(crate) iter: RawIterModified<T>,
     mod_counter: usize,
+    _marker: std::marker::PhantomData<&'a ()>,
 }
 
-impl<T: Clone> Clone for ModifiedIterator<T> {
-    #[inline]
-    fn clone(&self) -> Self {
-        Self {
-            iter: self.iter.clone(),
-            mod_counter: self.mod_counter.clone(),
-        }
-    }
-}
-
-impl<T: Clone> Iterator for ModifiedIterator<T> {
-    type Item = T;
+impl<'a, T: 'a + Clone> Iterator for ModifiedIterator<'a, T> {
+    type Item = &'a T;
 
     #[inline]
-    fn next(&mut self) -> Option<T> {
+    fn next(&mut self) -> Option<&'a T> {
         if self.mod_counter == 0 {
             // Reached zero modified buckets, no point in searching further.
             None
         } else if let Some(b) = self.iter.next() {
             self.mod_counter -= 1;
-            Some(unsafe { b.as_ref().clone() })
+            Some(unsafe { b.as_ref() })
         } else {
             None
         }
@@ -1214,9 +1192,6 @@ impl<T: Clone> Iterator for ModifiedIterator<T> {
         (0, None)
     }
 }
-
-impl<T: Clone> ExactSizeIterator for ModifiedIterator<T> {}
-impl<T: Clone> FusedIterator for ModifiedIterator<T> {}
 
 /// Iterator which returns a raw pointer to every full bucket in the table.
 pub struct RawIter<T> {

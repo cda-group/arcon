@@ -3,6 +3,7 @@
 
 use arcon_state::{
     index::{hash::HashIndex, IndexOps},
+    serialization::protobuf::serialize,
     *,
 };
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
@@ -96,7 +97,6 @@ impl LargeStruct {
 fn hash(c: &mut Criterion) {
     let mut group = c.benchmark_group("hash");
     group.throughput(Throughput::Elements(TOTAL_OPERATIONS));
-    use arcon_state::serialization::protobuf::serialize;
 
     let small_bytes = serialize(&SmallStruct::new()).unwrap();
     let large_bytes = serialize(&LargeStruct::new()).unwrap();

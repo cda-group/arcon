@@ -45,6 +45,19 @@ impl MapOps for Sled {
         Ok(())
     }
 
+    fn map_fast_insert_by_ref<K: Key, V: Value, IK: Metakey, N: Metakey>(
+        &mut self,
+        handle: &Handle<MapState<K, V>, IK, N>,
+        key: &K,
+        value: &V,
+    ) -> Result<()> {
+        let key = handle.serialize_metakeys_and_key(key)?;
+        let serialized = protobuf::serialize(value)?;
+        self.put(handle.id, &key, &serialized)?;
+
+        Ok(())
+    }
+
     fn map_insert<K: Key, V: Value, IK: Metakey, N: Metakey>(
         &mut self,
         handle: &Handle<MapState<K, V>, IK, N>,
@@ -73,6 +86,23 @@ impl MapOps for Sled {
         for (user_key, value) in key_value_pairs {
             let key = handle.serialize_metakeys_and_key(&user_key)?;
             let serialized = protobuf::serialize(&value)?;
+            batch.insert(key, serialized);
+        }
+
+        Ok(tree.apply_batch(batch)?)
+    }
+
+    fn map_insert_all_by_ref<'a, K: Key, V: Value, IK: Metakey, N: Metakey>(
+        &mut self,
+        handle: &Handle<MapState<K, V>, IK, N>,
+        key_value_pairs: impl IntoIterator<Item = &'a (K, V)>,
+    ) -> Result<()> {
+        let mut batch = Batch::default();
+        let tree = self.tree(handle.id)?;
+
+        for (user_key, value) in key_value_pairs {
+            let key = handle.serialize_metakeys_and_key(user_key)?;
+            let serialized = protobuf::serialize(value)?;
             batch.insert(key, serialized);
         }
 

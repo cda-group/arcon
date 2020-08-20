@@ -51,6 +51,18 @@ impl MapOps for InMemory {
         Ok(())
     }
 
+    fn map_fast_insert_by_ref<K: Key, V: Value, IK: Metakey, N: Metakey>(
+        &mut self,
+        handle: &Handle<MapState<K, V>, IK, N>,
+        key: &K,
+        value: &V,
+    ) -> Result<()> {
+        let key = handle.serialize_metakeys_and_key(key)?;
+        let dynamic = SmallBox::new(value.clone());
+        let _old_value = self.get_mut(handle).insert(key, dynamic);
+        Ok(())
+    }
+
     fn map_insert<K: Key, V: Value, IK: Metakey, N: Metakey>(
         &mut self,
         handle: &Handle<MapState<K, V>, IK, N>,
@@ -80,6 +92,17 @@ impl MapOps for InMemory {
     ) -> Result<()> {
         for (k, v) in key_value_pairs.into_iter() {
             self.map_fast_insert(handle, k, v)?; // TODO: what if one fails? partial insert? should we roll back?
+        }
+
+        Ok(())
+    }
+    fn map_insert_all_by_ref<'a, K: Key, V: Value, IK: Metakey, N: Metakey>(
+        &mut self,
+        handle: &Handle<MapState<K, V>, IK, N>,
+        key_value_pairs: impl IntoIterator<Item = &'a (K, V)>,
+    ) -> Result<()> {
+        for (k, v) in key_value_pairs.into_iter() {
+            self.map_fast_insert_by_ref(handle, k, v)?; // TODO: what if one fails? partial insert? should we roll back?
         }
 
         Ok(())

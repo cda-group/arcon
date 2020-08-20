@@ -2,7 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 pub mod appender;
+/// HashIndex suitable for point lookups and random reads
 pub mod hash;
+pub mod timer;
+/// ValueIndex suitable for single object operations
 pub mod value;
 
 use crate::error::Result;

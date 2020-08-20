@@ -3,7 +3,8 @@
 #![feature(associated_type_defaults)]
 #![feature(const_generics)]
 #![warn(missing_debug_implementations)]
-use crate::{error::*, metered::Metrics, serialization::fixed_bytes::FixedBytes};
+//use crate::{error::*, metered::Metrics, serialization::fixed_bytes::FixedBytes};
+use crate::{error::*, serialization::fixed_bytes::FixedBytes};
 use std::{
     any,
     cell::{RefCell, RefMut},
@@ -158,9 +159,11 @@ pub trait Backend:
         None
     }
 
+    /*
     fn metrics(&mut self) -> Option<&mut Metrics> {
         None
     }
+    */
 
     // region handle registration
     fn register_value_handle<'s, T: Value, IK: Metakey, N: Metakey>(
@@ -347,8 +350,8 @@ impl<A: Aggregator> Default for AggregatorState<A> {
 
 pub mod in_memory;
 pub use self::in_memory::InMemory;
-pub mod metered;
-pub use self::metered::Metered;
+//pub mod metered;
+//pub use self::metered::Metered;
 
 #[cfg(feature = "rocks")]
 pub mod rocks;
