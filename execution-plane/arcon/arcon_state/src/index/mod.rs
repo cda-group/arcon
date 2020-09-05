@@ -1,6 +1,7 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/// AppenderIndex suitable for Non-associative Windows
 pub mod appender;
 /// HashIndex suitable for point lookups and random reads
 pub mod hash;

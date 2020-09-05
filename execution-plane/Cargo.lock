@@ -158,6 +158,7 @@ dependencies = [
  "rocksdb",
  "serde",
  "sled",
+ "smallbitvec",
  "smallbox",
  "snafu",
  "tempfile",
@@ -2604,6 +2605,12 @@ dependencies = [
  "term 0.6.1",
  "thread_local",
 ]
+
+[[package]]
+name = "smallbitvec"
+version = "2.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "797a4eaffb90d896f29698d45676f9f940a71936d7574996a7df54593ba209fa"
 
 [[package]]
 name = "smallbox"

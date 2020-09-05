@@ -6,6 +6,7 @@
 
 use core::{alloc::Layout, hint, iter::FusedIterator, marker::PhantomData, mem, ptr::NonNull};
 use std::alloc::{alloc, dealloc, handle_alloc_error};
+use smallbitvec::SmallBitVec;
 
 use crate::{
     hint::{likely, unlikely},
@@ -112,7 +113,7 @@ fn is_safe(meta: u8) -> bool {
 /// Primary hash function, used to select the initial bucket to probe from.
 #[inline]
 #[allow(clippy::cast_possible_truncation)]
-fn h1(hash: u64) -> usize {
+pub fn h1(hash: u64) -> usize {
     // On 32-bit platforms we simply ignore the higher hash bits.
     hash as usize
 }
@@ -120,7 +121,7 @@ fn h1(hash: u64) -> usize {
 /// Secondary hash function, saved in the low 7 bits of the control byte.
 #[inline]
 #[allow(clippy::cast_possible_truncation)]
-fn h2(hash: u64) -> u8 {
+pub fn h2(hash: u64) -> u8 {
     // Grab the top 7 bits of the hash. While the hash is normally a full 64-bit
     // value, some hash functions (such as FxHash) produce a usize result
     // instead, which means that the top 32 bits are 0 on 32-bit platforms.
@@ -142,6 +143,8 @@ struct ProbeSeq {
     bucket_mask: usize,
     pos: usize,
     stride: usize,
+    probe_counter: usize,
+    probe_limit: usize,
 }
 
 impl Iterator for ProbeSeq {
@@ -149,6 +152,9 @@ impl Iterator for ProbeSeq {
 
     #[inline]
     fn next(&mut self) -> Option<usize> {
+        if self.probe_counter > self.probe_limit {
+            return None;
+        }
         if self.stride >= self.bucket_mask {
             return None;
         }
@@ -157,6 +163,7 @@ impl Iterator for ProbeSeq {
         self.stride += Group::WIDTH;
         self.pos += self.stride;
         self.pos &= self.bucket_mask;
+        self.probe_counter += 1;
         Some(result)
     }
 }
@@ -250,6 +257,13 @@ fn calculate_layout<T>(buckets: usize) -> Option<(Layout, usize)> {
     ))
 }
 
+#[inline]
+fn region_layout<T>(regions: usize) -> Option<Layout> {
+    debug_assert!(regions.is_power_of_two());
+    // Array of regions
+    Layout::array::<T>(regions).ok()
+}
+
 /// A reference to a hash table bucket containing a `T`.
 ///
 /// This is usually just a pointer to the element itself. However if the element
@@ -260,7 +274,7 @@ pub struct Bucket<T> {
     // this is needed to maintain pointer arithmetic invariants
     // keeping direct pointer to element introduces difficulty.
     // Using `NonNull` for variance and niche layout
-    ptr: NonNull<T>,
+    pub ptr: NonNull<T>,
 }
 
 impl<T> Clone for Bucket<T> {
@@ -333,6 +347,25 @@ impl<T> Bucket<T> {
     }
 }
 
+/*
+/// Poc Table
+use super::region::Region;
+pub struct CrackTable<T: Clone> {
+    regions: NonNull<Region>,
+    // Array of modified buckets
+    //
+    // Should be relatively small and fit within l2/l3 cache.
+    mod_buckets: NonNull<T>,
+    // Array of buckets
+    //
+    // Is meant to hold a larger of the tables data.
+    buckets: NonNull<T>,
+    total_items: usize,
+    // Tell dropck that we own instances of T.
+    marker: PhantomData<T>,
+}
+*/
+
 /// A raw hash table with an unsafe API.
 pub struct RawTable<T: Clone> {
     // Mask to get an index from a hash value. The value is one less than the
@@ -398,6 +431,7 @@ impl<T: Clone> RawTable<T> {
         let ctrl = NonNull::new_unchecked(ctrl_ptr.as_ptr().add(ctrl_offset));
         let meta = NonNull::new_unchecked(meta_ptr.as_ptr().add(ctrl_offset));
         let growth_left = bucket_mask_to_capacity(buckets - 1);
+        println!("Capacity {}, bucket mask {}", growth_left, buckets-1);
 
         Ok(Self {
             ctrl,
@@ -549,6 +583,8 @@ impl<T: Clone> RawTable<T> {
             bucket_mask: self.bucket_mask,
             pos: h1(hash) & self.bucket_mask,
             stride: 0,
+            probe_counter: 0,
+            probe_limit: 8,
         }
     }
     /// Sets a meta byte
@@ -775,6 +811,7 @@ impl<T: Clone> RawTable<T> {
                 let group = Group::load(self.ctrl(pos));
                 for bit in group.match_byte(h2(hash)) {
                     let index = (pos + bit) & self.bucket_mask;
+                    //println!("INDEX {}, POS {}, BIT {}, BUCKET_MASK {}", index, pos, bit, self.bucket_mask);
                     let bucket = self.bucket(index);
                     if likely(eq(bucket.as_ref())) {
                         // If the meta was safe, then increase modification
@@ -801,6 +838,7 @@ impl<T: Clone> RawTable<T> {
                 let group = Group::load(self.ctrl(pos));
                 for bit in group.match_byte(h2(hash)) {
                     let index = (pos + bit) & self.bucket_mask;
+                    //println!("INDEX {}, POS {}, BIT {}, BUCKET_MASK {}", index, pos, bit, self.bucket_mask);
                     let bucket = self.bucket(index);
                     if likely(eq(bucket.as_ref())) {
                         if is_safe(*self.meta(index)) {
