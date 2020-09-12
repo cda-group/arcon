@@ -2,8 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
-    error::*, handles::Handle, hint::unlikely, index::IndexOps, Backend, BackendContainer, Value,
-    VecState,
+    error::*, handles::Handle, index::IndexOps, Backend, BackendContainer, Value, VecState,
 };
 use std::rc::Rc;
 
@@ -64,9 +63,7 @@ where
         state.clear()
     }
 
-    /// Consume the whole AppenderIndex
-    ///
-    /// This function will clear the data afterwards.
+    /// Consume the whole batch of data
     #[inline(always)]
     pub fn consume(&mut self) -> Result<Vec<V>> {
         let mut sb_session = self.backend.session();
@@ -89,7 +86,7 @@ where
 
     #[inline(always)]
     pub fn append(&mut self, data: V) -> Result<()> {
-        if unlikely(self.elements.len() == self.elements.capacity()) {
+        if self.elements.len() == self.elements.capacity() {
             self.persist()?;
         }
         self.elements.push(data);

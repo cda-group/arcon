@@ -16,13 +16,13 @@ fn appender(c: &mut Criterion) {
         let description = format!("capacity: {}", capacity);
         #[cfg(feature = "rocks")]
         group.bench_with_input(
-            BenchmarkId::new("Mean Window Index Rocks Backed", description.clone()),
+            BenchmarkId::new("Mean Index Rocks Backed", description.clone()),
             &(window_size, capacity),
             |b, (window_size, &capacity)| index_mean_rocks(b, *window_size, capacity),
         );
         #[cfg(feature = "sled")]
         group.bench_with_input(
-            BenchmarkId::new("Mean Window Index Sled Backed", description.clone()),
+            BenchmarkId::new("Mean Index Sled Backed", description.clone()),
             &(window_size, capacity),
             |b, (window_size, &capacity)| index_mean_sled(b, *window_size, capacity),
         );
@@ -32,14 +32,14 @@ fn appender(c: &mut Criterion) {
     let window_size = WINDOW_SIZE;
     #[cfg(feature = "sled")]
     group.bench_with_input(
-        BenchmarkId::new("Mean Window Pure Sled", ""),
+        BenchmarkId::new("Mean Index Pure Sled", ""),
         &(window_size),
         |b, window_size| appender_mean_pure_backend(BackendType::Sled, *window_size, b),
     );
 
     #[cfg(feature = "rocks")]
     group.bench_with_input(
-        BenchmarkId::new("Mean Window Pure Rocks", ""),
+        BenchmarkId::new("Mean Index Pure Rocks", ""),
         &(window_size),
         |b, window_size| appender_mean_pure_backend(BackendType::Rocks, *window_size, b),
     );
@@ -68,7 +68,7 @@ fn appender_mean_index(backend: BackendType, window_size: usize, capacity: usize
     with_backend_type!(backend, |B| {
         let backend = B::create(dir.as_ref()).unwrap();
         let mut appender_index: AppenderIndex<u64, B> =
-            AppenderIndex::new("_appenderindex", capacity, std::rc::Rc::new(backend));
+            AppenderIndex::new("_valueindex", capacity, std::rc::Rc::new(backend));
         b.iter(|| {
             for i in 0..window_size {
                 let _ = appender_index.append(i as u64).unwrap();
@@ -83,7 +83,7 @@ fn appender_mean_pure_backend(backend: BackendType, window_size: usize, b: &mut 
     let dir = tempdir().unwrap();
     with_backend_type!(backend, |B| {
         let backend = B::create(dir.as_ref()).unwrap();
-        let mut vec_handle: Handle<VecState<u64>> = Handle::vec("_vecstate");
+        let mut vec_handle: Handle<VecState<u64>> = Handle::vec("vec");
         let mut session = backend.session();
         {
             let mut rtok = unsafe { RegistrationToken::new(&mut session) };
@@ -97,7 +97,6 @@ fn appender_mean_pure_backend(backend: BackendType, window_size: usize, b: &mut 
                 let _ = state.append(i as u64).unwrap();
             }
             let consumed = state.get().unwrap();
-            // NOTE: the appender index does the clear operation within the consume call
             state.clear().unwrap();
             mean(&consumed)
         });

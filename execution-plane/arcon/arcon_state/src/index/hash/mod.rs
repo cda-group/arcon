@@ -35,8 +35,6 @@ cfg_if::cfg_if! {
 }
 
 mod bitmask;
-mod region;
-mod group;
 mod table;
 
 use self::table::RawTable;
