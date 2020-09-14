@@ -28,7 +28,6 @@ fn appender(c: &mut Criterion) {
         );
     }
 
-
     let window_size = WINDOW_SIZE;
     #[cfg(feature = "sled")]
     group.bench_with_input(
@@ -43,7 +42,6 @@ fn appender(c: &mut Criterion) {
         &(window_size),
         |b, window_size| appender_mean_pure_backend(BackendType::Rocks, *window_size, b),
     );
-
 
     group.finish()
 }

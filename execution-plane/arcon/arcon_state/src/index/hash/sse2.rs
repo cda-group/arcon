@@ -1,8 +1,10 @@
 // Copyright (c) 2016 Amanieu d'Antras
 // SPDX-License-Identifier: MIT
 
-use super::bitmask::BitMask;
-use super::table::EMPTY;
+use super::{
+    bitmask::BitMask,
+    table::{EMPTY, MODIFIED_TOUCHED, SAFE_TOUCHED},
+};
 use core::mem;
 
 #[cfg(target_arch = "x86")]
@@ -59,7 +61,6 @@ impl Group {
         debug_assert_eq!(ptr as usize & (mem::align_of::<Self>() - 1), 0);
         Group(x86::_mm_load_si128(ptr as *const _))
     }
-
 
     /// Returns a `BitMask` indicating all bytes in the group which have
     /// the given value.
@@ -119,28 +120,28 @@ impl Group {
     }
 
     /// Performs the following transformation on all bytes in the group:
-    /// - `EMPTY => EMPTY`
-    /// - `DELETED => EMPTY`
-    /// - `FULL => DELETED`
+    /// - SAFE => SAFE,
+    /// - SAFE_TOUCHED => SAFE
+    /// - MODIFIED => SAFE
+    /// - MODIFIED_TOUCHED => SAFE_TOUCHED
     #[inline]
-    pub fn _convert_special_to_empty_and_full_to_deleted(self) -> Self {
-        // Map high_bit = 1 (EMPTY or DELETED) to 1111_1111
-        // and high_bit = 0 (FULL) to 1000_0000
+    pub fn convert_mod_to_safe(self, ptr: *mut u8) -> Group {
+        // All bytes that match MODIFIED_TOUCHED are set to 1111_1111
+        // in the resulting cmp_eq_epi8. The remainder will show as 0000_0000.
         //
-        // Here's this logic expanded to concrete values:
-        //   let special = 0 > byte = 1111_1111 (true) or 0000_0000 (false)
-        //   1111_1111 | 1000_0000 = 1111_1111
-        //   0000_0000 | 1000_0000 = 1000_0000
-        #[allow(
-            clippy::cast_possible_wrap, // byte: 0x80_u8 as i8
-        )]
+        // Run bitwise AND operation using SAFE_TOUCHED to get new bytes
+        // 0000_0000 & 0000_0010 => 0000_0000 // SAFE
+        // 1111_1111 & 0000_0010 => 0000_0010 // SAFE_TOUCHED
         unsafe {
-            let zero = x86::_mm_setzero_si128();
-            let special = x86::_mm_cmpgt_epi8(zero, self.0);
-            Group(x86::_mm_or_si128(
-                special,
-                x86::_mm_set1_epi8(0x80_u8 as i8),
-            ))
+            let mod_touched_eq =
+                x86::_mm_cmpeq_epi8(x86::_mm_set1_epi8(MODIFIED_TOUCHED as i8), self.0);
+            let transformed_group = x86::_mm_and_si128(
+                mod_touched_eq,
+                x86::_mm_set1_epi8(SAFE_TOUCHED as i8), // SAFE: 0000_0010
+            );
+            // Store the resulting `_mm_and_si128` at `ptr` which is the current group.
+            x86::_mm_storeu_si128(ptr as *mut _, transformed_group);
+            Group(transformed_group)
         }
     }
 }

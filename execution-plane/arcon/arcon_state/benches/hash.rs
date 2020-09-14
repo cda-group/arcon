@@ -14,7 +14,7 @@ use std::rc::Rc;
 use tempfile::tempdir;
 
 const MOD_FACTORS: [f32; 2] = [0.3, 0.8];
-const CAPACITY: [usize; 2] = [5048, 32768]; // Capacity in amount of elements and not as in bytes size..
+const CAPACITY: [usize; 2] = [4096, 32768]; // Capacity in amount of elements and not as in bytes size..
 const TOTAL_KEYS: u64 = 10000;
 const TOTAL_OPERATIONS: u64 = 100000;
 

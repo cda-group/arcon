@@ -9,7 +9,7 @@ use std::{
     hash::{BuildHasher, Hash, Hasher},
 };
 
-use crate::{error::*, handles::Handle, hint::unlikely, index::IndexOps, Key, MapState, Value};
+use crate::{error::*, handles::Handle, index::IndexOps, Key, MapState, Value};
 
 cfg_if::cfg_if! {
     // Use the SSE2 implementation if possible: it allows us to scan 16 buckets
@@ -40,7 +40,7 @@ mod table;
 use self::table::RawTable;
 #[cfg(test)]
 use crate::index::hash::table::ModifiedIterator;
-use crate::{Backend, BackendContainer};
+use crate::{index::hash::table::ModIterator, Backend, BackendContainer};
 use std::{cell::UnsafeCell, rc::Rc};
 
 // Set FxHash to default as most keys tend to be small
@@ -112,31 +112,21 @@ where
     }
 
     /// Insert a Key-Value record into the RawTable
-    ///
-    /// The function will evict a bucket if the table is above the given
-    /// modification threshold.
-    #[inline]
-    fn insert(&self, k: K, v: V) -> Result<Option<V>> {
+    #[inline(always)]
+    fn insert(&self, k: K, v: V) -> Result<()> {
         let hash = make_hash(&self.hash_builder, &k);
         let table = self.raw_table_mut();
         unsafe {
-            // If the entry is already in the RawTable then
-            // replace it with new one. Otherwise, insert the
-            // new entry.
             if let Some(item) = table.find_mut(hash, |x| k.eq(&x.0)) {
-                Ok(Some(std::mem::replace(&mut item.as_mut().1, v)))
+                item.as_mut().1 = v;
             } else {
-                // If we are above the modification threshold, then
-                // move a modified entry to the backend.
-                if table.above_mod_threshold() {
-                    let bucket = table.evict_mod_bucket(hash);
-                    let &(ref key, ref value) = bucket.as_ref();
-                    self.backend_put(key, value)?;
+                if let Some((mod_iter, (k, v))) = table.insert(hash, (k, v)) {
+                    self.drain_modified(mod_iter)?;
+                    // This shall not fail now
+                    let _ = table.insert(hash, (k, v));
                 }
-                // continue with insert
-                table.insert(hash, (k, v));
-                Ok(None)
             }
+            Ok(())
         }
     }
 
@@ -146,14 +136,6 @@ where
         let mut sb_session = self.backend.session();
         let state = self.handle.activate(&mut sb_session);
         state.get(k)
-    }
-
-    /// Internal helper to put a key-value record into the Backend
-    #[inline]
-    fn backend_put(&self, k: &K, v: &V) -> Result<()> {
-        let mut sb_session = self.backend.session();
-        let mut state = self.handle.activate(&mut sb_session);
-        state.fast_insert_by_ref(k, v)
     }
 
     /// Internal helper to delete a key-value record from the Backend
@@ -298,8 +280,7 @@ where
     /// Insert a key-value record into the RawTable
     #[inline(always)]
     pub fn put(&mut self, key: K, value: V) -> Result<()> {
-        self.insert(key, value)?;
-        Ok(())
+        self.insert(key, value)
     }
 
     /// Read-Modify-Write Operation
@@ -315,20 +296,6 @@ where
         if let Some(mut entry) = self.table_get_mut(key) {
             // run the udf on the data
             f(&mut entry);
-
-            // as we have touched `key` through table_get_mut,
-            // check whether we are above the modifcation limit,
-            // and proceed to evict bucket if that is the case.
-            let table = self.raw_table_mut();
-            if unlikely(table.above_mod_threshold()) {
-                unsafe {
-                    let hash = make_hash(&self.hash_builder, &key);
-                    let bucket = table.evict_mod_bucket(hash);
-                    let &(ref key, ref value) = bucket.as_ref();
-                    self.backend_put(key, value)?;
-                };
-            }
-
             // indicate that the operation was successful
             return Ok(true);
         }
@@ -348,6 +315,12 @@ where
                 Ok(false)
             }
         }
+    }
+    #[inline(always)]
+    pub fn drain_modified(&self, iter: ModIterator<(K, V)>) -> Result<()> {
+        let mut sb_session = self.backend.session();
+        let mut map_state = self.handle.activate(&mut sb_session);
+        map_state.insert_all_by_ref(iter)
     }
 
     /// Method only used for testing the ModifiedIterator of RawTable.
