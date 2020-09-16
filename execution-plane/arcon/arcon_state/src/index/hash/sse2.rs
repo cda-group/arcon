@@ -29,22 +29,6 @@ impl Group {
     /// Number of bytes in the group.
     pub const WIDTH: usize = mem::size_of::<Self>();
 
-    /// Returns a full group of empty bytes, suitable for use as the initial
-    /// value for an empty hash table. This value is explicitly declared as
-    /// a static variable to ensure the address is consistent across dylibs.
-    ///
-    /// This is guaranteed to be aligned to the group size.
-    pub fn static_empty() -> &'static [u8] {
-        union AlignedBytes {
-            _align: Group,
-            bytes: [u8; Group::WIDTH],
-        };
-        static ALIGNED_BYTES: AlignedBytes = AlignedBytes {
-            bytes: [EMPTY; Group::WIDTH],
-        };
-        unsafe { &ALIGNED_BYTES.bytes }
-    }
-
     /// Loads a group of bytes starting at the given address.
     #[inline]
     #[allow(clippy::cast_ptr_alignment)] // unaligned load
@@ -135,10 +119,8 @@ impl Group {
         unsafe {
             let mod_touched_eq =
                 x86::_mm_cmpeq_epi8(x86::_mm_set1_epi8(MODIFIED_TOUCHED as i8), self.0);
-            let transformed_group = x86::_mm_and_si128(
-                mod_touched_eq,
-                x86::_mm_set1_epi8(SAFE_TOUCHED as i8), // SAFE: 0000_0010
-            );
+            let transformed_group =
+                x86::_mm_and_si128(mod_touched_eq, x86::_mm_set1_epi8(SAFE_TOUCHED as i8));
             // Store the resulting `_mm_and_si128` at `ptr` which is the current group.
             x86::_mm_storeu_si128(ptr as *mut _, transformed_group);
             Group(transformed_group)

@@ -97,13 +97,6 @@ fn special_is_empty(ctrl: u8) -> bool {
     ctrl & 0x01 != 0
 }
 
-/// Checks whether a meta byte represents a modified bucket (top bit is set).
-#[inline]
-#[allow(dead_code)]
-fn is_modified(meta: u8) -> bool {
-    meta & 0x80 != 0
-}
-
 /// Checks whether a meta byte represents a safe bucket (top bit is clear).
 #[inline]
 fn is_safe(meta: u8) -> bool {
@@ -371,26 +364,6 @@ pub struct RawTable<T: Clone> {
 }
 
 impl<T: Clone> RawTable<T> {
-    /// Creates a new empty hash table without allocating any memory.
-    ///
-    /// In effect this returns a table with exactly 1 bucket. However we can
-    /// leave the data pointer dangling since that bucket is never written to
-    /// due to our load factor forcing us to always have at least 1 free bucket.
-    #[inline]
-    pub fn new() -> Self {
-        Self {
-            // Be careful to cast the entire slice to a raw pointer.
-            ctrl: unsafe { NonNull::new_unchecked(Group::static_empty().as_ptr() as *mut u8) },
-            meta: unsafe { NonNull::new_unchecked(Group::static_empty().as_ptr() as *mut u8) },
-            bucket_mask: 0,
-            items: 0,
-            growth_left: 0,
-            mod_counter: 0,
-            mod_limit: 0,
-            marker: PhantomData,
-        }
-    }
-
     /// Allocates a new hash table with the given number of buckets.
     ///
     /// The control bytes are left uninitialized.
@@ -428,18 +401,17 @@ impl<T: Clone> RawTable<T> {
         mod_factor: f32,
         fallability: Fallibility,
     ) -> Result<Self, CollectionAllocErr> {
-        if capacity == 0 {
-            Ok(Self::new())
-        } else {
-            unsafe {
-                let buckets =
-                    capacity_to_buckets(capacity).ok_or_else(|| fallability.capacity_overflow())?;
-                let result = Self::new_uninitialized(buckets, mod_factor, fallability)?;
-                result.ctrl(0).write_bytes(EMPTY, result.num_ctrl_bytes());
-                result.meta(0).write_bytes(SAFE, result.num_ctrl_bytes());
-
-                Ok(result)
+        unsafe {
+            let mut buckets =
+                capacity_to_buckets(capacity).ok_or_else(|| fallability.capacity_overflow())?;
+            if buckets < (Group::WIDTH * 2) {
+                buckets = 256;
             }
+            let result = Self::new_uninitialized(buckets, mod_factor, fallability)?;
+            result.ctrl(0).write_bytes(EMPTY, result.num_ctrl_bytes());
+            result.meta(0).write_bytes(SAFE, result.num_ctrl_bytes());
+
+            Ok(result)
         }
     }
 
@@ -552,10 +524,6 @@ impl<T: Clone> RawTable<T> {
     }
 
     /// Returns an iterator for a probe sequence on the table.
-    ///
-    /// This iterator never terminates, but is guaranteed to visit each bucket
-    /// group exactly once. The loop using `probe_seq` must terminate upon
-    /// reaching a group containing an empty bucket.
     #[inline]
     fn probe_seq(&self, hash: u64) -> ProbeSeq {
         ProbeSeq {
@@ -563,7 +531,7 @@ impl<T: Clone> RawTable<T> {
             pos: h1(hash) & self.bucket_mask,
             stride: 0,
             probe_counter: 0,
-            probe_limit: 16, // TODO: This is somewhat random choice, fix..
+            probe_limit: 8, // TODO: This is somewhat random choice, fix..
         }
     }
     /// Sets a meta byte
@@ -605,8 +573,6 @@ impl<T: Clone> RawTable<T> {
 
     /// Searches for an empty or deleted bucket which is suitable for inserting
     /// a new element.
-    ///
-    /// There must be at least 1 empty bucket in the table.
     #[inline]
     fn find_insert_slot(&self, hash: u64) -> Option<usize> {
         for pos in self.probe_seq(hash) {
@@ -646,13 +612,12 @@ impl<T: Clone> RawTable<T> {
     ///
     /// This does not check if the given element already exists in the table.
     #[inline(always)]
-    pub fn insert<'a>(&'a mut self, hash: u64, value: T) -> Option<(ModIterator<T>, T)> {
+    pub fn insert<'a>(&'a mut self, hash: u64, value: T) -> Option<(ProbeModIterator<T>, T)> {
         unsafe {
             let index = match self.find_insert_slot(hash) {
                 Some(index) => index,
                 None => {
-                    // Failed to find insert slot, Return ModIterator
-                    return Some((ModIterator::new(self, hash), value));
+                    return Some((ProbeModIterator::new(self, hash), value));
                 }
             };
 
@@ -769,27 +734,12 @@ impl<T: Clone> RawTable<T> {
         self.mod_limit
     }
 
-    /// Returns an iterator over every element in the table that has a meta byte set as MODIFIED.
-    /// Note that this iterator will reset every MODIFIED byte to SAFE.
+    /// Returns a TableModIterator that starts scanning the table for modified buckets.
     ///
-    /// Safety: It is up to the caller to properly persist the buckets from the [ModifiedIterator]
+    /// Safety: It is up to the caller to properly persist the buckets from the [TableModIterator]
     #[inline]
-    pub(crate) unsafe fn iter_modified<'a>(&'a mut self) -> ModifiedIterator<'a, T> {
-        let data = Bucket::from_base_index(self.data_end(), 0);
-        let mod_counter = self.mod_counter;
-        // reset the old one to zero
-        self.mod_counter = 0;
-
-        ModifiedIterator {
-            iter: RawIterModified::new(
-                self.ctrl.as_ptr(),
-                self.meta.as_ptr(),
-                data,
-                self.buckets(),
-            ),
-            mod_counter,
-            _marker: std::marker::PhantomData,
-        }
+    pub(crate) unsafe fn iter_modified<'a>(&'a mut self) -> TableModIterator<'a, T> {
+        TableModIterator::new(self, 0)
     }
 
     /// Returns an iterator over every element in the table. It is up to
@@ -842,13 +792,17 @@ impl<T: Clone> Drop for RawTable<T> {
     }
 }
 
-pub struct ModIterator<'a, T: Clone> {
+/// Iterator that returns modified buckets over a ProbeSeq
+///
+/// Unlike the [TableModIterator], this iterator will perform
+/// a cleaning process over the buckets it sees.
+pub struct ProbeModIterator<'a, T: Clone> {
     pub(crate) iter: RawModIterator<'a, T>,
     h2_hash: u64,
     _marker: std::marker::PhantomData<&'a ()>,
 }
 
-impl<'a, T: Clone> ModIterator<'a, T> {
+impl<'a, T: Clone> ProbeModIterator<'a, T> {
     fn new(table: &'a mut RawTable<T>, hash: u64) -> Self {
         unsafe {
             let mut probe_seq = table.probe_seq(hash);
@@ -863,7 +817,7 @@ impl<'a, T: Clone> ModIterator<'a, T> {
                 bitmask,
                 erased_buckets: 0,
             };
-            ModIterator {
+            ProbeModIterator {
                 iter,
                 h2_hash: hash,
                 _marker: PhantomData,
@@ -872,7 +826,7 @@ impl<'a, T: Clone> ModIterator<'a, T> {
     }
 }
 
-impl<'a, T: 'a + Clone> Iterator for ModIterator<'a, T> {
+impl<'a, T: 'a + Clone> Iterator for ProbeModIterator<'a, T> {
     type Item = &'a T;
 
     #[inline]
@@ -881,8 +835,9 @@ impl<'a, T: 'a + Clone> Iterator for ModIterator<'a, T> {
             Some(bucket)
         } else {
             // NOTE: it may happen that all buckets in the probe
-            // were MODIFIED_TOUCHED and thus converted were into SAFE_TOUCHED.
-            // If this is the case, clear a few SAFE_TOUCHED buckets..
+            // were MODIFIED_TOUCHED and were thus converted into SAFE_TOUCHED.
+            // If this is the case, we need to iterate over a few SAFE_TOUCHED buckets
+            // and erase them from the table.
             if unlikely(self.iter.erased_buckets == 0) {
                 let mut cleared_groups = 0;
                 let raw_table = &mut self.iter.table;
@@ -919,8 +874,6 @@ impl<'a, T: 'a + Clone> Iterator for ModIterator<'a, T> {
     }
 }
 
-/// Iterator that returns all modified buckets for a whole probe sequence.
-/// Each MODIFIED/MODIFIED_TOUCHED meta byte is converted into SAFE.
 pub struct RawModIterator<'a, T: Clone> {
     /// Mutable Reference to the RawTable
     table: &'a mut RawTable<T>,
@@ -928,7 +881,7 @@ pub struct RawModIterator<'a, T: Clone> {
     probe_seq: ProbeSeq,
     /// Current group
     group: Group,
-    /// Current position within the group
+    /// Current position of the group
     pos: usize,
     /// The Active BitMask Iterator
     bitmask: BitMaskIter,
@@ -980,92 +933,67 @@ impl<'a, T: Clone> Iterator for RawModIterator<'a, T> {
     }
 }
 
-/// Iterator over modified table buckets
-pub(crate) struct RawIterModified<T> {
-    // Mask of full buckets in the current group. Bits are cleared from this
-    // mask as each element is processed.
-    current_group: BitMask,
-
-    // Pointer to the buckets for the current group.
-    data: Bucket<T>,
-
-    ctrl: NonNull<u8>,
-    meta: NonNull<u8>,
-
-    // Pointer to the next group of meta bytes
-    // Must be aligned to the group size.
-    next_meta: *const u8,
-    // Pointer one past the last meta byte of this range.
-    meta_end: *const u8,
-}
-impl<T> RawIterModified<T> {
-    /// Returns a `RawIterModified` covering modified buckets of the table
-    ///
-    /// The control & meta byte address must be aligned to the group size.
-    #[inline]
-    unsafe fn new(ctrl: *const u8, meta: *const u8, data: Bucket<T>, len: usize) -> Self {
-        debug_assert_ne!(len, 0);
-        debug_assert_eq!(meta as usize % Group::WIDTH, 0);
-        let meta_end = meta.add(len);
-
-        // Load the first group and advance meta to point to the next group
-        let current_group = Group::load_aligned(meta).match_modified();
-        let next_meta = meta.add(Group::WIDTH);
-        let ctrl = NonNull::new_unchecked(ctrl as *mut u8);
-        let meta = NonNull::new_unchecked(meta as *mut u8);
-
-        Self {
-            current_group,
-            data,
-            ctrl,
-            meta,
-            next_meta,
-            meta_end,
-        }
-    }
+/// Iterator that scans modified buckets from the start of the RawTable.
+pub struct TableModIterator<'a, T: Clone> {
+    /// Mutable Reference to the RawTable
+    table: &'a mut RawTable<T>,
+    /// Current group
+    group: Group,
+    /// Current group position
+    pos: usize,
+    /// The Active BitMask Iterator
+    bitmask: BitMaskIter,
+    /// Number of buckets in Table
+    buckets: usize,
 }
 
-impl<T> Iterator for RawIterModified<T> {
-    type Item = Bucket<T>;
-
-    #[inline]
-    fn next(&mut self) -> Option<Bucket<T>> {
+impl<'a, T: Clone> TableModIterator<'a, T> {
+    fn new(table: &'a mut RawTable<T>, pos: usize) -> Self {
+        debug_assert_eq!(pos % Group::WIDTH, 0);
         unsafe {
-            loop {
-                if let Some(index) = self.current_group.lowest_set_bit() {
-                    self.current_group = self.current_group.remove_lowest_bit();
-                    let bucket = self.data.next_n(index);
-                    // Get index for this bucket
-                    let bucket_index =
-                        bucket.to_base_index(NonNull::new_unchecked(self.ctrl.as_ptr() as *mut T));
-                    // Set the meta byte of the index to SAFE
-                    std::ptr::write(self.meta.as_ptr().add(bucket_index), SAFE);
-                    return Some(bucket);
-                }
-
-                if self.next_meta >= self.meta_end {
-                    return None;
-                }
-
-                // We might read past self.end up to the next group boundary,
-                // but this is fine because it only occurs on tables smaller
-                // than the group size where the trailing control bytes are all
-                // EMPTY. On larger tables self.end is guaranteed to be aligned
-                // to the group size (since tables are power-of-two sized).
-                self.current_group = Group::load_aligned(self.next_meta).match_modified();
-                self.data = self.data.next_n(Group::WIDTH);
-                self.next_meta = self.next_meta.add(Group::WIDTH);
+            let group = Group::load_aligned(table.meta(pos));
+            let bitmask = group.match_modified().into_iter();
+            let buckets = table.buckets();
+            TableModIterator {
+                table,
+                group,
+                pos,
+                bitmask,
+                buckets,
             }
         }
     }
+}
 
-    #[inline]
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        // We don't have an item count, so just guess based on the range size.
-        (
-            0,
-            Some(unsafe { offset_from(self.meta_end, self.next_meta) + Group::WIDTH }),
-        )
+impl<'a, T: Clone> Iterator for TableModIterator<'a, T> {
+    type Item = &'a T;
+
+    fn next(&mut self) -> Option<&'a T> {
+        unsafe {
+            loop {
+                if let Some(bit) = self.bitmask.next() {
+                    let index = (self.pos + bit) & self.table.bucket_mask;
+                    self.table.mod_counter = self.table.mod_counter.saturating_sub(1);
+                    self.table.set_meta(index, SAFE);
+                    let bucket = self.table.bucket(index);
+                    return Some(bucket.as_ref());
+                }
+
+                // If we have reached zero modified buckets,
+                // no point in scanning further..
+                if self.table.mod_counter == 0 {
+                    return None;
+                }
+
+                if self.pos < self.buckets {
+                    self.pos += Group::WIDTH;
+                    self.group = Group::load_aligned(self.table.meta(self.pos));
+                    self.bitmask = self.group.match_modified().into_iter();
+                } else {
+                    return None;
+                }
+            }
+        }
     }
 }
 
@@ -1210,35 +1138,6 @@ impl<T> Iterator for RawIterRange<T> {
 }
 
 impl<T> FusedIterator for RawIterRange<T> {}
-
-/// Iterator which returns a raw pointer to every full bucket in the table.
-pub struct ModifiedIterator<'a, T: Clone> {
-    pub(crate) iter: RawIterModified<T>,
-    mod_counter: usize,
-    _marker: std::marker::PhantomData<&'a ()>,
-}
-
-impl<'a, T: 'a + Clone> Iterator for ModifiedIterator<'a, T> {
-    type Item = &'a T;
-
-    #[inline]
-    fn next(&mut self) -> Option<&'a T> {
-        if self.mod_counter == 0 {
-            // Reached zero modified buckets, no point in searching further.
-            None
-        } else if let Some(b) = self.iter.next() {
-            self.mod_counter -= 1;
-            Some(unsafe { b.as_ref() })
-        } else {
-            None
-        }
-    }
-
-    #[inline]
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        (0, None)
-    }
-}
 
 /// Iterator which returns a raw pointer to every full bucket in the table.
 pub struct RawIter<T> {
