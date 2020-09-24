@@ -78,12 +78,6 @@ impl BitMask {
             self.0.trailing_zeros() as usize / BITMASK_STRIDE
         }
     }
-
-    /// Returns the number of leading zeroes in the `BitMask`.
-    #[inline]
-    pub fn leading_zeros(self) -> usize {
-        self.0.leading_zeros() as usize / BITMASK_STRIDE
-    }
 }
 
 impl IntoIterator for BitMask {

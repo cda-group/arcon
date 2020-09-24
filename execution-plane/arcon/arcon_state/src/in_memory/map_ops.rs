@@ -99,7 +99,7 @@ impl MapOps for InMemory {
     fn map_insert_all_by_ref<'a, K: Key, V: Value, IK: Metakey, N: Metakey>(
         &mut self,
         handle: &Handle<MapState<K, V>, IK, N>,
-        key_value_pairs: impl IntoIterator<Item = &'a (K, V)>,
+        key_value_pairs: impl IntoIterator<Item = (&'a K, &'a V)>,
     ) -> Result<()> {
         for (k, v) in key_value_pairs.into_iter() {
             self.map_fast_insert_by_ref(handle, k, v)?; // TODO: what if one fails? partial insert? should we roll back?

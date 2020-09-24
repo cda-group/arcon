@@ -9,7 +9,7 @@ use std::{
     hash::{BuildHasher, Hash, Hasher},
 };
 
-use crate::{error::*, handles::Handle, index::IndexOps, Key, MapState, Value};
+use crate::{error::*, handles::Handle, hint::likely, index::IndexOps, Key, MapState, Value};
 
 cfg_if::cfg_if! {
     // Use the SSE2 implementation if possible: it allows us to scan 16 buckets
@@ -51,14 +51,14 @@ pub type DefaultHashBuilder = fxhash::FxBuildHasher;
 /// type where it may persist or fetch data from.
 pub struct HashIndex<K, V, B>
 where
-    K: Key,
+    K: Key + Hash,
     V: Value,
     B: Backend,
 {
     /// Hasher for the keys
     hash_builder: fxhash::FxBuildHasher,
     /// In-memory RawTable
-    raw_table: UnsafeCell<RawTable<(K, V)>>,
+    raw_table: UnsafeCell<RawTable<K, V>>,
     /// Map Handle
     handle: Handle<MapState<K, V>>,
     /// The underlying backend
@@ -81,10 +81,13 @@ where
     /// Creates a HashIndex
     pub fn new(
         key: &'static str,
-        capacity: usize,
-        mod_factor: f32,
+        mod_capacity: usize,
+        read_capacity: usize,
         backend: Rc<BackendContainer<B>>,
     ) -> HashIndex<K, V, B> {
+        assert!(mod_capacity.is_power_of_two());
+        assert!(read_capacity.is_power_of_two());
+
         // register handle
         let mut handle = Handle::map(key);
         handle.register(&mut unsafe {
@@ -93,7 +96,7 @@ where
 
         HashIndex {
             hash_builder: DefaultHashBuilder::default(),
-            raw_table: UnsafeCell::new(RawTable::with_capacity(capacity, mod_factor)),
+            raw_table: UnsafeCell::new(RawTable::with_capacity(mod_capacity, read_capacity)),
             handle,
             backend,
         }
@@ -101,33 +104,39 @@ where
 
     /// Internal helper function to access a RawTable
     #[inline(always)]
-    fn raw_table(&self) -> &RawTable<(K, V)> {
+    fn raw_table(&self) -> &RawTable<K, V> {
         unsafe { &*self.raw_table.get() }
     }
 
     /// Internal helper function to access a mutable RawTable
     #[inline(always)]
-    fn raw_table_mut(&self) -> &mut RawTable<(K, V)> {
+    fn raw_table_mut(&self) -> &mut RawTable<K, V> {
         unsafe { &mut *self.raw_table.get() }
     }
 
     /// Insert a Key-Value record into the RawTable
     #[inline(always)]
-    fn insert(&self, k: K, v: V) -> Result<()> {
-        let hash = make_hash(&self.hash_builder, &k);
+    fn insert(&self, k: K, v: V, hash: u64) -> Result<()> {
         let table = self.raw_table_mut();
-        unsafe {
-            if let Some(item) = table.find_mut(hash, |x| k.eq(&x.0)) {
-                item.as_mut().1 = v;
-            } else {
-                if let Some((mod_iter, (k, v))) = table.insert(hash, (k, v)) {
-                    self.drain_modified(mod_iter)?;
-                    // This shall not fail now
-                    let _ = table.insert(hash, (k, v));
-                }
+
+        // If the key exists in the mod lane already, we simply update the value..
+        if let Some(item) = table.find_mod_lane_mut(hash, |x| k.eq(&x.0)) {
+            *item = v;
+        } else {
+            if let Some((mod_iter, (k, v))) = table.insert_mod_lane(hash, (k, v)) {
+                self.drain_modified(mod_iter)?;
+                // This shall not fail now
+                let _ = table.insert_mod_lane(hash, (k, v));
             }
-            Ok(())
         }
+        Ok(())
+    }
+
+    /// Insert a Key-Value record into the RawTable
+    #[inline(always)]
+    fn insert_read_lane(&self, k: K, v: V, hash: u64) {
+        let table = self.raw_table_mut();
+        table.insert_read_lane(hash, (k, v));
     }
 
     /// Internal helper to get a value from the Backend
@@ -159,39 +168,33 @@ where
     }
 
     #[inline]
-    fn table_get<Q: ?Sized>(&self, k: &Q) -> Option<&V>
+    fn table_get<Q: ?Sized>(&self, k: &Q, hash: u64) -> Option<&V>
     where
         K: Borrow<Q>,
         Q: Hash + Eq,
     {
-        self.get_key_value(k).map(|(_, v)| v)
-    }
-
-    #[inline]
-    fn table_get_mut<Q: ?Sized>(&mut self, k: &Q) -> Option<&mut V>
-    where
-        K: Borrow<Q>,
-        Q: Hash + Eq,
-    {
-        let hash = make_hash(&self.hash_builder, k);
-        let table = self.raw_table_mut();
-        table
-            .find_mut(hash, |x| k.eq(x.0.borrow()))
-            .map(|item| unsafe { &mut item.as_mut().1 })
-    }
-
-    #[inline]
-    fn get_key_value<Q: ?Sized>(&self, k: &Q) -> Option<(&K, &V)>
-    where
-        K: Borrow<Q>,
-        Q: Hash + Eq,
-    {
-        let hash = make_hash(&self.hash_builder, k);
         let table = self.raw_table();
-        table.find(hash, |x| k.eq(x.0.borrow())).map(|item| unsafe {
-            let &(ref key, ref value) = item.as_ref();
-            (key, value)
-        })
+        table.find(hash, |x| k.eq(x.0.borrow())).map(|(_, v)| v)
+    }
+
+    #[inline(always)]
+    fn table_find_mod_lane<Q: ?Sized>(&mut self, k: &Q, hash: u64) -> Option<&mut V>
+    where
+        K: Borrow<Q>,
+        Q: Hash + Eq,
+    {
+        let table = self.raw_table_mut();
+        table.find_mod_lane_mut(hash, |x| k.eq(x.0.borrow()))
+    }
+
+    #[inline(always)]
+    fn table_take_read_lane<Q: ?Sized>(&mut self, k: &Q, hash: u64) -> Option<(K, V)>
+    where
+        K: Borrow<Q>,
+        Q: Hash + Eq,
+    {
+        let table = self.raw_table_mut();
+        table.take_read_lane(hash, |x| k.eq(x.0.borrow()))
     }
 
     #[inline]
@@ -201,29 +204,6 @@ where
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.raw_table().len() == 0
-    }
-    #[inline]
-    pub fn mod_limit(&self) -> usize {
-        self.raw_table().mod_limit()
-    }
-    #[inline]
-    pub fn capacity(&self) -> usize {
-        self.raw_table().capacity()
-    }
-    /// Remove a value by Key
-    #[inline(always)]
-    pub fn erase(&mut self, k: &K) -> Result<()> {
-        // (1). Probe RawTable and erase if it exists
-        // (2). Delete from Backend
-
-        let table = self.raw_table_mut();
-        let hash = make_hash(&self.hash_builder, &k);
-        unsafe {
-            if let Some(item) = table.find(hash, |x| k.eq(x.0.borrow())) {
-                table.erase(item)
-            }
-        };
-        self.backend_remove_fast(k)
     }
 
     /// Remove a value by Key and return existing item if found
@@ -235,29 +215,29 @@ where
         let table = self.raw_table_mut();
         let hash = make_hash(&self.hash_builder, &k);
 
-        unsafe {
-            match table.find(hash, |x| k.eq(x.0.borrow())) {
-                Some(item) => {
-                    let value = table.remove(item).1;
-                    self.backend_remove_fast(k)?;
-                    return Ok(Some(value));
-                }
-                None => {
-                    // Key was not found in RawTable, attempt to remove from the backend
-                    return self.backend_remove(k);
-                }
+
+        match table.remove(hash, |x| k.eq(x.0.borrow())) {
+            Some(item) => {
+                self.backend_remove_fast(k)?;
+                return Ok(Some(item.1));
             }
-        };
+            None => {
+                // Key was not found in RawTable, attempt to remove from the backend
+                return self.backend_remove(k);
+            }
+        }
     }
 
     /// Fetch a value by Key
     #[inline(always)]
     pub fn get(&self, key: &K) -> Result<Option<&V>> {
+        let hash = make_hash(&self.hash_builder, key);
+
         // Attempt to find the value by probing the RawTable
-        let entry = self.table_get(key);
+        let entry = self.table_get(key, hash);
 
         // Return early if we have a match
-        if entry.is_some() {
+        if likely(entry.is_some()) {
             return Ok(entry);
         }
 
@@ -265,10 +245,10 @@ where
         match self.backend_get(key)? {
             Some(v) => {
                 // Insert the value back into the index
-                self.insert(key.clone(), v)?;
+                self.insert_read_lane(key.clone(), v, hash);
                 // Kinda silly but run table_get again to get the referenced value.
                 // Cannot return a referenced value created in the function itself...
-                Ok(self.table_get(key))
+                Ok(self.table_get(key, hash))
             }
             None => {
                 // Key does not exist
@@ -280,7 +260,8 @@ where
     /// Insert a key-value record into the RawTable
     #[inline(always)]
     pub fn put(&mut self, key: K, value: V) -> Result<()> {
-        self.insert(key, value)
+        let hash = make_hash(&self.hash_builder, &key);
+        self.insert(key, value, hash)
     }
 
     /// Read-Modify-Write Operation
@@ -292,21 +273,31 @@ where
     where
         F: FnMut(&mut V),
     {
-        // Probe the RawTable and modify the record in-place if possible..
-        if let Some(mut entry) = self.table_get_mut(key) {
+        let hash = make_hash(&self.hash_builder, key);
+        // In best case, we find the record in the RawTable's MOD lane
+        // and modify the record in place.
+        if let Some(mut entry) = self.table_find_mod_lane(key, hash) {
             // run the udf on the data
             f(&mut entry);
             // indicate that the operation was successful
             return Ok(true);
         }
 
-        // Check whether the value is in the backend
+        // Attempt to find the value in the READ lane. If found,
+        // we modify the value before inserting it back into the MOD lane..
+        if let Some((key, mut value)) = self.table_take_read_lane(key, hash) {
+            f(&mut value);
+            self.insert(key, value, hash)?;
+            return Ok(true);
+        }
+
+        // Otherwise, check the backing state backend if it has the key.
         match self.backend_get(key)? {
             Some(mut value) => {
                 // run the rmw op on the value
                 f(&mut value);
                 // insert the value into the RawTable
-                self.put(key.clone(), value)?;
+                self.insert(key.clone(), value, hash)?;
                 // indicate that the operation was successful
                 Ok(true)
             }
@@ -316,8 +307,11 @@ where
             }
         }
     }
+
+    /// Inserts Modified elements in a MOD lane probe sequence into the
+    /// backing MapState.
     #[inline(always)]
-    pub fn drain_modified(&self, iter: ProbeModIterator<(K, V)>) -> Result<()> {
+    pub fn drain_modified(&self, iter: ProbeModIterator<K, V>) -> Result<()> {
         let mut sb_session = self.backend.session();
         let mut map_state = self.handle.activate(&mut sb_session);
         map_state.insert_all_by_ref(iter)
@@ -325,7 +319,7 @@ where
 
     /// Method only used for testing the TableModIterator of RawTable.
     #[cfg(test)]
-    pub(crate) fn modified_iterator(&mut self) -> TableModIterator<(K, V)> {
+    pub(crate) fn modified_iterator(&mut self) -> TableModIterator<K, V> {
         let table = self.raw_table_mut();
         unsafe { table.iter_modified() }
     }
@@ -357,10 +351,10 @@ mod tests {
     #[test]
     fn basic_test() {
         let backend = crate::InMemory::create(&std::path::Path::new("/tmp/")).unwrap();
-        let mod_factor: f32 = 0.4;
-        let capacity = 4;
+        let mod_capacity = 1024;
+        let read_capacity = 1024;
         let mut hash_index: HashIndex<u64, u64, InMemory> =
-            HashIndex::new("_hashindex", capacity, mod_factor, Rc::new(backend));
+            HashIndex::new("_hashindex", mod_capacity, read_capacity, Rc::new(backend));
         for i in 0..1024 {
             hash_index.put(i as u64, i as u64).unwrap();
             let key: u64 = i as u64;
@@ -387,16 +381,14 @@ mod tests {
     #[test]
     fn modified_test() {
         let backend = crate::InMemory::create(&std::path::Path::new("/tmp/")).unwrap();
-        let mod_factor: f32 = 0.4;
-        let capacity = 32;
+        let capacity = 64;
 
         let mut hash_index: HashIndex<u64, u64, InMemory> =
-            HashIndex::new("_hashindex", capacity, mod_factor, Rc::new(backend));
+            HashIndex::new("_hashindex", capacity, capacity, Rc::new(backend));
         for i in 0..10 {
             hash_index.put(i as u64, i as u64).unwrap();
         }
 
-        assert_eq!(hash_index.capacity(), 56);
         assert_eq!(hash_index.modified_iterator().count(), 10);
 
         // The meta data is reset, so the counter should now be zero

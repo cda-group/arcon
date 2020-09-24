@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #![feature(associated_type_defaults)]
 #![feature(const_generics)]
-#![warn(missing_debug_implementations)]
 //use crate::{error::*, metered::Metrics, serialization::fixed_bytes::FixedBytes};
 use crate::{error::*, serialization::fixed_bytes::FixedBytes};
 use std::{

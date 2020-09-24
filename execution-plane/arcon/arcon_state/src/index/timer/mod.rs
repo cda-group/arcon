@@ -33,7 +33,7 @@ where
     pub fn new(hash_index_capacity: usize, backend: Rc<BackendContainer<B>>) -> Self {
         Self {
             timer: QuadWheelWithOverflow::default(),
-            timeouts: HashIndex::new("_timeouts", hash_index_capacity, 0.8, backend.clone()),
+            timeouts: HashIndex::new("_timeouts", hash_index_capacity, hash_index_capacity, backend.clone()),
             current_time: ValueIndex::new("_currtime", backend.clone()),
         }
     }

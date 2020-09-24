@@ -13,8 +13,8 @@ use rand::Rng;
 use std::rc::Rc;
 use tempfile::tempdir;
 
-const MOD_FACTORS: [f32; 2] = [0.3, 0.8];
-const CAPACITY: [usize; 2] = [4096, 32768]; // Capacity in amount of elements and not as in bytes size..
+const MOD_CAPACITY: [usize; 2] = [32768, 65536];
+const READ_CAPACITY: [usize; 2] = [16384 , 32768]; // Capacity in amount of elements and not as in bytes size..
 const TOTAL_KEYS: u64 = 10000;
 const TOTAL_OPERATIONS: u64 = 100000;
 
@@ -114,9 +114,9 @@ fn hash(c: &mut Criterion) {
         std::mem::size_of::<LargeStruct>()
     );
 
-    for input in MOD_FACTORS.iter().cartesian_product(CAPACITY.iter()) {
-        let (mod_factor, capacity) = input;
-        let description = format!("mod_factor: {}, capacity: {}", mod_factor, capacity);
+    for input in MOD_CAPACITY.iter().cartesian_product(READ_CAPACITY.iter()) {
+        let (mod_capacity, read_capacity) = input;
+        let description = format!("mod_capacity: {}, read_capacity: {}", mod_capacity, read_capacity);
 
         #[cfg(feature = "rocks")]
         group.bench_with_input(
@@ -124,15 +124,15 @@ fn hash(c: &mut Criterion) {
                 "SmallStruct Hot Keys Read Rocks Backed",
                 description.clone(),
             ),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
+            &(mod_capacity, read_capacity),
+            |b, (&mod_capacity, &read_capacity)| {
                 read!(
                     HOT_KEYS,
                     b,
                     SmallStruct,
                     BackendType::Rocks,
-                    capacity,
-                    mod_factor
+                    mod_capacity,
+                    read_capacity
                 )
             },
         );
@@ -143,15 +143,15 @@ fn hash(c: &mut Criterion) {
                 "SmallStruct Uniform Keys Read Rocks Backed",
                 description.clone(),
             ),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
+            &(mod_capacity, read_capacity),
+            |b, (&mod_capacity, &read_capacity)| {
                 read!(
                     UNIFORM_KEYS,
                     b,
                     SmallStruct,
                     BackendType::Rocks,
-                    capacity,
-                    mod_factor
+                    mod_capacity,
+                    read_capacity
                 )
             },
         );
@@ -159,15 +159,15 @@ fn hash(c: &mut Criterion) {
         #[cfg(feature = "sled")]
         group.bench_with_input(
             BenchmarkId::new("SmallStruct Hot Keys Read Sled Backed", description.clone()),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
+            &(mod_capacity, read_capacity),
+            |b, (&mod_capacity, &read_capacity)| {
                 read!(
                     HOT_KEYS,
                     b,
                     SmallStruct,
                     BackendType::Sled,
-                    capacity,
-                    mod_factor
+                    mod_capacity,
+                    read_capacity,
                 )
             },
         );
@@ -178,34 +178,35 @@ fn hash(c: &mut Criterion) {
                 "SmallStruct Uniform Keys Read Sled Backed",
                 description.clone(),
             ),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
+            &(mod_capacity, read_capacity),
+            |b, (&mod_capacity, &read_capacity)| {
                 read!(
                     UNIFORM_KEYS,
                     b,
                     SmallStruct,
                     BackendType::Sled,
-                    capacity,
-                    mod_factor
+                    mod_capacity,
+                    read_capacity,
                 )
             },
         );
 
+            /*
         #[cfg(feature = "rocks")]
         group.bench_with_input(
             BenchmarkId::new(
                 "LargeStruct Hot Keys Read Rocks Backed",
                 description.clone(),
             ),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
+            &(mod_capacity, read_capacity),
+            |b, (&mod_capacity, &read_capacity)| {
                 read!(
                     HOT_KEYS,
                     b,
                     LargeStruct,
                     BackendType::Rocks,
-                    capacity,
-                    mod_factor
+                    mod_capacity,
+                    read_capacity,
                 )
             },
         );
@@ -216,15 +217,15 @@ fn hash(c: &mut Criterion) {
                 "LargeStruct Uniform Keys Read Rocks Backed",
                 description.clone(),
             ),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
+            &(mod_capacity, read_capacity),
+            |b, (&mod_capacity, &read_capacity)| {
                 read!(
                     UNIFORM_KEYS,
                     b,
                     LargeStruct,
                     BackendType::Rocks,
-                    capacity,
-                    mod_factor
+                    mod_capacity,
+                    read_capacity,
                 )
             },
         );
@@ -232,15 +233,15 @@ fn hash(c: &mut Criterion) {
         #[cfg(feature = "sled")]
         group.bench_with_input(
             BenchmarkId::new("LargeStruct Hot Keys Read Sled Backed", description.clone()),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
+            &(mod_capacity, read_capacity),
+            |b, (&mod_capacity, &read_capacity)| {
                 read!(
                     HOT_KEYS,
                     b,
                     LargeStruct,
                     BackendType::Sled,
-                    capacity,
-                    mod_factor
+                    mod_capacity,
+                    read_capacity,
                 )
             },
         );
@@ -251,15 +252,15 @@ fn hash(c: &mut Criterion) {
                 "LargeStruct Uniform Keys Read Sled Backed",
                 description.clone(),
             ),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
+            &(mod_capacity, read_capacity),
+            |b, (&mod_capacity, &read_capacity)| {
                 read!(
                     UNIFORM_KEYS,
                     b,
                     LargeStruct,
                     BackendType::Sled,
-                    capacity,
-                    mod_factor
+                    mod_capacity,
+                    read_capacity,
                 )
             },
         );
@@ -270,15 +271,15 @@ fn hash(c: &mut Criterion) {
                 "SmallStruct Insert Hot Keys Rocks Backed",
                 description.clone(),
             ),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
+            &(mod_capacity, read_capacity),
+            |b, (&mod_capacity, &read_capacity)| {
                 insert!(
                     HOT_KEYS,
                     b,
                     SmallStruct,
                     BackendType::Rocks,
-                    capacity,
-                    mod_factor,
+                    mod_capacity,
+                    read_capacity,
                     false
                 )
             },
@@ -289,15 +290,15 @@ fn hash(c: &mut Criterion) {
                 "SmallStruct Insert Hot Keys Rocks Backed Full Eviction",
                 description.clone(),
             ),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
+            &(mod_capacity, read_capacity),
+            |b, (&mod_capacity, &read_capacity)| {
                 insert!(
                     HOT_KEYS,
                     b,
                     SmallStruct,
                     BackendType::Rocks,
-                    capacity,
-                    mod_factor,
+                    mod_capacity,
+                    read_capacity,
                     true
                 )
             },
@@ -308,15 +309,15 @@ fn hash(c: &mut Criterion) {
                 "SmallStruct Insert Uniform Keys Rocks Backed",
                 description.clone(),
             ),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
+            &(mod_capacity, read_capacity),
+            |b, (&mod_capacity, &read_capacity)| {
                 insert!(
                     UNIFORM_KEYS,
                     b,
                     SmallStruct,
                     BackendType::Rocks,
-                    capacity,
-                    mod_factor,
+                    mod_capacity,
+                    read_capacity,
                     false
                 )
             },
@@ -327,15 +328,15 @@ fn hash(c: &mut Criterion) {
                 "SmallStruct Insert Uniform Keys Rocks Backed Full Eviction",
                 description.clone(),
             ),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
+            &(mod_capacity, read_capacity),
+            |b, (&mod_capacity, &read_capacity)| {
                 insert!(
                     UNIFORM_KEYS,
                     b,
                     SmallStruct,
                     BackendType::Rocks,
-                    capacity,
-                    mod_factor,
+                    mod_capacity,
+                    read_capacity,
                     true
                 )
             },
@@ -347,15 +348,15 @@ fn hash(c: &mut Criterion) {
                 "SmallStruct Insert Hot Keys Sled Backed",
                 description.clone(),
             ),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
+            &(mod_capacity, read_capacity),
+            |b, (&mod_capacity, &read_capacity)| {
                 insert!(
                     HOT_KEYS,
                     b,
                     SmallStruct,
                     BackendType::Sled,
-                    capacity,
-                    mod_factor,
+                    mod_capacity,
+                    read_capacity,
                     false
                 )
             },
@@ -366,15 +367,15 @@ fn hash(c: &mut Criterion) {
                 "SmallStruct Insert Hot Keys Sled Backed Full Eviction",
                 description.clone(),
             ),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
+            &(mod_capacity, read_capacity),
+            |b, (&mod_capacity, &read_capacity)| {
                 insert!(
                     HOT_KEYS,
                     b,
                     SmallStruct,
                     BackendType::Sled,
-                    capacity,
-                    mod_factor,
+                    mod_capacity,
+                    read_capacity,
                     true
                 )
             },
@@ -386,15 +387,15 @@ fn hash(c: &mut Criterion) {
                 "SmallStruct Insert Uniform Keys Sled Backed",
                 description.clone(),
             ),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
+            &(mod_capacity, read_capacity),
+            |b, (&mod_capacity, &read_capacity)| {
                 insert!(
                     UNIFORM_KEYS,
                     b,
                     SmallStruct,
                     BackendType::Sled,
-                    capacity,
-                    mod_factor,
+                    mod_capacity,
+                    read_capacity,
                     false
                 )
             },
@@ -406,15 +407,15 @@ fn hash(c: &mut Criterion) {
                 "SmallStruct Insert Uniform Keys Sled Backed Full Eviction",
                 description.clone(),
             ),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
+            &(mod_capacity, read_capacity),
+            |b, (&mod_capacity, &read_capacity)| {
                 insert!(
                     UNIFORM_KEYS,
                     b,
                     SmallStruct,
                     BackendType::Sled,
-                    capacity,
-                    mod_factor,
+                    mod_capacity,
+                    read_capacity,
                     true
                 )
             },
@@ -426,15 +427,15 @@ fn hash(c: &mut Criterion) {
                 "LargeStruct Insert Hot Keys Rocks Backed",
                 description.clone(),
             ),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
+            &(mod_capacity, read_capacity),
+            |b, (&mod_capacity, &read_capacity)| {
                 insert!(
                     HOT_KEYS,
                     b,
                     LargeStruct,
                     BackendType::Rocks,
-                    capacity,
-                    mod_factor,
+                    mod_capacity,
+                    read_capacity,
                     false
                 )
             },
@@ -446,15 +447,15 @@ fn hash(c: &mut Criterion) {
                 "LargeStruct Insert Hot Keys Rocks Backed Full Eviction",
                 description.clone(),
             ),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
+            &(mod_capacity, read_capacity),
+            |b, (&mod_capacity, &read_capacity)| {
                 insert!(
                     HOT_KEYS,
                     b,
                     LargeStruct,
                     BackendType::Rocks,
-                    capacity,
-                    mod_factor,
+                    mod_capacity,
+                    read_capacity,
                     true
                 )
             },
@@ -466,15 +467,15 @@ fn hash(c: &mut Criterion) {
                 "LargeStruct Insert Uniform Keys Rocks Backed",
                 description.clone(),
             ),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
+            &(mod_capacity, read_capacity),
+            |b, (&mod_capacity, &read_capacity)| {
                 insert!(
                     UNIFORM_KEYS,
                     b,
                     LargeStruct,
                     BackendType::Rocks,
-                    capacity,
-                    mod_factor,
+                    mod_capacity,
+                    read_capacity,
                     false
                 )
             },
@@ -486,15 +487,15 @@ fn hash(c: &mut Criterion) {
                 "LargeStruct Insert Uniform Keys Rocks Backed Full Eviction",
                 description.clone(),
             ),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
+            &(mod_capacity, read_capacity),
+            |b, (&mod_capacity, &read_capacity)| {
                 insert!(
                     UNIFORM_KEYS,
                     b,
                     LargeStruct,
                     BackendType::Rocks,
-                    capacity,
-                    mod_factor,
+                    mod_capacity,
+                    read_capacity,
                     true
                 )
             },
@@ -506,15 +507,15 @@ fn hash(c: &mut Criterion) {
                 "LargeStruct Insert Hot Keys Sled Backed",
                 description.clone(),
             ),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
+            &(mod_capacity, read_capacity),
+            |b, (&mod_capacity, &read_capacity)| {
                 insert!(
                     HOT_KEYS,
                     b,
                     LargeStruct,
                     BackendType::Sled,
-                    capacity,
-                    mod_factor,
+                    mod_capacity,
+                    read_capacity,
                     false
                 )
             },
@@ -525,15 +526,15 @@ fn hash(c: &mut Criterion) {
                 "LargeStruct Insert Hot Keys Sled Backed Full Eviction",
                 description.clone(),
             ),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
+            &(mod_capacity, read_capacity),
+            |b, (&mod_capacity, &read_capacity)| {
                 insert!(
                     HOT_KEYS,
                     b,
                     LargeStruct,
                     BackendType::Sled,
-                    capacity,
-                    mod_factor,
+                    mod_capacity,
+                    read_capacity,
                     true
                 )
             },
@@ -545,15 +546,15 @@ fn hash(c: &mut Criterion) {
                 "LargeStruct Insert Uniform Keys Sled Backed",
                 description.clone(),
             ),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
+            &(mod_capacity, read_capacity),
+            |b, (&mod_capacity, &read_capacity)| {
                 insert!(
                     UNIFORM_KEYS,
                     b,
                     LargeStruct,
                     BackendType::Sled,
-                    capacity,
-                    mod_factor,
+                    mod_capacity,
+                    read_capacity,
                     false
                 )
             },
@@ -564,32 +565,33 @@ fn hash(c: &mut Criterion) {
                 "LargeStruct Insert Uniform Keys Sled Backed Full Eviction",
                 description.clone(),
             ),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
+            &(mod_capacity, read_capacity),
+            |b, (&mod_capacity, &read_capacity)| {
                 insert!(
                     UNIFORM_KEYS,
                     b,
                     LargeStruct,
                     BackendType::Sled,
-                    capacity,
-                    mod_factor,
+                    mod_capacity,
+                    read_capacity,
                     true
                 )
             },
         );
+        */
 
         #[cfg(feature = "rocks")]
         group.bench_with_input(
             BenchmarkId::new("RMW SmallStruct Hot Keys Rocks Backed", description.clone()),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
+            &(mod_capacity, read_capacity),
+            |b, (&mod_capacity, &read_capacity)| {
                 rmw!(
                     HOT_KEYS,
                     b,
                     SmallStruct,
                     BackendType::Rocks,
-                    capacity,
-                    mod_factor,
+                    mod_capacity,
+                    read_capacity,
                     false
                 )
             },
@@ -600,15 +602,15 @@ fn hash(c: &mut Criterion) {
                 "RMW SmallStruct Uniform Keys Rocks Backed",
                 description.clone(),
             ),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
+            &(mod_capacity, read_capacity),
+            |b, (&mod_capacity, &read_capacity)| {
                 rmw!(
                     UNIFORM_KEYS,
                     b,
                     SmallStruct,
                     BackendType::Rocks,
-                    capacity,
-                    mod_factor,
+                    mod_capacity,
+                    read_capacity,
                     false
                 )
             },
@@ -620,15 +622,15 @@ fn hash(c: &mut Criterion) {
                 "RMW SmallStruct Hot Keys Rocks Backed Full Eviction",
                 description.clone(),
             ),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
+            &(mod_capacity, read_capacity),
+            |b, (&mod_capacity, &read_capacity)| {
                 rmw!(
                     HOT_KEYS,
                     b,
                     SmallStruct,
                     BackendType::Rocks,
-                    capacity,
-                    mod_factor,
+                    mod_capacity,
+                    read_capacity,
                     true
                 )
             },
@@ -640,15 +642,15 @@ fn hash(c: &mut Criterion) {
                 "RMW SmallStruct Uniform Keys Rocks Backed Full Eviction",
                 description.clone(),
             ),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
+            &(mod_capacity, read_capacity),
+            |b, (&mod_capacity, &read_capacity)| {
                 rmw!(
                     UNIFORM_KEYS,
                     b,
                     SmallStruct,
                     BackendType::Rocks,
-                    capacity,
-                    mod_factor,
+                    mod_capacity,
+                    read_capacity,
                     true
                 )
             },
@@ -657,15 +659,15 @@ fn hash(c: &mut Criterion) {
         #[cfg(feature = "sled")]
         group.bench_with_input(
             BenchmarkId::new("RMW SmallStruct Hot Keys Sled Backed", description.clone()),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
+            &(mod_capacity, read_capacity),
+            |b, (&mod_capacity, &read_capacity)| {
                 rmw!(
                     HOT_KEYS,
                     b,
                     SmallStruct,
                     BackendType::Sled,
-                    capacity,
-                    mod_factor,
+                    mod_capacity,
+                    read_capacity,
                     false
                 )
             },
@@ -677,15 +679,15 @@ fn hash(c: &mut Criterion) {
                 "RMW SmallStruct Uniform Keys Sled Backed",
                 description.clone(),
             ),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
+            &(mod_capacity, read_capacity),
+            |b, (&mod_capacity, &read_capacity)| {
                 rmw!(
                     UNIFORM_KEYS,
                     b,
                     SmallStruct,
                     BackendType::Sled,
-                    capacity,
-                    mod_factor,
+                    mod_capacity,
+                    read_capacity,
                     false
                 )
             },
@@ -697,15 +699,15 @@ fn hash(c: &mut Criterion) {
                 "RMW SmallStruct Hot Keys Sled Backed Full Eviction",
                 description.clone(),
             ),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
+            &(mod_capacity, read_capacity),
+            |b, (&mod_capacity, &read_capacity)| {
                 rmw!(
                     HOT_KEYS,
                     b,
                     SmallStruct,
                     BackendType::Sled,
-                    capacity,
-                    mod_factor,
+                    mod_capacity,
+                    read_capacity,
                     true
                 )
             },
@@ -717,15 +719,15 @@ fn hash(c: &mut Criterion) {
                 "RMW SmallStruct Uniform Keys Sled Backed Full Eviction",
                 description.clone(),
             ),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
+            &(mod_capacity, read_capacity),
+            |b, (&mod_capacity, &read_capacity)| {
                 rmw!(
                     UNIFORM_KEYS,
                     b,
                     SmallStruct,
                     BackendType::Sled,
-                    capacity,
-                    mod_factor,
+                    mod_capacity,
+                    read_capacity,
                     true
                 )
             },
@@ -734,15 +736,15 @@ fn hash(c: &mut Criterion) {
         #[cfg(feature = "rocks")]
         group.bench_with_input(
             BenchmarkId::new("RMW LargeStruct Hot Keys Rocks Backed", description.clone()),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
+            &(mod_capacity, read_capacity),
+            |b, (&mod_capacity, &read_capacity)| {
                 rmw!(
                     HOT_KEYS,
                     b,
                     LargeStruct,
                     BackendType::Rocks,
-                    capacity,
-                    mod_factor,
+                    mod_capacity,
+                    read_capacity,
                     false
                 )
             },
@@ -754,15 +756,15 @@ fn hash(c: &mut Criterion) {
                 "RMW LargeStruct Hot Keys Rocks Backed Full Eviction",
                 description.clone(),
             ),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
+            &(mod_capacity, read_capacity),
+            |b, (&mod_capacity, &read_capacity)| {
                 rmw!(
                     HOT_KEYS,
                     b,
                     LargeStruct,
                     BackendType::Rocks,
-                    capacity,
-                    mod_factor,
+                    mod_capacity,
+                    read_capacity,
                     true
                 )
             },
@@ -774,15 +776,15 @@ fn hash(c: &mut Criterion) {
                 "RMW LargeStruct Uniform Keys Rocks Backed",
                 description.clone(),
             ),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
+            &(mod_capacity, read_capacity),
+            |b, (&mod_capacity, &read_capacity)| {
                 rmw!(
                     UNIFORM_KEYS,
                     b,
                     LargeStruct,
                     BackendType::Rocks,
-                    capacity,
-                    mod_factor,
+                    mod_capacity,
+                    read_capacity,
                     false
                 )
             },
@@ -794,15 +796,15 @@ fn hash(c: &mut Criterion) {
                 "RMW LargeStruct Uniform Keys Rocks Backed Full Eviction",
                 description.clone(),
             ),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
+            &(mod_capacity, read_capacity),
+            |b, (&mod_capacity, &read_capacity)| {
                 rmw!(
                     UNIFORM_KEYS,
                     b,
                     LargeStruct,
                     BackendType::Rocks,
-                    capacity,
-                    mod_factor,
+                    mod_capacity,
+                    read_capacity,
                     true
                 )
             },
@@ -811,15 +813,15 @@ fn hash(c: &mut Criterion) {
         #[cfg(feature = "sled")]
         group.bench_with_input(
             BenchmarkId::new("RMW LargeStruct Hot Keys Sled Backed", description.clone()),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
+            &(mod_capacity, read_capacity),
+            |b, (&mod_capacity, &read_capacity)| {
                 rmw!(
                     HOT_KEYS,
                     b,
                     LargeStruct,
                     BackendType::Sled,
-                    capacity,
-                    mod_factor,
+                    mod_capacity,
+                    read_capacity,
                     false
                 )
             },
@@ -831,15 +833,15 @@ fn hash(c: &mut Criterion) {
                 "RMW LargeStruct Hot Keys Sled Backed Full Eviction",
                 description.clone(),
             ),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
+            &(mod_capacity, read_capacity),
+            |b, (&mod_capacity, &read_capacity)| {
                 rmw!(
                     HOT_KEYS,
                     b,
                     LargeStruct,
                     BackendType::Sled,
-                    capacity,
-                    mod_factor,
+                    mod_capacity,
+                    read_capacity,
                     true
                 )
             },
@@ -850,15 +852,15 @@ fn hash(c: &mut Criterion) {
                 "RMW LargeStruct Uniform Keys Sled Backed",
                 description.clone(),
             ),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
+            &(mod_capacity, read_capacity),
+            |b, (&mod_capacity, &read_capacity)| {
                 rmw!(
                     UNIFORM_KEYS,
                     b,
                     LargeStruct,
                     BackendType::Sled,
-                    capacity,
-                    mod_factor,
+                    mod_capacity,
+                    read_capacity,
                     false
                 )
             },
@@ -869,15 +871,15 @@ fn hash(c: &mut Criterion) {
                 "RMW LargeStruct Uniform Keys Sled Backed Full Eviction",
                 description.clone(),
             ),
-            &(mod_factor, capacity),
-            |b, (&mod_factor, &capacity)| {
+            &(mod_capacity, read_capacity),
+            |b, (&mod_capacity, &read_capacity)| {
                 rmw!(
                     UNIFORM_KEYS,
                     b,
                     LargeStruct,
                     BackendType::Sled,
-                    capacity,
-                    mod_factor,
+                    mod_capacity,
+                    read_capacity,
                     true
                 )
             },
@@ -996,12 +998,12 @@ fn hash(c: &mut Criterion) {
 
 #[macro_export]
 macro_rules! read {
-    ($keys: expr, $bencher: expr, $type_value:ident, $backend:expr, $capacity:expr, $mod_factor:expr) => {{
+    ($keys: expr, $bencher: expr, $type_value:ident, $backend:expr, $mod_capacity:expr, $read_capacity:expr) => {{
         let dir = tempdir().unwrap();
         with_backend_type!($backend, |B| {
             let backend = B::create(dir.as_ref()).unwrap();
             let mut hash_index: HashIndex<u64, $type_value, B> =
-                HashIndex::new("_hashindex", $capacity, $mod_factor, Rc::new(backend));
+                HashIndex::new("_hashindex", $mod_capacity, $read_capacity, Rc::new(backend));
 
             for i in 0..TOTAL_KEYS {
                 let _ = hash_index.put(i, $type_value::new()).unwrap();
@@ -1009,7 +1011,7 @@ macro_rules! read {
 
             $bencher.iter(|| {
                 for i in $keys.iter() {
-                    assert_eq!(hash_index.get(&i).unwrap().is_some(), true);
+                    assert_eq!(hash_index.get(&i).unwrap().is_some(), true, "Failed to get()");
                 }
             });
         });
@@ -1018,12 +1020,12 @@ macro_rules! read {
 
 #[macro_export]
 macro_rules! insert {
-    ($keys: expr, $bencher: expr, $type_value:ident, $backend:expr, $capacity:expr, $mod_factor:expr, $full_eviction:expr) => {{
+    ($keys: expr, $bencher: expr, $type_value:ident, $backend:expr, $mod_capacity:expr, $read_capacity:expr, $full_eviction:expr) => {{
         let dir = tempdir().unwrap();
         with_backend_type!($backend, |B| {
             let backend = B::create(dir.as_ref()).unwrap();
             let mut hash_index: HashIndex<u64, $type_value, B> =
-                HashIndex::new("_hashindex", $capacity, $mod_factor, Rc::new(backend));
+                HashIndex::new("_hashindex", $mod_capacity, $read_capacity, Rc::new(backend));
 
             if $full_eviction {
                 $bencher.iter(|| {
@@ -1045,12 +1047,12 @@ macro_rules! insert {
 
 #[macro_export]
 macro_rules! rmw {
-    ($keys: expr, $bencher: expr, $type_value:ident, $backend:expr, $capacity:expr, $mod_factor:expr, $full_eviction:expr) => {{
+    ($keys: expr, $bencher: expr, $type_value:ident, $backend:expr, $mod_capacity:expr, $read_capacity:expr, $full_eviction:expr) => {{
         let dir = tempdir().unwrap();
         with_backend_type!($backend, |B| {
             let backend = B::create(dir.as_ref()).unwrap();
             let mut hash_index: HashIndex<u64, $type_value, B> =
-                HashIndex::new("_hashindex", $capacity, $mod_factor, Rc::new(backend));
+                HashIndex::new("_hashindex", $mod_capacity, $read_capacity, Rc::new(backend));
 
             for i in 0..TOTAL_KEYS {
                 let _ = hash_index.put(i, $type_value::new()).unwrap();

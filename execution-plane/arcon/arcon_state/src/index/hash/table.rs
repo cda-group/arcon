@@ -11,6 +11,7 @@ use std::alloc::{alloc, dealloc, handle_alloc_error};
 use crate::{
     hint::{likely, unlikely},
     index::hash::{bitmask::BitMask, imp::Group},
+    Key, Value,
 };
 
 /// Augments `AllocErr` with a `CapacityOverflow` variant.
@@ -67,8 +68,6 @@ impl Fallibility {
 
 /// Control byte value for an empty bucket.
 pub(crate) const EMPTY: u8 = 0b1111_1111;
-/// Control byte value for a deleted bucket.
-const DELETED: u8 = 0b1000_0000;
 
 /// Meta bytes for a modified bucket.
 pub(crate) const MODIFIED: u8 = 0b1111_1110;
@@ -77,25 +76,6 @@ pub(crate) const MODIFIED_TOUCHED: u8 = 0b1000_0001;
 /// Meta bytes for a safe bucket.
 pub(crate) const SAFE: u8 = 0b0000_0000;
 pub(crate) const SAFE_TOUCHED: u8 = 0b0000_0010;
-
-/// Checks whether a control byte represents a full bucket (top bit is clear).
-#[inline]
-fn is_full(ctrl: u8) -> bool {
-    ctrl & 0x80 == 0
-}
-
-/// Checks whether a control byte represents a special value (top bit is set).
-#[inline]
-fn is_special(ctrl: u8) -> bool {
-    ctrl & 0x80 != 0
-}
-
-/// Checks whether a special control value is EMPTY (just check 1 bit).
-#[inline]
-fn special_is_empty(ctrl: u8) -> bool {
-    debug_assert!(is_special(ctrl));
-    ctrl & 0x01 != 0
-}
 
 /// Checks whether a meta byte represents a safe bucket (top bit is clear).
 #[inline]
@@ -158,43 +138,37 @@ impl Iterator for ProbeSeq {
     }
 }
 
-/// Returns the number of buckets needed to hold the given number of items,
-/// taking the maximum load factor into account.
-///
-/// Returns `None` if an overflow occurs.
 #[inline]
-// Workaround for emscripten bug emscripten-core/emscripten-fastcomp#258
-#[cfg_attr(target_os = "emscripten", inline(never))]
-fn capacity_to_buckets(cap: usize) -> Option<usize> {
-    let adjusted_cap = if cap < 8 {
-        // Need at least 1 free bucket on small tables
-        cap + 1
-    } else {
-        // Otherwise require 1/8 buckets to be empty (87.5% load)
-        //
-        // Be careful when modifying this, calculate_layout relies on the
-        // overflow check here.
-        cap.checked_mul(8)? / 7
-    };
+fn calculate_layoutz<T, R>(
+    mod_buckets: usize,
+    read_buckets: usize,
+) -> Option<(Layout, usize, usize, usize)> {
+    debug_assert!(mod_buckets.is_power_of_two());
+    debug_assert!(read_buckets.is_power_of_two());
 
-    // Any overflows will have been caught by the checked_mul. Also, any
-    // rounding errors from the division above will be cleaned up by
-    // next_power_of_two (which can't overflow because of the previous divison).
-    Some(adjusted_cap.next_power_of_two())
-}
+    // Array of buckets
+    let mod_data = Layout::array::<T>(mod_buckets).ok()?;
+    let read_data = Layout::array::<R>(read_buckets).ok()?;
 
-/// Returns the maximum effective capacity for the given bucket mask, taking
-/// the maximum load factor into account.
-#[inline]
-fn bucket_mask_to_capacity(bucket_mask: usize) -> usize {
-    if bucket_mask < 8 {
-        // For tables with 1/2/4/8 buckets, we always reserve one empty slot.
-        // Keep in mind that the bucket mask is one less than the bucket count.
-        bucket_mask
-    } else {
-        // For larger tables we reserve 12.5% of the slots as empty.
-        ((bucket_mask + 1) / 8) * 7
-    }
+    let (bucket_layout, bucket_offset) = mod_data.extend(read_data).ok()?;
+
+    // Array of control bytes. This must be aligned to the group size.
+    //
+    // We add `Group::WIDTH` control bytes at the end of the array which
+    // replicate the bytes at the start of the array and thus avoids the need to
+    // perform bounds-checking while probing.
+    //
+    // There is no possible overflow here since buckets is a power of two and
+    // Group::WIDTH is a small number.
+    let mod_ctrl =
+        unsafe { Layout::from_size_align_unchecked(mod_buckets + Group::WIDTH, Group::WIDTH) };
+    let read_ctrl =
+        unsafe { Layout::from_size_align_unchecked(read_buckets + Group::WIDTH, Group::WIDTH) };
+
+    let (ctrl, read_ctrl_offset) = mod_ctrl.extend(read_ctrl).ok()?;
+
+    let (full_layout, ctrl_offset) = bucket_layout.extend(ctrl).ok()?;
+    Some((full_layout, bucket_offset, ctrl_offset, read_ctrl_offset))
 }
 
 /// Returns a Layout which describes the allocation required for a hash table,
@@ -203,7 +177,6 @@ fn bucket_mask_to_capacity(bucket_mask: usize) -> usize {
 ///
 /// Returns `None` if an overflow occurs.
 #[inline]
-#[cfg(feature = "nightly")]
 fn calculate_layout<T>(buckets: usize) -> Option<(Layout, usize)> {
     debug_assert!(buckets.is_power_of_two());
 
@@ -221,30 +194,6 @@ fn calculate_layout<T>(buckets: usize) -> Option<(Layout, usize)> {
     let ctrl = unsafe { Layout::from_size_align_unchecked(buckets + Group::WIDTH, Group::WIDTH) };
 
     data.extend(ctrl).ok()
-}
-
-/// Returns a Layout which describes the allocation required for a hash table,
-/// and the offset of the control bytes in the allocation.
-/// (the offset is also one past last element of buckets)
-///
-/// Returns `None` if an overflow occurs.
-#[inline]
-#[cfg(not(feature = "nightly"))]
-fn calculate_layout<T>(buckets: usize) -> Option<(Layout, usize)> {
-    debug_assert!(buckets.is_power_of_two());
-
-    // Manual layout calculation since Layout methods are not yet stable.
-    let ctrl_align = usize::max(mem::align_of::<T>(), Group::WIDTH);
-    let ctrl_offset = mem::size_of::<T>()
-        .checked_mul(buckets)?
-        .checked_add(ctrl_align - 1)?
-        & !(ctrl_align - 1);
-    let len = ctrl_offset.checked_add(buckets + Group::WIDTH)?;
-
-    Some((
-        unsafe { Layout::from_size_align_unchecked(len, ctrl_align) },
-        ctrl_offset,
-    ))
 }
 
 /// Returns a Layout which describes the meta bytes of the hash table.
@@ -337,59 +286,97 @@ impl<T> Bucket<T> {
     }
 }
 
-/// A raw hash table with an unsafe API.
-pub struct RawTable<T: Clone> {
-    // Mask to get an index from a hash value. The value is one less than the
-    // number of buckets in the table.
-    bucket_mask: usize,
+/// In-memory Special Purpose Hash Table.
+///
+/// The table is split up into two lanes, MOD and READ.
+/// New insertions or modification of READ lane buckets
+/// go into the MOD lane.
+///
+/// A [TableModIterator] is used to scan all active modified buckets
+/// in the MOD lane in order to make them durable in a state backend.
+pub struct RawTable<K, V>
+where
+    K: Key,
+    V: Value,
+{
+    // MOD LANE
 
-    // [Padding], T1, T2, ..., Tlast, C1, C2, ...
-    //                                ^ points here
-    ctrl: NonNull<u8>,
-    meta: NonNull<u8>,
-
-    // Number of elements that can be inserted before we need to grow the table
-    growth_left: usize,
-
-    // Number of elements in the table, only really used by len()
-    items: usize,
-
+    mod_ctrl: NonNull<u8>,
+    /// Mask to get an index from a hash value.
+    mod_mask: usize,
+    /// Meta bytes for the mod lane
+    mod_meta: NonNull<u8>,
+    /// Counter keeping track of current total of modified buckets
     mod_counter: usize,
-    // e.g., only 30% of ctrl full bytes may be set as modified
-    //
-    mod_limit: usize,
 
-    // Tell dropck that we own instances of T.
-    marker: PhantomData<T>,
+    // READ LANE
+
+    read_ctrl: NonNull<u8>,
+    /// Mask to get an index from a hash value.
+    read_mask: usize,
+    /// Number of elements in the table, only really used by len()
+    items: usize,
+    // Tell dropck that we own instances of (K, V)
+    marker: PhantomData<(K, V)>,
 }
 
-impl<T: Clone> RawTable<T> {
+impl<K, V> RawTable<K, V>
+where
+    K: Key,
+    V: Value,
+{
     /// Allocates a new hash table with the given number of buckets.
     ///
     /// The control bytes are left uninitialized.
     #[inline]
     unsafe fn new_uninitialized(
-        buckets: usize,
-        mod_factor: f32,
+        mod_lane_buckets: usize,
+        read_lane_buckets: usize,
         fallability: Fallibility,
     ) -> Result<Self, CollectionAllocErr> {
-        debug_assert!(buckets.is_power_of_two());
-        let (layout, ctrl_offset) =
-            calculate_layout::<T>(buckets).ok_or_else(|| fallability.capacity_overflow())?;
-        let meta_layout = meta_layout(buckets).ok_or_else(|| fallability.alloc_err(layout))?;
-        let meta = NonNull::new(alloc(meta_layout)).ok_or_else(|| fallability.alloc_err(layout))?;
-        let ctrl_ptr = NonNull::new(alloc(layout)).ok_or_else(|| fallability.alloc_err(layout))?;
-        let ctrl = NonNull::new_unchecked(ctrl_ptr.as_ptr().add(ctrl_offset));
-        let growth_left = bucket_mask_to_capacity(buckets - 1);
+        debug_assert!(mod_lane_buckets.is_power_of_two());
+        debug_assert!(read_lane_buckets.is_power_of_two());
+
+        // Avoid `Option::ok_or_else` because it bloats LLVM IR.
+        let (layout, ctrl_offset) = match calculate_layout::<(K, V, u64)>(mod_lane_buckets) {
+            Some(lco) => lco,
+            None => return Err(fallability.capacity_overflow()),
+        };
+        let mod_alloc = match NonNull::new(alloc(layout)) {
+            Some(ptr) => ptr,
+            None => return Err(fallability.alloc_err(layout)),
+        };
+
+        let mod_ctrl = NonNull::new_unchecked(mod_alloc.as_ptr().add(ctrl_offset));
+
+        let (layout, ctrl_offset) = match calculate_layout::<(K, V)>(read_lane_buckets) {
+            Some(lco) => lco,
+            None => return Err(fallability.capacity_overflow()),
+        };
+        let read_alloc = match NonNull::new(alloc(layout)) {
+            Some(ptr) => ptr,
+            None => return Err(fallability.alloc_err(layout)),
+        };
+
+        let read_ctrl = NonNull::new_unchecked(read_alloc.as_ptr().add(ctrl_offset));
+
+        let layout = match meta_layout(mod_lane_buckets) {
+            Some(lco) => lco,
+            None => return Err(fallability.capacity_overflow()),
+        };
+        let mod_meta = match NonNull::new(alloc(layout)) {
+            Some(ptr) => ptr,
+            None => return Err(fallability.alloc_err(layout)),
+        };
 
         Ok(Self {
-            ctrl,
-            meta,
-            bucket_mask: buckets - 1,
             items: 0,
+            mod_ctrl,
+            read_ctrl,
+            read_mask: read_lane_buckets - 1,
+            mod_meta,
             mod_counter: 0,
-            mod_limit: (growth_left as f32 * mod_factor) as usize,
-            growth_left,
+            mod_mask: mod_lane_buckets - 1,
             marker: PhantomData,
         })
     }
@@ -397,19 +384,22 @@ impl<T: Clone> RawTable<T> {
     /// Attempts to allocate a new hash table with at least enough capacity
     /// for inserting the given number of elements without reallocating.
     fn try_with_capacity(
-        capacity: usize,
-        mod_factor: f32,
+        read_capacity: usize,
+        mod_capacity: usize,
         fallability: Fallibility,
     ) -> Result<Self, CollectionAllocErr> {
+        assert!(read_capacity > 32, "Capacity size must be larger than 32");
+        assert!(mod_capacity > 32, "Capacity size must be larger than 32");
+
         unsafe {
-            let mut buckets =
-                capacity_to_buckets(capacity).ok_or_else(|| fallability.capacity_overflow())?;
-            if buckets < (Group::WIDTH * 2) {
-                buckets = 256;
-            }
-            let result = Self::new_uninitialized(buckets, mod_factor, fallability)?;
-            result.ctrl(0).write_bytes(EMPTY, result.num_ctrl_bytes());
-            result.meta(0).write_bytes(SAFE, result.num_ctrl_bytes());
+            let result = Self::new_uninitialized(mod_capacity, read_capacity, fallability)?;
+
+            // initialise bytes
+            result
+                .mod_ctrl(0)
+                .write_bytes(EMPTY, result.mod_ctrl_bytes());
+            result.ctrl(0).write_bytes(EMPTY, result.read_ctrl_bytes());
+            result.meta(0).write_bytes(SAFE, result.mod_ctrl_bytes());
 
             Ok(result)
         }
@@ -417,136 +407,127 @@ impl<T: Clone> RawTable<T> {
 
     /// Allocates a new hash table with at least enough capacity for inserting
     /// the given number of elements without reallocating.
-    pub fn with_capacity(capacity: usize, mod_factor: f32) -> Self {
-        assert!(
-            mod_factor > 0.0 && mod_factor <= 0.9,
-            "Modification factor needs to be set between 0.0 and 0.9"
-        );
-        Self::try_with_capacity(capacity, mod_factor, Fallibility::Infallible)
+    pub fn with_capacity(mod_capacity: usize, read_capacity: usize) -> Self {
+        Self::try_with_capacity(read_capacity, mod_capacity, Fallibility::Infallible)
             .unwrap_or_else(|_| unsafe { hint::unreachable_unchecked() })
     }
 
     /// Deallocates the table without dropping any entries.
     #[inline]
     unsafe fn free_buckets(&mut self) {
-        let (layout, ctrl_offset) =
-            calculate_layout::<T>(self.buckets()).unwrap_or_else(|| hint::unreachable_unchecked());
-        dealloc(self.ctrl.as_ptr().sub(ctrl_offset), layout);
-        let meta_layout =
-            meta_layout(self.buckets()).unwrap_or_else(|| hint::unreachable_unchecked());
-        dealloc(self.meta.as_ptr(), meta_layout);
+        let (layout, ctrl_offset) = calculate_layout::<(K, V, u64)>(self.mod_buckets())
+            .unwrap_or_else(|| hint::unreachable_unchecked());
+        dealloc(self.mod_ctrl.as_ptr().sub(ctrl_offset), layout);
+
+        let (layout, ctrl_offset) = calculate_layout::<(K, V)>(self.read_buckets())
+            .unwrap_or_else(|| hint::unreachable_unchecked());
+        dealloc(self.read_ctrl.as_ptr().sub(ctrl_offset), layout);
+
+        let mod_meta_layout =
+            meta_layout(self.mod_buckets()).unwrap_or_else(|| hint::unreachable_unchecked());
+        dealloc(self.mod_meta.as_ptr(), mod_meta_layout);
     }
 
     /// Returns pointer to one past last element of data table.
     #[inline]
-    pub unsafe fn data_end(&self) -> NonNull<T> {
-        NonNull::new_unchecked(self.ctrl.as_ptr() as *mut T)
+    pub unsafe fn data_end(&self) -> NonNull<(K, V)> {
+        NonNull::new_unchecked(self.read_ctrl.as_ptr() as *mut (K, V))
     }
 
-    /// Returns pointer to start of data table.
+    /// Returns pointer to one past last element of data table.
     #[inline]
-    #[cfg(feature = "nightly")]
-    pub unsafe fn data_start(&self) -> *mut T {
-        self.data_end().as_ptr().wrapping_sub(self.buckets())
+    pub unsafe fn mod_data_end(&self) -> NonNull<(K, V, u64)> {
+        NonNull::new_unchecked(self.mod_ctrl.as_ptr() as *mut (K, V, u64))
     }
 
     /// Returns the index of a bucket from a `Bucket`.
     #[inline]
-    unsafe fn bucket_index(&self, bucket: &Bucket<T>) -> usize {
+    unsafe fn bucket_index(&self, bucket: &Bucket<(K, V)>) -> usize {
         bucket.to_base_index(self.data_end())
     }
 
     /// Returns a pointer to a control byte.
     #[inline]
     unsafe fn ctrl(&self, index: usize) -> *mut u8 {
-        debug_assert!(index < self.num_ctrl_bytes());
-        self.ctrl.as_ptr().add(index)
+        debug_assert!(index < self.read_ctrl_bytes());
+        self.read_ctrl.as_ptr().add(index)
+    }
+
+    /// Returns a pointer to a mod lane control byte.
+    #[inline]
+    unsafe fn mod_ctrl(&self, index: usize) -> *mut u8 {
+        debug_assert!(index < self.mod_ctrl_bytes());
+        self.mod_ctrl.as_ptr().add(index)
     }
 
     /// Returns a pointer to a meta byte
     #[inline]
     unsafe fn meta(&self, index: usize) -> *mut u8 {
-        debug_assert!(index < self.num_ctrl_bytes());
-        self.meta.as_ptr().add(index)
+        debug_assert!(index < self.mod_ctrl_bytes());
+        self.mod_meta.as_ptr().add(index)
     }
 
     /// Returns a pointer to an element in the table.
     #[inline]
-    pub unsafe fn bucket(&self, index: usize) -> Bucket<T> {
-        debug_assert_ne!(self.bucket_mask, 0);
-        debug_assert!(index < self.buckets());
-        Bucket::from_base_index(self.data_end(), index)
+    pub unsafe fn read_bucket(&self, index: usize) -> Bucket<(K, V)> {
+        Bucket::from_base_index(
+            NonNull::new_unchecked(self.read_ctrl.as_ptr() as *mut (K, V)),
+            index,
+        )
+    }
+
+    /// Returns a pointer to an element in the table.
+    #[inline]
+    pub unsafe fn mod_bucket(&self, index: usize) -> Bucket<(K, V, u64)> {
+        Bucket::from_base_index(
+            NonNull::new_unchecked(self.mod_ctrl.as_ptr() as *mut (K, V, u64)),
+            index,
+        )
     }
 
     #[inline]
-    pub unsafe fn erase_by_index(&mut self, index: usize) {
-        debug_assert!(is_full(*self.ctrl(index)));
-        let index_before = index.wrapping_sub(Group::WIDTH) & self.bucket_mask;
-        let empty_before = Group::load(self.ctrl(index_before)).match_empty();
-        let empty_after = Group::load(self.ctrl(index)).match_empty();
-
-        // If we are inside a continuous block of Group::WIDTH full or deleted
-        // cells then a probe window may have seen a full block when trying to
-        // insert. We therefore need to keep that block non-empty so that
-        // lookups will continue searching to the next probe window.
-        //
-        // Note that in this context `leading_zeros` refers to the bytes at the
-        // end of a group, while `trailing_zeros` refers to the bytes at the
-        // begining of a group.
-        let ctrl = if empty_before.leading_zeros() + empty_after.trailing_zeros() >= Group::WIDTH {
-            DELETED
-        } else {
-            self.growth_left += 1;
-            EMPTY
-        };
-        self.set_ctrl(index, ctrl);
-        self.items -= 1;
-    }
-
-    /// Erases an element from the table, dropping it in place.
-    #[inline]
-    #[allow(clippy::needless_pass_by_value)]
-    pub unsafe fn erase(&mut self, item: Bucket<T>) {
-        // Erase the element from the table first since drop might panic.
-        let index = self.bucket_index(&item);
-        self.erase_by_index(index);
-        item.drop();
-    }
-
-    /// Removes an element from the table, returning it.
-    #[inline]
-    #[allow(clippy::needless_pass_by_value)]
-    #[allow(deprecated)]
-    pub unsafe fn remove(&mut self, item: Bucket<T>) -> T {
-        let index = self.bucket_index(&item);
-        self.erase_by_index(index);
-        item.read()
-    }
-
-    /// Returns an iterator for a probe sequence on the table.
-    #[inline]
-    fn probe_seq(&self, hash: u64) -> ProbeSeq {
+    fn probe_read(&self, hash: u64) -> ProbeSeq {
         ProbeSeq {
-            bucket_mask: self.bucket_mask,
-            pos: h1(hash) & self.bucket_mask,
+            bucket_mask: self.read_mask,
+            pos: h1(hash) & self.read_mask,
             stride: 0,
             probe_counter: 0,
-            probe_limit: 8, // TODO: This is somewhat random choice, fix..
+            probe_limit: 16, // TODO: This is somewhat random choice, fix..
         }
     }
-    /// Sets a meta byte
+
+    #[inline]
+    fn probe_mod(&self, hash: u64) -> ProbeSeq {
+        ProbeSeq {
+            bucket_mask: self.mod_mask,
+            pos: h1(hash) & self.mod_mask,
+            stride: 0,
+            probe_counter: 0,
+            probe_limit: 16, // TODO: This is somewhat random choice, fix..
+        }
+    }
+
     #[inline]
     unsafe fn set_meta(&self, index: usize, meta: u8) {
-        // Using same logic as set_ctrl
-        let index2 = ((index.wrapping_sub(Group::WIDTH)) & self.bucket_mask) + Group::WIDTH;
-        *self.meta(index) = meta;
-        *self.meta(index2) = meta;
+        self.set_lane_byte(index, meta, self.mod_meta.as_ptr(), self.mod_mask);
+    }
+
+    #[inline]
+    unsafe fn set_mod_ctrl(&self, index: usize, ctrl: u8) {
+        debug_assert!(index < self.mod_ctrl_bytes());
+        self.set_lane_byte(index, ctrl, self.mod_ctrl.as_ptr(), self.mod_mask);
+    }
+
+    #[inline]
+    unsafe fn set_read_ctrl(&self, index: usize, ctrl: u8) {
+        debug_assert!(index < self.read_ctrl_bytes());
+        self.set_lane_byte(index, ctrl, self.read_ctrl.as_ptr(), self.read_mask);
     }
 
     /// Sets a control byte, and possibly also the replicated control byte at
     /// the end of the array.
     #[inline]
-    unsafe fn set_ctrl(&self, index: usize, ctrl: u8) {
+    unsafe fn set_lane_byte(&self, index: usize, ctrl: u8, ptr: *mut u8, mask: usize) {
         // Replicate the first Group::WIDTH control bytes at the end of
         // the array without using a branch:
         // - If index >= Group::WIDTH then index == index2.
@@ -565,122 +546,167 @@ impl<T: Clone> RawTable<T> {
         // ---------------------------------------------
         // | [A] | [B] | [EMPTY] | [EMPTY] | [A] | [B] |
         // ---------------------------------------------
-        let index2 = ((index.wrapping_sub(Group::WIDTH)) & self.bucket_mask) + Group::WIDTH;
-
-        *self.ctrl(index) = ctrl;
-        *self.ctrl(index2) = ctrl;
+        let index2 = ((index.wrapping_sub(Group::WIDTH)) & mask) + Group::WIDTH;
+        *ptr.add(index) = ctrl;
+        *ptr.add(index2) = ctrl;
     }
 
-    /// Searches for an empty or deleted bucket which is suitable for inserting
-    /// a new element.
+    /// Common search function for both MOD and READ Lanes to find an EMPTY or DELETED bucket.
     #[inline]
-    fn find_insert_slot(&self, hash: u64) -> Option<usize> {
-        for pos in self.probe_seq(hash) {
-            unsafe {
-                let group = Group::load(self.ctrl(pos));
-                if let Some(bit) = group.match_empty_or_deleted().lowest_set_bit() {
-                    let result = (pos + bit) & self.bucket_mask;
+    unsafe fn find_insert_slot(
+        &self,
+        probe: impl Iterator<Item = usize>,
+        mask: usize,
+        ptr: *mut u8,
+    ) -> Option<usize> {
+        for pos in probe {
+            let group = Group::load(ptr.add(pos));
+            if let Some(bit) = group.match_empty().lowest_set_bit() {
+                let result = (pos + bit) & mask;
+                return Some(result);
+            }
+        }
+        None
+    }
 
-                    // In tables smaller than the group width, trailing control
-                    // bytes outside the range of the table are filled with
-                    // EMPTY entries. These will unfortunately trigger a
-                    // match, but once masked may point to a full bucket that
-                    // is already occupied. We detect this situation here and
-                    // perform a second scan starting at the begining of the
-                    // table. This second scan is guaranteed to find an empty
-                    // slot (due to the load factor) before hitting the trailing
-                    // control bytes (containing EMPTY).
-                    if unlikely(is_full(*self.ctrl(result))) {
-                        debug_assert!(self.bucket_mask < Group::WIDTH);
-                        debug_assert_ne!(pos, 0);
-                        return Some(
-                            Group::load_aligned(self.ctrl(0))
-                                .match_empty_or_deleted()
-                                .lowest_set_bit_nonzero(),
-                        );
-                    } else {
-                        return Some(result);
+
+    /// Inserts a new element into the READ lane.
+    #[inline(always)]
+    pub fn insert_read_lane(&mut self, hash: u64, record: (K, V)) {
+        unsafe {
+            if let Some(index) = self.find_insert_slot(
+                self.probe_read(hash),
+                self.read_mask,
+                self.read_ctrl.as_ptr(),
+            ) {
+                let bucket = self.read_bucket(index);
+                self.set_read_ctrl(index, h2(hash));
+                bucket.write(record);
+            } else {
+                //panic!("NO SPACE IN READ LANE");
+                // no space in the READ lane
+                for pos in self.probe_read(hash) {
+                    let group = Group::load(self.read_ctrl.as_ptr().add(pos));
+                    if let Some(bit) = group.match_full().lowest_set_bit() {
+                        let index = (pos + bit) & self.read_mask;
+                        let bucket = self.read_bucket(index);
+                        let _ = bucket.drop();
+                        self.set_read_ctrl(index, h2(hash));
+                        // write the data to the bucket
+                        bucket.write(record);
+                        return;
                     }
                 }
             }
         }
-
-        return None;
     }
 
-    /// Inserts a new element into the table.
+    /// Inserts a new element into the MOD lane.
     ///
-    /// This does not check if the given element already exists in the table.
+    ///
+    /// If `find_insert_slot` fails to find a suitable position for insertion,
+    /// a ProbeModIterator is then returned in order to make some space.
     #[inline(always)]
-    pub fn insert<'a>(&'a mut self, hash: u64, value: T) -> Option<(ProbeModIterator<T>, T)> {
+    pub fn insert_mod_lane<'a>(
+        &'a mut self,
+        hash: u64,
+        value: (K, V),
+    ) -> Option<(ProbeModIterator<K, V>, (K, V))> {
         unsafe {
-            let index = match self.find_insert_slot(hash) {
+            let index = match self.find_insert_slot(
+                self.probe_mod(hash),
+                self.mod_mask,
+                self.mod_ctrl.as_ptr(),
+            ) {
                 Some(index) => index,
                 None => {
                     return Some((ProbeModIterator::new(self, hash), value));
                 }
             };
 
-            let ctrl = *self.ctrl(index);
-            let bucket = self.bucket(index);
-
-            self.growth_left = self
-                .growth_left
-                .saturating_sub(special_is_empty(ctrl) as usize);
-            self.set_ctrl(index, h2(hash));
+            // Set ctrl and meta bytes
+            self.set_mod_ctrl(index, h2(hash));
             self.set_meta(index, MODIFIED);
-            bucket.write(value);
-            self.items += 1;
+
+            let bucket = self.mod_bucket(index);
+            bucket.write((value.0, value.1, hash));
             self.mod_counter += 1;
             None
         }
     }
 
-    /// Searches for an element in the table.
-    ///
-    /// Similar to the find function, but we use it for mutable finds and thus set
-    /// bucket's meta byte to MODIFIED_TOUCHED.
-    ///
-    /// Note that we simply assume that the caller will modify the underlying value.
-    #[inline(always)]
-    pub fn find_mut(&mut self, hash: u64, mut eq: impl FnMut(&T) -> bool) -> Option<Bucket<T>> {
+    /// Probes in worst case both lanes to find a record to remove.
+    #[inline]
+    pub fn remove(&mut self, hash: u64, mut eq: impl FnMut((&K, &V)) -> bool) -> Option<(K, V)> {
         unsafe {
-            for pos in self.probe_seq(hash) {
-                let group = Group::load(self.ctrl(pos));
+            for pos in self.probe_mod(hash) {
+                let group = Group::load(self.mod_ctrl(pos));
                 for bit in group.match_byte(h2(hash)) {
-                    let index = (pos + bit) & self.bucket_mask;
-                    let bucket = self.bucket(index);
-                    if likely(eq(bucket.as_ref())) {
-                        // If the meta was safe, then increase modification
+                    let index = (pos + bit) & self.mod_mask;
+                    let bucket = self.mod_bucket(index);
+                    let &(ref key, ref value, _) = bucket.as_ref();
+                    if likely(eq((key, value))) {
+                        // take ownership
+                        let (key, value, _) = bucket.read();
+                        // clear ctrl byte
+                        self.set_mod_ctrl(index, EMPTY);
+                        return Some((key, value));
+                    }
+                }
+            }
+            // otherwise attempt to take from READ lane
+            self.take_read_lane(hash, eq)
+        }
+    }
+
+    #[inline(always)]
+    pub fn find_mod_lane_mut(
+        &mut self,
+        hash: u64,
+        mut eq: impl FnMut((&K, &V)) -> bool,
+    ) -> Option<&mut V> {
+        unsafe {
+            for pos in self.probe_mod(hash) {
+                let group = Group::load(self.mod_ctrl(pos));
+                for bit in group.match_byte(h2(hash)) {
+                    let index = (pos + bit) & self.mod_mask;
+                    let bucket = self.mod_bucket(index);
+                    let &mut (ref key, ref mut value, _) = bucket.as_mut();
+                    if likely(eq((key, value))) {
+                        // If the meta byte is safe, then increase modification
                         // counter as we are setting the meta to MODIFIED_TOUCHED.
                         if is_safe(*self.meta(index)) {
                             self.mod_counter += 1;
                         }
 
                         self.set_meta(index, MODIFIED_TOUCHED);
-                        return Some(bucket);
+                        return Some(value);
                     }
                 }
             }
-
-            return None;
+            None
         }
     }
 
-    /// Searches for an element in the table.
+    /// Probes the READ lane and returns an owned bucket record if found.
+    ///
+    /// Used mainly to migrate a Read-Modify-Write record to the MOD lane.
     #[inline(always)]
-    pub fn find(&self, hash: u64, mut eq: impl FnMut(&T) -> bool) -> Option<Bucket<T>> {
+    pub fn take_read_lane(
+        &mut self,
+        hash: u64,
+        mut eq: impl FnMut((&K, &V)) -> bool,
+    ) -> Option<(K, V)> {
         unsafe {
-            for pos in self.probe_seq(hash) {
+            for pos in self.probe_read(hash) {
                 let group = Group::load(self.ctrl(pos));
                 for bit in group.match_byte(h2(hash)) {
-                    let index = (pos + bit) & self.bucket_mask;
-                    let bucket = self.bucket(index);
-                    if likely(eq(bucket.as_ref())) {
-                        if is_safe(*self.meta(index)) {
-                            self.set_meta(index, SAFE_TOUCHED);
-                        }
-                        return Some(bucket);
+                    let index = (pos + bit) & self.read_mask;
+                    let bucket = self.read_bucket(index);
+                    let &(ref key, ref value) = bucket.as_ref();
+                    if likely(eq((key, value))) {
+                        self.set_read_ctrl(index, EMPTY);
+                        return Some(bucket.read());
                     }
                 }
             }
@@ -688,13 +714,40 @@ impl<T: Clone> RawTable<T> {
         return None;
     }
 
-    /// Returns the number of elements the map can hold without reallocating.
-    ///
-    /// This number is a lower bound; the table might be able to hold
-    /// more, but is guaranteed to be able to hold at least this many.
-    #[inline]
-    pub fn capacity(&self) -> usize {
-        self.items + self.growth_left
+    /// Searches for an element in the table.
+    #[inline(always)]
+    pub fn find(&self, hash: u64, mut eq: impl FnMut((&K, &V)) -> bool) -> Option<(&K, &V)> {
+        unsafe {
+            // Probe Mod Lane first...
+            for pos in self.probe_mod(hash) {
+                let group = Group::load(self.mod_ctrl(pos));
+                for bit in group.match_byte(h2(hash)) {
+                    let index = (pos + bit) & self.mod_mask;
+                    let bucket = self.mod_bucket(index);
+                    let &(ref key, ref value, _) = bucket.as_ref();
+                    if likely(eq((key, value))) {
+                        if is_safe(*self.meta(index)) {
+                            self.set_meta(index, SAFE_TOUCHED);
+                        }
+                        return Some((key, value));
+                    }
+                }
+            }
+
+            // Probe read lane
+            for pos in self.probe_read(hash) {
+                let group = Group::load(self.ctrl(pos));
+                for bit in group.match_byte(h2(hash)) {
+                    let index = (pos + bit) & self.read_mask;
+                    let bucket = self.read_bucket(index);
+                    let &(ref key, ref value) = bucket.as_ref();
+                    if likely(eq((key, value))) {
+                        return Some((key, value));
+                    }
+                }
+            }
+        }
+        return None;
     }
 
     /// Returns the number of elements in the table.
@@ -703,109 +756,136 @@ impl<T: Clone> RawTable<T> {
         self.items
     }
 
-    /// Returns whether the table is above allowed modification threshold
+    /// Returns the number of buckets in the MOD lane.
     #[inline]
-    pub fn above_mod_threshold(&self) -> bool {
-        self.mod_counter >= self.mod_limit
+    pub fn mod_buckets(&self) -> usize {
+        self.mod_mask + 1
     }
 
-    /// Returns the number of buckets in the table.
+    /// Returns the number of buckets in the READ lane.
     #[inline]
-    pub fn buckets(&self) -> usize {
-        self.bucket_mask + 1
+    pub fn read_buckets(&self) -> usize {
+        self.read_mask + 1
     }
 
-    /// Returns the number of control bytes in the table.
+    /// Returns the number of control bytes in the READ lane.
     #[inline]
-    fn num_ctrl_bytes(&self) -> usize {
-        self.bucket_mask + 1 + Group::WIDTH
+    fn read_ctrl_bytes(&self) -> usize {
+        self.read_mask + 1 + Group::WIDTH
     }
 
-    /// Returns whether this table points to the empty singleton with a capacity
-    /// of 0.
+    /// Returns the number of control bytes in the MOD lane
     #[inline]
-    fn is_empty_singleton(&self) -> bool {
-        self.bucket_mask == 0
+    fn mod_ctrl_bytes(&self) -> usize {
+        self.mod_mask + 1 + Group::WIDTH
     }
 
-    /// Returns the amount of amount of allowed modifications
-    #[inline]
-    pub fn mod_limit(&self) -> usize {
-        self.mod_limit
-    }
-
-    /// Returns a TableModIterator that starts scanning the table for modified buckets.
+    /// Returns a TableModIterator that starts scanning the Mod lane for modified buckets.
     ///
     /// Safety: It is up to the caller to properly persist the buckets from the [TableModIterator]
     #[inline]
-    pub(crate) unsafe fn iter_modified<'a>(&'a mut self) -> TableModIterator<'a, T> {
+    pub(crate) unsafe fn iter_modified<'a>(&'a mut self) -> TableModIterator<'a, K, V> {
         TableModIterator::new(self, 0)
     }
 
-    /// Returns an iterator over every element in the table. It is up to
-    /// the caller to ensure that the `RawTable` outlives the `RawIter`.
-    /// Because we cannot make the `next` method unsafe on the `RawIter`
-    /// struct, we have to make the `iter` method unsafe.
+    // Returns an iterator over every element in the table. It is up to
+    // the caller to ensure that the `RawTable` outlives the `RawIter`.
+    // Because we cannot make the `next` method unsafe on the `RawIter`
+    // struct, we have to make the `iter` method unsafe.
     #[inline]
-    pub unsafe fn iter(&self) -> RawIter<T> {
+    pub unsafe fn mod_lane_iter(&self) -> RawIter<(K, V, u64)> {
+        let data = Bucket::from_base_index(self.mod_data_end(), 0);
+        RawIter {
+            iter: RawIterRange::new(self.mod_ctrl.as_ptr(), data, self.mod_buckets()),
+            items: self.mod_buckets(),
+        }
+    }
+
+    #[inline]
+    pub unsafe fn read_lane_iter(&self) -> RawIter<(K, V)> {
         let data = Bucket::from_base_index(self.data_end(), 0);
         RawIter {
-            iter: RawIterRange::new(self.ctrl.as_ptr(), data, self.buckets()),
-            items: self.items,
+            iter: RawIterRange::new(self.read_ctrl.as_ptr(), data, self.read_buckets()),
+            items: self.read_buckets(),
         }
     }
 }
 
-unsafe impl<T: Clone> Send for RawTable<T> where T: Send {}
-unsafe impl<T: Clone> Sync for RawTable<T> where T: Sync {}
+unsafe impl<K, V> Send for RawTable<K, V>
+where
+    K: Key + Send,
+    V: Value + Send,
+{
+}
+unsafe impl<K, V> Sync for RawTable<K, V>
+where
+    K: Key + Send,
+    V: Value + Send,
+{
+}
 
 #[cfg(feature = "nightly")]
-unsafe impl<#[may_dangle] T: Clone> Drop for RawTable<T> {
+unsafe impl<#[may_dangle] K, V> Drop for RawTable<K, V>
+where
+    K: Key,
+    V: Value,
+{
     #[inline]
     fn drop(&mut self) {
-        if !self.is_empty_singleton() {
-            unsafe {
-                if mem::needs_drop::<T>() {
-                    for item in self.iter() {
-                        item.drop();
-                    }
+        unsafe {
+            if mem::needs_drop::<(K, V)>() {
+                for item in self.mod_lane_iter() {
+                    item.drop();
                 }
-                self.free_buckets();
+                for item in self.read_lane_iter() {
+                    item.drop();
+                }
             }
+            self.free_buckets();
         }
     }
 }
 #[cfg(not(feature = "nightly"))]
-impl<T: Clone> Drop for RawTable<T> {
+impl<K, V> Drop for RawTable<K, V>
+where
+    K: Key,
+    V: Value,
+{
     #[inline]
     fn drop(&mut self) {
-        if !self.is_empty_singleton() {
-            unsafe {
-                if mem::needs_drop::<T>() {
-                    for item in self.iter() {
-                        item.drop();
-                    }
+        unsafe {
+            if mem::needs_drop::<(K, V)>() {
+                for item in self.mod_lane_iter() {
+                    item.drop();
                 }
-                self.free_buckets();
+                for item in self.read_lane_iter() {
+                    item.drop();
+                }
             }
+            self.free_buckets();
         }
     }
 }
 
 /// Iterator that returns modified buckets over a ProbeSeq
-///
-/// Unlike the [TableModIterator], this iterator will perform
-/// a cleaning process over the buckets it sees.
-pub struct ProbeModIterator<'a, T: Clone> {
-    pub(crate) iter: RawModIterator<'a, T>,
-    h2_hash: u64,
+pub struct ProbeModIterator<'a, K, V>
+where
+    K: Key,
+    V: Value,
+{
+    pub(crate) iter: RawModIterator<'a, K, V>,
+    hash: u64,
     _marker: std::marker::PhantomData<&'a ()>,
 }
 
-impl<'a, T: Clone> ProbeModIterator<'a, T> {
-    fn new(table: &'a mut RawTable<T>, hash: u64) -> Self {
+impl<'a, K, V> ProbeModIterator<'a, K, V>
+where
+    K: Key,
+    V: Value,
+{
+    fn new(table: &'a mut RawTable<K, V>, hash: u64) -> Self {
         unsafe {
-            let mut probe_seq = table.probe_seq(hash);
+            let mut probe_seq = table.probe_mod(hash);
             let pos = probe_seq.next().unwrap();
             let group = Group::load(table.meta(pos));
             let bitmask = group.match_modified().into_iter();
@@ -819,18 +899,22 @@ impl<'a, T: Clone> ProbeModIterator<'a, T> {
             };
             ProbeModIterator {
                 iter,
-                h2_hash: hash,
+                hash,
                 _marker: PhantomData,
             }
         }
     }
 }
 
-impl<'a, T: 'a + Clone> Iterator for ProbeModIterator<'a, T> {
-    type Item = &'a T;
+impl<'a, K: 'a, V: 'a> Iterator for ProbeModIterator<'a, K, V>
+where
+    K: Key,
+    V: Value,
+{
+    type Item = (&'a K, &'a V);
 
     #[inline]
-    fn next(&mut self) -> Option<&'a T> {
+    fn next(&mut self) -> Option<(&'a K, &'a V)> {
         if let Some(bucket) = self.iter.next() {
             Some(bucket)
         } else {
@@ -841,19 +925,22 @@ impl<'a, T: 'a + Clone> Iterator for ProbeModIterator<'a, T> {
             if unlikely(self.iter.erased_buckets == 0) {
                 let mut cleared_groups = 0;
                 let raw_table = &mut self.iter.table;
-                for pos in raw_table.probe_seq(self.h2_hash) {
+                for pos in raw_table.probe_mod(self.hash) {
                     unsafe {
                         let group = Group::load(raw_table.meta(pos));
                         let bitmask = group.match_byte(SAFE_TOUCHED);
-                        if bitmask.any_bit_set() {
+                        if likely(bitmask.any_bit_set()) {
                             cleared_groups += 1;
                         }
+
                         for bit in bitmask {
-                            let index = (pos + bit) & raw_table.bucket_mask;
-                            let bucket = raw_table.bucket(index);
-                            raw_table.erase_by_index(index);
+                            let index = (pos + bit) & raw_table.mod_mask;
+                            let bucket = raw_table.mod_bucket(index);
+                            // take ownership of bucket data
+                            let (key, value, hash) = bucket.read();
+                            raw_table.insert_read_lane(hash, (key, value));
+                            raw_table.set_mod_ctrl(index, EMPTY);
                             raw_table.set_meta(index, SAFE);
-                            bucket.drop();
                         }
 
                         // In order to avoid clearing to many SAFE_TOUCHED buckets,
@@ -874,9 +961,13 @@ impl<'a, T: 'a + Clone> Iterator for ProbeModIterator<'a, T> {
     }
 }
 
-pub struct RawModIterator<'a, T: Clone> {
+pub struct RawModIterator<'a, K, V>
+where
+    K: Key,
+    V: Value,
+{
     /// Mutable Reference to the RawTable
-    table: &'a mut RawTable<T>,
+    table: &'a mut RawTable<K, V>,
     /// The Probe Sequence that is followed
     probe_seq: ProbeSeq,
     /// Current group
@@ -892,17 +983,22 @@ pub struct RawModIterator<'a, T: Clone> {
     erased_buckets: usize,
 }
 
-impl<'a, T: Clone> Iterator for RawModIterator<'a, T> {
-    type Item = &'a T;
+impl<'a, K, V> Iterator for RawModIterator<'a, K, V>
+where
+    K: Key,
+    V: Value,
+{
+    type Item = (&'a K, &'a V);
 
-    fn next(&mut self) -> Option<&'a T> {
+    fn next(&mut self) -> Option<(&'a K, &'a V)> {
         unsafe {
             loop {
                 if let Some(bit) = self.bitmask.next() {
-                    let index = (self.pos + bit) & self.table.bucket_mask;
+                    let index = (self.pos + bit) & self.table.mod_mask;
                     self.table.mod_counter -= 1;
-                    let bucket = self.table.bucket(index);
-                    return Some(bucket.as_ref());
+                    let bucket = self.table.mod_bucket(index);
+                    let (ref key, ref value, _) = bucket.as_ref();
+                    return Some((key, value));
                 }
 
                 // Converts the bytes in-place:
@@ -914,10 +1010,12 @@ impl<'a, T: Clone> Iterator for RawModIterator<'a, T> {
 
                 for bit in self.group.match_byte(SAFE) {
                     // for every SAFE meta byte, erase and make space for new inserts..
-                    let index = (self.pos + bit) & self.table.bucket_mask;
-                    let bucket = self.table.bucket(index);
-                    self.table.erase_by_index(index);
-                    bucket.drop();
+                    let index = (self.pos + bit) & self.table.mod_mask;
+                    let bucket = self.table.mod_bucket(index);
+                    self.table.set_mod_ctrl(index, EMPTY);
+                    // take ownership of bucket data
+                    let (key, value, hash) = bucket.read();
+                    self.table.insert_read_lane(hash, (key, value));
                     self.erased_buckets += 1;
                 }
 
@@ -933,10 +1031,14 @@ impl<'a, T: Clone> Iterator for RawModIterator<'a, T> {
     }
 }
 
-/// Iterator that scans modified buckets from the start of the RawTable.
-pub struct TableModIterator<'a, T: Clone> {
+/// Iterator that scans modified buckets from the start of the Mod Lane
+pub struct TableModIterator<'a, K, V>
+where
+    K: Key,
+    V: Value,
+{
     /// Mutable Reference to the RawTable
-    table: &'a mut RawTable<T>,
+    table: &'a mut RawTable<K, V>,
     /// Current group
     group: Group,
     /// Current group position
@@ -947,13 +1049,17 @@ pub struct TableModIterator<'a, T: Clone> {
     buckets: usize,
 }
 
-impl<'a, T: Clone> TableModIterator<'a, T> {
-    fn new(table: &'a mut RawTable<T>, pos: usize) -> Self {
+impl<'a, K, V> TableModIterator<'a, K, V>
+where
+    K: Key,
+    V: Value,
+{
+    fn new(table: &'a mut RawTable<K, V>, pos: usize) -> Self {
         debug_assert_eq!(pos % Group::WIDTH, 0);
         unsafe {
             let group = Group::load_aligned(table.meta(pos));
             let bitmask = group.match_modified().into_iter();
-            let buckets = table.buckets();
+            let buckets = table.mod_buckets();
             TableModIterator {
                 table,
                 group,
@@ -965,19 +1071,30 @@ impl<'a, T: Clone> TableModIterator<'a, T> {
     }
 }
 
-impl<'a, T: Clone> Iterator for TableModIterator<'a, T> {
-    type Item = &'a T;
+impl<'a, K, V> Iterator for TableModIterator<'a, K, V>
+where
+    K: Key,
+    V: Value,
+{
+    type Item = (&'a K, &'a V);
 
-    fn next(&mut self) -> Option<&'a T> {
+    fn next(&mut self) -> Option<(&'a K, &'a V)> {
         unsafe {
             loop {
                 if let Some(bit) = self.bitmask.next() {
-                    let index = (self.pos + bit) & self.table.bucket_mask;
-                    self.table.mod_counter = self.table.mod_counter.saturating_sub(1);
-                    self.table.set_meta(index, SAFE);
-                    let bucket = self.table.bucket(index);
-                    return Some(bucket.as_ref());
+                    let index = (self.pos + bit) & self.table.mod_mask;
+                    self.table.mod_counter -= 1;
+                    let bucket = self.table.mod_bucket(index);
+                    let (ref key, ref value, _) = bucket.as_ref();
+                    return Some((key, value));
                 }
+
+                // Converts the bytes in-place:
+                // - SAFE => SAFE,
+                // - SAFE_TOUCHED => SAFE
+                // - MODIFIED => SAFE
+                // - MODIFIED_TOUCHED => SAFE_TOUCHED
+                self.group = self.group.convert_mod_to_safe(self.table.meta(self.pos));
 
                 // If we have reached zero modified buckets,
                 // no point in scanning further..

@@ -344,7 +344,7 @@ impl<B: Backend, K: Key, V: Value, IK: Metakey, N: Metakey>
     #[inline]
     pub fn insert_all_by_ref<'a>(
         &mut self,
-        key_value_pairs: impl IntoIterator<Item = &'a (K, V)>,
+        key_value_pairs: impl IntoIterator<Item = (&'a K, &'a V)>,
     ) -> Result<()> {
         self.backend
             .map_insert_all_by_ref(self.inner, key_value_pairs)

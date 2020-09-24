@@ -3,7 +3,7 @@
 
 use super::{
     bitmask::BitMask,
-    table::{EMPTY, MODIFIED_TOUCHED, SAFE_TOUCHED},
+    table::{MODIFIED_TOUCHED, SAFE_TOUCHED},
 };
 use core::mem;
 
@@ -68,13 +68,6 @@ impl Group {
     /// `EMPTY`.
     #[inline]
     pub fn match_empty(self) -> BitMask {
-        self.match_byte(EMPTY)
-    }
-
-    /// Returns a `BitMask` indicating all bytes in the group which are
-    /// `EMPTY` or `DELETED`.
-    #[inline]
-    pub fn match_empty_or_deleted(self) -> BitMask {
         #[allow(
             // byte: i32 as u16
             //   note: _mm_movemask_epi8 returns a 16-bit mask in a i32, the
@@ -83,7 +76,7 @@ impl Group {
             clippy::cast_possible_truncation
         )]
         unsafe {
-            // A byte is EMPTY or DELETED iff the high bit is set
+            // A byte is EMPTY iff the high bit is set
             BitMask(x86::_mm_movemask_epi8(self.0) as u16)
         }
     }
@@ -91,7 +84,7 @@ impl Group {
     /// Returns a `BitMask` indicating all bytes in the group which are full.
     #[inline]
     pub fn match_full(&self) -> BitMask {
-        self.match_empty_or_deleted().invert()
+        self.match_empty().invert()
     }
 
     /// Returns a `BitMask` indicating all bytes in the group which are modified.
@@ -100,7 +93,7 @@ impl Group {
         // NOTE: A modified meta byte has the high bit set to 1
         //       thus we can simply run the same "match_empty_or_deleted" function
         //       as it tests for the same thing.
-        self.match_empty_or_deleted()
+        self.match_empty()
     }
 
     /// Performs the following transformation on all bytes in the group:

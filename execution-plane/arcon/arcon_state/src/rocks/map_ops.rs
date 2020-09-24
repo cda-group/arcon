@@ -100,7 +100,7 @@ impl MapOps for Rocks {
     fn map_insert_all_by_ref<'a, K: Key, V: Value, IK: Metakey, N: Metakey>(
         &mut self,
         handle: &Handle<MapState<K, V>, IK, N>,
-        key_value_pairs: impl IntoIterator<Item = &'a (K, V)>,
+        key_value_pairs: impl IntoIterator<Item = (&'a K, &'a V)>,
     ) -> Result<()> {
         let backend = self.initialized_mut()?;
 
