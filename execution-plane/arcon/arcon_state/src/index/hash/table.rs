@@ -5,11 +5,18 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::index::hash::bitmask::BitMaskIter;
-use core::{alloc::Layout, hint, iter::FusedIterator, marker::PhantomData, mem, ptr::NonNull};
+use core::{
+    alloc::Layout,
+    hint,
+    intrinsics::{likely, unlikely},
+    iter::FusedIterator,
+    marker::PhantomData,
+    mem,
+    ptr::NonNull,
+};
 use std::alloc::{alloc, dealloc, handle_alloc_error};
 
 use crate::{
-    hint::{likely, unlikely},
     index::hash::{bitmask::BitMask, imp::Group},
     Key, Value,
 };
@@ -27,12 +34,6 @@ pub enum CollectionAllocErr {
     },
 }
 
-#[cfg(feature = "nightly")]
-#[inline]
-unsafe fn offset_from<T>(to: *const T, from: *const T) -> usize {
-    to.offset_from(from) as usize
-}
-#[cfg(not(feature = "nightly"))]
 #[inline]
 unsafe fn offset_from<T>(to: *const T, from: *const T) -> usize {
     (to as usize - from as usize) / mem::size_of::<T>()
@@ -139,7 +140,7 @@ impl Iterator for ProbeSeq {
 }
 
 #[inline]
-fn calculate_layoutz<T, R>(
+fn calculate_layout<A, B>(
     mod_buckets: usize,
     read_buckets: usize,
 ) -> Option<(Layout, usize, usize, usize)> {
@@ -147,8 +148,8 @@ fn calculate_layoutz<T, R>(
     debug_assert!(read_buckets.is_power_of_two());
 
     // Array of buckets
-    let mod_data = Layout::array::<T>(mod_buckets).ok()?;
-    let read_data = Layout::array::<R>(read_buckets).ok()?;
+    let mod_data = Layout::array::<A>(mod_buckets).ok()?;
+    let read_data = Layout::array::<B>(read_buckets).ok()?;
 
     let (bucket_layout, bucket_offset) = mod_data.extend(read_data).ok()?;
 
@@ -169,31 +170,6 @@ fn calculate_layoutz<T, R>(
 
     let (full_layout, ctrl_offset) = bucket_layout.extend(ctrl).ok()?;
     Some((full_layout, bucket_offset, ctrl_offset, read_ctrl_offset))
-}
-
-/// Returns a Layout which describes the allocation required for a hash table,
-/// and the offset of the control bytes in the allocation.
-/// (the offset is also one past last element of buckets)
-///
-/// Returns `None` if an overflow occurs.
-#[inline]
-fn calculate_layout<T>(buckets: usize) -> Option<(Layout, usize)> {
-    debug_assert!(buckets.is_power_of_two());
-
-    // Array of buckets
-    let data = Layout::array::<T>(buckets).ok()?;
-
-    // Array of control bytes. This must be aligned to the group size.
-    //
-    // We add `Group::WIDTH` control bytes at the end of the array which
-    // replicate the bytes at the start of the array and thus avoids the need to
-    // perform bounds-checking while probing.
-    //
-    // There is no possible overflow here since buckets is a power of two and
-    // Group::WIDTH is a small number.
-    let ctrl = unsafe { Layout::from_size_align_unchecked(buckets + Group::WIDTH, Group::WIDTH) };
-
-    data.extend(ctrl).ok()
 }
 
 /// Returns a Layout which describes the meta bytes of the hash table.
@@ -234,14 +210,6 @@ impl<T> Bucket<T> {
         };
         Self {
             ptr: NonNull::new_unchecked(ptr),
-        }
-    }
-    #[inline]
-    unsafe fn to_base_index(&self, base: NonNull<T>) -> usize {
-        if mem::size_of::<T>() == 0 {
-            self.ptr.as_ptr() as usize - 1
-        } else {
-            offset_from(base.as_ptr(), self.ptr.as_ptr())
         }
     }
     #[inline]
@@ -299,21 +267,23 @@ where
     K: Key,
     V: Value,
 {
-    // MOD LANE
-
+    // [mod buckets | read buckets] [mod ctrl | read ctrl]
+    // meta bytes for mod:          [meta bytes]
     mod_ctrl: NonNull<u8>,
     /// Mask to get an index from a hash value.
     mod_mask: usize,
-    /// Meta bytes for the mod lane
-    mod_meta: NonNull<u8>,
-    /// Counter keeping track of current total of modified buckets
-    mod_counter: usize,
-
-    // READ LANE
 
     read_ctrl: NonNull<u8>,
     /// Mask to get an index from a hash value.
     read_mask: usize,
+
+    /// Pointer to offset between mod and read buckets.
+    mod_bucket: NonNull<u8>,
+
+    /// Meta bytes for the mod lane
+    mod_meta: NonNull<u8>,
+    /// Counter keeping track of current total of modified buckets
+    mod_counter: usize,
     /// Number of elements in the table, only really used by len()
     items: usize,
     // Tell dropck that we own instances of (K, V)
@@ -338,27 +308,21 @@ where
         debug_assert!(read_lane_buckets.is_power_of_two());
 
         // Avoid `Option::ok_or_else` because it bloats LLVM IR.
-        let (layout, ctrl_offset) = match calculate_layout::<(K, V, u64)>(mod_lane_buckets) {
-            Some(lco) => lco,
-            None => return Err(fallability.capacity_overflow()),
-        };
-        let mod_alloc = match NonNull::new(alloc(layout)) {
+        let (layout, bucket_offset, ctrl_offset, read_ctrl_offset) =
+            match calculate_layout::<(K, V, u64), (K, V)>(mod_lane_buckets, read_lane_buckets) {
+                Some(lco) => lco,
+                None => return Err(fallability.capacity_overflow()),
+            };
+
+        let table_alloc = match NonNull::new(alloc(layout)) {
             Some(ptr) => ptr,
             None => return Err(fallability.alloc_err(layout)),
         };
 
-        let mod_ctrl = NonNull::new_unchecked(mod_alloc.as_ptr().add(ctrl_offset));
-
-        let (layout, ctrl_offset) = match calculate_layout::<(K, V)>(read_lane_buckets) {
-            Some(lco) => lco,
-            None => return Err(fallability.capacity_overflow()),
-        };
-        let read_alloc = match NonNull::new(alloc(layout)) {
-            Some(ptr) => ptr,
-            None => return Err(fallability.alloc_err(layout)),
-        };
-
-        let read_ctrl = NonNull::new_unchecked(read_alloc.as_ptr().add(ctrl_offset));
+        let mod_ctrl = NonNull::new_unchecked(table_alloc.as_ptr().add(ctrl_offset));
+        let read_ctrl =
+            NonNull::new_unchecked(table_alloc.as_ptr().add(ctrl_offset + read_ctrl_offset));
+        let mod_bucket = NonNull::new_unchecked(mod_ctrl.as_ptr().sub(ctrl_offset - bucket_offset));
 
         let layout = match meta_layout(mod_lane_buckets) {
             Some(lco) => lco,
@@ -377,6 +341,7 @@ where
             mod_meta,
             mod_counter: 0,
             mod_mask: mod_lane_buckets - 1,
+            mod_bucket,
             marker: PhantomData,
         })
     }
@@ -415,13 +380,10 @@ where
     /// Deallocates the table without dropping any entries.
     #[inline]
     unsafe fn free_buckets(&mut self) {
-        let (layout, ctrl_offset) = calculate_layout::<(K, V, u64)>(self.mod_buckets())
-            .unwrap_or_else(|| hint::unreachable_unchecked());
+        let (layout, _, ctrl_offset, _) =
+            calculate_layout::<(K, V, u64), (K, V)>(self.mod_buckets(), self.read_buckets())
+                .unwrap_or_else(|| hint::unreachable_unchecked());
         dealloc(self.mod_ctrl.as_ptr().sub(ctrl_offset), layout);
-
-        let (layout, ctrl_offset) = calculate_layout::<(K, V)>(self.read_buckets())
-            .unwrap_or_else(|| hint::unreachable_unchecked());
-        dealloc(self.read_ctrl.as_ptr().sub(ctrl_offset), layout);
 
         let mod_meta_layout =
             meta_layout(self.mod_buckets()).unwrap_or_else(|| hint::unreachable_unchecked());
@@ -431,19 +393,13 @@ where
     /// Returns pointer to one past last element of data table.
     #[inline]
     pub unsafe fn data_end(&self) -> NonNull<(K, V)> {
-        NonNull::new_unchecked(self.read_ctrl.as_ptr() as *mut (K, V))
+        NonNull::new_unchecked(self.mod_ctrl.as_ptr() as *mut (K, V))
     }
 
     /// Returns pointer to one past last element of data table.
     #[inline]
     pub unsafe fn mod_data_end(&self) -> NonNull<(K, V, u64)> {
-        NonNull::new_unchecked(self.mod_ctrl.as_ptr() as *mut (K, V, u64))
-    }
-
-    /// Returns the index of a bucket from a `Bucket`.
-    #[inline]
-    unsafe fn bucket_index(&self, bucket: &Bucket<(K, V)>) -> usize {
-        bucket.to_base_index(self.data_end())
+        NonNull::new_unchecked(self.mod_bucket.as_ptr() as *mut (K, V, u64))
     }
 
     /// Returns a pointer to a control byte.
@@ -471,7 +427,7 @@ where
     #[inline]
     pub unsafe fn read_bucket(&self, index: usize) -> Bucket<(K, V)> {
         Bucket::from_base_index(
-            NonNull::new_unchecked(self.read_ctrl.as_ptr() as *mut (K, V)),
+            NonNull::new_unchecked(self.mod_ctrl.as_ptr() as *mut (K, V)),
             index,
         )
     }
@@ -480,7 +436,9 @@ where
     #[inline]
     pub unsafe fn mod_bucket(&self, index: usize) -> Bucket<(K, V, u64)> {
         Bucket::from_base_index(
-            NonNull::new_unchecked(self.mod_ctrl.as_ptr() as *mut (K, V, u64)),
+            NonNull::new_unchecked(
+                self.mod_bucket.as_ptr() as *mut (K, V, u64),
+            ),
             index,
         )
     }
@@ -569,7 +527,6 @@ where
         None
     }
 
-
     /// Inserts a new element into the READ lane.
     #[inline(always)]
     pub fn insert_read_lane(&mut self, hash: u64, record: (K, V)) {
@@ -583,20 +540,25 @@ where
                 self.set_read_ctrl(index, h2(hash));
                 bucket.write(record);
             } else {
-                //panic!("NO SPACE IN READ LANE");
-                // no space in the READ lane
-                for pos in self.probe_read(hash) {
-                    let group = Group::load(self.read_ctrl.as_ptr().add(pos));
-                    if let Some(bit) = group.match_full().lowest_set_bit() {
-                        let index = (pos + bit) & self.read_mask;
-                        let bucket = self.read_bucket(index);
-                        let _ = bucket.drop();
-                        self.set_read_ctrl(index, h2(hash));
-                        // write the data to the bucket
-                        bucket.write(record);
-                        return;
-                    }
+                // READ lane is full for this particular probe sequence
+                //
+                // Load 1 Group for the first probe POS and clear all FULL ctrl bytes and then insert
+                // `record` into a slot.
+                let pos = self.probe_read(hash).next().unwrap();
+                let group = Group::load(self.read_ctrl.as_ptr().add(pos));
+                for bit in group.match_full() {
+                    let index = (pos + bit) & self.read_mask;
+                    let bucket = self.read_bucket(index);
+                    let _ = bucket.drop();
+                    self.set_read_ctrl(index, EMPTY);
                 }
+
+                // bit = 0-15, here we pick 0.
+                let insert_index = (pos + 0) & self.read_mask;
+                let bucket = self.read_bucket(insert_index);
+                self.set_read_ctrl(insert_index, h2(hash));
+                // write the data to the bucket
+                bucket.write(record);
             }
         }
     }
@@ -648,8 +610,9 @@ where
                     if likely(eq((key, value))) {
                         // take ownership
                         let (key, value, _) = bucket.read();
-                        // clear ctrl byte
+                        // clear lane bytes
                         self.set_mod_ctrl(index, EMPTY);
+                        self.set_meta(index, SAFE);
                         return Some((key, value));
                     }
                 }
@@ -824,28 +787,6 @@ where
 {
 }
 
-#[cfg(feature = "nightly")]
-unsafe impl<#[may_dangle] K, V> Drop for RawTable<K, V>
-where
-    K: Key,
-    V: Value,
-{
-    #[inline]
-    fn drop(&mut self) {
-        unsafe {
-            if mem::needs_drop::<(K, V)>() {
-                for item in self.mod_lane_iter() {
-                    item.drop();
-                }
-                for item in self.read_lane_iter() {
-                    item.drop();
-                }
-            }
-            self.free_buckets();
-        }
-    }
-}
-#[cfg(not(feature = "nightly"))]
 impl<K, V> Drop for RawTable<K, V>
 where
     K: Key,
@@ -1151,50 +1092,6 @@ impl<T> RawIterRange<T> {
             data,
             next_ctrl,
             end,
-        }
-    }
-
-    /// Splits a `RawIterRange` into two halves.
-    ///
-    /// Returns `None` if the remaining range is smaller than or equal to the
-    /// group width.
-    #[inline]
-    #[cfg(feature = "rayon")]
-    pub(crate) fn split(mut self) -> (Self, Option<RawIterRange<T>>) {
-        unsafe {
-            if self.end <= self.next_ctrl {
-                // Nothing to split if the group that we are current processing
-                // is the last one.
-                (self, None)
-            } else {
-                // len is the remaining number of elements after the group that
-                // we are currently processing. It must be a multiple of the
-                // group size (small tables are caught by the check above).
-                let len = offset_from(self.end, self.next_ctrl);
-                debug_assert_eq!(len % Group::WIDTH, 0);
-
-                // Split the remaining elements into two halves, but round the
-                // midpoint down in case there is an odd number of groups
-                // remaining. This ensures that:
-                // - The tail is at least 1 group long.
-                // - The split is roughly even considering we still have the
-                //   current group to process.
-                let mid = (len / 2) & !(Group::WIDTH - 1);
-
-                let tail = Self::new(
-                    self.next_ctrl.add(mid),
-                    self.data.next_n(Group::WIDTH).next_n(mid),
-                    len - mid,
-                );
-                debug_assert_eq!(
-                    self.data.next_n(Group::WIDTH).next_n(mid).ptr,
-                    tail.data.ptr
-                );
-                debug_assert_eq!(self.end, tail.end);
-                self.end = self.next_ctrl.add(mid);
-                debug_assert_eq!(self.end.add(Group::WIDTH), tail.next_ctrl);
-                (self, Some(tail))
-            }
         }
     }
 }

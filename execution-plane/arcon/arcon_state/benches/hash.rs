@@ -13,7 +13,7 @@ use rand::Rng;
 use std::rc::Rc;
 use tempfile::tempdir;
 
-const MOD_CAPACITY: [usize; 2] = [32768, 65536];
+const MOD_CAPACITY: [usize; 2] = [16384, 65536];
 const READ_CAPACITY: [usize; 2] = [16384 , 32768]; // Capacity in amount of elements and not as in bytes size..
 const TOTAL_KEYS: u64 = 10000;
 const TOTAL_OPERATIONS: u64 = 100000;
@@ -191,7 +191,6 @@ fn hash(c: &mut Criterion) {
             },
         );
 
-            /*
         #[cfg(feature = "rocks")]
         group.bench_with_input(
             BenchmarkId::new(
@@ -206,7 +205,7 @@ fn hash(c: &mut Criterion) {
                     LargeStruct,
                     BackendType::Rocks,
                     mod_capacity,
-                    read_capacity,
+                    read_capacity
                 )
             },
         );
@@ -225,7 +224,7 @@ fn hash(c: &mut Criterion) {
                     LargeStruct,
                     BackendType::Rocks,
                     mod_capacity,
-                    read_capacity,
+                    read_capacity
                 )
             },
         );
@@ -578,7 +577,6 @@ fn hash(c: &mut Criterion) {
                 )
             },
         );
-        */
 
         #[cfg(feature = "rocks")]
         group.bench_with_input(

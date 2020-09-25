@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #![feature(associated_type_defaults)]
 #![feature(const_generics)]
+#![feature(core_intrinsics)]
 //use crate::{error::*, metered::Metrics, serialization::fixed_bytes::FixedBytes};
 use crate::{error::*, serialization::fixed_bytes::FixedBytes};
 use std::{
@@ -19,7 +20,6 @@ pub mod error;
 pub mod handles;
 #[macro_use]
 pub mod macros;
-mod hint;
 pub mod index;
 pub mod ops;
 pub mod serialization;

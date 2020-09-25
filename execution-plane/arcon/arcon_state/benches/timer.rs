@@ -49,7 +49,7 @@ fn timer_inserts(backend: BackendType, b: &mut Bencher) {
     let dir = tempdir().unwrap();
     with_backend_type!(backend, |B| {
         let backend = B::create(dir.as_ref()).unwrap();
-        let mut index: TimerIndex<u64, u64, B> = TimerIndex::new(20024, std::rc::Rc::new(backend));
+        let mut index: TimerIndex<u64, u64, B> = TimerIndex::new(4096, std::rc::Rc::new(backend));
         b.iter(|| {
             for id in RANDOM_KEYS.iter() {
                 assert_eq!(index.schedule_at(*id, 10, 1000).is_ok(), true);

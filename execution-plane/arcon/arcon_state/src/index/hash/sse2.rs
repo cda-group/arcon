@@ -1,5 +1,8 @@
 // Copyright (c) 2016 Amanieu d'Antras
 // SPDX-License-Identifier: MIT
+//
+// Modifications Copyright (c) 2020, KTH Royal Institute of Technology.
+// SPDX-License-Identifier: AGPL-3.0-only
 
 use super::{
     bitmask::BitMask,
@@ -90,9 +93,6 @@ impl Group {
     /// Returns a `BitMask` indicating all bytes in the group which are modified.
     #[inline]
     pub fn match_modified(&self) -> BitMask {
-        // NOTE: A modified meta byte has the high bit set to 1
-        //       thus we can simply run the same "match_empty_or_deleted" function
-        //       as it tests for the same thing.
         self.match_empty()
     }
 

@@ -9,7 +9,8 @@ use std::{
     hash::{BuildHasher, Hash, Hasher},
 };
 
-use crate::{error::*, handles::Handle, hint::likely, index::IndexOps, Key, MapState, Value};
+use crate::{error::*, handles::Handle, index::IndexOps, Key, MapState, Value};
+use core::intrinsics::likely;
 
 cfg_if::cfg_if! {
     // Use the SSE2 implementation if possible: it allows us to scan 16 buckets
@@ -214,7 +215,6 @@ where
 
         let table = self.raw_table_mut();
         let hash = make_hash(&self.hash_builder, &k);
-
 
         match table.remove(hash, |x| k.eq(x.0.borrow())) {
             Some(item) => {
