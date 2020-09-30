@@ -12,12 +12,13 @@ State management features for Arcon
 """
 
 [features]
-default = []
+default = ["arcon_state_derive"]
 rocks = ["rocksdb"]
 faster = ["faster-rs", "serde"]
 sled_checkpoints = ["sled"]
 
 [dependencies]
+arcon_state_derive = { version = "0.1", path = "arcon_state_derive", optional = true }
 prost = { git = "https://github.com/Max-Meldrum/prost.git", branch = "derive_generics" }
 bytes = "0.5"
 snafu = "0.6"

@@ -1,5 +1,6 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
+
 use crate::{
     Aggregator, AggregatorState, Handle, MapState, Reducer, ReducerState, ValueState, VecState,
 };
@@ -65,7 +66,7 @@ macro_rules! common_state_tests {
     ($construct_backend: expr) => {
         mod common {
             use super::*;
-            use crate::{test_common::*, Bundle, RegistrationToken};
+            use crate::{backend::test_common::*, Bundle, RegistrationToken};
             use std::collections::HashSet;
 
             #[test]

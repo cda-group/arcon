@@ -1,8 +1,11 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 use crate::{
-    error::*, Aggregator, AggregatorState, Backend, BackendContainer, Config, Handle, Key,
-    MapState, Metakey, Reducer, ReducerState, StateType, Value, ValueState, VecState,
+    backend::{
+        Aggregator, AggregatorState, Backend, BackendContainer, Config, Handle, Key, MapState,
+        Metakey, Reducer, ReducerState, StateType, Value, ValueState, VecState,
+    },
+    error::*,
 };
 use smallbox::{space, SmallBox};
 use std::{any::Any, collections::HashMap, path::Path};

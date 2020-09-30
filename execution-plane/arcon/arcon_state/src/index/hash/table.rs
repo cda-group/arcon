@@ -17,8 +17,8 @@ use core::{
 use std::alloc::{alloc, dealloc, handle_alloc_error};
 
 use crate::{
+    data::{Key, Value},
     index::hash::{bitmask::BitMask, imp::Group},
-    Key, Value,
 };
 
 /// Augments `AllocErr` with a `CapacityOverflow` variant.
@@ -436,9 +436,7 @@ where
     #[inline]
     pub unsafe fn mod_bucket(&self, index: usize) -> Bucket<(K, V, u64)> {
         Bucket::from_base_index(
-            NonNull::new_unchecked(
-                self.mod_bucket.as_ptr() as *mut (K, V, u64),
-            ),
+            NonNull::new_unchecked(self.mod_bucket.as_ptr() as *mut (K, V, u64)),
             index,
         )
     }

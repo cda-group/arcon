@@ -1,10 +1,12 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 use crate::{
+    backend::{
+        handles::BoxedIteratorOfResult,
+        serialization::{fixed_bytes, protobuf},
+        Handle, InMemory, Key, MapOps, MapState, Metakey, Value,
+    },
     error::*,
-    handles::BoxedIteratorOfResult,
-    serialization::{fixed_bytes, protobuf},
-    Handle, InMemory, Key, MapOps, MapState, Metakey, Value,
 };
 use smallbox::SmallBox;
 use std::any::Any;

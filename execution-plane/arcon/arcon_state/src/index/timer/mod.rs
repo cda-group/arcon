@@ -1,12 +1,16 @@
 use super::{hash::HashIndex, value::ValueIndex, IndexOps};
-use crate::{error::Result, Backend, BackendContainer, Key, Value};
+use crate::{
+    backend::{Backend, BackendContainer},
+    data::{Key, Value},
+    error::Result,
+};
 use hierarchical_hash_wheel_timer::{
     wheels::{quad_wheel::*, *},
     *,
 };
 
 use core::time::Duration;
-use std::{cmp::Eq, hash::Hash, rc::Rc};
+use std::{cmp::Eq, hash::Hash, sync::Arc};
 
 /// An Index for Stream Timers
 ///
@@ -30,16 +34,22 @@ where
     V: Value,
     B: Backend,
 {
-    pub fn new(hash_index_capacity: usize, backend: Rc<BackendContainer<B>>) -> Self {
+    pub fn new(hash_index_capacity: usize, backend: Arc<BackendContainer<B>>) -> Self {
         Self {
             timer: QuadWheelWithOverflow::default(),
-            timeouts: HashIndex::new("_timeouts", hash_index_capacity, hash_index_capacity, backend.clone()),
+            timeouts: HashIndex::new(
+                "_timeouts",
+                hash_index_capacity,
+                hash_index_capacity,
+                backend.clone(),
+            ),
             current_time: ValueIndex::new("_currtime", backend.clone()),
         }
     }
-    fn replay_events(&mut self) {
-        let time = self.current_time.get().unwrap_or(&0);
+
+    fn _replay_events(&mut self) {
         // TODO
+        //let time = self.current_time.get().unwrap_or(&0);
     }
 
     #[inline(always)]
@@ -168,14 +178,14 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::backend::in_memory::InMemory;
 
     #[test]
     fn timer_index_test() {
-        use crate::in_memory::InMemory;
-        let backend = crate::InMemory::create(&std::path::Path::new("/tmp/")).unwrap();
+        let backend = InMemory::create(&std::path::Path::new("/tmp/")).unwrap();
         let capacity = 128;
         let mut index: TimerIndex<u64, u64, InMemory> =
-            TimerIndex::new(capacity, std::rc::Rc::new(backend));
+            TimerIndex::new(capacity, std::sync::Arc::new(backend));
         // Timer per key...
         index.schedule_at(1, 1000, 10).unwrap();
         index.schedule_at(2, 1600, 10).unwrap();

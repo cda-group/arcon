@@ -1,7 +1,8 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 use crate::{
-    error::*, handles::BoxedIteratorOfResult, Handle, InMemory, Metakey, Value, VecOps, VecState,
+    backend::{handles::BoxedIteratorOfResult, Handle, InMemory, Metakey, Value, VecOps, VecState},
+    error::*,
 };
 use smallbox::SmallBox;
 use std::iter;

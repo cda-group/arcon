@@ -10,11 +10,11 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Through
 use itertools::Itertools;
 use once_cell::sync::Lazy;
 use rand::Rng;
-use std::rc::Rc;
+use std::sync::Arc;
 use tempfile::tempdir;
 
 const MOD_CAPACITY: [usize; 2] = [16384, 65536];
-const READ_CAPACITY: [usize; 2] = [16384 , 32768]; // Capacity in amount of elements and not as in bytes size..
+const READ_CAPACITY: [usize; 2] = [16384, 32768]; // Capacity in amount of elements and not as in bytes size..
 const TOTAL_KEYS: u64 = 10000;
 const TOTAL_OPERATIONS: u64 = 100000;
 
@@ -116,7 +116,10 @@ fn hash(c: &mut Criterion) {
 
     for input in MOD_CAPACITY.iter().cartesian_product(READ_CAPACITY.iter()) {
         let (mod_capacity, read_capacity) = input;
-        let description = format!("mod_capacity: {}, read_capacity: {}", mod_capacity, read_capacity);
+        let description = format!(
+            "mod_capacity: {}, read_capacity: {}",
+            mod_capacity, read_capacity
+        );
 
         #[cfg(feature = "rocks")]
         group.bench_with_input(
@@ -167,7 +170,7 @@ fn hash(c: &mut Criterion) {
                     SmallStruct,
                     BackendType::Sled,
                     mod_capacity,
-                    read_capacity,
+                    read_capacity
                 )
             },
         );
@@ -186,7 +189,7 @@ fn hash(c: &mut Criterion) {
                     SmallStruct,
                     BackendType::Sled,
                     mod_capacity,
-                    read_capacity,
+                    read_capacity
                 )
             },
         );
@@ -240,7 +243,7 @@ fn hash(c: &mut Criterion) {
                     LargeStruct,
                     BackendType::Sled,
                     mod_capacity,
-                    read_capacity,
+                    read_capacity
                 )
             },
         );
@@ -259,7 +262,7 @@ fn hash(c: &mut Criterion) {
                     LargeStruct,
                     BackendType::Sled,
                     mod_capacity,
-                    read_capacity,
+                    read_capacity
                 )
             },
         );
@@ -1000,8 +1003,12 @@ macro_rules! read {
         let dir = tempdir().unwrap();
         with_backend_type!($backend, |B| {
             let backend = B::create(dir.as_ref()).unwrap();
-            let mut hash_index: HashIndex<u64, $type_value, B> =
-                HashIndex::new("_hashindex", $mod_capacity, $read_capacity, Rc::new(backend));
+            let mut hash_index: HashIndex<u64, $type_value, B> = HashIndex::new(
+                "_hashindex",
+                $mod_capacity,
+                $read_capacity,
+                Arc::new(backend),
+            );
 
             for i in 0..TOTAL_KEYS {
                 let _ = hash_index.put(i, $type_value::new()).unwrap();
@@ -1009,7 +1016,11 @@ macro_rules! read {
 
             $bencher.iter(|| {
                 for i in $keys.iter() {
-                    assert_eq!(hash_index.get(&i).unwrap().is_some(), true, "Failed to get()");
+                    assert_eq!(
+                        hash_index.get(&i).unwrap().is_some(),
+                        true,
+                        "Failed to get()"
+                    );
                 }
             });
         });
@@ -1022,8 +1033,12 @@ macro_rules! insert {
         let dir = tempdir().unwrap();
         with_backend_type!($backend, |B| {
             let backend = B::create(dir.as_ref()).unwrap();
-            let mut hash_index: HashIndex<u64, $type_value, B> =
-                HashIndex::new("_hashindex", $mod_capacity, $read_capacity, Rc::new(backend));
+            let mut hash_index: HashIndex<u64, $type_value, B> = HashIndex::new(
+                "_hashindex",
+                $mod_capacity,
+                $read_capacity,
+                Arc::new(backend),
+            );
 
             if $full_eviction {
                 $bencher.iter(|| {
@@ -1049,8 +1064,12 @@ macro_rules! rmw {
         let dir = tempdir().unwrap();
         with_backend_type!($backend, |B| {
             let backend = B::create(dir.as_ref()).unwrap();
-            let mut hash_index: HashIndex<u64, $type_value, B> =
-                HashIndex::new("_hashindex", $mod_capacity, $read_capacity, Rc::new(backend));
+            let mut hash_index: HashIndex<u64, $type_value, B> = HashIndex::new(
+                "_hashindex",
+                $mod_capacity,
+                $read_capacity,
+                Arc::new(backend),
+            );
 
             for i in 0..TOTAL_KEYS {
                 let _ = hash_index.put(i, $type_value::new()).unwrap();

@@ -2,9 +2,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
-    error::*, handles::Handle, index::IndexOps, Backend, BackendContainer, Value, ValueState,
+    backend::{handles::Handle, Backend, BackendContainer, ValueState},
+    data::Value,
+    error::*,
+    index::IndexOps,
 };
-use std::rc::Rc;
+use std::sync::Arc;
 
 /// An Index suitable for single value operations
 ///
@@ -22,7 +25,7 @@ where
     /// A handle to the ValueState
     handle: Handle<ValueState<V>>,
     /// Reference to the underlying Backend
-    backend: Rc<BackendContainer<B>>,
+    backend: Arc<BackendContainer<B>>,
 }
 
 impl<V, B> ValueIndex<V, B>
@@ -31,11 +34,11 @@ where
     B: Backend,
 {
     /// Creates a ValueIndex
-    pub fn new(key: &'static str, backend: Rc<BackendContainer<B>>) -> Self {
+    pub fn new(key: &'static str, backend: Arc<BackendContainer<B>>) -> Self {
         // register handle
         let mut handle = Handle::value(key);
         handle.register(&mut unsafe {
-            crate::RegistrationToken::new(&mut backend.clone().session())
+            crate::backend::RegistrationToken::new(&mut backend.clone().session())
         });
 
         ValueIndex {
@@ -116,13 +119,13 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::backend::in_memory::InMemory;
 
     #[test]
     fn value_index_test() {
-        use crate::in_memory::InMemory;
-        let backend = crate::InMemory::create(&std::path::Path::new("/tmp/")).unwrap();
+        let backend = InMemory::create(&std::path::Path::new("/tmp/")).unwrap();
         let mut index: ValueIndex<u64, InMemory> =
-            ValueIndex::new("_valueindex", std::rc::Rc::new(backend));
+            ValueIndex::new("_valueindex", std::sync::Arc::new(backend));
         assert_eq!(index.get(), Some(&0u64));
         index.put(10u64);
         assert_eq!(index.get(), Some(&10u64));

@@ -2,9 +2,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
-    error::*, handles::Handle, index::IndexOps, Backend, BackendContainer, Value, VecState,
+    backend::{handles::Handle, Backend, BackendContainer, VecState},
+    data::Value,
+    error::*,
+    index::IndexOps,
 };
-use std::rc::Rc;
+use std::sync::Arc;
 
 /// An Index suitable for Non-associative Windows
 ///
@@ -21,7 +24,7 @@ where
     /// A handle to the VecState
     handle: Handle<VecState<V>>,
     /// Reference to the underlying Backend
-    backend: Rc<BackendContainer<B>>,
+    backend: Arc<BackendContainer<B>>,
 }
 
 impl<V, B> AppenderIndex<V, B>
@@ -30,11 +33,11 @@ where
     B: Backend,
 {
     /// Creates an AppenderIndex
-    pub fn new(key: &'static str, capacity: usize, backend: Rc<BackendContainer<B>>) -> Self {
+    pub fn new(key: &'static str, capacity: usize, backend: Arc<BackendContainer<B>>) -> Self {
         // register handle
         let mut handle = Handle::vec(key);
         handle.register(&mut unsafe {
-            crate::RegistrationToken::new(&mut backend.clone().session())
+            crate::backend::RegistrationToken::new(&mut backend.clone().session())
         });
 
         AppenderIndex {
@@ -110,14 +113,14 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::backend::in_memory::InMemory;
 
     #[test]
     fn appender_test() {
-        use crate::in_memory::InMemory;
-        let backend = crate::InMemory::create(&std::path::Path::new("/tmp/")).unwrap();
+        let backend = InMemory::create(&std::path::Path::new("/tmp/")).unwrap();
         let capacity = 524;
         let mut index: AppenderIndex<u64, InMemory> =
-            AppenderIndex::new("_appender", capacity, std::rc::Rc::new(backend));
+            AppenderIndex::new("_appender", capacity, std::sync::Arc::new(backend));
 
         for i in 0..1024 {
             index.append(i as u64).unwrap();

@@ -66,7 +66,7 @@ fn appender_mean_index(backend: BackendType, window_size: usize, capacity: usize
     with_backend_type!(backend, |B| {
         let backend = B::create(dir.as_ref()).unwrap();
         let mut appender_index: AppenderIndex<u64, B> =
-            AppenderIndex::new("_valueindex", capacity, std::rc::Rc::new(backend));
+            AppenderIndex::new("_valueindex", capacity, std::sync::Arc::new(backend));
         b.iter(|| {
             for i in 0..window_size {
                 let _ = appender_index.append(i as u64).unwrap();

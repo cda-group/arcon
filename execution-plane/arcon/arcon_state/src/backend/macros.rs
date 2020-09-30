@@ -8,8 +8,9 @@
 ///
 /// ```
 /// # extern crate arcon_state;
-/// # use arcon_state::*;
-/// # use arcon_state::in_memory::*;
+/// # use arcon_state::backend::*;
+/// # use arcon_state::Value;
+/// # use arcon_state::backend::in_memory::*;
 /// # let mut backend = InMemory::restore_or_create(&Default::default(), Default::default()).unwrap();
 /// # let mut backend_session = backend.session();
 /// arcon_state::bundle! {
@@ -70,7 +71,7 @@ macro_rules! bundle {
         >)? {
             $(
                 $(#[$state_meta])*
-                $state_name : $crate::Handle<$state_type $(, $item_key_type $(, $namespace_type)?)?>,
+                $state_name : $crate::backend::Handle<$state_type $(, $item_key_type $(, $namespace_type)?)?>,
             )*
         }
 
@@ -78,10 +79,10 @@ macro_rules! bundle {
             #[allow(missing_debug_implementations)]
             pub struct Active<
                 '__bundle, '__session, $($($generic_lifetime_param,)*)?
-                __B: $crate::Backend,
+                __B: $crate::backend::Backend,
                 $($($generic_param $(: $first_bound $(+ $other_bounds)*)?,)*)?
             > {
-                session: &'__session mut $crate::Session<'__session, __B>,
+                session: &'__session mut $crate::backend::Session<'__session, __B>,
                 inner: &'__bundle $name$(<
                     $($generic_lifetime_param,)*
                     $($generic_param,)*
@@ -90,7 +91,7 @@ macro_rules! bundle {
 
             impl<
                 '__bundle, '__session, '__backend, $($($generic_lifetime_param,)*)?
-                __B: $crate::Backend,
+                __B: $crate::backend::Backend,
                 $($($generic_param $(: $first_bound $(+ $other_bounds)*)?,)*)?
             > Active<
                 '__bundle, '__session, $($($generic_lifetime_param,)*)?
@@ -98,7 +99,7 @@ macro_rules! bundle {
             > {$(
                 $(#[$state_meta])*
                 #[inline]
-                pub fn $state_name(&mut self) -> $crate::handles::ActiveHandle<__B,
+                pub fn $state_name(&mut self) -> $crate::backend::handles::ActiveHandle<__B,
                     $state_type $(, $item_key_type $(, $namespace_type)?)?
                 > {
                     self.inner.$state_name.activate(self.session)
@@ -107,9 +108,9 @@ macro_rules! bundle {
 
             impl<
                 '__this, '__session, '__backend, $($($generic_lifetime_param,)*)?
-                __B: $crate::Backend,
+                __B: $crate::backend::Backend,
                 $($($generic_param $(: $first_bound $(+ $other_bounds)*)?,)*)?
-            > $crate::Bundle<'__this, '__session, '__backend, __B> for $name$(<
+            > $crate::backend::Bundle<'__this, '__session, '__backend, __B> for $name$(<
                 $($generic_lifetime_param,)* $($generic_param,)*
             >)? {
                 type Active = Active<
@@ -119,14 +120,14 @@ macro_rules! bundle {
 
                 fn register_states(
                     &mut self,
-                    registration_token: &mut $crate::RegistrationToken<__B>
+                    registration_token: &mut $crate::backend::RegistrationToken<__B>
                 ) {
                     $(self.$state_name.register(registration_token);)*
                 }
 
                 fn activate(
                     &'__this self,
-                    session: &'__session mut $crate::Session<'__backend, __B>,
+                    session: &'__session mut $crate::backend::Session<'__backend, __B>,
                 ) -> Self::Active {
                     Active {
                         // SAFETY: this boils down to lifetime variance.
@@ -227,7 +228,8 @@ macro_rules! cfg_if_faster {
 ///
 /// ```
 /// # extern crate arcon_state;
-/// # use arcon_state::{BackendType, Backend, with_backend_type};
+/// # use arcon_state::backend::{BackendType, Backend};
+/// # use arcon_state::with_backend_type;
 /// # use std::any::Any;
 /// let runtime_type = BackendType::InMemory;
 /// let boxed: Box<dyn Any> = with_backend_type!(runtime_type,
@@ -237,11 +239,11 @@ macro_rules! cfg_if_faster {
 #[macro_export]
 macro_rules! with_backend_type {
     ($type_value:expr, |$type_ident:ident| $body:expr) => {{
-        use $crate::BackendType::*;
+        use $crate::backend::BackendType::*;
         #[allow(unreachable_patterns)]
         match $type_value {
             InMemory => {
-                type $type_ident = $crate::in_memory::InMemory;
+                type $type_ident = $crate::backend::in_memory::InMemory;
                 $body
             }
             /*
@@ -252,42 +254,42 @@ macro_rules! with_backend_type {
             */
             $crate::cfg_if_rocks!(@pat Rocks) => {
                 $crate::cfg_if_rocks! {
-                    type $type_ident = $crate::rocks::Rocks;
+                    type $type_ident = $crate::backend::rocks::Rocks;
                     $body
                 }
             }
             /*
             $crate::cfg_if_rocks!(@pat MeteredRocks) => {
                 $crate::cfg_if_rocks! {
-                    type $type_ident = $crate::metered::Metered<$crate::rocks::Rocks>;
+                    type $type_ident = $crate::backend::metered::Metered<$crate::rocks::Rocks>;
                     $body
                 }
             }
             */
             $crate::cfg_if_sled!(@pat Sled) => {
                 $crate::cfg_if_sled! {
-                    type $type_ident = $crate::sled::Sled;
+                    type $type_ident = $crate::backend::sled::Sled;
                     $body
                 }
             }
             /*
             $crate::cfg_if_sled!(@pat MeteredSled) => {
                 $crate::cfg_if_sled! {
-                    type $type_ident = $crate::metered::Metered<$crate::sled::Sled>;
+                    type $type_ident = $crate::backend::metered::Metered<$crate::sled::Sled>;
                     $body
                 }
             }
             */
             $crate::cfg_if_faster!(@pat Faster) => {
                 $crate::cfg_if_faster! {
-                    type $type_ident = $crate::faster::Faster;
+                    type $type_ident = $crate::backend::faster::Faster;
                     $body
                 }
             }
             /*
             $crate::cfg_if_faster!(@pat MeteredFaster) => {
                 $crate::cfg_if_faster! {
-                    type $type_ident = $crate::metered::Metered<$crate::faster::Faster>;
+                    type $type_ident = $crate::backend::metered::Metered<$crate::faster::Faster>;
                     $body
                 }
             }

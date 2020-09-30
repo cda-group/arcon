@@ -45,7 +45,7 @@ impl WindowEvent {
     }
 }
 
-#[derive(prost::Message)]
+#[derive(prost::Message, Clone)]
 pub struct KeyAndIndex {
     #[prost(uint64)]
     key: Key,

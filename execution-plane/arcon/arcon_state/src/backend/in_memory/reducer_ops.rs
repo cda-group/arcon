@@ -1,6 +1,9 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
-use crate::{error::*, Handle, InMemory, Metakey, Reducer, ReducerOps, ReducerState, Value};
+use crate::{
+    backend::{Handle, InMemory, Metakey, Reducer, ReducerOps, ReducerState, Value},
+    error::*,
+};
 use smallbox::SmallBox;
 
 impl ReducerOps for InMemory {

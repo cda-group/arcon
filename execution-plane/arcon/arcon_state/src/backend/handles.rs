@@ -1,6 +1,7 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
-use crate::*;
+
+use crate::backend::*;
 use bytes::BufMut;
 use std::cell::Cell;
 
@@ -143,7 +144,7 @@ impl<S: StateType, IK: Metakey, N: Metakey> Handle<S, IK, N> {
 
     #[inline(always)]
     pub fn serialize_metakeys_into(&self, dest: &mut impl BufMut) -> Result<()> {
-        use crate::serialization::fixed_bytes::serialize_into;
+        use crate::backend::serialization::fixed_bytes::serialize_into;
         serialize_into(dest, &self.item_key.get())?;
         serialize_into(dest, &self.namespace.get())?;
         Ok(())
@@ -162,7 +163,7 @@ impl<S: StateType, IK: Metakey, N: Metakey> Handle<S, IK, N> {
         key: &impl Key,
         dest: &mut impl BufMut,
     ) -> Result<()> {
-        use crate::serialization::protobuf;
+        use crate::backend::serialization::protobuf;
         self.serialize_metakeys_into(dest)?;
         protobuf::serialize_into(dest, key)?;
         Ok(())
@@ -170,7 +171,7 @@ impl<S: StateType, IK: Metakey, N: Metakey> Handle<S, IK, N> {
 
     #[inline(always)]
     pub fn serialize_metakeys_and_key(&self, key: &impl Key) -> Result<Vec<u8>> {
-        use crate::serialization::*;
+        use crate::backend::serialization::*;
         let mut dest =
             Vec::with_capacity(self.metakey_size() + protobuf::size_hint(key).unwrap_or(0));
         self.serialize_metakeys_and_key_into(key, &mut dest)?;
@@ -179,7 +180,7 @@ impl<S: StateType, IK: Metakey, N: Metakey> Handle<S, IK, N> {
 
     #[inline(always)]
     pub fn serialize_id_and_metakeys_into(&self, dest: &mut impl BufMut) -> Result<()> {
-        use crate::serialization::*;
+        use crate::backend::serialization::*;
         fixed_bytes::serialize_bytes_into(dest, self.id.as_bytes())?;
         self.serialize_metakeys_into(dest)?;
         Ok(())
@@ -187,7 +188,7 @@ impl<S: StateType, IK: Metakey, N: Metakey> Handle<S, IK, N> {
 
     #[inline(always)]
     pub fn serialize_id_and_metakeys(&self) -> Result<Vec<u8>> {
-        use crate::serialization::*;
+        use crate::backend::serialization::*;
         let mut dest = Vec::with_capacity(
             <usize as fixed_bytes::FixedBytes>::SIZE + self.id.len() + self.metakey_size(),
         );
@@ -201,7 +202,7 @@ impl<S: StateType, IK: Metakey, N: Metakey> Handle<S, IK, N> {
         dest: &mut impl BufMut,
         key: &impl Key,
     ) -> Result<()> {
-        use crate::serialization::*;
+        use crate::backend::serialization::*;
         self.serialize_id_and_metakeys_into(dest)?;
         protobuf::serialize_into(dest, key)?;
         Ok(())
@@ -209,7 +210,7 @@ impl<S: StateType, IK: Metakey, N: Metakey> Handle<S, IK, N> {
 
     #[inline(always)]
     pub fn serialize_id_metakeys_and_key(&self, key: &impl Key) -> Result<Vec<u8>> {
-        use crate::serialization::*;
+        use crate::backend::serialization::*;
         let mut dest = Vec::with_capacity(
             <usize as fixed_bytes::FixedBytes>::SIZE
                 + self.id.len()

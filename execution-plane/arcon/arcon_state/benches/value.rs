@@ -44,7 +44,7 @@ fn index_rolling_counter(backend: BackendType, b: &mut Bencher) {
     with_backend_type!(backend, |B| {
         let backend = B::create(dir.as_ref()).unwrap();
         let mut value_index: ValueIndex<u64, B> =
-            ValueIndex::new("_valueindex", std::rc::Rc::new(backend));
+            ValueIndex::new("_valueindex", std::sync::Arc::new(backend));
         b.iter(|| {
             let curr_value = value_index.get().unwrap().clone();
             for _i in 0..OPS_PER_EPOCH {

@@ -9,7 +9,12 @@ use std::{
     hash::{BuildHasher, Hash, Hasher},
 };
 
-use crate::{error::*, handles::Handle, index::IndexOps, Key, MapState, Value};
+use crate::{
+    backend::{handles::Handle, MapState},
+    data::{Key, Value},
+    error::*,
+    index::IndexOps,
+};
 use core::intrinsics::likely;
 
 cfg_if::cfg_if! {
@@ -41,8 +46,11 @@ mod table;
 use self::table::RawTable;
 #[cfg(test)]
 use crate::index::hash::table::TableModIterator;
-use crate::{index::hash::table::ProbeModIterator, Backend, BackendContainer};
-use std::{cell::UnsafeCell, rc::Rc};
+use crate::{
+    backend::{Backend, BackendContainer},
+    index::hash::table::ProbeModIterator,
+};
+use std::{cell::UnsafeCell, sync::Arc};
 
 // Set FxHash to default as most keys tend to be small
 pub type DefaultHashBuilder = fxhash::FxBuildHasher;
@@ -63,7 +71,7 @@ where
     /// Map Handle
     handle: Handle<MapState<K, V>>,
     /// The underlying backend
-    backend: Rc<BackendContainer<B>>,
+    backend: Arc<BackendContainer<B>>,
 }
 
 #[inline]
@@ -84,7 +92,7 @@ where
         key: &'static str,
         mod_capacity: usize,
         read_capacity: usize,
-        backend: Rc<BackendContainer<B>>,
+        backend: Arc<BackendContainer<B>>,
     ) -> HashIndex<K, V, B> {
         assert!(mod_capacity.is_power_of_two());
         assert!(read_capacity.is_power_of_two());
@@ -92,7 +100,7 @@ where
         // register handle
         let mut handle = Handle::map(key);
         handle.register(&mut unsafe {
-            crate::RegistrationToken::new(&mut backend.clone().session())
+            crate::backend::RegistrationToken::new(&mut backend.clone().session())
         });
 
         HashIndex {
@@ -345,16 +353,16 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::in_memory::InMemory;
-    use std::rc::Rc;
+    use crate::backend::in_memory::InMemory;
+    use std::sync::Arc;
 
     #[test]
     fn basic_test() {
-        let backend = crate::InMemory::create(&std::path::Path::new("/tmp/")).unwrap();
+        let backend = InMemory::create(&std::path::Path::new("/tmp/")).unwrap();
         let mod_capacity = 1024;
         let read_capacity = 1024;
         let mut hash_index: HashIndex<u64, u64, InMemory> =
-            HashIndex::new("_hashindex", mod_capacity, read_capacity, Rc::new(backend));
+            HashIndex::new("_hashindex", mod_capacity, read_capacity, Arc::new(backend));
         for i in 0..1024 {
             hash_index.put(i as u64, i as u64).unwrap();
             let key: u64 = i as u64;
@@ -380,11 +388,11 @@ mod tests {
 
     #[test]
     fn modified_test() {
-        let backend = crate::InMemory::create(&std::path::Path::new("/tmp/")).unwrap();
+        let backend = InMemory::create(&std::path::Path::new("/tmp/")).unwrap();
         let capacity = 64;
 
         let mut hash_index: HashIndex<u64, u64, InMemory> =
-            HashIndex::new("_hashindex", capacity, capacity, Rc::new(backend));
+            HashIndex::new("_hashindex", capacity, capacity, Arc::new(backend));
         for i in 0..10 {
             hash_index.put(i as u64, i as u64).unwrap();
         }

@@ -144,6 +144,7 @@ dependencies = [
 name = "arcon_state"
 version = "0.1.1"
 dependencies = [
+ "arcon_state_derive",
  "bytes",
  "cfg-if",
  "criterion",
@@ -161,6 +162,15 @@ dependencies = [
  "smallbox",
  "snafu",
  "tempfile",
+]
+
+[[package]]
+name = "arcon_state_derive"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2 1.0.19",
+ "quote 1.0.7",
+ "syn",
 ]
 
 [[package]]
