@@ -73,6 +73,21 @@ impl MapOps for Faster {
         Ok(old)
     }
 
+    fn map_fast_insert_by_ref<K: Key, V: Value, IK: Metakey, N: Metakey>(
+        &mut self,
+        handle: &Handle<MapState<K, V>, IK, N>,
+        key: &K,
+        value: &V,
+    ) -> Result<()> {
+        let prefix = handle.serialize_id_and_metakeys()?;
+        let key = handle.serialize_id_metakeys_and_key(key)?;
+        let serialized = protobuf::serialize(value)?;
+        self.put(&key, &serialized)?;
+        self.vec_push_if_absent(&prefix, key)?;
+
+        Ok(())
+    }
+
     fn map_insert_all<K: Key, V: Value, IK: Metakey, N: Metakey>(
         &mut self,
         handle: &Handle<MapState<K, V>, IK, N>,
@@ -86,6 +101,20 @@ impl MapOps for Faster {
             self.vec_push_if_absent(&prefix, key)?;
         }
 
+        Ok(())
+    }
+    fn map_insert_all_by_ref<'a, K: Key, V: Value, IK: Metakey, N: Metakey>(
+        &mut self,
+        handle: &Handle<MapState<K, V>, IK, N>,
+        key_value_pairs: impl IntoIterator<Item = (&'a K, &'a V)>,
+    ) -> Result<()> {
+        let prefix = handle.serialize_id_and_metakeys()?;
+        for (user_key, value) in key_value_pairs {
+            let key = handle.serialize_id_metakeys_and_key(user_key)?;
+            let serialized = protobuf::serialize(value)?;
+            self.put(&key, &serialized)?;
+            self.vec_push_if_absent(&prefix, key)?;
+        }
         Ok(())
     }
 

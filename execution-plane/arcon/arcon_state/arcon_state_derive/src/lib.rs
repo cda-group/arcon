@@ -38,7 +38,7 @@ pub fn arcon_state(input: TokenStream) -> TokenStream {
 
         let output: proc_macro2::TokenStream = {
             quote! {
-                impl #impl_generics ::arcon_state::index::ActiveState for #name #ty_generics #where_clause {}
+                impl #impl_generics ::arcon_state::index::ArconState for #name #ty_generics #where_clause {}
 
                 impl #impl_generics ::arcon_state::index::IndexOps for #name #ty_generics #where_clause {
                     #[inline]

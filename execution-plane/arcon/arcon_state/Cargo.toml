@@ -34,7 +34,7 @@ rocksdb = { git = "https://github.com/mrobakowski/rust-rocksdb.git", branch = "a
 sled = { git = "https://github.com/mrobakowski/sled.git", optional = true } # TODO
 
 [target.'cfg(target_os = "linux")'.dependencies]
-faster-rs = { version = "0.10", optional = true }
+faster-rs = { version = "0.11", optional = true }
 
 [dev-dependencies]
 criterion = { version = "0.3", features = ['real_blackbox'] }

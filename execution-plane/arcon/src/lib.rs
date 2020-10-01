@@ -121,7 +121,10 @@ pub mod prelude {
     pub use kompact::{get_core_ids, CoreId};
 
     pub use arcon_state as state;
+
     pub use arcon_state::{
+        ArconState,
+        HashIndex, ValueIndex, AppenderIndex,
         AggregatorState, Backend as _, Bundle as _, Handle, MapState, ReducerState, ValueState,
         VecState,
     };

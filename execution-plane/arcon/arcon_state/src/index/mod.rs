@@ -20,4 +20,4 @@ pub trait IndexOps {
     fn persist(&mut self) -> Result<()>;
 }
 
-pub trait ActiveState: IndexOps + 'static {}
+pub trait ArconState: IndexOps + 'static {}
