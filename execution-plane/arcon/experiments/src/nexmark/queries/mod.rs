@@ -11,13 +11,16 @@ use crate::nexmark::{
 use arcon::{pipeline::CreatedDynamicNode, prelude::*, timer::TimerBackend};
 use std::{rc::Rc, time::Duration};
 
-pub mod q1;
-pub mod q3;
+//pub mod q1;
+//pub mod q3;
 
 type QueryTimer = Option<KFuture<QueryResult>>;
+/*
 type StateMetricsThief<T> = Rc<dyn Fn(CreatedDynamicNode<T>) -> Option<state::metered::Metrics>>;
 type StateMetricsPrinter = Box<dyn FnOnce()>;
+*/
 
+/*
 // `node` is important for type inference! some of the types here can potentially be unnameable!
 fn make_state_metrics_thief<IN, O, B, T>(_node: &Node<O, B, T>) -> StateMetricsThief<IN>
 where
@@ -39,6 +42,7 @@ where
             })
     })
 }
+*/
 
 #[derive(Debug, Clone)]
 pub struct QueryResult {
@@ -60,7 +64,8 @@ pub trait Query {
         nexmark_config: NEXMarkConfig,
         pipeline: &mut ArconPipeline,
         state_backend_type: state::BackendType,
-    ) -> (QueryTimer, Vec<StateMetricsPrinter>);
+    //) -> (QueryTimer, Vec<StateMetricsPrinter>);
+    ) -> QueryTimer;
 }
 
 pub fn sink<A: ArconType>(

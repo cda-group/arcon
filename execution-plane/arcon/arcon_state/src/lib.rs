@@ -18,7 +18,7 @@ mod data;
 #[doc(hidden)]
 pub use crate::backend::*;
 #[doc(hidden)]
-pub use crate::data::{Key, Metakey, Value};
+use crate::data::{Key, Metakey, Value};
 
 pub use crate::index::{HashIndex, ValueIndex, AppenderIndex};
 

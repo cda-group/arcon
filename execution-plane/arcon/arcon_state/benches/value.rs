@@ -6,6 +6,7 @@ use arcon_state::{
     Aggregator, Backend, *,
 };
 use criterion::{criterion_group, criterion_main, Bencher, Criterion, Throughput};
+use std::sync::Arc;
 use tempfile::tempdir;
 
 const OPS_PER_EPOCH: u64 = 10000;
@@ -42,9 +43,12 @@ fn index_rocks_backed(b: &mut Bencher) {
 fn index_rolling_counter(backend: BackendType, b: &mut Bencher) {
     let dir = tempdir().unwrap();
     with_backend_type!(backend, |B| {
-        let backend = B::create(dir.as_ref()).unwrap();
+        let backend = Arc::new(B::create(dir.as_ref()).unwrap());
+        let mut value_handle = Handle::value("_value");
+        backend.register_value_handle(&mut value_handle);
+        let active_handle = value_handle.activate(backend.clone());
         let mut value_index: ValueIndex<u64, B> =
-            ValueIndex::new("_valueindex", std::sync::Arc::new(backend));
+            ValueIndex::new(active_handle);
         b.iter(|| {
             let curr_value = value_index.get().unwrap().clone();
             for _i in 0..OPS_PER_EPOCH {
@@ -102,15 +106,10 @@ fn naive_rolling_sled(b: &mut Bencher) {
 fn naive_rolling_counter(backend: BackendType, b: &mut Bencher) {
     let dir = tempdir().unwrap();
     with_backend_type!(backend, |B| {
-        let backend = B::create(dir.as_ref()).unwrap();
+        let backend = Arc::new(B::create(dir.as_ref()).unwrap());
         let mut value_handle: Handle<ValueState<u64>> = Handle::value("_valueindex");
-        let mut session = backend.session();
-        {
-            let mut rtok = unsafe { RegistrationToken::new(&mut session) };
-            value_handle.register(&mut rtok);
-        }
-
-        let mut state = value_handle.activate(&mut session);
+        backend.register_value_handle(&mut value_handle);
+        let mut state = value_handle.activate(backend.clone());
         b.iter(|| {
             let curr_value: u64 = state.get().unwrap().unwrap_or(0);
             for _i in 0..OPS_PER_EPOCH {
@@ -137,16 +136,11 @@ fn specialised_sled(b: &mut Bencher) {
 fn specialised_rolling_counter(backend: BackendType, b: &mut Bencher) {
     let dir = tempdir().unwrap();
     with_backend_type!(backend, |B| {
-        let backend = B::create(dir.as_ref()).unwrap();
+        let backend = Arc::new(B::create(dir.as_ref()).unwrap());
         let mut agg_handle = Handle::aggregator("agger", CounterAggregator);
-        let mut session = backend.session();
+        backend.register_aggregator_handle(&mut agg_handle);
 
-        {
-            let mut rtok = unsafe { RegistrationToken::new(&mut session) };
-            agg_handle.register(&mut rtok);
-        }
-
-        let mut state = agg_handle.activate(&mut session);
+        let mut state = agg_handle.activate(backend.clone());
         b.iter(|| {
             let curr_value: u64 = state.get().unwrap();
             for _i in 0..OPS_PER_EPOCH {

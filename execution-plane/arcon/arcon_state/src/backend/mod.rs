@@ -22,7 +22,6 @@ use crate::{
 };
 use std::{
     any,
-    cell::{RefCell, RefMut},
     collections::{BTreeSet, HashMap},
     fmt,
     fmt::{Debug, Formatter},
@@ -39,9 +38,9 @@ pub struct Config {
 }
 
 pub trait Backend:
-    ValueOps + MapOps + VecOps + ReducerOps + AggregatorOps + Send + 'static
+    ValueOps + MapOps + VecOps + ReducerOps + AggregatorOps + Send + Sync + 'static
 {
-    fn restore_or_create(config: &Config, id: String) -> Result<BackendContainer<Self>>
+    fn restore_or_create(config: &Config, id: String) -> Result<Self>
     where
         Self: Sized,
     {
@@ -128,10 +127,10 @@ pub trait Backend:
         }
     }
 
-    fn create(live_path: &Path) -> Result<BackendContainer<Self>>
+    fn create(live_path: &Path) -> Result<Self>
     where
         Self: Sized;
-    fn restore(live_path: &Path, checkpoint_path: &Path) -> Result<BackendContainer<Self>>
+    fn restore(live_path: &Path, checkpoint_path: &Path) -> Result<Self>
     where
         Self: Sized;
 
@@ -154,115 +153,27 @@ pub trait Backend:
     */
 
     // region handle registration
-    fn register_value_handle<'s, T: Value, IK: Metakey, N: Metakey>(
-        &'s mut self,
-        handle: &'s mut Handle<ValueState<T>, IK, N>,
+    fn register_value_handle<T: Value, IK: Metakey, N: Metakey>(
+        &self,
+        handle: &mut Handle<ValueState<T>, IK, N>,
     );
-    fn register_map_handle<'s, K: Key, V: Value, IK: Metakey, N: Metakey>(
-        &'s mut self,
-        handle: &'s mut Handle<MapState<K, V>, IK, N>,
+    fn register_map_handle<K: Key, V: Value, IK: Metakey, N: Metakey>(
+        &self,
+        handle: &mut Handle<MapState<K, V>, IK, N>,
     );
-    fn register_vec_handle<'s, T: Value, IK: Metakey, N: Metakey>(
-        &'s mut self,
-        handle: &'s mut Handle<VecState<T>, IK, N>,
+    fn register_vec_handle<T: Value, IK: Metakey, N: Metakey>(
+        &self,
+        handle: &mut Handle<VecState<T>, IK, N>,
     );
-    fn register_reducer_handle<'s, T: Value, F: Reducer<T>, IK: Metakey, N: Metakey>(
-        &'s mut self,
-        handle: &'s mut Handle<ReducerState<T, F>, IK, N>,
+    fn register_reducer_handle<T: Value, F: Reducer<T>, IK: Metakey, N: Metakey>(
+        &self,
+        handle: &mut Handle<ReducerState<T, F>, IK, N>,
     );
-    fn register_aggregator_handle<'s, A: Aggregator, IK: Metakey, N: Metakey>(
-        &'s mut self,
-        handle: &'s mut Handle<AggregatorState<A>, IK, N>,
+    fn register_aggregator_handle<A: Aggregator, IK: Metakey, N: Metakey>(
+        &self,
+        handle: &mut Handle<AggregatorState<A>, IK, N>,
     );
     // endregion
-}
-
-#[derive(Debug)]
-pub struct BackendContainer<B: Backend> {
-    pub inner: RefCell<B>,
-}
-
-impl<B: Backend> BackendContainer<B> {
-    fn new(backend: B) -> Self {
-        BackendContainer {
-            inner: RefCell::new(backend),
-        }
-    }
-
-    pub fn get_mut(&mut self) -> &mut B {
-        self.inner.get_mut()
-    }
-
-    pub fn session(&self) -> Session<B> {
-        let mut backend = self.inner.borrow_mut();
-        backend.start_session();
-        let drop_hook = backend.session_drop_hook();
-
-        Session { backend, drop_hook }
-    }
-}
-
-pub struct Session<'b, B: ?Sized> {
-    /// DANGER: _never_ overwrite this
-    pub backend: RefMut<'b, B>,
-    drop_hook: Option<Box<dyn FnOnce(&mut B)>>,
-}
-
-impl<B> Debug for Session<'_, B> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "Session<{}>", any::type_name::<B>())
-    }
-}
-
-impl<'b, B: ?Sized> Drop for Session<'b, B> {
-    fn drop(&mut self) {
-        match self.drop_hook.take() {
-            Some(drop_hook) => drop_hook(&mut *self.backend),
-            None => (),
-        }
-    }
-}
-
-mod reg_token {
-    use super::*;
-    #[derive(Debug)]
-    pub struct RegistrationToken<'b, B>(pub(crate) &'b mut B);
-    impl<'s, B: Backend> RegistrationToken<'s, B> {
-        /// This is only safe to call by an Arcon Node. The registration token has to be used
-        /// before any state backend operations happen
-        pub unsafe fn new<'b>(session: &'s mut Session<'b, B>) -> Self {
-            RegistrationToken(&mut *session.backend)
-        }
-    }
-}
-pub use self::reg_token::RegistrationToken;
-
-// In an ideal world where rust has working GATs, there would be 0 generics here...
-pub trait Bundle<'this, 'session, 'backend, B: Backend>: Send {
-    // ... because they would be here instead. And everybody would be happy.
-    type Active;
-    fn register_states(&mut self, registration_token: &mut RegistrationToken<B>);
-    fn activate(&'this self, session: &'session mut Session<'backend, B>) -> Self::Active;
-}
-
-impl<'this, 'session, 'backend, B: Backend> Bundle<'this, 'session, 'backend, B> for () {
-    type Active = ();
-    fn register_states(&mut self, _registration_token: &mut RegistrationToken<B>) {}
-    fn activate(&self, _session: &mut Session<B>) -> () {
-        ()
-    }
-}
-
-// trait alias analogous to DeserializeOwned in serde
-// would be cleaner if we had GATs
-pub trait GenericBundle<B: Backend>:
-    for<'this, 'session, 'backend> Bundle<'this, 'session, 'backend, B>
-{
-}
-
-impl<T, B: Backend> GenericBundle<B> for T where
-    T: for<'this, 'session, 'backend> Bundle<'this, 'session, 'backend, B>
-{
 }
 
 pub trait StateType: Default {
@@ -336,8 +247,8 @@ impl<A: Aggregator> Default for AggregatorState<A> {
     }
 }
 
-pub mod in_memory;
-pub use self::in_memory::InMemory;
+//pub mod in_memory;
+//pub use self::in_memory::InMemory;
 //pub mod metered;
 //pub use self::metered::Metered;
 
@@ -358,7 +269,7 @@ pub use self::sled::Sled;
 
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 pub enum BackendType {
-    InMemory,
+    //InMemory,
     //MeteredInMemory,
     #[cfg(feature = "rocks")]
     Rocks,
@@ -384,7 +295,7 @@ impl BackendType {
     pub const VARIANTS: &'static [BackendType] = {
         use BackendType::*;
         &[
-            InMemory,
+            //InMemory,
             //MeteredInMemory,
             #[cfg(feature = "rocks")]
             Rocks,
@@ -403,7 +314,7 @@ impl BackendType {
 
     pub const STR_VARIANTS: &'static [&'static str] = {
         &[
-            "InMemory",
+            //"InMemory",
             //"MeteredInMemory",
             #[cfg(feature = "rocks")]
             "Rocks",
@@ -428,7 +339,7 @@ impl FromStr for BackendType {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         use BackendType::*;
         match s {
-            x if x.eq_ignore_ascii_case("InMemory") => Ok(InMemory),
+            //x if x.eq_ignore_ascii_case("InMemory") => Ok(InMemory),
             //x if x.eq_ignore_ascii_case("MeteredInMemory") => Ok(MeteredInMemory),
             #[cfg(feature = "rocks")]
             x if x.eq_ignore_ascii_case("Rocks") => Ok(Rocks),

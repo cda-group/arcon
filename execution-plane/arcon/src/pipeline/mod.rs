@@ -4,7 +4,7 @@
 #[cfg(feature = "arcon_tui")]
 use crate::tui::{component::TuiComponent, widgets::node::Node as TuiNode};
 use crate::{
-    allocator::ArconAllocator, buffer::event::PoolInfo, conf::ArconConf, manager::node_manager::*,
+    allocator::ArconAllocator, buffer::event::PoolInfo, conf::ArconConf, manager::node::*,
     prelude::*, util::SafelySendableFn,
 };
 use fxhash::FxHashMap;
@@ -21,7 +21,7 @@ pub struct ArconPipeline {
     /// Arcon allocator for this pipeline
     allocator: Arc<Mutex<ArconAllocator>>,
     /// NodeManagers launched on top of this ArconPipeline
-    node_managers: FxHashMap<String, ActorRefStrong<NodeEvent>>,
+    //node_managers: FxHashMap<String, ActorRefStrong<NodeEvent>>,
     #[cfg(feature = "arcon_tui")]
     tui_component: Arc<Component<TuiComponent>>,
     #[cfg(feature = "arcon_tui")]
@@ -49,7 +49,7 @@ impl ArconPipeline {
             system,
             conf,
             allocator,
-            node_managers: FxHashMap::default(),
+            //node_managers: FxHashMap::default(),
             #[cfg(feature = "arcon_tui")]
             tui_component,
             #[cfg(feature = "arcon_tui")]
@@ -69,7 +69,7 @@ impl ArconPipeline {
             system,
             conf,
             allocator,
-            node_managers: FxHashMap::default(),
+            //node_managers: FxHashMap::default(),
             #[cfg(feature = "arcon_tui")]
             tui_component,
             #[cfg(feature = "arcon_tui")]
@@ -127,6 +127,7 @@ impl ArconPipeline {
         &self.conf
     }
 
+    /*
     /// Adds a NodeManager to the Arcon Pipeline
     pub fn create_node_manager<IN, OUT>(
         &mut self,
@@ -180,10 +181,12 @@ impl ArconPipeline {
 
         node_comps
     }
+    */
 
     /// Awaits termination from the pipeline
+    /// 
+    /// Note that this blocks the current thread
     pub fn await_termination(self) {
-        // NOTE: Blocking call
         self.system.await_termination();
     }
 

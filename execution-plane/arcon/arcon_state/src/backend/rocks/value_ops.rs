@@ -6,7 +6,7 @@ use crate::{
 
 impl ValueOps for Rocks {
     fn value_clear<T: Value, IK: Metakey, N: Metakey>(
-        &mut self,
+        &self,
         handle: &Handle<ValueState<T>, IK, N>,
     ) -> Result<()> {
         let key = handle.serialize_metakeys()?;
@@ -28,7 +28,7 @@ impl ValueOps for Rocks {
     }
 
     fn value_set<T: Value, IK: Metakey, N: Metakey>(
-        &mut self,
+        &self,
         handle: &Handle<ValueState<T>, IK, N>,
         value: T,
     ) -> Result<Option<T>> {
@@ -45,7 +45,7 @@ impl ValueOps for Rocks {
     }
 
     fn value_fast_set<T: Value, IK: Metakey, N: Metakey>(
-        &mut self,
+        &self,
         handle: &Handle<ValueState<T>, IK, N>,
         value: T,
     ) -> Result<()> {
@@ -56,7 +56,7 @@ impl ValueOps for Rocks {
     }
 
     fn value_fast_set_by_ref<T: Value, IK: Metakey, N: Metakey>(
-        &mut self,
+        &self,
         handle: &Handle<ValueState<T>, IK, N>,
         value: &T,
     ) -> Result<()> {

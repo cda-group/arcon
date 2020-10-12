@@ -2,12 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
-    backend::{handles::Handle, Backend, BackendContainer, ValueState},
+    backend::{handles::ActiveHandle, Backend, ValueState},
     data::Value,
     error::*,
     index::IndexOps,
 };
-use std::sync::Arc;
 
 /// An Index suitable for single value operations
 ///
@@ -23,9 +22,7 @@ where
     /// Modified flag
     modified: bool,
     /// A handle to the ValueState
-    handle: Handle<ValueState<V>>,
-    /// Reference to the underlying Backend
-    backend: Arc<BackendContainer<B>>,
+    handle: ActiveHandle<B, ValueState<V>>,
 }
 
 impl<V, B> ValueIndex<V, B>
@@ -34,18 +31,11 @@ where
     B: Backend,
 {
     /// Creates a ValueIndex
-    pub fn new(key: &'static str, backend: Arc<BackendContainer<B>>) -> Self {
-        // register handle
-        let mut handle = Handle::value(key);
-        handle.register(&mut unsafe {
-            crate::backend::RegistrationToken::new(&mut backend.clone().session())
-        });
-
+    pub fn new(handle: ActiveHandle<B, ValueState<V>>) -> Self {
         ValueIndex {
             data: Some(V::default()),
             modified: false,
             handle,
-            backend,
         }
     }
 
@@ -53,15 +43,12 @@ where
     #[inline(always)]
     pub fn clear(&mut self) {
         self.data = None;
-        let mut sb_session = self.backend.session();
-        let mut state = self.handle.activate(&mut sb_session);
-        let _ = state.clear();
+        let _ = self.handle.clear();
     }
 
     /// Access the index value through an Option.
     #[inline(always)]
-    pub fn get(&self) -> Option<&V> {
-        self.data.as_ref()
+    pub fn get(&self) -> Option<&V> { self.data.as_ref()
     }
 
     /// Blind insert
@@ -105,9 +92,7 @@ where
         if let Some(data) = &self.data {
             // only push data to the handle if it has actually been modified
             if self.modified {
-                let mut sb_session = self.backend.session();
-                let mut state = self.handle.activate(&mut sb_session);
-                state.fast_set_by_ref(data)?;
+                self.handle.fast_set_by_ref(data)?;
                 self.modified = false;
             }
         }
@@ -119,13 +104,19 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::in_memory::InMemory;
+    use crate::backend::sled::Sled;
+    use crate::backend::Handle;
+    use std::sync::Arc;
 
     #[test]
     fn value_index_test() {
-        let backend = InMemory::create(&std::path::Path::new("/tmp/")).unwrap();
-        let mut index: ValueIndex<u64, InMemory> =
-            ValueIndex::new("_valueindex", std::sync::Arc::new(backend));
+        let backend = Sled::create(&std::path::Path::new("/tmp/value")).unwrap();
+        let backend = Arc::new(backend);
+        let mut handle = Handle::value("_value");
+        backend.register_value_handle(&mut handle);
+        let active = handle.activate(backend.clone());
+        let mut index: ValueIndex<u64, Sled> =
+            ValueIndex::new(active);
         assert_eq!(index.get(), Some(&0u64));
         index.put(10u64);
         assert_eq!(index.get(), Some(&10u64));

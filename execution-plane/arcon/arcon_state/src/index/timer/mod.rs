@@ -1,6 +1,6 @@
 use super::{hash::HashIndex, value::ValueIndex, IndexOps};
 use crate::{
-    backend::{Backend, BackendContainer},
+    backend::{Backend},
     data::{Key, Value},
     error::Result,
 };
@@ -17,22 +17,20 @@ use std::{cmp::Eq, hash::Hash, sync::Arc};
 /// The Index utilises the [QuadWheelWithOverflow] data structure
 /// in order to manage the timers. The remaining state is kept in
 /// other indexes such as HashIndex/ValueIndex.
-pub struct TimerIndex<K, V, B>
+pub struct TimerIndex<K, V>
 where
     K: Key + Eq + Hash,
     V: Value,
-    B: Backend,
 {
     timer: QuadWheelWithOverflow<K>,
-    timeouts: HashIndex<K, V, B>,
-    current_time: ValueIndex<u64, B>,
+    timeouts: HashIndex<K, V>,
+    current_time: ValueIndex<u64>,
 }
 
-impl<K, V, B> TimerIndex<K, V, B>
+impl<K, V> TimerIndex<K, V>
 where
     K: Key + Eq + Hash,
     V: Value,
-    B: Backend,
 {
     pub fn new(hash_index_capacity: usize, backend: Arc<BackendContainer<B>>) -> Self {
         Self {
@@ -178,13 +176,13 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::in_memory::InMemory;
+    use crate::backend::sled::Sled;
 
     #[test]
     fn timer_index_test() {
-        let backend = InMemory::create(&std::path::Path::new("/tmp/")).unwrap();
+        let backend = Sled::create(&std::path::Path::new("/tmp/")).unwrap();
         let capacity = 128;
-        let mut index: TimerIndex<u64, u64, InMemory> =
+        let mut index: TimerIndex<u64, u64, Sled> =
             TimerIndex::new(capacity, std::sync::Arc::new(backend));
         // Timer per key...
         index.schedule_at(1, 1000, 10).unwrap();

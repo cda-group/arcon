@@ -12,7 +12,7 @@ use std::{iter, mem};
 
 impl VecOps for Rocks {
     fn vec_clear<T: Value, IK: Metakey, N: Metakey>(
-        &mut self,
+        &self,
         handle: &Handle<VecState<T>, IK, N>,
     ) -> Result<()> {
         let key = handle.serialize_metakeys()?;
@@ -21,7 +21,7 @@ impl VecOps for Rocks {
     }
 
     fn vec_append<T: Value, IK: Metakey, N: Metakey>(
-        &mut self,
+        &self,
         handle: &Handle<VecState<T>, IK, N>,
         value: T,
     ) -> Result<()> {
@@ -102,7 +102,7 @@ impl VecOps for Rocks {
     }
 
     fn vec_set<T: Value, IK: Metakey, N: Metakey>(
-        &mut self,
+        &self,
         handle: &Handle<VecState<T>, IK, N>,
         value: Vec<T>,
     ) -> Result<()> {
@@ -123,7 +123,7 @@ impl VecOps for Rocks {
     }
 
     fn vec_add_all<T: Value, IK: Metakey, N: Metakey>(
-        &mut self,
+        &self,
         handle: &Handle<VecState<T>, IK, N>,
         values: impl IntoIterator<Item = T>,
     ) -> Result<()> {

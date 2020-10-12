@@ -12,7 +12,7 @@ State management features for Arcon
 """
 
 [features]
-default = ["arcon_state_derive"]
+default = ["arcon_state_derive", "sled"]
 rocks = ["rocksdb"]
 faster = ["faster-rs", "serde"]
 sled_checkpoints = ["sled"]
@@ -28,10 +28,9 @@ fxhash = "0.2.1"
 cfg-if = "0.1.10"
 smallbox = { version = "0.8", features = ["coerce"] }
 hierarchical_hash_wheel_timer = "1.0"
-
 serde = { version = "1.0", features = ["serde_derive"], optional = true }
 rocksdb = { git = "https://github.com/mrobakowski/rust-rocksdb.git", branch = "arcon", optional = true } # TODO
-sled = { git = "https://github.com/mrobakowski/sled.git", optional = true } # TODO
+sled = { version = "0.34", optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 faster-rs = { version = "0.11", optional = true }

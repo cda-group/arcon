@@ -4,7 +4,7 @@
 pub mod appender;
 /// HashIndex suitable for point lookups and random reads
 pub mod hash;
-pub mod timer;
+//pub mod timer;
 /// ValueIndex suitable for single object operations
 pub mod value;
 
@@ -20,4 +20,13 @@ pub trait IndexOps {
     fn persist(&mut self) -> Result<()>;
 }
 
-pub trait ArconState: IndexOps + 'static {}
+/// Active Arcon State
+pub trait ArconState: IndexOps + Send + 'static {}
+
+
+impl ArconState for () {}
+impl IndexOps for () {
+    fn persist(&mut self) -> Result<(), crate::error::ArconStateError> {
+        Ok(())
+    }
+}

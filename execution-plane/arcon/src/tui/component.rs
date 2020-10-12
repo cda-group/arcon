@@ -1,7 +1,7 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::{manager::node_manager::MetricReport, tui::widgets::node::Node};
+use crate::{manager::node::MetricReport, tui::widgets::node::Node};
 use crossbeam_channel::Sender;
 use kompact::prelude::*;
 

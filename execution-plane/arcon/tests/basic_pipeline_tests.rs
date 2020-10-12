@@ -4,6 +4,8 @@
 //! The following tests will look similar to the generated code from `arcon_codegen`.
 //! The purpose of these tests are to verify the results of end-to-end pipelines.
 
+/*
+
 #![allow(bare_trait_objects)]
 extern crate arcon;
 
@@ -198,3 +200,98 @@ fn normalise_pipeline_test() {
     assert_eq!(result[0], 4);
     pipeline.shutdown();
 }
+
+#[derive(arcon::Arcon, prost::Message, Clone, abomonation_derive::Abomonation)]
+#[arcon(unsafe_ser_id = 104, reliable_ser_id = 105, version = 1)]
+pub struct Event {
+    #[prost(uint32, tag = "1")]
+    pub id: u32,
+    #[prost(uint32, tag = "2")]
+    pub price: u32,
+}
+
+#[derive(ArconState)]
+pub struct OpState<B: Backend> {
+    event_total_price: HashIndex<u32, u64, B>,
+    counter: ValueIndex<u64, B>,
+}
+
+/*
+#[derive(ArconState)]
+pub struct OpState {
+    event_total_price: HashIndex<u32, u64>,
+    counter: ValueIndex<u64>,
+}
+*/
+
+/*
+struct CustomOperator<B: Backend> {
+    state: OpState<B>,
+}
+impl<B> arcon::Operator for CustomOperator<B> {
+    type IN = Event;
+    type OUT = u64;
+    type TimerState = ArconNever;
+
+    fn handle_element<CD>(
+        &self,
+        element: ArconElement<IN>,
+        source: &CD,
+        mut ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>,
+    ) where
+        CD: ComponentDefinition + Sized + 'static,
+    {
+        // Custom logic
+        // ctx.output(new_event) 
+    }
+
+    ignore_epoch!();
+    ignore_timeout!();
+    ignore_watermark!();
+}
+*/
+
+#[derive(ArconState)]
+pub struct CustomState<B: Backend> {
+    counter: ValueIndex<u64, B>,
+}
+
+//CustomState::from("checkpoint_dir");
+
+#[derive(ArconState)]
+pub struct PersonState<B: Backend> {
+    event_total_price: HashIndex<u32, u64, B>,
+    counter: ValueIndex<u64, B>,
+}
+
+#[derive(ArconState)]
+pub struct QueryState<B: Backend> {
+    custom: CustomState<B>,
+    person: PersonState<B>,
+}
+
+/*
+impl<B: Backend> From<Backend> for CustomState<B> {
+    fn from(backend: Backend) -> Self {
+    }
+}
+*/
+
+#[test]
+fn an_api_test() {
+    let mut pipeline = Pipeline::new();
+    // pipeline.source(...)
+    /*
+    pipeline.map_with_state(|e: Event, state: &mut OpState| {
+        state.event_total_price.get().rmw(&e.id, |p| {
+            *p += e.price;
+        });
+
+        state.counter.get().rmw(|c| *c += 1);
+    });
+
+
+    pipeline.await_termination();
+    */
+}
+*/

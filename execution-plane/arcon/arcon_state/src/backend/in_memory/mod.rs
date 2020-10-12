@@ -11,11 +11,14 @@ use smallbox::{space, SmallBox};
 use std::{any::Any, collections::HashMap, path::Path};
 
 // we'll store values of size up to 8 * size_of::<usize>() inline
-type StoredValue = SmallBox<dyn Any + Send, space::S8>;
+type StoredValue = SmallBox<dyn Any + Send +Sync, space::S8>;
 
+use dashmap::DashMap;
+use std::sync::{Mutex, Arc};
 #[derive(Debug, Default)]
 pub struct InMemory {
-    data: HashMap<&'static str, HashMap<Vec<u8>, StoredValue>>,
+    //data: Arc<DashMap<&'static str, HashMap<Vec<u8>, StoredValue>>>,
+    data: Arc<Mutex<HashMap<&'static str, HashMap<Vec<u8>, StoredValue>>>>,
 }
 
 impl InMemory {
@@ -23,13 +26,14 @@ impl InMemory {
         &self,
         handle: &Handle<S, IK, N>,
     ) -> &HashMap<Vec<u8>, StoredValue> {
-        self.data.get(handle.id).unwrap()
+        //self.data.lock().unwrap().get(handle.id).unwrap()
+        self.data.lock().unwrap()
     }
     fn get_mut<S: StateType, IK: Metakey, N: Metakey>(
         &mut self,
         handle: &Handle<S, IK, N>,
     ) -> &mut HashMap<Vec<u8>, StoredValue> {
-        self.data.get_mut(handle.id).unwrap()
+        self.data.lock().unwrap().get_mut(handle.id).unwrap()
     }
 }
 
@@ -65,7 +69,7 @@ impl Backend for InMemory {
         &'s mut self,
         handle: &'s mut Handle<ValueState<T>, IK, N>,
     ) {
-        self.data.entry(handle.id).or_default();
+        self.data.lock().unwrap().entry(handle.id).or_default();
         handle.registered = true;
     }
 
@@ -73,7 +77,7 @@ impl Backend for InMemory {
         &'s mut self,
         handle: &'s mut Handle<MapState<K, V>, IK, N>,
     ) {
-        self.data.entry(handle.id).or_default();
+        self.data.lock().unwrap().entry(handle.id).or_default();
         handle.registered = true;
     }
 
@@ -81,7 +85,7 @@ impl Backend for InMemory {
         &'s mut self,
         handle: &'s mut Handle<VecState<T>, IK, N>,
     ) {
-        self.data.entry(handle.id).or_default();
+        self.data.lock().unwrap().entry(handle.id).or_default();
         handle.registered = true;
     }
 
@@ -89,7 +93,7 @@ impl Backend for InMemory {
         &'s mut self,
         handle: &'s mut Handle<ReducerState<T, F>, IK, N>,
     ) {
-        self.data.entry(handle.id).or_default();
+        self.data.lock().unwrap().entry(handle.id).or_default();
         handle.registered = true;
     }
 
@@ -97,7 +101,7 @@ impl Backend for InMemory {
         &'s mut self,
         handle: &'s mut Handle<AggregatorState<A>, IK, N>,
     ) {
-        self.data.entry(handle.id).or_default();
+        self.data.lock().unwrap().entry(handle.id).or_default();
         handle.registered = true;
     }
     // endregion

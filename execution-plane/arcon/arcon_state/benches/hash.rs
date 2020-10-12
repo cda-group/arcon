@@ -1002,12 +1002,14 @@ macro_rules! read {
     ($keys: expr, $bencher: expr, $type_value:ident, $backend:expr, $mod_capacity:expr, $read_capacity:expr) => {{
         let dir = tempdir().unwrap();
         with_backend_type!($backend, |B| {
-            let backend = B::create(dir.as_ref()).unwrap();
+            let backend = Arc::new(B::create(dir.as_ref()).unwrap());
+            let mut map_handle: Handle<MapState<u64, $type_value>> = Handle::map("mapindex");
+            backend.register_map_handle(&mut map_handle);
+            let state = map_handle.activate(backend.clone());
             let mut hash_index: HashIndex<u64, $type_value, B> = HashIndex::new(
-                "_hashindex",
+                state,
                 $mod_capacity,
                 $read_capacity,
-                Arc::new(backend),
             );
 
             for i in 0..TOTAL_KEYS {
@@ -1032,12 +1034,14 @@ macro_rules! insert {
     ($keys: expr, $bencher: expr, $type_value:ident, $backend:expr, $mod_capacity:expr, $read_capacity:expr, $full_eviction:expr) => {{
         let dir = tempdir().unwrap();
         with_backend_type!($backend, |B| {
-            let backend = B::create(dir.as_ref()).unwrap();
+            let backend = Arc::new(B::create(dir.as_ref()).unwrap());
+            let mut map_handle: Handle<MapState<u64, $type_value>> = Handle::map("mapindex");
+            backend.register_map_handle(&mut map_handle);
+            let state = map_handle.activate(backend.clone());
             let mut hash_index: HashIndex<u64, $type_value, B> = HashIndex::new(
-                "_hashindex",
+                state,
                 $mod_capacity,
                 $read_capacity,
-                Arc::new(backend),
             );
 
             if $full_eviction {
@@ -1063,12 +1067,15 @@ macro_rules! rmw {
     ($keys: expr, $bencher: expr, $type_value:ident, $backend:expr, $mod_capacity:expr, $read_capacity:expr, $full_eviction:expr) => {{
         let dir = tempdir().unwrap();
         with_backend_type!($backend, |B| {
-            let backend = B::create(dir.as_ref()).unwrap();
+            let backend = Arc::new(B::create(dir.as_ref()).unwrap());
+            let mut map_handle: Handle<MapState<u64, $type_value>> = Handle::map("mapindex");
+            backend.register_map_handle(&mut map_handle);
+            let state = map_handle.activate(backend.clone());
+
             let mut hash_index: HashIndex<u64, $type_value, B> = HashIndex::new(
-                "_hashindex",
+                state,
                 $mod_capacity,
                 $read_capacity,
-                Arc::new(backend),
             );
 
             for i in 0..TOTAL_KEYS {
@@ -1107,15 +1114,11 @@ macro_rules! rmw_pure_backend {
     ($keys: expr, $bencher: expr, $type_value:ident, $backend:expr) => {{
         let dir = tempdir().unwrap();
         with_backend_type!($backend, |B| {
-            let backend = B::create(dir.as_ref()).unwrap();
+            let backend = Arc::new(B::create(dir.as_ref()).unwrap());
             let mut map_handle: Handle<MapState<u64, $type_value>> = Handle::map("mapindex");
-            let mut session = backend.session();
-            {
-                let mut rtok = unsafe { RegistrationToken::new(&mut session) };
-                map_handle.register(&mut rtok);
-            }
+            backend.register_map_handle(&mut map_handle);
 
-            let mut state = map_handle.activate(&mut session);
+            let state = map_handle.activate(backend.clone());
             // Fill in some keys
             for i in 0..TOTAL_KEYS {
                 let _ = state.fast_insert(i, $type_value::new());
@@ -1137,15 +1140,11 @@ macro_rules! read_pure_backend {
     ($keys: expr, $bencher: expr, $type_value:ident, $backend:expr) => {{
         let dir = tempdir().unwrap();
         with_backend_type!($backend, |B| {
-            let backend = B::create(dir.as_ref()).unwrap();
+            let backend = Arc::new(B::create(dir.as_ref()).unwrap());
             let mut map_handle: Handle<MapState<u64, $type_value>> = Handle::map("mapindex");
-            let mut session = backend.session();
-            {
-                let mut rtok = unsafe { RegistrationToken::new(&mut session) };
-                map_handle.register(&mut rtok);
-            }
+            backend.register_map_handle(&mut map_handle);
 
-            let mut state = map_handle.activate(&mut session);
+            let state = map_handle.activate(backend.clone());
             // Fill in some keys
             for i in 0..TOTAL_KEYS {
                 let _ = state.fast_insert(i, $type_value::new());

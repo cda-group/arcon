@@ -43,7 +43,7 @@ pub mod pipeline;
 /// Contains the core stream logic
 pub mod stream;
 /// Arcon event time facilities
-pub mod timer;
+//pub mod timer;
 
 // Internal modules
 
@@ -51,6 +51,7 @@ pub mod timer;
 mod allocator;
 /// Arcon buffer implementations
 mod buffer;
+#[cfg(feature = "metrics")]
 /// Arcon metrics
 mod metrics;
 /// Test module containing some more complex unit tests
@@ -75,11 +76,13 @@ pub mod test_utils {
 
 /// Helper module that imports everything related to arcon into scope
 pub mod prelude {
+    /*
     #[cfg(feature = "socket")]
     pub use crate::stream::{
         operator::sink::socket::SocketSink,
         source::socket::{SocketKind, SocketSource},
     };
+    */
     pub use crate::{
         allocator::{AllocResult, ArconAllocator},
         buffer::event::{BufferPool, BufferReader, BufferWriter},
@@ -94,7 +97,9 @@ pub mod prelude {
                 },
                 Channel,
             },
-            node::{debug::DebugNode, Node, NodeDescriptor},
+            node::{debug::DebugNode, Node},
+            node::{NodeDescriptor},
+            /*
             operator::{
                 function::*,
                 sink::local_file::LocalFileSink,
@@ -102,13 +107,14 @@ pub mod prelude {
                 Operator,
             },
             source::{collection::CollectionSource, local_file::LocalFileSource, SourceContext},
+            */
         },
-        timer,
+        //timer,
     };
     pub use kompact::prelude::SerId;
 
-    #[cfg(feature = "kafka")]
-    pub use crate::stream::{operator::sink::kafka::KafkaSink, source::kafka::KafkaSource};
+    //#[cfg(feature = "kafka")]
+    //pub use crate::stream::{operator::sink::kafka::KafkaSink, source::kafka::KafkaSource};
 
     pub use crate::data::{
         flight_serde::{reliable_remote::ReliableSerde, unsafe_remote::UnsafeSerde, FlightSerde},
@@ -125,7 +131,7 @@ pub mod prelude {
     pub use arcon_state::{
         ArconState,
         HashIndex, ValueIndex, AppenderIndex,
-        AggregatorState, Backend as _, Bundle as _, Handle, MapState, ReducerState, ValueState,
+        AggregatorState, Backend as _, Handle, MapState, ReducerState, ValueState,
         VecState,
     };
     #[cfg(feature = "rayon")]

@@ -10,7 +10,7 @@ use std::{
 };
 
 use crate::{
-    backend::{handles::Handle, MapState},
+    backend::{handles::ActiveHandle, MapState},
     data::{Key, Value},
     error::*,
     index::IndexOps,
@@ -47,10 +47,10 @@ use self::table::RawTable;
 #[cfg(test)]
 use crate::index::hash::table::TableModIterator;
 use crate::{
-    backend::{Backend, BackendContainer},
+    backend::{Backend},
     index::hash::table::ProbeModIterator,
 };
-use std::{cell::UnsafeCell, sync::Arc};
+use std::cell::UnsafeCell;
 
 // Set FxHash to default as most keys tend to be small
 pub type DefaultHashBuilder = fxhash::FxBuildHasher;
@@ -69,9 +69,7 @@ where
     /// In-memory RawTable
     raw_table: UnsafeCell<RawTable<K, V>>,
     /// Map Handle
-    handle: Handle<MapState<K, V>>,
-    /// The underlying backend
-    backend: Arc<BackendContainer<B>>,
+    handle: ActiveHandle<B, MapState<K, V>>,
 }
 
 #[inline]
@@ -89,25 +87,17 @@ where
 {
     /// Creates a HashIndex
     pub fn new(
-        key: &'static str,
+        handle: ActiveHandle<B, MapState<K, V>>,
         mod_capacity: usize,
         read_capacity: usize,
-        backend: Arc<BackendContainer<B>>,
-    ) -> HashIndex<K, V, B> {
+    ) -> Self {
         assert!(mod_capacity.is_power_of_two());
         assert!(read_capacity.is_power_of_two());
-
-        // register handle
-        let mut handle = Handle::map(key);
-        handle.register(&mut unsafe {
-            crate::backend::RegistrationToken::new(&mut backend.clone().session())
-        });
 
         HashIndex {
             hash_builder: DefaultHashBuilder::default(),
             raw_table: UnsafeCell::new(RawTable::with_capacity(mod_capacity, read_capacity)),
             handle,
-            backend,
         }
     }
 
@@ -151,9 +141,7 @@ where
     /// Internal helper to get a value from the Backend
     #[inline]
     fn backend_get(&self, k: &K) -> Result<Option<V>> {
-        let mut sb_session = self.backend.session();
-        let state = self.handle.activate(&mut sb_session);
-        state.get(k)
+        self.handle.get(k)
     }
 
     /// Internal helper to delete a key-value record from the Backend
@@ -161,9 +149,7 @@ where
     /// This version returns the deleted value if it existed before
     #[inline]
     fn backend_remove(&self, k: &K) -> Result<Option<V>> {
-        let mut sb_session = self.backend.session();
-        let mut state = self.handle.activate(&mut sb_session);
-        state.remove(k)
+        self.handle.remove(k)
     }
 
     /// Internal helper to delete a key-value record from the Backend
@@ -171,9 +157,7 @@ where
     /// This version does not return a possible old value
     #[inline]
     fn backend_remove_fast(&self, k: &K) -> Result<()> {
-        let mut sb_session = self.backend.session();
-        let mut state = self.handle.activate(&mut sb_session);
-        state.fast_remove(k)
+        self.handle.fast_remove(k)
     }
 
     #[inline]
@@ -320,9 +304,7 @@ where
     /// backing MapState.
     #[inline(always)]
     pub fn drain_modified(&self, iter: ProbeModIterator<K, V>) -> Result<()> {
-        let mut sb_session = self.backend.session();
-        let mut map_state = self.handle.activate(&mut sb_session);
-        map_state.insert_all_by_ref(iter)
+        self.handle.insert_all_by_ref(iter)
     }
 
     /// Method only used for testing the TableModIterator of RawTable.
@@ -342,9 +324,7 @@ where
     fn persist(&mut self) -> Result<()> {
         let table = self.raw_table_mut();
         unsafe {
-            let mut sb_session = self.backend.session();
-            let mut map_state = self.handle.activate(&mut sb_session);
-            map_state.insert_all_by_ref(table.iter_modified())?;
+            self.handle.insert_all_by_ref(table.iter_modified())?;
         };
         Ok(())
     }
@@ -353,16 +333,22 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::in_memory::InMemory;
+    use crate::backend::sled::Sled;
     use std::sync::Arc;
+    use crate::backend::Handle;
 
     #[test]
     fn basic_test() {
-        let backend = InMemory::create(&std::path::Path::new("/tmp/")).unwrap();
+        let backend = Sled::create(&std::path::Path::new("/tmp/h1")).unwrap();
+        let backend = Arc::new(backend);
+        let mut handle = Handle::map("_map");
+        backend.register_map_handle(&mut handle);
+        let active = handle.activate(backend.clone());
+
         let mod_capacity = 1024;
         let read_capacity = 1024;
-        let mut hash_index: HashIndex<u64, u64, InMemory> =
-            HashIndex::new("_hashindex", mod_capacity, read_capacity, Arc::new(backend));
+        let mut hash_index: HashIndex<u64, u64, Sled> =
+            HashIndex::new(active, mod_capacity, read_capacity);
         for i in 0..1024 {
             hash_index.put(i as u64, i as u64).unwrap();
             let key: u64 = i as u64;
@@ -388,11 +374,15 @@ mod tests {
 
     #[test]
     fn modified_test() {
-        let backend = InMemory::create(&std::path::Path::new("/tmp/")).unwrap();
+        let backend = Sled::create(&std::path::Path::new("/tmp/h2")).unwrap();
+        let backend = Arc::new(backend);
+        let mut handle = Handle::map("_map");
+        backend.register_map_handle(&mut handle);
+        let active = handle.activate(backend.clone());
         let capacity = 64;
 
-        let mut hash_index: HashIndex<u64, u64, InMemory> =
-            HashIndex::new("_hashindex", capacity, capacity, Arc::new(backend));
+        let mut hash_index: HashIndex<u64, u64, Sled> =
+            HashIndex::new(active, capacity, capacity);
         for i in 0..10 {
             hash_index.put(i as u64, i as u64).unwrap();
         }

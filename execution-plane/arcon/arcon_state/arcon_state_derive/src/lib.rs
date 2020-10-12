@@ -7,28 +7,53 @@ extern crate quote;
 use proc_macro::TokenStream;
 use syn::{parse_macro_input, DeriveInput};
 
-#[proc_macro_derive(ArconState)]
+#[proc_macro_derive(ArconState, attributes(empheral))]
 pub fn arcon_state(input: TokenStream) -> TokenStream {
     let item = parse_macro_input!(input as DeriveInput);
     let name = &item.ident;
 
     if let syn::Data::Struct(ref s) = item.data {
         let mut idents = Vec::new();
-        for field in s.fields.iter() {
-            match field.ident {
-                Some(ref ident) => idents.push((ident.clone(), &field.ty)),
-                None => panic!("Struct missing identiy"),
-            }
-        }
+        let mut empherals = Vec::new();
 
-        let mut persist_quotes = Vec::new();
-        for (ident, _) in idents.iter() {
-            let field_gen = quote! { self.#ident.persist()?; };
-            persist_quotes.push(field_gen);
+        match s.fields {
+            syn::Fields::Named(ref fields_named) => {
+                for field in fields_named.named.iter() {
+                    let mut empheral = false;
+                    for attr in field.attrs.iter() {
+                        let meta = attr.parse_meta().unwrap();
+                        match meta {
+                            syn::Meta::Path(ref path)
+                                if path.get_ident().unwrap().to_string() == "empheral" =>
+                            {
+                                idents.push((field.ident.clone(), &field.ty));
+                                empherals.push((field.ident.clone(), &field.ty));
+                                empheral = true;
+                            }
+                            _ => (),
+                        }
+                    }
+                    if !empheral {
+                        idents.push((field.ident.clone(), &field.ty));
+                    }
+                }
+            }
+            _ => {}
         }
 
         let mut field_getters = Vec::new();
-        for (ident, ty) in idents.iter() {
+        let mut persist_quotes = Vec::new();
+
+        for data in idents.into_iter() {
+            let ident = &data.0;
+            let ty = &data.1;
+
+            // add only non-empheral fields
+            if !empherals.contains(&(data)) {
+                let field_gen = quote! { self.#ident.persist()?; };
+                persist_quotes.push(field_gen);
+            }
+
             let field_gen = quote! { pub fn #ident(&mut self) -> &mut #ty { &mut self.#ident } };
             field_getters.push(field_gen);
         }

@@ -12,7 +12,7 @@ pub(crate) const VALUE_MARKER: u8 = 0x00;
 
 impl AggregatorOps for Sled {
     fn aggregator_clear<A: Aggregator, IK: Metakey, N: Metakey>(
-        &mut self,
+        &self,
         handle: &Handle<AggregatorState<A>, IK, N>,
     ) -> Result<()> {
         let key = handle.serialize_metakeys()?;
@@ -42,7 +42,7 @@ impl AggregatorOps for Sled {
     }
 
     fn aggregator_aggregate<A: Aggregator, IK: Metakey, N: Metakey>(
-        &mut self,
+        &self,
         handle: &Handle<AggregatorState<A>, IK, N>,
         value: <A as Aggregator>::Input,
     ) -> Result<()> {

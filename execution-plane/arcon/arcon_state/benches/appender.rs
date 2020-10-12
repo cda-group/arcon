@@ -3,6 +3,7 @@
 
 use arcon_state::{index::appender::AppenderIndex, Backend, *};
 use criterion::{criterion_group, criterion_main, Bencher, BenchmarkId, Criterion};
+use std::sync::Arc;
 use tempfile::tempdir;
 
 const CAPACITY: [usize; 3] = [5048, 12498, 20048];
@@ -64,9 +65,12 @@ fn mean(numbers: &Vec<u64>) -> f32 {
 fn appender_mean_index(backend: BackendType, window_size: usize, capacity: usize, b: &mut Bencher) {
     let dir = tempdir().unwrap();
     with_backend_type!(backend, |B| {
-        let backend = B::create(dir.as_ref()).unwrap();
+        let backend = Arc::new(B::create(dir.as_ref()).unwrap());
+        let mut vec_handle = Handle::vec("agger");
+        backend.register_vec_handle(&mut vec_handle);
+        let state = vec_handle.activate(backend.clone());
         let mut appender_index: AppenderIndex<u64, B> =
-            AppenderIndex::new("_valueindex", capacity, std::sync::Arc::new(backend));
+            AppenderIndex::new(capacity, state);
         b.iter(|| {
             for i in 0..window_size {
                 let _ = appender_index.append(i as u64).unwrap();
@@ -80,15 +84,10 @@ fn appender_mean_index(backend: BackendType, window_size: usize, capacity: usize
 fn appender_mean_pure_backend(backend: BackendType, window_size: usize, b: &mut Bencher) {
     let dir = tempdir().unwrap();
     with_backend_type!(backend, |B| {
-        let backend = B::create(dir.as_ref()).unwrap();
-        let mut vec_handle: Handle<VecState<u64>> = Handle::vec("vec");
-        let mut session = backend.session();
-        {
-            let mut rtok = unsafe { RegistrationToken::new(&mut session) };
-            vec_handle.register(&mut rtok);
-        }
-
-        let mut state = vec_handle.activate(&mut session);
+        let backend = Arc::new(B::create(dir.as_ref()).unwrap());
+        let mut vec_handle: Handle<VecState<u64>> = Handle::vec("agger");
+        backend.register_vec_handle(&mut vec_handle);
+        let state = vec_handle.activate(backend.clone());
 
         b.iter(|| {
             for i in 0..window_size {

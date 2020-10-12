@@ -19,10 +19,10 @@ thread_pinning = ["kompact/thread_pinning"]
 socket = ["tokio-util", "tokio", "futures", "serde_json", "serde"]
 arcon_tui = ["tui", "num-rational", "psutil", "serde_json", "size", "crossbeam-channel", "ctrlc", "crossterm", "better-panic"]
 quiet = ["slog"]
+metrics = []
 
 # state features
-arcon_rocksdb = ["arcon_state/rocks"]
-arcon_faster = ["arcon_state/faster", "serde"]
+#arcon_rocksdb = ["arcon_state/rocks"]
 arcon_sled = ["arcon_state/sled"]
 arcon_sled_checkpoints = ["arcon_state/sled_checkpoints"]
 
@@ -89,10 +89,6 @@ harness = false
 
 [[bench]]
 name = "buffer_pool"
-harness = false
-
-[[bench]]
-name = "window"
 harness = false
 
 [[bench]]

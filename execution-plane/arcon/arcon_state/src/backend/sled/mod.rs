@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
-    error::*, Aggregator, AggregatorState, Backend, BackendContainer, Handle, Key, MapState,
+    error::*, Aggregator, AggregatorState, Backend, Handle, Key, MapState,
     Metakey, Reducer, ReducerState, Value, ValueState, VecState,
 };
 use sled::{open, Batch, Db, IVec, Tree};
@@ -31,19 +31,19 @@ impl Sled {
         Ok(val)
     }
 
-    fn put(&mut self, tree_name: &str, key: &[u8], value: &[u8]) -> Result<Option<IVec>> {
+    fn put(&self, tree_name: &str, key: &[u8], value: &[u8]) -> Result<Option<IVec>> {
         let tree = self.tree(tree_name)?;
         let old = tree.insert(key, value)?;
         Ok(old)
     }
 
-    fn remove(&mut self, tree_name: &str, key: &[u8]) -> Result<Option<IVec>> {
+    fn remove(&self, tree_name: &str, key: &[u8]) -> Result<Option<IVec>> {
         let tree = self.tree(tree_name)?;
         let old = tree.remove(key)?;
         Ok(old)
     }
 
-    fn remove_prefix(&mut self, tree_name: &str, prefix: Vec<u8>) -> Result<()> {
+    fn remove_prefix(&self, tree_name: &str, prefix: Vec<u8>) -> Result<()> {
         let tree = self.tree(tree_name)?;
 
         let mut batch = Batch::default();
@@ -63,19 +63,19 @@ impl Sled {
 }
 
 impl Backend for Sled {
-    fn create(live_path: &Path) -> Result<BackendContainer<Self>>
+    fn create(live_path: &Path) -> Result<Self>
     where
         Self: Sized,
     {
         let db = open(live_path)?;
-        Ok(BackendContainer::new(Sled {
+        Ok(Sled {
             db,
             restored: false,
-        }))
+        })
     }
 
     #[allow(unused_variables)]
-    fn restore(live_path: &Path, checkpoint_path: &Path) -> Result<BackendContainer<Self>>
+    fn restore(live_path: &Path, checkpoint_path: &Path) -> Result<Self>
     where
         Self: Sized,
     {
@@ -93,7 +93,7 @@ impl Backend for Sled {
             restored = true;
         }
 
-        Ok(BackendContainer::new(Sled { db, restored }))
+        Ok(Sled { db, restored })
     }
 
     fn was_restored(&self) -> bool {
@@ -158,23 +158,23 @@ impl Backend for Sled {
         Ok(())
     }
 
-    fn register_value_handle<'s, T: Value, IK: Metakey, N: Metakey>(
-        &'s mut self,
-        handle: &'s mut Handle<ValueState<T>, IK, N>,
+    fn register_value_handle<T: Value, IK: Metakey, N: Metakey>(
+        &self,
+        handle: &mut Handle<ValueState<T>, IK, N>,
     ) {
         handle.registered = true;
     }
 
-    fn register_map_handle<'s, K: Key, V: Value, IK: Metakey, N: Metakey>(
-        &'s mut self,
-        handle: &'s mut Handle<MapState<K, V>, IK, N>,
+    fn register_map_handle<K: Key, V: Value, IK: Metakey, N: Metakey>(
+        &self,
+        handle: &mut Handle<MapState<K, V>, IK, N>,
     ) {
         handle.registered = true;
     }
 
-    fn register_vec_handle<'s, T: Value, IK: Metakey, N: Metakey>(
-        &'s mut self,
-        handle: &'s mut Handle<VecState<T>, IK, N>,
+    fn register_vec_handle<T: Value, IK: Metakey, N: Metakey>(
+        &self,
+        handle: &mut Handle<VecState<T>, IK, N>,
     ) {
         let tree = self
             .tree(handle.id)
@@ -183,9 +183,9 @@ impl Backend for Sled {
         handle.registered = true;
     }
 
-    fn register_reducer_handle<'s, T: Value, F: Reducer<T>, IK: Metakey, N: Metakey>(
-        &'s mut self,
-        handle: &'s mut Handle<ReducerState<T, F>, IK, N>,
+    fn register_reducer_handle<T: Value, F: Reducer<T>, IK: Metakey, N: Metakey>(
+        &self,
+        handle: &mut Handle<ReducerState<T, F>, IK, N>,
     ) {
         let tree = self
             .tree(handle.id)
@@ -194,9 +194,9 @@ impl Backend for Sled {
         handle.registered = true;
     }
 
-    fn register_aggregator_handle<'s, A: Aggregator, IK: Metakey, N: Metakey>(
-        &'s mut self,
-        handle: &'s mut Handle<AggregatorState<A>, IK, N>,
+    fn register_aggregator_handle<A: Aggregator, IK: Metakey, N: Metakey>(
+        &self,
+        handle: &mut Handle<AggregatorState<A>, IK, N>,
     ) {
         let tree = self
             .tree(handle.id)
@@ -270,12 +270,13 @@ mod tests {
     use std::{
         fs,
         ops::{Deref, DerefMut},
+        sync::Arc,
     };
     use tempfile::TempDir;
 
     #[derive(Debug)]
     pub struct TestDb {
-        sled: BackendContainer<Sled>,
+        sled: Arc<Sled>,
         dir: TempDir,
     }
 
@@ -286,12 +287,12 @@ mod tests {
             dir_path.push("sled");
             fs::create_dir(&dir_path).unwrap();
             let sled = Sled::create(&dir_path).unwrap();
-            TestDb { sled, dir }
+            TestDb { sled: Arc::new(sled), dir }
         }
     }
 
     impl Deref for TestDb {
-        type Target = BackendContainer<Sled>;
+        type Target = Arc<Sled>;
 
         fn deref(&self) -> &Self::Target {
             &self.sled
