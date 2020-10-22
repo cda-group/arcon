@@ -3,9 +3,17 @@
 
 #[cfg(feature = "arcon_tui")]
 use crate::tui::{component::TuiComponent, widgets::node::Node as TuiNode};
+
 use crate::{
-    allocator::ArconAllocator, buffer::event::PoolInfo, conf::ArconConf, manager::node::*,
-    prelude::*, util::SafelySendableFn,
+    allocator::ArconAllocator,
+    buffer::event::PoolInfo,
+    conf::ArconConf,
+    manager::{
+        node::*,
+        state::{SnapshotRef, StateID, StateManager, StateManagerPort},
+    },
+    prelude::*,
+    util::SafelySendableFn,
 };
 use fxhash::FxHashMap;
 use kompact::{component::AbstractComponent, prelude::KompactSystem};
@@ -20,8 +28,10 @@ pub struct ArconPipeline {
     conf: ArconConf,
     /// Arcon allocator for this pipeline
     allocator: Arc<Mutex<ArconAllocator>>,
-    /// NodeManagers launched on top of this ArconPipeline
+    /// NodeManagers launched on top of this pipeline
     //node_managers: FxHashMap<String, ActorRefStrong<NodeEvent>>,
+    /// StateManager component for this pipeline
+    state_manager: Arc<Component<StateManager>>,
     #[cfg(feature = "arcon_tui")]
     tui_component: Arc<Component<TuiComponent>>,
     #[cfg(feature = "arcon_tui")]
@@ -43,13 +53,14 @@ impl ArconPipeline {
         #[cfg(feature = "arcon_tui")]
         let (system, tui_component, arcon_receiver) = ArconPipeline::setup(&conf);
         #[cfg(not(feature = "arcon_tui"))]
-        let system = ArconPipeline::setup(&conf);
+        let (system, state_manager) = ArconPipeline::setup(&conf);
 
         ArconPipeline {
             system,
             conf,
             allocator,
             //node_managers: FxHashMap::default(),
+            state_manager,
             #[cfg(feature = "arcon_tui")]
             tui_component,
             #[cfg(feature = "arcon_tui")]
@@ -63,13 +74,14 @@ impl ArconPipeline {
         #[cfg(feature = "arcon_tui")]
         let (system, tui_component, arcon_receiver) = ArconPipeline::setup(&conf);
         #[cfg(not(feature = "arcon_tui"))]
-        let system = ArconPipeline::setup(&conf);
+        let (system, state_manager) = ArconPipeline::setup(&conf);
 
         ArconPipeline {
             system,
             conf,
             allocator,
             //node_managers: FxHashMap::default(),
+            state_manager,
             #[cfg(feature = "arcon_tui")]
             tui_component,
             #[cfg(feature = "arcon_tui")]
@@ -89,10 +101,18 @@ impl ArconPipeline {
 
     /// Helper function to set up internals of the pipeline
     #[cfg(not(feature = "arcon_tui"))]
-    fn setup(arcon_conf: &ArconConf) -> KompactSystem {
+    fn setup(arcon_conf: &ArconConf) -> (KompactSystem, Arc<Component<StateManager>>) {
         let kompact_config = arcon_conf.kompact_conf();
         let system = kompact_config.build().expect("KompactSystem");
+        let state_manager = StateManager::new();
+        let state_manager_comp = system.create_dedicated(|| state_manager);
+        let timeout = std::time::Duration::from_millis(500);
         system
+            .start_notify(&state_manager_comp)
+            .wait_timeout(timeout)
+            .expect("StateManager comp never started!");
+
+        (system, state_manager_comp)
     }
 
     /// Helper function to set up internals of the pipeline
@@ -115,6 +135,28 @@ impl ArconPipeline {
             .wait_timeout(timeout)
             .expect("TuiComponent never started!");
         (system, tui_component, arcon_receiver)
+    }
+
+    pub fn connect_state_port<B: Backend>(&mut self, nm: &Arc<Component<NodeManager<B>>>) {
+        biconnect_components::<StateManagerPort, _, _>(&self.state_manager, nm)
+            .expect("connection");
+    }
+
+    /// Add component `c` to receive state snapshots from `state_id`
+    pub fn watch(
+        &mut self,
+        state_ids: &'static [&str],
+        c: Arc<dyn AbstractComponent<Message = SnapshotRef>>,
+    ) {
+        self.state_manager.on_definition(|cd| {
+            for id in state_ids.into_iter() {
+                let actor_ref = c.actor_ref().hold().expect("fail");
+                cd.subscribers
+                    .entry(id.to_owned().to_string())
+                    .or_insert(Vec::new())
+                    .push(actor_ref);
+            }
+        });
     }
 
     /// Give out a mutable reference to the KompactSystem of the pipeline
@@ -184,7 +226,7 @@ impl ArconPipeline {
     */
 
     /// Awaits termination from the pipeline
-    /// 
+    ///
     /// Note that this blocks the current thread
     pub fn await_termination(self) {
         self.system.await_termination();

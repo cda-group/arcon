@@ -31,3 +31,12 @@ pub fn get_system_time_nano() -> u64 {
 
 pub trait SafelySendableFn<Args>: Fn<Args> + Send + Sync {}
 impl<Args, F> SafelySendableFn<Args> for F where F: Fn<Args> + Send + Sync {}
+
+/// Creates a temporary Sled backend for development purposes
+#[cfg(test)]
+pub(crate) fn temp_backend() -> arcon_state::Sled {
+    use arcon_state::backend::Backend;
+    let test_dir = tempfile::tempdir().unwrap();
+    let path = test_dir.path();
+    arcon_state::Sled::create(path).unwrap()
+}

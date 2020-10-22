@@ -4,13 +4,13 @@
 pub mod appender;
 /// HashIndex suitable for point lookups and random reads
 pub mod hash;
-//pub mod timer;
+pub mod timer;
 /// ValueIndex suitable for single object operations
 pub mod value;
 
 use crate::error::Result;
 
-pub use self::{appender::AppenderIndex, hash::HashIndex, value::ValueIndex};
+pub use self::{appender::AppenderIndex, hash::HashIndex, timer::TimerIndex, value::ValueIndex};
 
 /// Common Index Operations
 ///
@@ -22,7 +22,6 @@ pub trait IndexOps {
 
 /// Active Arcon State
 pub trait ArconState: IndexOps + Send + 'static {}
-
 
 impl ArconState for () {}
 impl IndexOps for () {

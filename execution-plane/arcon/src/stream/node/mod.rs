@@ -6,15 +6,18 @@ pub mod debug;
 
 use crate::{
     data::RawArconMessage,
-    manager::node::*,
+    manager::node::{NodeEvent::Checkpoint, *},
     prelude::*,
     stream::operator::{Operator, OperatorContext},
 };
-use arcon_state::{index::IndexOps, Backend};
-use std::{cell::RefCell, collections::HashMap};
+use arcon_state::{index::IndexOps, AppenderIndex, ArconState, Backend, TimerIndex};
+use fxhash::*;
+use std::{cell::UnsafeCell, sync::Arc};
 
 #[cfg(feature = "metrics")]
 use crate::metrics::{counter::Counter, gauge::Gauge, meter::Meter};
+
+const MESSAGE_BUFFER_SIZE: usize = 1024;
 
 /// Type alias for a Node description
 pub type NodeDescriptor = String;
@@ -55,18 +58,18 @@ impl NodeMetrics {
     }
 }
 
-use arcon_state::{AppenderIndex, ArconState, HashIndex, ValueIndex};
-
 #[derive(ArconState)]
-pub struct NodeState<IN: ArconType, B: Backend> {
+pub struct NodeState<OP: Operator<B> + 'static, B: Backend> {
     /// Durable message buffer used for blocked channels
-    message_buffer: AppenderIndex<RawArconMessage<IN>, B>,
+    message_buffer: AppenderIndex<RawArconMessage<OP::IN>, B>,
+    // Durable Timer structure
+    timer: TimerIndex<u64, OP::TimerState, B>,
     /// Map of senders and their corresponding Watermark
     #[empheral]
-    watermarks: HashMap<NodeID, Watermark>,
+    watermarks: FxHashMap<NodeID, Watermark>,
     /// Map of blocked senders
     #[empheral]
-    blocked_channels: HashMap<NodeID, ()>,
+    blocked_channels: FxHashMap<NodeID, ()>,
     /// Current Watermark value for the Node
     #[empheral]
     current_watermark: Watermark,
@@ -83,10 +86,47 @@ pub struct NodeState<IN: ArconType, B: Backend> {
     id: NodeID,
 }
 
+impl<OP: Operator<B> + 'static, B: Backend> NodeState<OP, B> {
+    pub fn new(id: NodeID, in_channels: Vec<NodeID>, backend: Arc<B>) -> Self {
+        let mut handle = Handle::vec("_messagebuffer");
+        backend.register_vec_handle(&mut handle);
+        let active_handle = handle.activate(backend.clone());
+        let message_buffer = AppenderIndex::with_capacity(MESSAGE_BUFFER_SIZE, active_handle);
+
+        // initialise watermarks
+        let mut watermarks: FxHashMap<NodeID, Watermark> = FxHashMap::default();
+        for sender in &in_channels {
+            watermarks.insert(*sender, Watermark::new(0));
+        }
+
+        // timer
+        let mut timeouts_handle = Handle::map("_timeouts");
+        backend.register_map_handle(&mut timeouts_handle);
+        let timeouts_handle = timeouts_handle.activate(backend.clone());
+
+        let mut time_handle = Handle::value("_time");
+        backend.register_value_handle(&mut time_handle);
+        let time_handle = time_handle.activate(backend.clone());
+
+        let timer = TimerIndex::new(timeouts_handle, time_handle);
+
+        Self {
+            message_buffer,
+            timer,
+            watermarks,
+            blocked_channels: FxHashMap::default(),
+            current_watermark: Watermark::new(0),
+            current_epoch: Epoch::new(0),
+            in_channels,
+            id,
+        }
+    }
+}
+
 // Just a shorthand to avoid repeating the OperatorContext construction everywhere
 macro_rules! make_context {
     ($sel:ident) => {
-        OperatorContext::new($sel, &mut *$sel.channel_strategy.borrow_mut())
+        OperatorContext::new($sel, &mut (*$sel.channel_strategy.get()))
     };
 }
 
@@ -94,7 +134,7 @@ macro_rules! make_context {
 #[derive(ComponentDefinition)]
 pub struct Node<OP, B>
 where
-    OP: Operator + 'static,
+    OP: Operator<B> + 'static,
     B: Backend,
 {
     /// Component context
@@ -104,20 +144,19 @@ where
     /// Node descriptor
     descriptor: NodeDescriptor,
     /// Channel Strategy used by the Node
-    channel_strategy: RefCell<ChannelStrategy<OP::OUT>>,
+    channel_strategy: UnsafeCell<ChannelStrategy<OP::OUT>>,
     /// User-defined Operator
-    operator: RefCell<OP>,
+    operator: UnsafeCell<OP>,
     #[cfg(feature = "metrics")]
     /// Metrics collected by the Node
     metrics: NodeMetrics,
     /// Internal Node State
-    node_state: NodeState<OP::IN, B>,
-    manager_ref: ActorRefStrong<Ask<CheckpointRequest, bool>>,
+    node_state: NodeState<OP, B>,
 }
 
 impl<OP, B> Node<OP, B>
 where
-    OP: Operator + 'static,
+    OP: Operator<B> + 'static,
     B: Backend,
 {
     /// Creates a new Node
@@ -125,19 +164,17 @@ where
         descriptor: NodeDescriptor,
         channel_strategy: ChannelStrategy<OP::OUT>,
         operator: OP,
-        node_state: NodeState<OP::IN, B>,
-        manager_ref: ActorRefStrong<Ask<CheckpointRequest, bool>>,
+        node_state: NodeState<OP, B>,
     ) -> Self {
         Node {
             ctx: ComponentContext::uninitialised(),
             node_manager_port: RequiredPort::uninitialised(),
             descriptor,
-            channel_strategy: RefCell::new(channel_strategy),
-            operator: RefCell::new(operator),
+            channel_strategy: UnsafeCell::new(channel_strategy),
+            operator: UnsafeCell::new(operator),
             #[cfg(feature = "metrics")]
             metrics: NodeMetrics::new(),
             node_state,
-            manager_ref,
         }
     }
 
@@ -212,9 +249,9 @@ where
                         continue 'event_loop;
                     }
 
-                    self.operator
-                        .borrow_mut()
-                        .handle_element(e, make_context!(self));
+                    unsafe {
+                        (*self.operator.get()).handle_element(e, make_context!(self));
+                    };
                 }
                 ArconEvent::Watermark(w) => {
                     let watermark = match self.node_state.watermarks().get(&sender) {
@@ -242,17 +279,15 @@ where
 
                     if new_watermark.timestamp > self.node_state.current_watermark.timestamp {
                         self.node_state.current_watermark = new_watermark;
-                        // TODO:
-                        // if let Some(timer) = self.timer_index {
-                        //  let timeouts = timer.advance_to(new_watermark.timestamp);
-                        //  for timeout in timeouts {
-                        // operator.handle_timeout(
-                        //      timeout,
-                        //      make_context!(self),
-                        //  );
-                        // }
-                        //
-                        // }
+
+                        // TODO
+                        /*
+                        for timeout in self.node_state.timer.advance_to(new_watermark.timestamp) {
+                            unsafe {
+                                (*self.operator.get()).handle_timeout(timeout, make_context!(self));
+                            };
+                        }
+                        */
 
                         // Set current watermark
                         #[cfg(feature = "metrics")]
@@ -262,9 +297,10 @@ where
                         }
 
                         // Forward the watermark
-                        self.channel_strategy
-                            .borrow_mut()
-                            .add(ArconEvent::Watermark(new_watermark), self);
+                        unsafe {
+                            (*self.channel_strategy.get())
+                                .add(ArconEvent::Watermark(new_watermark), self);
+                        };
                     }
                 }
                 ArconEvent::Epoch(e) => {
@@ -284,43 +320,44 @@ where
                         self.node_state.persist()?;
 
                         // persist possible operator state..
-                        self.operator.borrow_mut().persist()?;
+                        unsafe {
+                            (*self.operator.get()).persist()?;
+                        };
 
+                        // TODO: Add checkpoint state here
                         // Let NodeManager know this Node is ready for checkpointing
                         // NOTE: This will await all nodes on the parent NodeManager
                         // to coordinate a snapshot of the underlying backend.
-                        let checkpoint = self
-                            .manager_ref
-                            .ask(Ask::of(CheckpointRequest(self.node_state.id, e)))
-                            .wait(); // TODO: Wait with timeout and handle error
+                        //
+                        // NOTE: must await this call blocking here...
+                        self.node_manager_port
+                            .trigger(Checkpoint(self.node_state.id, e));
 
-                        if checkpoint {
-                            // Once checkpointing is complete, forward the new epoch.
-                            self.channel_strategy
-                                .borrow_mut()
-                                .add(ArconEvent::Epoch(e), self);
+                        // Forward the Epoch
+                        unsafe {
+                            (*self.channel_strategy.get()).add(ArconEvent::Epoch(e), self);
+                        };
 
-                            #[cfg(feature = "metrics")]
-                            {
-                                self.metrics.epoch = e;
-                                self.metrics.epoch_counter.inc();
-                            }
+                        #[cfg(feature = "metrics")]
+                        {
+                            self.metrics.epoch = e;
+                            self.metrics.epoch_counter.inc();
+                        }
 
-                            // flush the blocked_channels list
-                            self.node_state.blocked_channels().clear();
+                        // flush the blocked_channels list
+                        self.node_state.blocked_channels().clear();
 
-                            // Iterate over the message-buffer until empty
-                            for message in self.node_state.message_buffer().consume()? {
-                                self.handle_events(message.sender, message.events)?;
-                            }
+                        // Iterate over the message-buffer until empty
+                        for message in self.node_state.message_buffer().consume()? {
+                            self.handle_events(message.sender, message.events)?;
                         }
                     }
                 }
                 ArconEvent::Death(s) => {
                     // We are instructed to shutdown....
-                    self.channel_strategy
-                        .borrow_mut()
-                        .add(ArconEvent::Death(s), self);
+                    unsafe {
+                        (*self.channel_strategy.get()).add(ArconEvent::Death(s), self);
+                    };
                     self.ctx.suicide(); // TODO: is suicide enough?
                 }
             }
@@ -332,7 +369,7 @@ where
 
 impl<OP, B> ComponentLifecycle for Node<OP, B>
 where
-    OP: Operator + 'static,
+    OP: Operator<B> + 'static,
     B: Backend,
 {
     fn on_start(&mut self) -> Handled {
@@ -362,7 +399,7 @@ where
 
 impl<OP, B> Require<NodeManagerPort> for Node<OP, B>
 where
-    OP: Operator + 'static,
+    OP: Operator<B> + 'static,
     B: Backend,
 {
     fn handle(&mut self, _: Never) -> Handled {
@@ -372,7 +409,7 @@ where
 
 impl<OP, B> Provide<NodeManagerPort> for Node<OP, B>
 where
-    OP: Operator + 'static,
+    OP: Operator<B> + 'static,
     B: Backend,
 {
     fn handle(&mut self, e: NodeEvent) -> Handled {
@@ -383,7 +420,7 @@ where
 
 impl<OP, B> Actor for Node<OP, B>
 where
-    OP: Operator + 'static,
+    OP: Operator<B> + 'static,
     B: Backend,
 {
     type Message = ArconMessage<OP::IN>;
@@ -427,16 +464,11 @@ where
     }
 }
 
-/*
 #[cfg(test)]
 mod tests {
     // Tests the message logic of Node.
     use super::*;
-    use crate::{
-        pipeline::*,
-        state::{Backend, Sled},
-        timer,
-    };
+    use crate::{pipeline::*, stream::operator::Filter};
     use std::{sync::Arc, thread, time};
 
     fn node_test_setup() -> (ActorRef<ArconMessage<i32>>, Arc<Component<DebugNode<i32>>>) {
@@ -447,32 +479,54 @@ mod tests {
         let system = &pipeline.system();
 
         let sink = system.create(move || DebugNode::<i32>::new());
-        system.start(&sink);
+
+        system
+            .start_notify(&sink)
+            .wait_timeout(std::time::Duration::from_millis(100))
+            .expect("started");
+
+        // Construct Channel to the Debug sink
         let actor_ref: ActorRefStrong<ArconMessage<i32>> =
             sink.actor_ref().hold().expect("Failed to fetch");
         let channel = Channel::Local(actor_ref);
         let channel_strategy: ChannelStrategy<i32> =
             ChannelStrategy::Forward(Forward::new(channel, NodeID::new(0), pool_info));
 
-        fn node_fn(x: &i32) -> bool {
+        // Set up  NodeManager
+        let backend = Arc::new(crate::util::temp_backend());
+        let descriptor = String::from("node_");
+        let in_channels = vec![1.into(), 2.into(), 3.into()];
+
+        let nm = NodeManager::new(descriptor.clone(), in_channels.clone(), backend.clone());
+        let node_manager_comp = system.create(|| nm);
+
+        system
+            .start_notify(&node_manager_comp)
+            .wait_timeout(std::time::Duration::from_millis(100))
+            .expect("started");
+
+        fn filter_fn(x: &i32) -> bool {
             *x >= 0
         }
 
-        let filter_node = system.create(move || {
-            Node::new(
-                String::from("filter_node"),
-                0.into(),
-                vec![1.into(), 2.into(), 3.into()],
-                channel_strategy,
-                Filter::new(&node_fn),
-                InMemory::create("test".as_ref()).unwrap(),
-                timer::none(),
-            )
-        });
+        let node = Node::new(
+            descriptor,
+            channel_strategy,
+            Filter::new(&filter_fn),
+            NodeState::new(NodeID::new(0), in_channels, backend.clone()),
+        );
 
-        system.start(&filter_node);
+        let filter_comp = system.create(|| node);
 
-        return (filter_node.actor_ref(), sink);
+        biconnect_components::<NodeManagerPort, _, _>(&node_manager_comp, &filter_comp)
+            .expect("connection");
+
+        system
+            .start_notify(&filter_comp)
+            .wait_timeout(std::time::Duration::from_millis(100))
+            .expect("started");
+
+        return (filter_comp.actor_ref(), sink);
     }
 
     fn watermark(time: u64, sender: u32) -> ArconMessage<i32> {
@@ -609,7 +663,7 @@ mod tests {
         // All the elements should now have been delivered in specific order
 
         node_ref.tell(death(3)); // send death marker on unblocked channel to flush
-        wait(1);
+        wait(5);
         sink.on_definition(|cd| {
             let data_len = cd.data.len();
             let epoch_len = cd.epochs.len();
@@ -624,4 +678,3 @@ mod tests {
         });
     }
 }
-*/

@@ -12,7 +12,7 @@ State management features for Arcon
 """
 
 [features]
-default = ["arcon_state_derive", "sled"]
+default = ["arcon_state_derive", "sled", "sled_checkpoints"]
 rocks = ["rocksdb"]
 faster = ["faster-rs", "serde"]
 sled_checkpoints = ["sled"]

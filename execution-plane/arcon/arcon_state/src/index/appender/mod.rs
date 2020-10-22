@@ -8,6 +8,8 @@ use crate::{
     index::IndexOps,
 };
 
+const DEFAULT_APPENDER_SIZE: usize = 1024;
+
 /// An Index suitable for Non-associative Windows
 ///
 /// A backing [VecState] acts as an overflow vector when
@@ -29,8 +31,16 @@ where
     V: Value,
     B: Backend,
 {
-    /// Creates an AppenderIndex
-    pub fn new(capacity: usize, handle: ActiveHandle<B, VecState<V>>) -> Self {
+    /// Creates an AppenderIndex using the default appender size
+    pub fn new(handle: ActiveHandle<B, VecState<V>>) -> Self {
+        AppenderIndex {
+            elements: Vec::with_capacity(DEFAULT_APPENDER_SIZE),
+            handle,
+        }
+    }
+
+    /// Creates an AppenderIndex with specified capacity
+    pub fn with_capacity(capacity: usize, handle: ActiveHandle<B, VecState<V>>) -> Self {
         AppenderIndex {
             elements: Vec::with_capacity(capacity),
             handle,

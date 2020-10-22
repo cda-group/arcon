@@ -32,8 +32,15 @@ where
 {
     /// Creates a ValueIndex
     pub fn new(handle: ActiveHandle<B, ValueState<V>>) -> Self {
+        // Attempt to fetch data from backend, otherwise set to default value..
+        let data = match handle.get() {
+            Ok(Some(v)) => v,
+            Ok(None) => V::default(),
+            Err(_) => V::default(),
+        };
+
         ValueIndex {
-            data: Some(V::default()),
+            data: Some(data),
             modified: false,
             handle,
         }
@@ -48,7 +55,8 @@ where
 
     /// Access the index value through an Option.
     #[inline(always)]
-    pub fn get(&self) -> Option<&V> { self.data.as_ref()
+    pub fn get(&self) -> Option<&V> {
+        self.data.as_ref()
     }
 
     /// Blind insert
@@ -104,8 +112,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::sled::Sled;
-    use crate::backend::Handle;
+    use crate::backend::{sled::Sled, Handle};
     use std::sync::Arc;
 
     #[test]
@@ -115,8 +122,7 @@ mod tests {
         let mut handle = Handle::value("_value");
         backend.register_value_handle(&mut handle);
         let active = handle.activate(backend.clone());
-        let mut index: ValueIndex<u64, Sled> =
-            ValueIndex::new(active);
+        let mut index: ValueIndex<u64, Sled> = ValueIndex::new(active);
         assert_eq!(index.get(), Some(&0u64));
         index.put(10u64);
         assert_eq!(index.get(), Some(&10u64));

@@ -30,13 +30,9 @@ arcon_sled_checkpoints = ["arcon_state/sled_checkpoints"]
 arcon_macros = { version = "0.1", path = "arcon_macros" }
 arcon_error = { version = "0.1", path = "arcon_error" }
 arcon_extra = { version = "0.1", path = "arcon_extra" }
-arcon_state = { version = "0.1", path = "arcon_state"}
+arcon_state = { version = "0.1", path = "arcon_state" }
 kompact = { git = "https://github.com/kompics/kompact.git", branch = "master", features = ["type_erasure"] }
-hierarchical_hash_wheel_timer = "1.0"
 uuid = "0.8"
-static_assertions = "1.1.0"
-itertools = "0.8.2"
-smallbox = { version = "0.8", features = ["coerce"] }
 cfg-if = "0.1.10"
 fxhash = "0.2.1"
 twox-hash = "1.5.0"
@@ -76,7 +72,7 @@ better-panic = {version = "0.2.0", optional = true }
 [dev-dependencies]
 tempfile = "3"
 rand = "0.6.5"
-slog = { version = "2.2", features = ["max_level_error"] }
+slog = { version = "2.2", features = ["max_level_info"] }
 criterion = { version = "0.3", features = ['real_blackbox'] }
 bincode = "1.1.4"
 serde = { version = "1.0.63", features = ["derive"]}

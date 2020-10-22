@@ -1,6 +1,6 @@
 use super::{hash::HashIndex, value::ValueIndex, IndexOps};
 use crate::{
-    backend::{Backend},
+    backend::{handles::ActiveHandle, ValueState, MapState, Backend},
     data::{Key, Value},
     error::Result,
 };
@@ -17,31 +17,31 @@ use std::{cmp::Eq, hash::Hash, sync::Arc};
 /// The Index utilises the [QuadWheelWithOverflow] data structure
 /// in order to manage the timers. The remaining state is kept in
 /// other indexes such as HashIndex/ValueIndex.
-pub struct TimerIndex<K, V>
+pub struct TimerIndex<K, V, B>
 where
     K: Key + Eq + Hash,
     V: Value,
+    B: Backend,
 {
     timer: QuadWheelWithOverflow<K>,
-    timeouts: HashIndex<K, V>,
-    current_time: ValueIndex<u64>,
+    timeouts: HashIndex<K, V, B>,
+    current_time: ValueIndex<u64, B>,
 }
 
-impl<K, V> TimerIndex<K, V>
+impl<K, V, B> TimerIndex<K, V, B>
 where
     K: Key + Eq + Hash,
     V: Value,
+    B: Backend,
 {
-    pub fn new(hash_index_capacity: usize, backend: Arc<BackendContainer<B>>) -> Self {
+    pub fn new(
+        timeouts_handle: ActiveHandle<B, MapState<K, V>>,
+        time_handle: ActiveHandle<B, ValueState<u64>>,
+    ) -> Self {
         Self {
             timer: QuadWheelWithOverflow::default(),
-            timeouts: HashIndex::new(
-                "_timeouts",
-                hash_index_capacity,
-                hash_index_capacity,
-                backend.clone(),
-            ),
-            current_time: ValueIndex::new("_currtime", backend.clone()),
+            timeouts: HashIndex::new(timeouts_handle),
+            current_time: ValueIndex::new(time_handle),
         }
     }
 
@@ -168,7 +168,6 @@ where
     fn persist(&mut self) -> crate::error::Result<()> {
         self.timeouts.persist()?;
         self.current_time.persist()?;
-        // NOTE: Do we need a Backend reference in the timer index it self
         Ok(())
     }
 }

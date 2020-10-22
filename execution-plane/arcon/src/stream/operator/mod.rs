@@ -13,19 +13,19 @@ use crate::{
     stream::channel::strategy::ChannelStrategy,
     util::SafelySendableFn,
 };
-use arcon_state::index::ArconState;
+use arcon_state::{index::ArconState, Backend, TimerIndex};
 use kompact::prelude::ComponentDefinition;
 use prost::Message;
 use std::marker::PhantomData;
 
 /// Defines the methods an `Operator` must implement
-pub trait Operator: Send + Sized {
+pub trait Operator<B: Backend>: Send + Sized {
     /// The type of input elements this operator processes
     type IN: ArconType;
     /// The type of output elements this operator produces
     type OUT: ArconType;
     /// Storage state type for timer facilities
-    type TimerState: Message + Default + PartialEq;
+    type TimerState: Message + Clone + Default + PartialEq;
     /// State type for the Operator
     type OperatorState: ArconState;
 
@@ -33,12 +33,12 @@ pub trait Operator: Send + Sized {
     fn handle_element<CD>(
         &mut self,
         element: ArconElement<Self::IN>,
-        ctx: OperatorContext<Self, CD>,
+        ctx: OperatorContext<Self, B, CD>,
     ) where
         CD: ComponentDefinition + Sized + 'static;
 
     /// Determines how the `Operator` handles timeouts it registered earlier when they are triggered
-    fn handle_timeout<CD>(&self, timeout: Self::TimerState, ctx: OperatorContext<Self, CD>)
+    fn handle_timeout<CD>(&self, timeout: Self::TimerState, ctx: OperatorContext<Self, B, CD>)
     where
         CD: ComponentDefinition + Sized + 'static;
 
@@ -46,59 +46,168 @@ pub trait Operator: Send + Sized {
     fn persist(&mut self) -> Result<(), arcon_state::error::ArconStateError>;
 }
 
-pub struct Map<IN, OUT, F, S>
+// MAP
+// TODO: Move
+
+pub struct Map<IN, OUT, F, S, B>
 where
     IN: ArconType,
     OUT: ArconType,
     F: SafelySendableFn(IN, &mut S) -> OUT,
     S: ArconState,
+    B: Backend,
 {
     state: S,
     udf: F,
     _marker: PhantomData<fn(IN) -> OUT>,
+    _b: PhantomData<B>,
 }
 
+impl<IN, OUT, B> Map<IN, OUT, fn(IN, &mut ()) -> OUT, (), B>
+where
+    IN: ArconType,
+    OUT: ArconType,
+    B: Backend,
+{
+    pub fn new(
+        udf: impl SafelySendableFn(IN) -> OUT,
+    ) -> Map<IN, OUT, impl SafelySendableFn(IN, &mut ()) -> OUT, (), B> {
+        let udf = move |input: IN, _: &mut ()| udf(input);
+        Map {
+            state: (),
+            udf,
+            _marker: Default::default(),
+            _b: PhantomData,
+        }
+    }
+}
 
-impl<IN, OUT, F, S> Map<IN, OUT, F, S>
+impl<IN, OUT, F, S, B> Map<IN, OUT, F, S, B>
 where
     IN: ArconType,
     OUT: ArconType,
     F: SafelySendableFn(IN, &mut S) -> OUT,
     S: ArconState,
+    B: Backend,
 {
     pub fn stateful(state: S, udf: F) -> Self {
         Map {
             state,
             udf,
             _marker: Default::default(),
+            _b: PhantomData,
         }
     }
 }
 
-impl<IN, OUT, F, S> Operator for Map<IN, OUT, F, S>
+impl<IN, OUT, F, S, B> Operator<B> for Map<IN, OUT, F, S, B>
 where
     IN: ArconType,
     OUT: ArconType,
     F: SafelySendableFn(IN, &mut S) -> OUT,
     S: ArconState,
+    B: Backend,
 {
     type IN = IN;
     type OUT = OUT;
     type TimerState = ArconNever;
     type OperatorState = S;
 
-    fn handle_element<CD>(&mut self, element: ArconElement<IN>, mut ctx: OperatorContext<Self, CD>)
-    where
+    fn handle_element<CD>(
+        &mut self,
+        element: ArconElement<IN>,
+        mut ctx: OperatorContext<Self, B, CD>,
+    ) where
         CD: ComponentDefinition + Sized + 'static,
     {
-        let result = (self.udf)(element.data, &mut self.state);
-        let out_elem = ArconElement {
-            data: result,
+        ctx.output(ArconElement {
+            data: (self.udf)(element.data, &mut self.state),
             timestamp: element.timestamp,
-        };
-        ctx.output(ArconEvent::Element(out_elem));
+        });
     }
-    crate::ignore_timeout!();
+
+    crate::ignore_timeout!(B);
+
+    fn persist(&mut self) -> Result<(), arcon_state::error::ArconStateError> {
+        self.state.persist()
+    }
+}
+
+// FILTER
+// TODO: Move
+
+pub struct Filter<IN, F, S, B>
+where
+    IN: ArconType,
+    F: SafelySendableFn(&IN, &mut S) -> bool,
+    S: ArconState,
+    B: Backend,
+{
+    state: S,
+    udf: F,
+    _marker: PhantomData<fn(IN) -> bool>,
+    _b: PhantomData<B>,
+}
+
+impl<IN, B> Filter<IN, fn(&IN, &mut ()) -> bool, (), B>
+where
+    IN: ArconType,
+    B: Backend,
+{
+    pub fn new(
+        udf: impl SafelySendableFn(&IN) -> bool,
+    ) -> Filter<IN, impl SafelySendableFn(&IN, &mut ()) -> bool, (), B> {
+        let udf = move |input: &IN, _: &mut ()| udf(input);
+        Filter {
+            state: (),
+            udf,
+            _marker: Default::default(),
+            _b: PhantomData,
+        }
+    }
+}
+
+impl<IN, F, S, B> Filter<IN, F, S, B>
+where
+    IN: ArconType,
+    F: SafelySendableFn(&IN, &mut S) -> bool,
+    S: ArconState,
+    B: Backend,
+{
+    pub fn stateful(state: S, udf: F) -> Self {
+        Filter {
+            state,
+            udf,
+            _marker: Default::default(),
+            _b: PhantomData,
+        }
+    }
+}
+
+impl<IN, F, S, B> Operator<B> for Filter<IN, F, S, B>
+where
+    IN: ArconType,
+    F: SafelySendableFn(&IN, &mut S) -> bool,
+    S: ArconState,
+    B: Backend,
+{
+    type IN = IN;
+    type OUT = IN;
+    type TimerState = ArconNever;
+    type OperatorState = S;
+
+    fn handle_element<CD>(
+        &mut self,
+        element: ArconElement<IN>,
+        mut ctx: OperatorContext<Self, B, CD>,
+    ) where
+        CD: ComponentDefinition + Sized + 'static,
+    {
+        if (self.udf)(&element.data, &mut self.state) {
+            ctx.output(element);
+        }
+    }
+    crate::ignore_timeout!(B);
 
     fn persist(&mut self) -> Result<(), arcon_state::error::ArconStateError> {
         self.state.persist()
@@ -108,9 +217,12 @@ where
 /// Helper macro to implement an empty ´handle_timeout` function
 #[macro_export]
 macro_rules! ignore_timeout {
-    () => {
-        fn handle_timeout<CD>(&self, _timeout: Self::TimerState, _ctx: OperatorContext<Self, CD>)
-        where
+    ($backend:ty) => {
+        fn handle_timeout<CD>(
+            &self,
+            _timeout: Self::TimerState,
+            _ctx: OperatorContext<Self, $backend, CD>,
+        ) where
             CD: ComponentDefinition + Sized + 'static,
         {
         }
@@ -128,46 +240,55 @@ macro_rules! ignore_persist {
 }
 
 /// Context Available to an Arcon Operator
-pub struct OperatorContext<'a, 'c, OP, CD>
+pub struct OperatorContext<'a, 'c, 'b, OP, B, CD>
 where
-    OP: Operator,
+    OP: Operator<B> + 'static,
+    B: Backend,
     CD: ComponentDefinition + Sized + 'static,
 {
     /// Channel Strategy that is used to pass on events
     channel_strategy: &'c mut ChannelStrategy<OP::OUT>,
+    //timer: &'b mut TimerIndex<u64, OP::TimerState, B>,
     /// A reference to the backing ComponentDefinition
     source: &'a CD,
+    _marker: &'b PhantomData<B>,
 }
 
-impl<'a, 'c, OP, CD> OperatorContext<'a, 'c, OP, CD>
+impl<'a, 'c, 'b, OP, B, CD> OperatorContext<'a, 'c, 'b, OP, B, CD>
 where
-    OP: Operator,
+    OP: Operator<B> + 'static,
+    B: Backend,
     CD: ComponentDefinition + Sized + 'static,
 {
     #[inline]
-    pub fn new(source: &'a CD, channel_strategy: &'c mut ChannelStrategy<OP::OUT>) -> Self {
+    pub fn new(
+        source: &'a CD,
+        //timer: &'b mut TimerIndex<u64, OP::TimerState, B>,
+        channel_strategy: &'c mut ChannelStrategy<OP::OUT>,
+    ) -> Self {
         OperatorContext {
             channel_strategy,
+            //timer,
             source,
+            _marker: &PhantomData,
         }
     }
 
     /// Add an event to the channel strategy
     #[inline]
-    pub fn output(&mut self, event: ArconEvent<OP::OUT>) {
-        self.channel_strategy.add(event, self.source)
+    pub fn output(&mut self, element: ArconElement<OP::OUT>) {
+        self.channel_strategy
+            .add(ArconEvent::Element(element), self.source)
     }
 
     #[inline]
     pub fn schedule_at(
         &mut self,
-        time: u64,
-        entry: OP::TimerState,
+        _time: u64,
+        _entry: OP::TimerState,
     ) -> Result<(), arcon_state::error::ArconStateError> {
         // TODO:  Fix TimerIndex and integrate
-        //self.timer_backend
-        //   .schedule_at(time, entry, self.state_session)
+        //self.timer.schedule_at(time, entry)
         unimplemented!()
     }
-    // TODO: ctx.spawn_async..
 }

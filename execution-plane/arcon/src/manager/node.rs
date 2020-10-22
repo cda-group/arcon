@@ -2,23 +2,18 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
+    buffer::event::PoolInfo,
     data::{ArconMessage, Epoch, Watermark},
+    manager::state::*,
     prelude::{state, NodeID},
-    stream::{
-        channel::strategy::ChannelStrategy,
-        operator::Operator,
-    },
+    stream::{channel::strategy::ChannelStrategy, node::NodeState, operator::Operator},
     util::SafelySendableFn,
-    ArconType,
 };
-use crate::manager::state::*;
 use arcon_error::*;
-use arcon_state::Handle;
+use arcon_state::{ArconState, Backend, Handle, HashIndex, ValueIndex};
 use fxhash::FxHashMap;
 use kompact::{component::AbstractComponent, prelude::*};
 use std::{collections::HashMap, sync::Arc};
-
-pub type CreatedDynamicNode<IN> = Arc<dyn AbstractComponent<Message = ArconMessage<IN>>>;
 
 use crate::stream::node::Node;
 #[cfg(feature = "metrics")]
@@ -39,13 +34,20 @@ pub struct CheckpointRequest(pub NodeID, pub Epoch);
 pub struct CheckpointResponse(pub bool);
 
 /// Enum containing possible local node events
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum NodeEvent {
     #[cfg(feature = "metrics")]
     Metrics(NodeID, NodeMetrics),
     Watermark(NodeID, Watermark),
     Epoch(NodeID, Epoch),
+    //Checkpoint(NodeID, Epoch, KPromise<()>),
     Checkpoint(NodeID, Epoch),
+}
+
+impl Clone for NodeEvent {
+    fn clone(&self) -> Self {
+        unimplemented!("Shouldn't be invoked!");
+    }
 }
 
 /// A [kompact] port for communication
@@ -54,8 +56,6 @@ impl Port for NodeManagerPort {
     type Indication = Never;
     type Request = NodeEvent;
 }
-
-use arcon_state::{ArconState, Backend, HashIndex, ValueIndex};
 
 #[derive(ArconState)]
 pub struct NodeManagerState<B: Backend> {
@@ -81,9 +81,8 @@ pub struct NodeManagerState<B: Backend> {
 /// ```
 #[allow(dead_code)]
 #[derive(ComponentDefinition)]
-pub struct NodeManager<OP, B>
+pub struct NodeManager<B>
 where
-    OP: Operator + 'static,
     B: state::Backend,
 {
     /// Component Context
@@ -94,6 +93,7 @@ where
     description: String,
     /// Port for incoming local events from nodes this manager controls
     manager_port: ProvidedPort<NodeManagerPort>,
+    /// Port for the StateManager component
     state_manager_port: RequiredPort<StateManagerPort>,
     /// Current Node parallelism
     node_parallelism: usize,
@@ -101,39 +101,21 @@ where
     max_node_parallelism: usize,
     /// Current Node IDs that are connected to nodes on this manager
     in_channels: Vec<NodeID>,
-    // Monotonically increasing Node ID index
-    //node_index: u32,
+    /// Monotonically increasing Node ID index
+    node_index: u32,
     /// Active Nodes on this NodeManager
-    nodes: FxHashMap<NodeID, Arc<Component<Node<OP, B>>>>,
+    //nodes: FxHashMap<NodeID, Arc<Component<Node<OP, B>>>>,
     /// State Backend used to persist data
     pub backend: Arc<B>,
     /// Internal manager state
     manager_state: NodeManagerState<B>,
-    /// Function to create a Node
-    node_fn:
-        &'static dyn SafelySendableFn(String, NodeID, ChannelStrategy<OP::OUT>, OP) -> Node<OP, B>,
-    checkpoint_requests: HashMap<NodeID, Ask<CheckpointRequest, bool>>,
-    active_checkpoint: bool,
 }
 
-impl<OP, B> NodeManager<OP, B>
+impl<B> NodeManager<B>
 where
-    OP: Operator + 'static,
     B: state::Backend,
 {
-    pub fn new(
-        description: String,
-        node_fn: &'static dyn SafelySendableFn(
-            String,
-            NodeID,
-            ChannelStrategy<OP::OUT>,
-            OP,
-        ) -> Node<OP, B>,
-        in_channels: Vec<NodeID>,
-        backend: Arc<B>,
-    ) -> Self {
-        let nodes_map: FxHashMap<NodeID, Arc<Component<Node<OP, B>>>> = FxHashMap::default();
-
+    pub fn new(description: String, in_channels: Vec<NodeID>, backend: Arc<B>) -> Self {
         // initialise internal state
         let mut wm_handle = Handle::map("_watermarks");
         let mut epoch_handle = Handle::map("_epochs");
@@ -146,8 +128,8 @@ where
         backend.register_value_handle(&mut curr_epoch_handle);
 
         let manager_state = NodeManagerState {
-            watermarks: HashIndex::new(wm_handle.activate(backend.clone()), 32, 32),
-            epochs: HashIndex::new(epoch_handle.activate(backend.clone()), 32, 32),
+            watermarks: HashIndex::with_capacity(wm_handle.activate(backend.clone()), 64, 64),
+            epochs: HashIndex::with_capacity(epoch_handle.activate(backend.clone()), 64, 64),
             current_watermark: ValueIndex::new(curr_wm_handle.activate(backend.clone())),
             current_epoch: ValueIndex::new(curr_epoch_handle.activate(backend.clone())),
         };
@@ -159,33 +141,37 @@ where
             state_manager_port: RequiredPort::uninitialised(),
             node_parallelism: num_cpus::get(),
             max_node_parallelism: (num_cpus::get() * 2) as usize,
+            node_index: 0,
             in_channels,
             backend,
             manager_state,
-            node_fn,
-            nodes: nodes_map,
-            checkpoint_requests: HashMap::with_capacity(16),
-            active_checkpoint: false,
         }
     }
 
     #[inline]
     fn checkpoint(&mut self) -> ArconResult<()> {
         if let Some(base_dir) = &self.ctx.config()["checkpoint_dir"].as_string() {
+            let curr_epoch = self.manager_state.current_epoch().get().unwrap().epoch;
+
             let checkpoint_dir = format!(
                 "{}/checkpoint_{id}_{epoch}",
                 base_dir,
                 id = self.description,
-                epoch = self
-                    .manager_state
-                    .current_epoch()
-                    .get()
-                    .ok_or_else(|| arcon_err_kind!("current epoch uninitialized"))?
-                    .epoch
+                epoch = curr_epoch,
             );
 
             self.backend.checkpoint(checkpoint_dir.as_ref())?;
-            //self.state_manager_port.trigger(self.description, epoch, checkpoint_dir)
+
+            // Checkpoint complete, send update to the StateManager
+            self.state_manager_port.trigger(StateEvent::Snapshot(
+                self.description.clone(),
+                Snapshot::new(curr_epoch, checkpoint_dir.clone()),
+            ));
+
+            // bump epoch
+            self.manager_state.current_epoch().rmw(|e| {
+                e.epoch += 1;
+            });
 
             debug!(
                 self.ctx.log(),
@@ -197,11 +183,26 @@ where
 
         Ok(())
     }
+
+    fn handle_node_event(&mut self, event: NodeEvent) -> ArconResult<()> {
+        match event {
+            NodeEvent::Watermark(id, w) => {
+                self.manager_state.watermarks.put(id, w)?;
+            }
+            NodeEvent::Epoch(id, e) => {
+                self.manager_state.epochs.put(id, e)?;
+            }
+            NodeEvent::Checkpoint(id, epoch) => {
+                self.checkpoint()?;
+            }
+            _ => {}
+        }
+        Ok(())
+    }
 }
 
-impl<OP, B> ComponentLifecycle for NodeManager<OP, B>
+impl<B> ComponentLifecycle for NodeManager<B>
 where
-    OP: Operator + 'static,
     B: state::Backend,
 {
     fn on_start(&mut self) -> Handled {
@@ -209,6 +210,7 @@ where
             self.ctx.log(),
             "Started NodeManager for {}", self.description,
         );
+        /*
         let manager_port = &mut self.manager_port;
 
         // For each node, connect its NodeManagerPort
@@ -217,12 +219,12 @@ where
                 biconnect_ports(manager_port, &mut cd.node_manager_port);
             });
         }
+        */
         Handled::Ok
     }
 }
-impl<OP, B> Require<StateManagerPort> for NodeManager<OP, B>
+impl<B> Require<StateManagerPort> for NodeManager<B>
 where
-    OP: Operator + 'static,
     B: Backend,
 {
     fn handle(&mut self, _: Never) -> Handled {
@@ -230,31 +232,30 @@ where
     }
 }
 
-impl<OP, B> Provide<StateManagerPort> for NodeManager<OP, B>
+impl<B> Provide<StateManagerPort> for NodeManager<B>
 where
-    OP: Operator + 'static,
     B: Backend,
 {
     fn handle(&mut self, e: StateEvent) -> Handled {
-        trace!(self.log(), "Ignoring node event: {:?}", e);
         Handled::Ok
     }
 }
 
-impl<OP, B> Provide<NodeManagerPort> for NodeManager<OP, B>
+impl<B> Provide<NodeManagerPort> for NodeManager<B>
 where
-    OP: Operator + 'static,
     B: state::Backend,
 {
     fn handle(&mut self, event: NodeEvent) -> Handled {
-        debug!(self.ctx.log(), "Got Event {:?}", event);
+        if let Err(err) = self.handle_node_event(event) {
+            error!(self.ctx.log(), "Failed to handle NodeEvent {:?}", err);
+        }
+
         Handled::Ok
     }
 }
 
-impl<OP, B> Require<NodeManagerPort> for NodeManager<OP, B>
+impl<B> Require<NodeManagerPort> for NodeManager<B>
 where
-    OP: Operator + 'static,
     B: state::Backend,
 {
     fn handle(&mut self, _: Never) -> Handled {
@@ -262,42 +263,15 @@ where
     }
 }
 
-impl<OP, B> Actor for NodeManager<OP, B>
+impl<B> Actor for NodeManager<B>
 where
-    OP: Operator + 'static,
     B: state::Backend,
 {
-    type Message = Ask<CheckpointRequest, bool>;
+    type Message = Never;
     fn receive_local(&mut self, msg: Self::Message) -> Handled {
-        let request: &CheckpointRequest = msg.request();
-        if !self.active_checkpoint {
-            // The sender is first node to initialise checkpoint process
-            //self.checkpoint_requests.insert(request.0, msg);
-            self.checkpoint().unwrap();
-            msg.reply(true).expect("reply");
-            self.active_checkpoint = false;
-            // add Promise to Map and await other nodes if needed.
-            // if self.nodes.len() > 1 {
-            //   self.checkpoint_requests.put(request.0, request);
-            // } else {
-            //   self.checkpoint()?;
-            //   msg.reply(CheckpointResponse(true);
-            // }
-        }
-        // if Node sent Checkpoint Request, add note of it
-        // and check if we still are waiting for more Checkpoint requests
-        // from other nodes.
-        //
-        // If we checkpoint_requests == nodes.len() then
-        // self.backend.checkpoint(...);
-        // Reply to all Checkpoint request...
-        //
-        unreachable!();
+        Handled::Ok
     }
     fn receive_network(&mut self, _: NetMessage) -> Handled {
         unreachable!();
     }
 }
-
-
-

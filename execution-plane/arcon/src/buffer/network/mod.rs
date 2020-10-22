@@ -3,7 +3,7 @@
 
 use crate::allocator::{AllocId, AllocResult, ArconAllocator};
 use arcon_error::*;
-use kompact::prelude::Chunk;
+use kompact::net::buffers::Chunk;
 use std::sync::{Arc, Mutex};
 
 /// A Buffer backed by the [ArconAllocator]

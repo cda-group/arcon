@@ -46,11 +46,11 @@ mod table;
 use self::table::RawTable;
 #[cfg(test)]
 use crate::index::hash::table::TableModIterator;
-use crate::{
-    backend::{Backend},
-    index::hash::table::ProbeModIterator,
-};
+use crate::{backend::Backend, index::hash::table::ProbeModIterator};
 use std::cell::UnsafeCell;
+
+const DEFAULT_READ_LANE_SIZE: usize = 8192;
+const DEFAULT_MOD_LANE_SIZE: usize = 1024;
 
 // Set FxHash to default as most keys tend to be small
 pub type DefaultHashBuilder = fxhash::FxBuildHasher;
@@ -85,8 +85,20 @@ where
     V: Value,
     B: Backend,
 {
-    /// Creates a HashIndex
-    pub fn new(
+    /// Creates a HashIndex with default settings
+    pub fn new(handle: ActiveHandle<B, MapState<K, V>>) -> Self {
+        HashIndex {
+            hash_builder: DefaultHashBuilder::default(),
+            raw_table: UnsafeCell::new(RawTable::with_capacity(
+                DEFAULT_MOD_LANE_SIZE,
+                DEFAULT_READ_LANE_SIZE,
+            )),
+            handle,
+        }
+    }
+
+    /// Creates a HashIndex with specified capacities
+    pub fn with_capacity(
         handle: ActiveHandle<B, MapState<K, V>>,
         mod_capacity: usize,
         read_capacity: usize,
@@ -333,9 +345,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::sled::Sled;
+    use crate::backend::{sled::Sled, Handle};
     use std::sync::Arc;
-    use crate::backend::Handle;
 
     #[test]
     fn basic_test() {
@@ -381,8 +392,7 @@ mod tests {
         let active = handle.activate(backend.clone());
         let capacity = 64;
 
-        let mut hash_index: HashIndex<u64, u64, Sled> =
-            HashIndex::new(active, capacity, capacity);
+        let mut hash_index: HashIndex<u64, u64, Sled> = HashIndex::new(active, capacity, capacity);
         for i in 0..10 {
             hash_index.put(i as u64, i as u64).unwrap();
         }

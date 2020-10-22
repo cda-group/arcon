@@ -1,11 +1,7 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Arcon is a Streaming-first Analytics Engine for the Arc language.
-//!
-//! This crate is not meant to be used directly, but rather relies on
-//! [Arc](https://github.com/cda-group/arc) to construct applications and
-//! [arcon_codegen] to generate the Rust code.
+//! Arcon is a Streaming-first Analytics Engine.
 
 #![feature(unboxed_closures)]
 
@@ -85,7 +81,7 @@ pub mod prelude {
     */
     pub use crate::{
         allocator::{AllocResult, ArconAllocator},
-        buffer::event::{BufferPool, BufferReader, BufferWriter},
+        buffer::event::{BufferPool, PoolInfo, BufferReader, BufferWriter},
         conf::ArconConf,
         data::VersionId,
         pipeline::ArconPipeline,
@@ -131,7 +127,7 @@ pub mod prelude {
     pub use arcon_state::{
         ArconState,
         HashIndex, ValueIndex, AppenderIndex,
-        AggregatorState, Backend as _, Handle, MapState, ReducerState, ValueState,
+        AggregatorState, Backend, Handle, MapState, ReducerState, ValueState,
         VecState,
     };
     #[cfg(feature = "rayon")]

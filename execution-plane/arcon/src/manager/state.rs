@@ -13,9 +13,23 @@ pub enum StateEvent {
 
 #[derive(Clone, Debug)]
 pub struct Snapshot {
-    epoch: u64,
-    snapshot_path: String,
-    backend_type: String,
+    pub epoch: u64,
+    pub snapshot_path: String,
+}
+
+impl Snapshot {
+    pub fn new(epoch: u64, snapshot_path: String) -> Self {
+        Snapshot {
+            epoch,
+            snapshot_path,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct SnapshotRef {
+    pub state_id: StateID,
+    pub snapshot: Snapshot,
 }
 
 pub struct StateManagerPort {}
@@ -33,6 +47,8 @@ pub struct StateManager {
     manager_port: ProvidedPort<StateManagerPort>,
     /// Snapshot Catalog
     catalog: FxHashMap<StateID, Snapshot>,
+    /// A map of subscribers per State ID
+    pub(crate) subscribers: FxHashMap<StateID, Vec<ActorRefStrong<SnapshotRef>>>,
 }
 
 impl StateManager {
@@ -41,6 +57,7 @@ impl StateManager {
             ctx: ComponentContext::uninitialised(),
             manager_port: ProvidedPort::uninitialised(),
             catalog: FxHashMap::default(),
+            subscribers: FxHashMap::default(),
         }
     }
 }
@@ -51,13 +68,16 @@ impl Provide<StateManagerPort> for StateManager {
 
         match event {
             StateEvent::Snapshot(id, snapshot) => {
-                self.catalog.insert(id, snapshot);
-                /*
-                if self.subscribers.contains(&id) {
-                    //
-                    // self.send SnapshotReference to subscriber
+                if let Some(subscribers) = self.subscribers.get(&id) {
+                    let state_ref = SnapshotRef {
+                        state_id: id.clone(),
+                        snapshot: snapshot.clone(),
+                    };
+                    for sub in subscribers {
+                        sub.tell(state_ref.clone());
+                    }
                 }
-                */
+                self.catalog.insert(id, snapshot);
             }
         }
         Handled::Ok
