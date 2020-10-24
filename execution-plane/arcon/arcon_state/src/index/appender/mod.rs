@@ -112,8 +112,7 @@ mod tests {
         let mut vec_handle = Handle::vec("_appender");
         backend.register_vec_handle(&mut vec_handle);
         let active_handle = vec_handle.activate(backend.clone());
-        let capacity = 524;
-        let mut index: AppenderIndex<u64, Sled> = AppenderIndex::new(capacity, active_handle);
+        let mut index: AppenderIndex<u64, Sled> = AppenderIndex::new(active_handle);
 
         for i in 0..1024 {
             index.append(i as u64).unwrap();

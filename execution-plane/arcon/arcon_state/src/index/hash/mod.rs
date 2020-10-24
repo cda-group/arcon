@@ -359,7 +359,7 @@ mod tests {
         let mod_capacity = 1024;
         let read_capacity = 1024;
         let mut hash_index: HashIndex<u64, u64, Sled> =
-            HashIndex::new(active, mod_capacity, read_capacity);
+            HashIndex::with_capacity(active, mod_capacity, read_capacity);
         for i in 0..1024 {
             hash_index.put(i as u64, i as u64).unwrap();
             let key: u64 = i as u64;
@@ -392,7 +392,8 @@ mod tests {
         let active = handle.activate(backend.clone());
         let capacity = 64;
 
-        let mut hash_index: HashIndex<u64, u64, Sled> = HashIndex::new(active, capacity, capacity);
+        let mut hash_index: HashIndex<u64, u64, Sled> =
+            HashIndex::with_capacity(active, capacity, capacity);
         for i in 0..10 {
             hash_index.put(i as u64, i as u64).unwrap();
         }

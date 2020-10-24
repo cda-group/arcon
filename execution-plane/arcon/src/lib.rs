@@ -28,16 +28,6 @@ pub use twox_hash::XxHash64;
 
 // Public Interface
 
-/// Arcon Configuration
-pub mod conf;
-/// Arcon data types, serialisers/deserialisers
-pub mod data;
-/// Module containing different runtime managers
-pub mod manager;
-/// Utilities for creating an Arcon pipeline
-pub mod pipeline;
-/// Contains the core stream logic
-pub mod stream;
 /// Arcon event time facilities
 //pub mod timer;
 
@@ -47,9 +37,19 @@ pub mod stream;
 mod allocator;
 /// Arcon buffer implementations
 mod buffer;
+/// Arcon Configuration
+pub mod conf;
+/// Arcon data types, serialisers/deserialisers
+pub mod data;
+/// Module containing different runtime managers
+pub mod manager;
 #[cfg(feature = "metrics")]
 /// Arcon metrics
 mod metrics;
+/// Utilities for creating an Arcon pipeline
+pub mod pipeline;
+/// Contains the core stream logic
+pub mod stream;
 /// Test module containing some more complex unit tests
 #[cfg(test)]
 mod test;
@@ -81,7 +81,7 @@ pub mod prelude {
     */
     pub use crate::{
         allocator::{AllocResult, ArconAllocator},
-        buffer::event::{BufferPool, PoolInfo, BufferReader, BufferWriter},
+        buffer::event::{BufferPool, BufferReader, BufferWriter, PoolInfo},
         conf::ArconConf,
         data::VersionId,
         pipeline::ArconPipeline,
@@ -93,19 +93,8 @@ pub mod prelude {
                 },
                 Channel,
             },
-            node::{debug::DebugNode, Node},
-            node::{NodeDescriptor},
-            /*
-            operator::{
-                function::*,
-                sink::local_file::LocalFileSink,
-                window::{AppenderWindow, EventTimeWindowAssigner, IncrementalWindow, Window},
-                Operator,
-            },
-            source::{collection::CollectionSource, local_file::LocalFileSource, SourceContext},
-            */
+            node::{debug::DebugNode, Node, NodeDescriptor},
         },
-        //timer,
     };
     pub use kompact::prelude::SerId;
 
@@ -125,10 +114,8 @@ pub mod prelude {
     pub use arcon_state as state;
 
     pub use arcon_state::{
-        ArconState,
-        HashIndex, ValueIndex, AppenderIndex,
-        AggregatorState, Backend, Handle, MapState, ReducerState, ValueState,
-        VecState,
+        AggregatorState, AppenderIndex, ArconState, Backend, Handle, HashIndex, MapState,
+        ReducerState, ValueIndex, ValueState, VecState,
     };
     #[cfg(feature = "rayon")]
     pub use rayon::prelude::*;

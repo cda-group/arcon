@@ -10,7 +10,7 @@ use hierarchical_hash_wheel_timer::{
 };
 
 use core::time::Duration;
-use std::{cmp::Eq, hash::Hash, sync::Arc};
+use std::{cmp::Eq, hash::Hash};
 
 /// An Index for Stream Timers
 ///
@@ -172,6 +172,7 @@ where
     }
 }
 
+/*
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -192,3 +193,4 @@ mod tests {
         assert_eq!(evs.len(), 1);
     }
 }
+*/

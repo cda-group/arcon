@@ -65,24 +65,24 @@ pub struct NodeState<OP: Operator<B> + 'static, B: Backend> {
     // Durable Timer structure
     timer: TimerIndex<u64, OP::TimerState, B>,
     /// Map of senders and their corresponding Watermark
-    #[empheral]
+    #[ephemeral]
     watermarks: FxHashMap<NodeID, Watermark>,
     /// Map of blocked senders
-    #[empheral]
+    #[ephemeral]
     blocked_channels: FxHashMap<NodeID, ()>,
     /// Current Watermark value for the Node
-    #[empheral]
+    #[ephemeral]
     current_watermark: Watermark,
     /// Current Epoch value for the Node
-    #[empheral]
+    #[ephemeral]
     current_epoch: Epoch,
     /// Vector of expected senders
     ///
     /// Used to validate message and separate channels
-    #[empheral]
+    #[ephemeral]
     in_channels: Vec<NodeID>,
     /// Identifier for the Node
-    #[empheral]
+    #[ephemeral]
     id: NodeID,
 }
 

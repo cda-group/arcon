@@ -7,33 +7,33 @@ extern crate quote;
 use proc_macro::TokenStream;
 use syn::{parse_macro_input, DeriveInput};
 
-#[proc_macro_derive(ArconState, attributes(empheral))]
+#[proc_macro_derive(ArconState, attributes(ephemeral))]
 pub fn arcon_state(input: TokenStream) -> TokenStream {
     let item = parse_macro_input!(input as DeriveInput);
     let name = &item.ident;
 
     if let syn::Data::Struct(ref s) = item.data {
         let mut idents = Vec::new();
-        let mut empherals = Vec::new();
+        let mut ephemerals = Vec::new();
 
         match s.fields {
             syn::Fields::Named(ref fields_named) => {
                 for field in fields_named.named.iter() {
-                    let mut empheral = false;
+                    let mut ephemeral= false;
                     for attr in field.attrs.iter() {
                         let meta = attr.parse_meta().unwrap();
                         match meta {
                             syn::Meta::Path(ref path)
-                                if path.get_ident().unwrap().to_string() == "empheral" =>
+                                if path.get_ident().unwrap().to_string() == "ephemeral" =>
                             {
                                 idents.push((field.ident.clone(), &field.ty));
-                                empherals.push((field.ident.clone(), &field.ty));
-                                empheral = true;
+                                ephemerals.push((field.ident.clone(), &field.ty));
+                                ephemeral = true;
                             }
                             _ => (),
                         }
                     }
-                    if !empheral {
+                    if !ephemeral {
                         idents.push((field.ident.clone(), &field.ty));
                     }
                 }
@@ -48,8 +48,8 @@ pub fn arcon_state(input: TokenStream) -> TokenStream {
             let ident = &data.0;
             let ty = &data.1;
 
-            // add only non-empheral fields
-            if !empherals.contains(&(data)) {
+            // add only non-ephemeral fields
+            if !ephemerals.contains(&(data)) {
                 let field_gen = quote! { self.#ident.persist()?; };
                 persist_quotes.push(field_gen);
             }

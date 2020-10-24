@@ -16,7 +16,7 @@ use std::{
 #[derive(ArconState)]
 pub struct MapStateOne<B: Backend> {
     events: AppenderIndex<u32, B>,
-    #[empheral]
+    #[ephemeral]
     c: u64,
 }
 
@@ -106,7 +106,7 @@ fn poc_test() {
         state.rolling_counter().rmw(|v| {
             *v += 1;
         });
-        x
+        x * 2
     }
 
     // Set up Map Node

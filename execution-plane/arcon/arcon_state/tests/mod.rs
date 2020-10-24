@@ -12,7 +12,7 @@ pub struct StreamingState<B: Backend> {
     watermark: ValueIndex<u64, B>,
     epoch: ValueIndex<u64, B>,
     counters: HashIndex<u64, u64, B>,
-    #[empheral]
+    #[ephemeral]
     emph: u64,
 }
 
@@ -35,7 +35,7 @@ fn streaming_state_test() {
     let mut state = StreamingState {
         watermark: ValueIndex::new(active_watermark_handle),
         epoch: ValueIndex::new(active_epoch_handle),
-        counters: HashIndex::new(active_counters_handle, 1024, 1024),
+        counters: HashIndex::new(active_counters_handle),
         emph: 0,
     };
 

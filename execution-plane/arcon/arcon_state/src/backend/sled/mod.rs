@@ -309,8 +309,7 @@ mod tests {
     #[test]
     fn test_sled_checkpoints() {
         let dir = TempDir::new().unwrap();
-        let mut sled = Sled::create(dir.path()).unwrap();
-        let sled = sled.get_mut();
+        let sled = Sled::create(dir.path()).unwrap();
 
         sled.db.insert(b"a", b"1").unwrap();
         sled.db.insert(b"b", b"2").unwrap();
@@ -324,8 +323,7 @@ mod tests {
 
         sled.checkpoint(chkp_dir.path()).unwrap();
 
-        let mut restored = Sled::restore(restore_dir.path(), chkp_dir.path()).unwrap();
-        let restored = restored.get_mut();
+        let restored = Sled::restore(restore_dir.path(), chkp_dir.path()).unwrap();
 
         assert!(!sled.was_restored());
         assert!(restored.was_restored());
