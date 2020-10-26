@@ -1,0 +1,8 @@
+[package]
+name = "arcon_allocator"
+version = "0.1.0"
+authors = ["Max Meldrum <mmeldrum@kth.se>"]
+edition = "2018"
+
+[dependencies]
+fxhash = "0.2.1"

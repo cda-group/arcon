@@ -1,7 +1,7 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::allocator::{AllocId, AllocResult, ArconAllocator};
+use arcon_allocator::{AllocId, AllocResult, Allocator};
 use arcon_error::*;
 use crossbeam_utils::CachePadded;
 use std::sync::{
@@ -9,7 +9,7 @@ use std::sync::{
     Arc, Mutex,
 };
 
-/// A reusable buffer allocated through [ArconAllocator]
+/// A reusable buffer allocated through [Allocator]
 ///
 /// Assumes a single-writer, single-reader setup.
 #[derive(Debug)]
@@ -19,7 +19,7 @@ pub struct EventBuffer<T> {
     /// Reference to the allocator
     ///
     /// Used to dealloc `ptr` when the EventBuffer is dropped
-    allocator: Arc<Mutex<ArconAllocator>>,
+    allocator: Arc<Mutex<Allocator>>,
     /// A unique identifier for the allocation
     id: AllocId,
     /// How many data elements there are in `ptr`
@@ -32,7 +32,7 @@ impl<T> EventBuffer<T> {
     /// Creates a new EventBuffer
     pub fn new(
         capacity: usize,
-        allocator: Arc<Mutex<ArconAllocator>>,
+        allocator: Arc<Mutex<Allocator>>,
     ) -> ArconResult<EventBuffer<T>> {
         let mut a = allocator.lock().unwrap();
 
@@ -302,7 +302,7 @@ pub struct PoolInfo {
     pub(crate) buffer_size: usize,
     pub(crate) capacity: usize,
     pub(crate) limit: usize,
-    pub(crate) allocator: Arc<Mutex<ArconAllocator>>,
+    pub(crate) allocator: Arc<Mutex<Allocator>>,
 }
 
 impl PoolInfo {
@@ -310,7 +310,7 @@ impl PoolInfo {
         buffer_size: usize,
         capacity: usize,
         limit: usize,
-        allocator: Arc<Mutex<ArconAllocator>>,
+        allocator: Arc<Mutex<Allocator>>,
     ) -> PoolInfo {
         PoolInfo {
             buffer_size,
@@ -324,8 +324,8 @@ impl PoolInfo {
 /// A preallocated pool of EventBuffers
 #[allow(dead_code)]
 pub struct BufferPool<T> {
-    /// Reference to an ArconAllocator
-    allocator: Arc<Mutex<ArconAllocator>>,
+    /// Reference to an Arcon Allocator
+    allocator: Arc<Mutex<Allocator>>,
     /// Size per buffer
     buffer_size: usize,
     /// Vec of buffers in the pool
@@ -339,7 +339,7 @@ impl<T> BufferPool<T> {
     pub fn new(
         capacity: usize,
         buffer_size: usize,
-        allocator: Arc<Mutex<ArconAllocator>>,
+        allocator: Arc<Mutex<Allocator>>,
     ) -> ArconResult<BufferPool<T>> {
         let mut buffers: Vec<Arc<EventBuffer<T>>> = Vec::with_capacity(capacity);
 
@@ -421,7 +421,7 @@ mod tests {
     #[test]
     fn event_buffer_test() {
         let total_bytes = 1024;
-        let allocator = Arc::new(Mutex::new(ArconAllocator::new(total_bytes)));
+        let allocator = Arc::new(Mutex::new(Allocator::new(total_bytes)));
         let items: Vec<u64> = vec![10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
 
         {
@@ -451,7 +451,7 @@ mod tests {
 
     #[test]
     fn buffer_pool_test() {
-        let allocator = Arc::new(Mutex::new(ArconAllocator::new(10024)));
+        let allocator = Arc::new(Mutex::new(Allocator::new(10024)));
         let buffer_size = 100;
         let pool_capacity = 2;
         let mut pool: BufferPool<u64> =

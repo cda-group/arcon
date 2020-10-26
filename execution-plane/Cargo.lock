@@ -68,6 +68,7 @@ version = "0.1.3"
 dependencies = [
  "abomonation",
  "abomonation_derive",
+ "arcon_allocator",
  "arcon_error",
  "arcon_extra",
  "arcon_macros",
@@ -105,6 +106,13 @@ dependencies = [
  "tui",
  "twox-hash",
  "uuid",
+]
+
+[[package]]
+name = "arcon_allocator"
+version = "0.1.0"
+dependencies = [
+ "fxhash",
 ]
 
 [[package]]

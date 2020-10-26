@@ -33,8 +33,6 @@ pub use twox_hash::XxHash64;
 
 // Internal modules
 
-/// Allocator for message buffers, network buffers, state backends
-mod allocator;
 /// Arcon buffer implementations
 mod buffer;
 /// Arcon Configuration
@@ -59,15 +57,15 @@ mod tui;
 /// Internal Arcon Utilities
 mod util;
 
-/// A module containing test utilities such as a global ArconAllocator
+/// A module containing test utilities such as a global Arcon Allocator
 #[cfg(test)]
 pub mod test_utils {
-    use crate::allocator::ArconAllocator;
+    use arcon_allocator::Allocator;
     use once_cell::sync::Lazy;
     use std::sync::{Arc, Mutex};
 
-    pub static ALLOCATOR: Lazy<Arc<Mutex<ArconAllocator>>> =
-        Lazy::new(|| Arc::new(Mutex::new(ArconAllocator::new(1073741824))));
+    pub static ALLOCATOR: Lazy<Arc<Mutex<Allocator>>> =
+        Lazy::new(|| Arc::new(Mutex::new(Allocator::new(1073741824))));
 }
 
 /// Helper module that imports everything related to arcon into scope
@@ -80,7 +78,6 @@ pub mod prelude {
     };
     */
     pub use crate::{
-        allocator::{AllocResult, ArconAllocator},
         buffer::event::{BufferPool, BufferReader, BufferWriter, PoolInfo},
         conf::ArconConf,
         data::VersionId,

@@ -3,7 +3,10 @@
 
 use arcon_error::*;
 use hocon::HoconLoader;
-use kompact::prelude::{DeadletterBox, KompactConfig, NetworkConfig};
+use kompact::{
+    net::buffers::BufferConfig,
+    prelude::{DeadletterBox, KompactConfig, NetworkConfig},
+};
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
@@ -34,9 +37,6 @@ pub struct ArconConf {
     /// Max amount of bytes allowed to be allocated by the ArconAllocator
     #[serde(default = "allocator_capacity_default")]
     pub allocator_capacity: usize,
-    /// Size of Network Buffers
-    #[serde(default = "network_buffer_size_default")]
-    pub network_buffer_size: usize,
     /// Amount of threads for Kompact's threadpool
     #[serde(default = "kompact_threads_default")]
     pub kompact_threads: usize,
@@ -51,6 +51,14 @@ pub struct ArconConf {
     /// It is set as optional as it is not necessary for local deployments
     #[serde(default = "kompact_network_host_default")]
     pub kompact_network_host: Option<String>,
+    #[serde(default = "kompact_chunk_size_default")]
+    pub kompact_chunk_size: usize,
+    #[serde(default = "kompact_initial_chunk_count_default")]
+    pub kompact_initial_chunk_count: usize,
+    #[serde(default = "kompact_max_chunk_count_default")]
+    pub kompact_max_chunk_count: usize,
+    #[serde(default = "kompact_encode_buf_min_free_space_default")]
+    pub kompact_encode_buf_min_free_space: usize,
 }
 
 impl ArconConf {
@@ -62,6 +70,7 @@ impl ArconConf {
             "{{ checkpoint_dir = {:?}, node_metrics_interval = {} }}",
             self.checkpoint_dir, self.node_metrics_interval
         );
+
         cfg.load_config_str(component_cfg);
         cfg.threads(self.kompact_threads);
         cfg.throughput(self.kompact_throughput);
@@ -69,8 +78,18 @@ impl ArconConf {
 
         // Set up Kompact network only if we are gonna use it..
         if let Some(host) = &self.kompact_network_host {
+            let mut buffer_config = BufferConfig::default();
+
+            buffer_config.chunk_size(self.kompact_chunk_size);
+            buffer_config.max_chunk_count(self.kompact_max_chunk_count);
+            buffer_config.initial_chunk_count(self.kompact_initial_chunk_count);
+            buffer_config.encode_buf_min_free_space(self.kompact_encode_buf_min_free_space);
+
             let sock_addr = host.parse().unwrap();
-            cfg.system_components(DeadletterBox::new, NetworkConfig::new(sock_addr).build());
+            cfg.system_components(
+                DeadletterBox::new,
+                NetworkConfig::with_buffer_config(sock_addr, buffer_config).build(),
+            );
         }
 
         cfg
@@ -84,7 +103,6 @@ impl ArconConf {
             watermark_interval: watermark_interval_default(),
             node_metrics_interval: node_metrics_interval_default(),
             buffer_pool_size: buffer_pool_size_default(),
-            network_buffer_size: network_buffer_size_default(),
             buffer_pool_limit: buffer_pool_limit_default(),
             channel_batch_size: channel_batch_size_default(),
             allocator_capacity: allocator_capacity_default(),
@@ -92,6 +110,10 @@ impl ArconConf {
             kompact_throughput: kompact_throughput_default(),
             kompact_msg_priority: kompact_msg_priority_default(),
             kompact_network_host: kompact_network_host_default(),
+            kompact_chunk_size: kompact_chunk_size_default(),
+            kompact_max_chunk_count: kompact_max_chunk_count_default(),
+            kompact_initial_chunk_count: kompact_initial_chunk_count_default(),
+            kompact_encode_buf_min_free_space: kompact_encode_buf_min_free_space_default(),
         }
     }
 
@@ -147,10 +169,6 @@ fn channel_batch_size_default() -> usize {
     248
 }
 
-fn network_buffer_size_default() -> usize {
-    64000
-}
-
 fn allocator_capacity_default() -> usize {
     // 500 MB
     524288000
@@ -170,6 +188,22 @@ fn kompact_msg_priority_default() -> f32 {
 
 fn kompact_network_host_default() -> Option<String> {
     None
+}
+
+fn kompact_chunk_size_default() -> usize {
+    128000
+}
+
+fn kompact_max_chunk_count_default() -> usize {
+    128
+}
+
+fn kompact_initial_chunk_count_default() -> usize {
+    2
+}
+
+fn kompact_encode_buf_min_free_space_default() -> usize {
+    64
 }
 
 #[cfg(test)]
@@ -197,7 +231,6 @@ mod tests {
         assert_eq!(conf.node_metrics_interval, node_metrics_interval_default());
         assert_eq!(conf.channel_batch_size, channel_batch_size_default());
         assert_eq!(conf.buffer_pool_size, buffer_pool_size_default());
-        assert_eq!(conf.network_buffer_size, network_buffer_size_default());
         assert_eq!(conf.allocator_capacity, allocator_capacity_default());
         assert_eq!(conf.kompact_threads, kompact_threads_default());
         assert_eq!(conf.kompact_throughput, kompact_throughput_default());

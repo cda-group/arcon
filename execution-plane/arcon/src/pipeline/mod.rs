@@ -4,8 +4,8 @@
 #[cfg(feature = "arcon_tui")]
 use crate::tui::{component::TuiComponent, widgets::node::Node as TuiNode};
 
+use arcon_allocator::Allocator;
 use crate::{
-    allocator::ArconAllocator,
     buffer::event::PoolInfo,
     conf::ArconConf,
     manager::{
@@ -27,7 +27,7 @@ pub struct ArconPipeline {
     /// Arcon configuration for this pipeline
     conf: ArconConf,
     /// Arcon allocator for this pipeline
-    allocator: Arc<Mutex<ArconAllocator>>,
+    allocator: Arc<Mutex<Allocator>>,
     /// NodeManagers launched on top of this pipeline
     //node_managers: FxHashMap<String, ActorRefStrong<NodeEvent>>,
     /// StateManager component for this pipeline
@@ -49,7 +49,7 @@ impl ArconPipeline {
     /// Creates a new ArconPipeline using the default ArconConf
     pub fn new() -> ArconPipeline {
         let conf = ArconConf::default();
-        let allocator = Arc::new(Mutex::new(ArconAllocator::new(conf.allocator_capacity)));
+        let allocator = Arc::new(Mutex::new(Allocator::new(conf.allocator_capacity)));
         #[cfg(feature = "arcon_tui")]
         let (system, tui_component, arcon_receiver) = ArconPipeline::setup(&conf);
         #[cfg(not(feature = "arcon_tui"))]
@@ -70,7 +70,7 @@ impl ArconPipeline {
 
     /// Creates a new ArconPipeline using the given ArconConf
     pub fn with_conf(conf: ArconConf) -> ArconPipeline {
-        let allocator = Arc::new(Mutex::new(ArconAllocator::new(conf.allocator_capacity)));
+        let allocator = Arc::new(Mutex::new(Allocator::new(conf.allocator_capacity)));
         #[cfg(feature = "arcon_tui")]
         let (system, tui_component, arcon_receiver) = ArconPipeline::setup(&conf);
         #[cfg(not(feature = "arcon_tui"))]

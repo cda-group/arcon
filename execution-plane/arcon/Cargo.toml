@@ -31,6 +31,7 @@ arcon_macros = { version = "0.1", path = "arcon_macros" }
 arcon_error = { version = "0.1", path = "arcon_error" }
 arcon_extra = { version = "0.1", path = "arcon_extra" }
 arcon_state = { version = "0.1", path = "arcon_state" }
+arcon_allocator = { version = "0.1", path = "arcon_allocator" }
 kompact = { git = "https://github.com/kompics/kompact.git", branch = "master", features = ["type_erasure"] }
 uuid = "0.8"
 cfg-if = "0.1.10"

@@ -14,7 +14,7 @@ pub type AllocPtr = *mut u8;
 pub enum AllocResult {
     /// A Successful allocation
     Alloc(AllocId, AllocPtr),
-    /// The ArconAllocator is Out-of-memory
+    /// The Allocator is Out-of-memory
     ///
     /// Returns how many bytes are currently available for allocation
     ArconOOM(usize),
@@ -26,14 +26,14 @@ pub enum AllocResult {
     CapacityErr(String),
 }
 
-/// An Allocator for [arcon]
+/// An Allocator for arcon.
 ///
 /// The allocator is not meant to handle all heap allocations
 /// during the execution. However, it is intended to be used to manage
-/// memory for different sections of [arcon]. This includes message buffers,
-/// network buffers, state backends...
+/// memory for different sections of the runtime. This includes message buffers,
+/// network buffers, and state indexes.
 #[derive(Debug)]
-pub struct ArconAllocator {
+pub struct Allocator {
     /// HashMap keeping track of allocations
     allocations: FxHashMap<AllocId, (AllocPtr, Layout)>,
     /// Memory limit
@@ -46,10 +46,10 @@ pub struct ArconAllocator {
     curr_alloc: usize,
 }
 
-impl ArconAllocator {
-    /// Creates a new ArconAllocator with the given memory limit size
-    pub fn new(limit: usize) -> ArconAllocator {
-        ArconAllocator {
+impl Allocator {
+    /// Creates a new Allocator with the given memory limit size
+    pub fn new(limit: usize) -> Allocator {
+        Allocator {
             allocations: FxHashMap::default(),
             limit,
             alloc_epoch: 1,
@@ -122,7 +122,7 @@ impl ArconAllocator {
     }
 }
 
-impl Drop for ArconAllocator {
+impl Drop for Allocator {
     fn drop(&mut self) {
         // Just to make sure we are not leaving any outstanding allocations
         let ids: Vec<AllocId> = self.allocations.keys().copied().collect();
@@ -134,7 +134,7 @@ impl Drop for ArconAllocator {
     }
 }
 
-unsafe impl Send for ArconAllocator {}
+unsafe impl Send for Allocator {}
 
 #[cfg(test)]
 mod tests {
@@ -144,7 +144,7 @@ mod tests {
     #[test]
     fn simple_allocator_test() {
         let total_bytes = 1024;
-        let allocator = Arc::new(Mutex::new(ArconAllocator::new(total_bytes)));
+        let allocator = Arc::new(Mutex::new(Allocator::new(total_bytes)));
 
         let mut a = allocator.lock().unwrap();
 

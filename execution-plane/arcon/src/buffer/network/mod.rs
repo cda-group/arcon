@@ -1,7 +1,7 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::allocator::{AllocId, AllocResult, ArconAllocator};
+use arcon_allocator::{AllocId, AllocResult, Allocator};
 use arcon_error::*;
 use kompact::net::buffers::Chunk;
 use std::sync::{Arc, Mutex};
@@ -15,7 +15,7 @@ pub(crate) struct NetworkBuffer {
     /// Reference to the allocator
     ///
     /// Used to dealloc `ptr` when the NetworkBuffer is dropped
-    allocator: Arc<Mutex<ArconAllocator>>,
+    allocator: Arc<Mutex<Allocator>>,
     /// A unique identifier for the allocation
     id: AllocId,
     /// How many data elements there are in `ptr`
@@ -28,7 +28,7 @@ impl NetworkBuffer {
     #[allow(dead_code)]
     pub fn new(
         capacity: usize,
-        allocator: Arc<Mutex<ArconAllocator>>,
+        allocator: Arc<Mutex<Allocator>>,
     ) -> ArconResult<NetworkBuffer> {
         let mut a = allocator.lock().unwrap();
 
@@ -79,7 +79,7 @@ mod tests {
     fn network_buffer_test() {
         // This test does not do much. Just need to ensure allocation and the drop of the NetworkBuffer works correctly.
         let total_bytes = 1024;
-        let allocator = Arc::new(Mutex::new(ArconAllocator::new(total_bytes)));
+        let allocator = Arc::new(Mutex::new(Allocator::new(total_bytes)));
         {
             let buffer: NetworkBuffer = NetworkBuffer::new(512, allocator.clone()).unwrap();
             assert_eq!(buffer.capacity(), 512);
