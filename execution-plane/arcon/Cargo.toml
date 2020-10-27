@@ -22,7 +22,7 @@ quiet = ["slog"]
 metrics = []
 
 # state features
-#arcon_rocksdb = ["arcon_state/rocks"]
+arcon_rocksdb = ["arcon_state/rocks"]
 arcon_sled = ["arcon_state/sled"]
 arcon_sled_checkpoints = ["arcon_state/sled_checkpoints"]
 

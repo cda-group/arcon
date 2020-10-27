@@ -28,26 +28,24 @@ pub use twox_hash::XxHash64;
 
 // Public Interface
 
-/// Arcon event time facilities
-//pub mod timer;
+/// Arcon Configuration
+pub mod conf;
+/// Utilities for creating an Arcon pipeline
+pub mod pipeline;
 
 // Internal modules
 
 /// Arcon buffer implementations
 mod buffer;
-/// Arcon Configuration
-pub mod conf;
 /// Arcon data types, serialisers/deserialisers
-pub mod data;
+mod data;
 /// Module containing different runtime managers
-pub mod manager;
+mod manager;
 #[cfg(feature = "metrics")]
 /// Arcon metrics
 mod metrics;
-/// Utilities for creating an Arcon pipeline
-pub mod pipeline;
 /// Contains the core stream logic
-pub mod stream;
+mod stream;
 /// Test module containing some more complex unit tests
 #[cfg(test)]
 mod test;

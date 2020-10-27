@@ -201,7 +201,7 @@ where
         self.handle_events(message.sender, message.events)
     }
 
-    /// Handle a local ArconMessage that is backed by the [ArconAllocator]
+    /// Handle a local ArconMessage that is backed by an arcon allocator
     #[inline]
     fn handle_message(&mut self, message: ArconMessage<OP::IN>) -> ArconResult<()> {
         if !self.node_state.in_channels.contains(&message.sender) {
@@ -250,7 +250,7 @@ where
                     }
 
                     unsafe {
-                        (*self.operator.get()).handle_element(e, make_context!(self));
+                        (*self.operator.get()).handle_element(e, make_context!(self))?;
                     };
                 }
                 ArconEvent::Watermark(w) => {

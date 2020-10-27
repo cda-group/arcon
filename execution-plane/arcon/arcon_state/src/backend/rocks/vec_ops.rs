@@ -25,7 +25,6 @@ impl VecOps for Rocks {
         handle: &Handle<VecState<T>, IK, N>,
         value: T,
     ) -> Result<()> {
-        let backend = self.initialized_mut()?;
         let key = handle.serialize_metakeys()?;
 
         let mut serialized = Vec::with_capacity(
@@ -34,11 +33,11 @@ impl VecOps for Rocks {
         fixed_bytes::serialize_into(&mut serialized, &1usize)?;
         protobuf::serialize_into(&mut serialized, &value)?;
 
-        let cf = backend.get_cf_handle(handle.id)?;
+        let cf = self.get_cf_handle(handle.id)?;
         // See the vec_merge function in this module. It is set as the merge operator for every
         // vec state.
-        Ok(backend
-            .db
+        Ok(self
+            .db()
             .merge_cf_opt(cf, key, serialized, &default_write_opts())?)
     }
 
@@ -127,7 +126,6 @@ impl VecOps for Rocks {
         handle: &Handle<VecState<T>, IK, N>,
         values: impl IntoIterator<Item = T>,
     ) -> Result<()> {
-        let backend = self.initialized_mut()?;
         let key = handle.serialize_metakeys()?;
 
         // figuring out the correct capacity would require iterating through `values`, but we
@@ -148,9 +146,8 @@ impl VecOps for Rocks {
         // impl for Vec starts at the end and extends it, so we want the first one
         fixed_bytes::serialize_into(&mut serialized.as_mut_slice(), &len)?;
 
-        let cf = backend.get_cf_handle(handle.id)?;
-        backend
-            .db
+        let cf = self.get_cf_handle(handle.id)?;
+        self.db()
             .merge_cf_opt(cf, key, serialized, &default_write_opts())?;
 
         Ok(())

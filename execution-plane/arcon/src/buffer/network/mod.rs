@@ -26,10 +26,7 @@ impl NetworkBuffer {
     /// Creates a new NetworkBuffer
     #[inline]
     #[allow(dead_code)]
-    pub fn new(
-        capacity: usize,
-        allocator: Arc<Mutex<Allocator>>,
-    ) -> ArconResult<NetworkBuffer> {
+    pub fn new(capacity: usize, allocator: Arc<Mutex<Allocator>>) -> ArconResult<NetworkBuffer> {
         let mut a = allocator.lock().unwrap();
 
         if let AllocResult::Alloc(id, ptr) = unsafe { a.alloc::<u8>(capacity) } {

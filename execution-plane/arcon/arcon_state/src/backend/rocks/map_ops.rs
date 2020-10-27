@@ -84,10 +84,9 @@ impl MapOps for Rocks {
         handle: &Handle<MapState<K, V>, IK, N>,
         key_value_pairs: impl IntoIterator<Item = (K, V)>,
     ) -> Result<()> {
-        let backend = self.initialized_mut()?;
 
         let mut wb = WriteBatch::default();
-        let cf = backend.get_cf_handle(handle.id)?;
+        let cf = self.get_cf_handle(handle.id)?;
 
         for (user_key, value) in key_value_pairs {
             let key = handle.serialize_metakeys_and_key(&user_key)?;
@@ -95,17 +94,16 @@ impl MapOps for Rocks {
             wb.put_cf(cf, key, serialized)?;
         }
 
-        Ok(backend.db.write_opt(wb, &default_write_opts())?)
+        Ok(self.db().write_opt(wb, &default_write_opts())?)
     }
     fn map_insert_all_by_ref<'a, K: Key, V: Value, IK: Metakey, N: Metakey>(
         &self,
         handle: &Handle<MapState<K, V>, IK, N>,
         key_value_pairs: impl IntoIterator<Item = (&'a K, &'a V)>,
     ) -> Result<()> {
-        let backend = self.initialized_mut()?;
 
         let mut wb = WriteBatch::default();
-        let cf = backend.get_cf_handle(handle.id)?;
+        let cf = self.get_cf_handle(handle.id)?;
 
         for (user_key, value) in key_value_pairs {
             let key = handle.serialize_metakeys_and_key(user_key)?;
@@ -113,7 +111,7 @@ impl MapOps for Rocks {
             wb.put_cf(cf, key, serialized)?;
         }
 
-        Ok(backend.db.write_opt(wb, &default_write_opts())?)
+        Ok(self.db().write_opt(wb, &default_write_opts())?)
     }
 
     fn map_remove<K: Key, V: Value, IK: Metakey, N: Metakey>(
@@ -158,15 +156,14 @@ impl MapOps for Rocks {
         &self,
         handle: &Handle<MapState<K, V>, IK, N>,
     ) -> Result<BoxedIteratorOfResult<'_, (K, V)>> {
-        let backend = self.initialized()?;
 
         let prefix = handle.serialize_metakeys()?;
-        let cf = backend.get_cf_handle(handle.id)?;
+        let cf = self.get_cf_handle(handle.id)?;
         // NOTE: prefix_iterator only works as expected when the cf has proper prefix_extractor
         //   option set. We do that in Rocks::register_*_state
         let iter =
-            backend
-                .db
+            self
+                .db()
                 .prefix_iterator_cf(cf, prefix)?
                 .map(move |(db_key, serialized_value)| {
                     let mut key_cursor = &db_key[..];
@@ -185,13 +182,11 @@ impl MapOps for Rocks {
         &self,
         handle: &Handle<MapState<K, V>, IK, N>,
     ) -> Result<BoxedIteratorOfResult<'_, K>> {
-        let backend = self.initialized()?;
-
         let prefix = handle.serialize_metakeys()?;
-        let cf = backend.get_cf_handle(handle.id)?;
+        let cf = self.get_cf_handle(handle.id)?;
 
-        let iter = backend
-            .db
+        let iter = self
+            .db()
             .prefix_iterator_cf(cf, prefix)?
             .map(move |(db_key, _)| {
                 let mut key_cursor = &db_key[..];
@@ -209,13 +204,11 @@ impl MapOps for Rocks {
         &self,
         handle: &Handle<MapState<K, V>, IK, N>,
     ) -> Result<BoxedIteratorOfResult<'_, V>> {
-        let backend = self.initialized()?;
-
         let prefix = handle.serialize_metakeys()?;
-        let cf = backend.get_cf_handle(handle.id)?;
+        let cf = self.get_cf_handle(handle.id)?;
 
-        let iter = backend
-            .db
+        let iter = self
+            .db()
             .prefix_iterator_cf(cf, prefix)?
             .map(move |(_, serialized_value)| {
                 let value: V = protobuf::deserialize(&serialized_value)?;
@@ -229,12 +222,10 @@ impl MapOps for Rocks {
         &self,
         handle: &Handle<MapState<K, V>, IK, N>,
     ) -> Result<usize> {
-        let backend = self.initialized()?;
-
         let prefix = handle.serialize_metakeys()?;
-        let cf = backend.get_cf_handle(handle.id)?;
+        let cf = self.get_cf_handle(handle.id)?;
 
-        let count = backend.db.prefix_iterator_cf(cf, prefix)?.count();
+        let count = self.db().prefix_iterator_cf(cf, prefix)?.count();
 
         Ok(count)
     }
@@ -243,10 +234,8 @@ impl MapOps for Rocks {
         &self,
         handle: &Handle<MapState<K, V>, IK, N>,
     ) -> Result<bool> {
-        let backend = self.initialized()?;
-
         let prefix = handle.serialize_metakeys()?;
-        let cf = backend.get_cf_handle(handle.id)?;
-        Ok(backend.db.prefix_iterator_cf(cf, prefix)?.next().is_none())
+        let cf = self.get_cf_handle(handle.id)?;
+        Ok(self.db().prefix_iterator_cf(cf, prefix)?.next().is_none())
     }
 }

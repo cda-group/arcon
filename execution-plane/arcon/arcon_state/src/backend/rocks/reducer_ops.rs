@@ -34,16 +34,14 @@ impl ReducerOps for Rocks {
         handle: &Handle<ReducerState<T, F>, IK, N>,
         value: T,
     ) -> Result<()> {
-        let backend = self.initialized_mut()?;
-
         let key = handle.serialize_metakeys()?;
         let serialized = protobuf::serialize(&value)?;
 
-        let cf = backend.get_cf_handle(handle.id)?;
+        let cf = self.get_cf_handle(handle.id)?;
         // See the make_reducer_merge function in this module. Its result is set as the merging
         // operator for this state.
-        Ok(backend
-            .db
+        Ok(self
+            .db()
             .merge_cf_opt(cf, key, serialized, &default_write_opts())?)
     }
 }

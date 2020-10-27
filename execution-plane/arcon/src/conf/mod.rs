@@ -34,7 +34,7 @@ pub struct ArconConf {
     /// Batch size for channels
     #[serde(default = "channel_batch_size_default")]
     pub channel_batch_size: usize,
-    /// Max amount of bytes allowed to be allocated by the ArconAllocator
+    /// Max amount of bytes allowed to be allocated by the Arcon Allocator
     #[serde(default = "allocator_capacity_default")]
     pub allocator_capacity: usize,
     /// Amount of threads for Kompact's threadpool

@@ -20,8 +20,7 @@ impl AggregatorOps for Rocks {
     }
 
     fn aggregator_get<A: Aggregator, IK: Metakey, N: Metakey>(
-        &self,
-        handle: &Handle<AggregatorState<A>, IK, N>,
+        &self, handle: &Handle<AggregatorState<A>, IK, N>,
     ) -> Result<<A as Aggregator>::Result> {
         let key = handle.serialize_metakeys()?;
 
@@ -45,18 +44,16 @@ impl AggregatorOps for Rocks {
         handle: &Handle<AggregatorState<A>, IK, N>,
         value: <A as Aggregator>::Input,
     ) -> Result<()> {
-        let backend = self.initialized_mut()?;
-
         let key = handle.serialize_metakeys()?;
         let mut serialized = Vec::with_capacity(protobuf::size_hint(&value).unwrap_or(0) + 1);
         serialized.push(VALUE_MARKER);
         protobuf::serialize_into(&mut serialized, &value)?;
 
-        let cf = backend.get_cf_handle(handle.id)?;
+        let cf = self.get_cf_handle(handle.id)?;
         // See the make_aggregating_merge function in this module. Its result is set as the
         // merging operator for this state.
-        Ok(backend
-            .db
+        Ok(self
+            .db()
             .merge_cf_opt(cf, key, serialized, &default_write_opts())?)
     }
 }

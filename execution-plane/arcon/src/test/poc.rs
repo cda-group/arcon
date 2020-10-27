@@ -102,11 +102,11 @@ fn poc_test() {
     let channel_strategy: ChannelStrategy<u32> =
         ChannelStrategy::Forward(Forward::new(channel, NodeID::new(0), pool_info.clone()));
 
-    fn map_fn_two<B: Backend>(x: u32, state: &mut MapStateTwo<B>) -> u32 {
+    fn map_fn_two(x: u32, state: &mut MapStateTwo<impl Backend>) -> ArconResult<u32> {
         state.rolling_counter().rmw(|v| {
             *v += 1;
         });
-        x * 2
+        Ok(x * 2)
     }
 
     // Set up Map Node
@@ -160,9 +160,9 @@ fn poc_test() {
         .wait_timeout(std::time::Duration::from_millis(100))
         .expect("started");
 
-    fn map_fn<B: Backend>(x: u32, state: &mut MapStateOne<B>) -> u32 {
-        state.events().append(x).expect("fail");
-        x * 2
+    fn map_fn<B: Backend>(x: u32, state: &mut MapStateOne<B>) -> ArconResult<u32> {
+        state.events().append(x)?;
+        Ok(x * 2)
     }
 
     let node = Node::new(

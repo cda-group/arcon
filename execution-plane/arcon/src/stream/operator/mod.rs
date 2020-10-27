@@ -13,6 +13,7 @@ use crate::{
     stream::channel::strategy::ChannelStrategy,
     util::SafelySendableFn,
 };
+use arcon_error::*;
 use arcon_state::{index::ArconState, Backend, TimerIndex};
 use kompact::prelude::ComponentDefinition;
 use prost::Message;
@@ -30,17 +31,18 @@ pub trait Operator<B: Backend>: Send + Sized {
     type OperatorState: ArconState;
 
     /// Determines how the `Operator` processes Elements
-    fn handle_element<CD>(
+    fn handle_element(
         &mut self,
         element: ArconElement<Self::IN>,
-        ctx: OperatorContext<Self, B, CD>,
-    ) where
-        CD: ComponentDefinition + Sized + 'static;
+        ctx: OperatorContext<Self, B, impl ComponentDefinition>,
+    ) -> ArconResult<()>;
 
     /// Determines how the `Operator` handles timeouts it registered earlier when they are triggered
-    fn handle_timeout<CD>(&self, timeout: Self::TimerState, ctx: OperatorContext<Self, B, CD>)
-    where
-        CD: ComponentDefinition + Sized + 'static;
+    fn handle_timeout(
+        &self,
+        timeout: Self::TimerState,
+        ctx: OperatorContext<Self, B, impl ComponentDefinition>,
+    ) -> ArconResult<()>;
 
     /// Determines how the `Operator` persists its state
     fn persist(&mut self) -> Result<(), arcon_state::error::ArconStateError>;
@@ -53,25 +55,25 @@ pub struct Map<IN, OUT, F, S, B>
 where
     IN: ArconType,
     OUT: ArconType,
-    F: SafelySendableFn(IN, &mut S) -> OUT,
+    F: SafelySendableFn(IN, &mut S) -> ArconResult<OUT>,
     S: ArconState,
     B: Backend,
 {
     state: S,
     udf: F,
-    _marker: PhantomData<fn(IN) -> OUT>,
+    _marker: PhantomData<fn(IN) -> ArconResult<OUT>>,
     _b: PhantomData<B>,
 }
 
-impl<IN, OUT, B> Map<IN, OUT, fn(IN, &mut ()) -> OUT, (), B>
+impl<IN, OUT, B> Map<IN, OUT, fn(IN, &mut ()) -> ArconResult<OUT>, (), B>
 where
     IN: ArconType,
     OUT: ArconType,
     B: Backend,
 {
     pub fn new(
-        udf: impl SafelySendableFn(IN) -> OUT,
-    ) -> Map<IN, OUT, impl SafelySendableFn(IN, &mut ()) -> OUT, (), B> {
+        udf: impl SafelySendableFn(IN) -> ArconResult<OUT>,
+    ) -> Map<IN, OUT, impl SafelySendableFn(IN, &mut ()) -> ArconResult<OUT>, (), B> {
         let udf = move |input: IN, _: &mut ()| udf(input);
         Map {
             state: (),
@@ -86,7 +88,7 @@ impl<IN, OUT, F, S, B> Map<IN, OUT, F, S, B>
 where
     IN: ArconType,
     OUT: ArconType,
-    F: SafelySendableFn(IN, &mut S) -> OUT,
+    F: SafelySendableFn(IN, &mut S) -> ArconResult<OUT>,
     S: ArconState,
     B: Backend,
 {
@@ -104,7 +106,7 @@ impl<IN, OUT, F, S, B> Operator<B> for Map<IN, OUT, F, S, B>
 where
     IN: ArconType,
     OUT: ArconType,
-    F: SafelySendableFn(IN, &mut S) -> OUT,
+    F: SafelySendableFn(IN, &mut S) -> ArconResult<OUT>,
     S: ArconState,
     B: Backend,
 {
@@ -113,17 +115,17 @@ where
     type TimerState = ArconNever;
     type OperatorState = S;
 
-    fn handle_element<CD>(
+    fn handle_element(
         &mut self,
         element: ArconElement<IN>,
-        mut ctx: OperatorContext<Self, B, CD>,
-    ) where
-        CD: ComponentDefinition + Sized + 'static,
-    {
+        mut ctx: OperatorContext<Self, B, impl ComponentDefinition>,
+    ) -> ArconResult<()> {
         ctx.output(ArconElement {
-            data: (self.udf)(element.data, &mut self.state),
+            data: (self.udf)(element.data, &mut self.state)?,
             timestamp: element.timestamp,
         });
+
+        Ok(())
     }
 
     crate::ignore_timeout!(B);
@@ -196,16 +198,15 @@ where
     type TimerState = ArconNever;
     type OperatorState = S;
 
-    fn handle_element<CD>(
+    fn handle_element(
         &mut self,
         element: ArconElement<IN>,
-        mut ctx: OperatorContext<Self, B, CD>,
-    ) where
-        CD: ComponentDefinition + Sized + 'static,
-    {
+        mut ctx: OperatorContext<Self, B, impl ComponentDefinition>,
+    ) -> ArconResult<()> {
         if (self.udf)(&element.data, &mut self.state) {
             ctx.output(element);
         }
+        Ok(())
     }
     crate::ignore_timeout!(B);
 
@@ -218,13 +219,12 @@ where
 #[macro_export]
 macro_rules! ignore_timeout {
     ($backend:ty) => {
-        fn handle_timeout<CD>(
+        fn handle_timeout(
             &self,
             _timeout: Self::TimerState,
-            _ctx: OperatorContext<Self, $backend, CD>,
-        ) where
-            CD: ComponentDefinition + Sized + 'static,
-        {
+            _ctx: OperatorContext<Self, $backend, impl ComponentDefinition>,
+        ) -> ArconResult<()> {
+            Ok(())
         }
     };
 }

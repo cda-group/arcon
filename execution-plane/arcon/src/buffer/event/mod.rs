@@ -30,10 +30,7 @@ pub struct EventBuffer<T> {
 
 impl<T> EventBuffer<T> {
     /// Creates a new EventBuffer
-    pub fn new(
-        capacity: usize,
-        allocator: Arc<Mutex<Allocator>>,
-    ) -> ArconResult<EventBuffer<T>> {
+    pub fn new(capacity: usize, allocator: Arc<Mutex<Allocator>>) -> ArconResult<EventBuffer<T>> {
         let mut a = allocator.lock().unwrap();
 
         if let AllocResult::Alloc(id, ptr) = unsafe { a.alloc::<T>(capacity) } {

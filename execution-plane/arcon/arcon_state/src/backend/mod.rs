@@ -247,8 +247,6 @@ impl<A: Aggregator> Default for AggregatorState<A> {
     }
 }
 
-//pub mod in_memory;
-//pub use self::in_memory::InMemory;
 //pub mod metered;
 //pub use self::metered::Metered;
 
@@ -269,8 +267,6 @@ pub use self::sled::Sled;
 
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 pub enum BackendType {
-    //InMemory,
-    //MeteredInMemory,
     #[cfg(feature = "rocks")]
     Rocks,
     //#[cfg(feature = "rocks")]
@@ -295,8 +291,6 @@ impl BackendType {
     pub const VARIANTS: &'static [BackendType] = {
         use BackendType::*;
         &[
-            //InMemory,
-            //MeteredInMemory,
             #[cfg(feature = "rocks")]
             Rocks,
             //#[cfg(feature = "rocks")]
@@ -314,8 +308,6 @@ impl BackendType {
 
     pub const STR_VARIANTS: &'static [&'static str] = {
         &[
-            //"InMemory",
-            //"MeteredInMemory",
             #[cfg(feature = "rocks")]
             "Rocks",
             //#[cfg(feature = "rocks")]
@@ -339,8 +331,6 @@ impl FromStr for BackendType {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         use BackendType::*;
         match s {
-            //x if x.eq_ignore_ascii_case("InMemory") => Ok(InMemory),
-            //x if x.eq_ignore_ascii_case("MeteredInMemory") => Ok(MeteredInMemory),
             #[cfg(feature = "rocks")]
             x if x.eq_ignore_ascii_case("Rocks") => Ok(Rocks),
             //#[cfg(feature = "rocks")]

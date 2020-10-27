@@ -4,7 +4,6 @@
 #[cfg(feature = "arcon_tui")]
 use crate::tui::{component::TuiComponent, widgets::node::Node as TuiNode};
 
-use arcon_allocator::Allocator;
 use crate::{
     buffer::event::PoolInfo,
     conf::ArconConf,
@@ -15,11 +14,11 @@ use crate::{
     prelude::*,
     util::SafelySendableFn,
 };
+use arcon_allocator::Allocator;
 use fxhash::FxHashMap;
 use kompact::{component::AbstractComponent, prelude::KompactSystem};
 use std::sync::{Arc, Mutex};
 
-/// A struct meant to simplify the creation of an Arcon Pipeline
 #[derive(Clone)]
 pub struct ArconPipeline {
     /// [kompact] system that drives the execution of components
@@ -28,10 +27,11 @@ pub struct ArconPipeline {
     conf: ArconConf,
     /// Arcon allocator for this pipeline
     allocator: Arc<Mutex<Allocator>>,
-    /// NodeManagers launched on top of this pipeline
-    //node_managers: FxHashMap<String, ActorRefStrong<NodeEvent>>,
     /// StateManager component for this pipeline
     state_manager: Arc<Component<StateManager>>,
+
+    /// NodeManagers launched on top of this pipeline
+    //node_managers: FxHashMap<String, ActorRefStrong<NodeEvent>>,
     #[cfg(feature = "arcon_tui")]
     tui_component: Arc<Component<TuiComponent>>,
     #[cfg(feature = "arcon_tui")]
@@ -46,16 +46,16 @@ pub type CreatedDynamicNode<IN> = Arc<dyn AbstractComponent<Message = ArconMessa
 pub type DynamicSource = Box<dyn CreateErased<()>>;
 
 impl ArconPipeline {
-    /// Creates a new ArconPipeline using the default ArconConf
-    pub fn new() -> ArconPipeline {
+    /// Creates a new Pipeline using the default ArconConf
+    pub fn new() -> Self {
         let conf = ArconConf::default();
         let allocator = Arc::new(Mutex::new(Allocator::new(conf.allocator_capacity)));
         #[cfg(feature = "arcon_tui")]
-        let (system, tui_component, arcon_receiver) = ArconPipeline::setup(&conf);
+        let (system, tui_component, arcon_receiver) = Self::setup(&conf);
         #[cfg(not(feature = "arcon_tui"))]
-        let (system, state_manager) = ArconPipeline::setup(&conf);
+        let (system, state_manager) = Self::setup(&conf);
 
-        ArconPipeline {
+        Self {
             system,
             conf,
             allocator,
@@ -69,14 +69,14 @@ impl ArconPipeline {
     }
 
     /// Creates a new ArconPipeline using the given ArconConf
-    pub fn with_conf(conf: ArconConf) -> ArconPipeline {
+    pub fn with_conf(conf: ArconConf) -> Self {
         let allocator = Arc::new(Mutex::new(Allocator::new(conf.allocator_capacity)));
         #[cfg(feature = "arcon_tui")]
-        let (system, tui_component, arcon_receiver) = ArconPipeline::setup(&conf);
+        let (system, tui_component, arcon_receiver) = Self::setup(&conf);
         #[cfg(not(feature = "arcon_tui"))]
-        let (system, state_manager) = ArconPipeline::setup(&conf);
+        let (system, state_manager) = Self::setup(&conf);
 
-        ArconPipeline {
+        Self {
             system,
             conf,
             allocator,
