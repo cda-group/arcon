@@ -9,7 +9,7 @@ use tui::{
     widgets::{Axis, Chart, Dataset, GraphType, Marker, Widget},
 };
 
-use crate::tui::{colorscheme::Colorscheme, update::UpdatableWidget, widgets::block};
+use crate::{colorscheme::Colorscheme, update::UpdatableWidget, widgets::block};
 
 const HORIZONTAL_SCALE_DELTA: u64 = 25;
 

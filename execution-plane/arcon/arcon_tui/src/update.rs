@@ -5,7 +5,7 @@
 
 use num_rational::Ratio;
 
-use crate::tui::app::Widgets;
+use crate::app::Widgets;
 
 pub trait UpdatableWidget {
     fn update(&mut self);

@@ -5,7 +5,6 @@
 
 #![feature(unboxed_closures)]
 
-extern crate arcon_error as error;
 // Enable use of arcon_macros within this crate
 #[cfg_attr(test, macro_use)]
 extern crate arcon_macros;
@@ -49,9 +48,6 @@ mod stream;
 /// Test module containing some more complex unit tests
 #[cfg(test)]
 mod test;
-/// Arcon terminal user interface
-#[cfg(feature = "arcon_tui")]
-mod tui;
 /// Internal Arcon Utilities
 mod util;
 
@@ -89,9 +85,10 @@ pub mod prelude {
                 Channel,
             },
             node::{debug::DebugNode, Node, NodeDescriptor},
+            operator::function::{Filter, FlatMap, Map, MapInPlace},
+            source::{collection::CollectionSource},
         },
     };
-    pub use kompact::prelude::SerId;
 
     //#[cfg(feature = "kafka")]
     //pub use crate::stream::{operator::sink::kafka::KafkaSink, source::kafka::KafkaSource};
@@ -100,7 +97,7 @@ pub mod prelude {
         flight_serde::{reliable_remote::ReliableSerde, unsafe_remote::UnsafeSerde, FlightSerde},
         *,
     };
-    pub use error::{arcon_err, arcon_err_kind, ArconResult};
+    pub use arcon_error::{arcon_err, arcon_err_kind, ArconResult};
 
     pub use kompact::{default_components::*, prelude::*};
     #[cfg(feature = "thread_pinning")]
@@ -112,6 +109,7 @@ pub mod prelude {
         AggregatorState, AppenderIndex, ArconState, Backend, Handle, HashIndex, MapState,
         ReducerState, ValueIndex, ValueState, VecState,
     };
+
     #[cfg(feature = "rayon")]
     pub use rayon::prelude::*;
 }

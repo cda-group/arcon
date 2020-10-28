@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use super::SourceContext;
-use crate::{prelude::state, stream::operator::Operator, timer::TimerBackend};
+use crate::{prelude::state, stream::operator::Operator};
 use kompact::prelude::*;
 use std::cell::RefCell;
 
@@ -17,27 +17,25 @@ impl Port for LoopbackPort {
 }
 
 #[derive(ComponentDefinition, Actor)]
-pub struct CollectionSource<OP, B, T>
+pub struct CollectionSource<OP, B>
 where
     OP: Operator<B> + 'static,
     B: state::Backend,
-    T: TimerBackend<OP::TimerState>,
 {
     ctx: ComponentContext<Self>,
     loopback_send: RequiredPort<LoopbackPort>,
     loopback_receive: ProvidedPort<LoopbackPort>,
-    pub source_ctx: RefCell<SourceContext<OP, B, T>>,
+    pub source_ctx: RefCell<SourceContext<OP, B>>,
     collection: RefCell<Vec<OP::IN>>,
     counter: usize,
 }
 
-impl<OP, B, T> CollectionSource<OP, B, T>
+impl<OP, B> CollectionSource<OP, B>
 where
     OP: Operator<B> + 'static,
     B: state::Backend,
-    T: TimerBackend<OP::TimerState>,
 {
-    pub fn new(collection: Vec<OP::IN>, source_ctx: SourceContext<OP, B, T>) -> Self {
+    pub fn new(collection: Vec<OP::IN>, source_ctx: SourceContext<OP, B>) -> Self {
         CollectionSource {
             ctx: ComponentContext::uninitialised(),
             loopback_send: RequiredPort::uninitialised(),
@@ -53,7 +51,9 @@ where
         let mut source_ctx = self.source_ctx.borrow_mut();
         for record in collection.drain(..drain_to) {
             let elem = source_ctx.extract_element(record);
-            source_ctx.process(elem, self);
+            if let Err(err) = source_ctx.process(elem, self) {
+                error!(self.ctx.log(), "Error while processing record {:?}", err);
+            }
 
             self.counter += 1;
             if (self.counter as u64) == source_ctx.watermark_interval {
@@ -69,11 +69,10 @@ where
     }
 }
 
-impl<OP, B, T> ComponentLifecycle for CollectionSource<OP, B, T>
+impl<OP, B> ComponentLifecycle for CollectionSource<OP, B>
 where
     OP: Operator<B> + 'static,
     B: state::Backend,
-    T: TimerBackend<OP::TimerState>,
 {
     fn on_start(&mut self) -> Handled {
         let shared = self.loopback_receive.share();
@@ -83,11 +82,10 @@ where
     }
 }
 
-impl<OP, B, T> Provide<LoopbackPort> for CollectionSource<OP, B, T>
+impl<OP, B> Provide<LoopbackPort> for CollectionSource<OP, B>
 where
     OP: Operator<B> + 'static,
     B: state::Backend,
-    T: TimerBackend<OP::TimerState>,
 {
     fn handle(&mut self, _event: ContinueSending) -> Handled {
         self.process_collection();
@@ -95,11 +93,10 @@ where
     }
 }
 
-impl<OP, B, T> Require<LoopbackPort> for CollectionSource<OP, B, T>
+impl<OP, B> Require<LoopbackPort> for CollectionSource<OP, B>
 where
     OP: Operator<B> + 'static,
     B: state::Backend,
-    T: TimerBackend<OP::TimerState>,
 {
     fn handle(&mut self, _event: Never) -> Handled {
         unreachable!("Never type has no instance");
@@ -115,9 +112,8 @@ mod tests {
         data::ArconMessage,
         pipeline::ArconPipeline,
         prelude::{Channel, ChannelStrategy, DebugNode, Filter, Forward},
-        state::{Backend, InMemory},
-        timer,
     };
+    use std::sync::Arc;
 
     #[test]
     fn collection_source_test() {
@@ -142,14 +138,14 @@ mod tests {
         // Set up SourceContext
         let watermark_interval = 50;
         let collection_elements = 2000;
+        let backend = Arc::new(crate::util::temp_backend());
 
         let source_context = SourceContext::new(
             watermark_interval,
             None, // no timestamp extractor
             channel_strategy,
             Filter::new(&filter_fn),
-            InMemory::create("test".as_ref()).unwrap(),
-            timer::none(),
+            backend,
         );
 
         // Generate collection

@@ -1,7 +1,7 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::{manager::node::MetricReport, tui::widgets::node::Node};
+use crate::widgets::node::Node;
 use crossbeam_channel::Sender;
 use kompact::prelude::*;
 
@@ -27,8 +27,9 @@ impl TuiComponent {
 ignore_lifecycle!(TuiComponent);
 
 impl Actor for TuiComponent {
-    type Message = MetricReport;
-    fn receive_local(&mut self, mut msg: Self::Message) -> Handled {
+    type Message = ();
+    fn receive_local(&mut self, msg: Self::Message) -> Handled {
+        /*
         let node = Node {
             description: msg.descriptor,
             id: msg.id.id,
@@ -41,6 +42,7 @@ impl Actor for TuiComponent {
         };
 
         self.sender.send(node).unwrap();
+        */
 
         Handled::Ok
     }

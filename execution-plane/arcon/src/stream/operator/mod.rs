@@ -1,23 +1,25 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// Available function operators
-//pub mod function;
+/// Available function operators
+pub mod function;
 // Available sink operators
 //pub mod sink;
 // Available window operators
 //pub mod window;
 
 use crate::{
-    data::{ArconElement, ArconEvent, ArconNever, ArconType},
+    data::{ArconElement, ArconEvent, ArconType},
     stream::channel::strategy::ChannelStrategy,
-    util::SafelySendableFn,
 };
 use arcon_error::*;
 use arcon_state::{index::ArconState, Backend, TimerIndex};
 use kompact::prelude::ComponentDefinition;
 use prost::Message;
 use std::marker::PhantomData;
+
+/// As we are using Slog with Kompact, we crate an arcon alias for it.
+pub type ArconLogger = kompact::KompactLogger;
 
 /// Defines the methods an `Operator` must implement
 pub trait Operator<B: Backend>: Send + Sized {
@@ -46,173 +48,6 @@ pub trait Operator<B: Backend>: Send + Sized {
 
     /// Determines how the `Operator` persists its state
     fn persist(&mut self) -> Result<(), arcon_state::error::ArconStateError>;
-}
-
-// MAP
-// TODO: Move
-
-pub struct Map<IN, OUT, F, S, B>
-where
-    IN: ArconType,
-    OUT: ArconType,
-    F: SafelySendableFn(IN, &mut S) -> ArconResult<OUT>,
-    S: ArconState,
-    B: Backend,
-{
-    state: S,
-    udf: F,
-    _marker: PhantomData<fn(IN) -> ArconResult<OUT>>,
-    _b: PhantomData<B>,
-}
-
-impl<IN, OUT, B> Map<IN, OUT, fn(IN, &mut ()) -> ArconResult<OUT>, (), B>
-where
-    IN: ArconType,
-    OUT: ArconType,
-    B: Backend,
-{
-    pub fn new(
-        udf: impl SafelySendableFn(IN) -> ArconResult<OUT>,
-    ) -> Map<IN, OUT, impl SafelySendableFn(IN, &mut ()) -> ArconResult<OUT>, (), B> {
-        let udf = move |input: IN, _: &mut ()| udf(input);
-        Map {
-            state: (),
-            udf,
-            _marker: Default::default(),
-            _b: PhantomData,
-        }
-    }
-}
-
-impl<IN, OUT, F, S, B> Map<IN, OUT, F, S, B>
-where
-    IN: ArconType,
-    OUT: ArconType,
-    F: SafelySendableFn(IN, &mut S) -> ArconResult<OUT>,
-    S: ArconState,
-    B: Backend,
-{
-    pub fn stateful(state: S, udf: F) -> Self {
-        Map {
-            state,
-            udf,
-            _marker: Default::default(),
-            _b: PhantomData,
-        }
-    }
-}
-
-impl<IN, OUT, F, S, B> Operator<B> for Map<IN, OUT, F, S, B>
-where
-    IN: ArconType,
-    OUT: ArconType,
-    F: SafelySendableFn(IN, &mut S) -> ArconResult<OUT>,
-    S: ArconState,
-    B: Backend,
-{
-    type IN = IN;
-    type OUT = OUT;
-    type TimerState = ArconNever;
-    type OperatorState = S;
-
-    fn handle_element(
-        &mut self,
-        element: ArconElement<IN>,
-        mut ctx: OperatorContext<Self, B, impl ComponentDefinition>,
-    ) -> ArconResult<()> {
-        ctx.output(ArconElement {
-            data: (self.udf)(element.data, &mut self.state)?,
-            timestamp: element.timestamp,
-        });
-
-        Ok(())
-    }
-
-    crate::ignore_timeout!(B);
-
-    fn persist(&mut self) -> Result<(), arcon_state::error::ArconStateError> {
-        self.state.persist()
-    }
-}
-
-// FILTER
-// TODO: Move
-
-pub struct Filter<IN, F, S, B>
-where
-    IN: ArconType,
-    F: SafelySendableFn(&IN, &mut S) -> bool,
-    S: ArconState,
-    B: Backend,
-{
-    state: S,
-    udf: F,
-    _marker: PhantomData<fn(IN) -> bool>,
-    _b: PhantomData<B>,
-}
-
-impl<IN, B> Filter<IN, fn(&IN, &mut ()) -> bool, (), B>
-where
-    IN: ArconType,
-    B: Backend,
-{
-    pub fn new(
-        udf: impl SafelySendableFn(&IN) -> bool,
-    ) -> Filter<IN, impl SafelySendableFn(&IN, &mut ()) -> bool, (), B> {
-        let udf = move |input: &IN, _: &mut ()| udf(input);
-        Filter {
-            state: (),
-            udf,
-            _marker: Default::default(),
-            _b: PhantomData,
-        }
-    }
-}
-
-impl<IN, F, S, B> Filter<IN, F, S, B>
-where
-    IN: ArconType,
-    F: SafelySendableFn(&IN, &mut S) -> bool,
-    S: ArconState,
-    B: Backend,
-{
-    pub fn stateful(state: S, udf: F) -> Self {
-        Filter {
-            state,
-            udf,
-            _marker: Default::default(),
-            _b: PhantomData,
-        }
-    }
-}
-
-impl<IN, F, S, B> Operator<B> for Filter<IN, F, S, B>
-where
-    IN: ArconType,
-    F: SafelySendableFn(&IN, &mut S) -> bool,
-    S: ArconState,
-    B: Backend,
-{
-    type IN = IN;
-    type OUT = IN;
-    type TimerState = ArconNever;
-    type OperatorState = S;
-
-    fn handle_element(
-        &mut self,
-        element: ArconElement<IN>,
-        mut ctx: OperatorContext<Self, B, impl ComponentDefinition>,
-    ) -> ArconResult<()> {
-        if (self.udf)(&element.data, &mut self.state) {
-            ctx.output(element);
-        }
-        Ok(())
-    }
-    crate::ignore_timeout!(B);
-
-    fn persist(&mut self) -> Result<(), arcon_state::error::ArconStateError> {
-        self.state.persist()
-    }
 }
 
 /// Helper macro to implement an empty ´handle_timeout` function
@@ -279,6 +114,14 @@ where
     pub fn output(&mut self, element: ArconElement<OP::OUT>) {
         self.channel_strategy
             .add(ArconEvent::Element(element), self.source)
+    }
+
+    /// Enable users to log within an Operator
+    ///
+    /// `error!(ctx.log(), "Something bad happened!");
+    #[inline]
+    pub fn log(&self) -> &ArconLogger {
+        self.source.log()
     }
 
     #[inline]

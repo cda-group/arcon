@@ -73,37 +73,30 @@ dependencies = [
  "arcon_extra",
  "arcon_macros",
  "arcon_state",
- "better-panic",
+ "arcon_tui",
  "bincode",
  "bytes",
  "cfg-if 0.1.10",
  "criterion",
- "crossbeam-channel 0.4.4",
  "crossbeam-utils 0.7.2",
- "crossterm 0.17.7",
- "ctrlc",
  "futures",
  "fxhash",
  "hocon",
  "kompact",
  "lz4-compression",
- "num-rational",
  "num_cpus",
  "once_cell",
  "prost 0.6.1 (git+https://github.com/Max-Meldrum/prost.git?branch=derive_generics)",
  "prost-types",
- "psutil",
  "rand 0.6.5",
  "rayon",
  "rdkafka",
  "serde",
  "serde_json",
- "size",
  "slog",
  "tempfile",
  "tokio",
  "tokio-util",
- "tui",
  "twox-hash",
  "uuid",
 ]
@@ -163,6 +156,23 @@ dependencies = [
  "proc-macro2 1.0.24",
  "quote 1.0.7",
  "syn",
+]
+
+[[package]]
+name = "arcon_tui"
+version = "0.1.0"
+dependencies = [
+ "better-panic",
+ "crossbeam-channel 0.4.4",
+ "crossterm 0.17.7",
+ "ctrlc",
+ "kompact",
+ "num-rational",
+ "psutil",
+ "serde",
+ "serde_json",
+ "size",
+ "tui",
 ]
 
 [[package]]

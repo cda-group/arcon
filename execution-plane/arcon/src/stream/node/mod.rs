@@ -468,7 +468,7 @@ where
 mod tests {
     // Tests the message logic of Node.
     use super::*;
-    use crate::{pipeline::*, stream::operator::Filter};
+    use crate::{pipeline::*, stream::operator::function::Filter};
     use std::{sync::Arc, thread, time};
 
     fn node_test_setup() -> (ActorRef<ArconMessage<i32>>, Arc<Component<DebugNode<i32>>>) {

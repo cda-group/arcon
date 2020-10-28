@@ -11,7 +11,7 @@ use tui::{
     widgets::{RenderDirection, Sparkline, Widget},
 };
 
-use crate::tui::{colorscheme::Colorscheme, update::UpdatableWidget, widgets::block};
+use crate::{colorscheme::Colorscheme, update::UpdatableWidget, widgets::block};
 
 const VPN_INTERFACE: &str = "tun0";
 

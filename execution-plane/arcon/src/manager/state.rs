@@ -92,7 +92,7 @@ impl ComponentLifecycle for StateManager {
 
 impl Actor for StateManager {
     type Message = ();
-    fn receive_local(&mut self, msg: Self::Message) -> Handled {
+    fn receive_local(&mut self, _: Self::Message) -> Handled {
         unreachable!();
     }
     fn receive_network(&mut self, _: NetMessage) -> Handled {

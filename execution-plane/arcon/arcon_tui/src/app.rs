@@ -3,7 +3,7 @@
 // Modifications Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::tui::{
+use crate::{
     colorscheme::Colorscheme,
     widgets::{cpu::CpuWidget, mem::MemWidget, net::NetWidget, node::NodeWidget},
 };

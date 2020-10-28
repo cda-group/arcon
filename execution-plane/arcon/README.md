@@ -4,15 +4,19 @@
 
 # arcon
 
-This crate is not intended to be used directly. It is a part of the [Arcon project](https://github.com/cda-group/arcon)
-
+* [`arcon_allocator`]: Custom allocator.
 * [`arcon_error`]: Common error utilities.
 * [`arcon_extra`]: Contains extra 3rd party features.
-* [`arcon_macros`]: Internal Rust macros used by Arcon.
+* [`arcon_macros`]: Internal Rust macros.
+* [`arcon_state`]: State management features.
+* [`arcon_tui`]: Text-based dashboard.
 
+[`arcon_allocator`]: arcon_allocator
 [`arcon_error`]: arcon_error
 [`arcon_extra`]: arcon_extra
 [`arcon_macros`]: arcon_macros
+[`arcon_state`]: arcon_state
+[`arcon_tui`]: arcon_tui
 
 ## Criterion Benchmarks
 

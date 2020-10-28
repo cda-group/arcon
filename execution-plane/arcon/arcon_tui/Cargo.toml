@@ -1,0 +1,18 @@
+[package]
+name = "arcon_tui"
+version = "0.1.0"
+authors = ["Max Meldrum <mmeldrum@kth.se>"]
+edition = "2018"
+
+[dependencies]
+kompact = { git = "https://github.com/kompics/kompact.git", branch = "master", features = ["type_erasure"] }
+tui = { git = "https://github.com/cjbassi/tui-rs", branch = "master", default-features = false, features = ["crossterm"]}
+num-rational = "0.2"
+psutil = { version = "3.0.0", default-features = false, features = ["cpu", "network", "memory"]}
+size = "0.1.2"
+crossbeam-channel = "0.4.0"
+ctrlc = { version = "3.1.3", features = ["termination"]}
+serde_json = "1.0.44"
+serde = { version = "1.0.104", features = ["derive"]}
+crossterm = "0.17.1"
+better-panic = "0.2.0"

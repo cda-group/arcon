@@ -4,7 +4,7 @@ use crate::{
         state::{SnapshotRef, StateID, StateManagerPort},
     },
     prelude::*,
-    stream::{node::NodeState, operator::Map},
+    stream::{node::NodeState, operator::function::Map},
 };
 use arcon_state::Sled;
 use std::{
@@ -208,7 +208,7 @@ fn poc_test() {
     node_ref.tell(epoch(1, 2));
     node_ref.tell(epoch(1, 3));
 
-    wait(15);
+    wait(5);
 }
 
 fn element(data: u32, time: u64, sender: u32) -> ArconMessage<u32> {

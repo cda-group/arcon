@@ -12,7 +12,7 @@ use tui::{
     widgets::{Row, Table, Widget},
 };
 
-use crate::tui::{colorscheme::Colorscheme, update::UpdatableWidget, widgets::block};
+use crate::{colorscheme::Colorscheme, update::UpdatableWidget, widgets::block};
 
 #[derive(Debug, Clone)]
 pub struct Node {

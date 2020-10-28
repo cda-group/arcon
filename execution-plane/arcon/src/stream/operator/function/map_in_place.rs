@@ -2,93 +2,89 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
-    data::{ArconElement, ArconEvent, ArconNever, ArconType, Epoch, Watermark},
-    prelude::state,
+    data::{ArconElement, ArconNever, ArconType},
     stream::operator::{Operator, OperatorContext},
-    timer::TimerBackend,
     util::SafelySendableFn,
 };
+use arcon_error::*;
+use arcon_state::{index::ArconState, Backend};
 use kompact::prelude::ComponentDefinition;
 use std::marker::PhantomData;
 
-/// An Arcon operator for performing an in-place map
-///
-/// IN: Input Event
-pub struct MapInPlace<IN, F, B, S>
+pub struct MapInPlace<IN, F, S, B>
 where
     IN: ArconType,
-    F: SafelySendableFn(&mut IN, &S, &mut state::Session<B>),
-    B: state::Backend,
-    S: state::GenericBundle<B>,
+    F: SafelySendableFn(&mut IN, &mut S) -> ArconResult<()>,
+    S: ArconState,
+    B: Backend,
 {
     state: S,
     udf: F,
-    _marker: PhantomData<fn(IN, B)>,
+    _marker: PhantomData<fn(&mut IN) -> ArconResult<()>>,
+    _b: PhantomData<B>,
 }
 
-impl<IN, B> MapInPlace<IN, fn(&mut IN, &(), &mut state::Session<B>), B, ()>
+impl<IN, B> MapInPlace<IN, fn(&mut IN, &mut ()) -> ArconResult<()>, (), B>
 where
     IN: ArconType,
-    B: state::Backend,
+    B: Backend,
 {
     pub fn new(
-        udf: impl SafelySendableFn(&mut IN),
-    ) -> MapInPlace<IN, impl SafelySendableFn(&mut IN, &(), &mut state::Session<B>), B, ()> {
-        let udf = move |input: &mut IN, _: &(), _: &mut state::Session<B>| udf(input);
+        udf: impl SafelySendableFn(&mut IN) -> ArconResult<()>,
+    ) -> MapInPlace<IN, impl SafelySendableFn(&mut IN, &mut ()) -> ArconResult<()>, (), B> {
+        let udf = move |input: &mut IN, _: &mut ()| udf(input);
         MapInPlace {
             state: (),
             udf,
             _marker: Default::default(),
+            _b: PhantomData,
         }
     }
 }
 
-impl<IN, F, B, S> MapInPlace<IN, F, B, S>
+impl<IN, F, S, B> MapInPlace<IN, F, S, B>
 where
     IN: ArconType,
-    F: SafelySendableFn(&mut IN, &S, &mut state::Session<B>),
-    B: state::Backend,
-    S: state::GenericBundle<B>,
+    F: SafelySendableFn(&mut IN, &mut S) -> ArconResult<()>,
+    S: ArconState,
+    B: Backend,
 {
     pub fn stateful(state: S, udf: F) -> Self {
         MapInPlace {
             state,
             udf,
             _marker: Default::default(),
+            _b: PhantomData,
         }
     }
 }
 
-impl<IN, F, B, S> Operator<B> for MapInPlace<IN, F, B, S>
+impl<IN, F, S, B> Operator<B> for MapInPlace<IN, F, S, B>
 where
     IN: ArconType,
-    F: SafelySendableFn(&mut IN, &S, &mut state::Session<B>),
-    B: state::Backend,
-    S: state::GenericBundle<B>,
+    F: SafelySendableFn(&mut IN, &mut S) -> ArconResult<()>,
+    S: ArconState,
+    B: Backend,
 {
     type IN = IN;
     type OUT = IN;
     type TimerState = ArconNever;
+    type OperatorState = S;
 
-    fn register_states(&mut self, registration_token: &mut state::RegistrationToken<B>) {
-        self.state.register_states(registration_token)
-    }
-
-    fn init(&mut self, _session: &mut state::Session<B>) {}
-
-    fn handle_element<CD>(
-        &self,
+    fn handle_element(
+        &mut self,
         element: ArconElement<IN>,
-        source: &CD,
-        mut ctx: OperatorContext<Self, B, impl TimerBackend<Self::TimerState>>,
-    ) where
-        CD: ComponentDefinition + Sized + 'static,
-    {
+        mut ctx: OperatorContext<Self, B, impl ComponentDefinition>,
+    ) -> ArconResult<()> {
         let mut elem = element;
-        (self.udf)(&mut elem.data, &self.state, ctx.state_session);
-        ctx.output(ArconEvent::Element(elem), source);
+        (self.udf)(&mut elem.data, &mut self.state)?;
+        ctx.output(elem);
+        Ok(())
     }
-    crate::ignore_watermark!(B);
-    crate::ignore_epoch!(B);
+
     crate::ignore_timeout!(B);
+
+    fn persist(&mut self) -> Result<(), arcon_state::error::ArconStateError> {
+        self.state.persist()
+    }
 }

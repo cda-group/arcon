@@ -40,10 +40,7 @@ where
 {
     /// Add event to outgoing buffer
     #[inline]
-    pub fn add<CD>(&mut self, event: ArconEvent<A>, source: &CD)
-    where
-        CD: ComponentDefinition + Sized + 'static,
-    {
+    pub fn add(&mut self, event: ArconEvent<A>, source: &impl ComponentDefinition) {
         match self {
             ChannelStrategy::Forward(s) => s.add(event, source),
             ChannelStrategy::Broadcast(s) => s.add(event, source),
@@ -54,10 +51,7 @@ where
     }
     /// Flush batch of events out
     #[inline]
-    pub fn flush<CD>(&mut self, source: &CD)
-    where
-        CD: ComponentDefinition + Sized + 'static,
-    {
+    pub fn flush(&mut self, source: &impl ComponentDefinition) {
         match self {
             ChannelStrategy::Forward(s) => s.flush(source),
             ChannelStrategy::Broadcast(s) => s.flush(source),
@@ -83,11 +77,11 @@ where
 ///
 /// The message may be sent to a local or remote component
 #[inline]
-fn send<A, CD>(channel: &Channel<A>, message: ArconMessage<A>, source: &CD) -> Result<(), SerError>
-where
-    A: ArconType,
-    CD: ComponentDefinition + Sized + 'static,
-{
+fn send<A: ArconType>(
+    channel: &Channel<A>,
+    message: ArconMessage<A>,
+    source: &impl ComponentDefinition,
+) -> Result<(), SerError> {
     match channel {
         Channel::Local(actor_ref) => {
             actor_ref.tell(message);

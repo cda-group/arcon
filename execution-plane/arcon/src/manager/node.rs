@@ -2,20 +2,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
-    buffer::event::PoolInfo,
-    data::{ArconMessage, Epoch, Watermark},
+    data::{Epoch, Watermark},
     manager::state::*,
     prelude::{state, NodeID},
-    stream::{channel::strategy::ChannelStrategy, node::NodeState, operator::Operator},
-    util::SafelySendableFn,
 };
 use arcon_error::*;
 use arcon_state::{ArconState, Backend, Handle, HashIndex, ValueIndex};
-use fxhash::FxHashMap;
-use kompact::{component::AbstractComponent, prelude::*};
-use std::{collections::HashMap, sync::Arc};
+use kompact::prelude::*;
+use std::sync::Arc;
 
-use crate::stream::node::Node;
 #[cfg(feature = "metrics")]
 use crate::stream::node::NodeMetrics;
 
@@ -192,10 +187,9 @@ where
             NodeEvent::Epoch(id, e) => {
                 self.manager_state.epochs.put(id, e)?;
             }
-            NodeEvent::Checkpoint(id, epoch) => {
+            NodeEvent::Checkpoint(_, _) => {
                 self.checkpoint()?;
             }
-            _ => {}
         }
         Ok(())
     }
@@ -236,7 +230,7 @@ impl<B> Provide<StateManagerPort> for NodeManager<B>
 where
     B: Backend,
 {
-    fn handle(&mut self, e: StateEvent) -> Handled {
+    fn handle(&mut self, _: StateEvent) -> Handled {
         Handled::Ok
     }
 }
@@ -268,7 +262,7 @@ where
     B: state::Backend,
 {
     type Message = Never;
-    fn receive_local(&mut self, msg: Self::Message) -> Handled {
+    fn receive_local(&mut self, _: Self::Message) -> Handled {
         Handled::Ok
     }
     fn receive_network(&mut self, _: NetMessage) -> Handled {

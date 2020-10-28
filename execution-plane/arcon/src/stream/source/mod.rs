@@ -8,20 +8,21 @@ use crate::{
         channel::strategy::ChannelStrategy,
         operator::{Operator, OperatorContext},
     },
-    timer::TimerBackend,
     util::SafelySendableFn,
 };
+use arcon_error::ArconResult;
 use kompact::prelude::ComponentDefinition;
+use std::sync::Arc;
 
 pub mod collection;
-#[cfg(feature = "kafka")]
-pub mod kafka;
-pub mod local_file;
-#[cfg(feature = "socket")]
-pub mod socket;
+//#[cfg(feature = "kafka")]
+//pub mod kafka;
+//pub mod local_file;
+//#[cfg(feature = "socket")]
+//pub mod socket;
 
 /// Common Context for all Source implementations
-pub struct SourceContext<OP: Operator<B>, B: state::Backend, T: TimerBackend<OP::TimerState>> {
+pub struct SourceContext<OP: Operator<B> + 'static, B: state::Backend> {
     /// Timestamp extractor function
     ///
     /// If set to None, timestamps of ArconElement's will also be None.
@@ -38,59 +39,35 @@ pub struct SourceContext<OP: Operator<B>, B: state::Backend, T: TimerBackend<OP:
     operator: OP,
     /// Strategy for outputting events
     channel_strategy: ChannelStrategy<OP::OUT>,
-    /// State backend that a source can keep persistent data in
-    pub state_backend: state::BackendContainer<B>,
-    /// Timer Backend to keep track of event timers
-    timer_backend: T,
+    /// Durable State Backend
+    backend: Arc<B>,
 }
 
-impl<OP, B, T> SourceContext<OP, B, T>
+impl<OP, B> SourceContext<OP, B>
 where
-    OP: Operator<B>,
+    OP: Operator<B> + 'static,
     B: state::Backend,
-    T: TimerBackend<OP::TimerState>,
 {
     pub fn new(
         watermark_interval: u64,
         ts_extractor: Option<&'static dyn SafelySendableFn(&OP::IN) -> u64>,
         channel_strategy: ChannelStrategy<OP::OUT>,
-        mut operator: OP,
-        state_backend: state::BackendContainer<B>,
-        mut timer_backend: T,
+        operator: OP,
+        backend: Arc<B>,
     ) -> Self {
-        let mut sb_session = state_backend.session();
-
-        // register all the states that will ever be used by this Node
-        {
-            // SAFETY: we specifically want this to be the only place that is supposed to call this
-            let mut registration_token = unsafe { state::RegistrationToken::new(&mut sb_session) };
-
-            operator.register_states(&mut registration_token);
-            timer_backend.register_states(&mut registration_token);
-        }
-
-        operator.init(&mut sb_session);
-        timer_backend.init(&mut sb_session);
-
-        drop(sb_session);
-
         SourceContext {
             ts_extractor,
             current_watermark: 0,
             watermark_interval,
             operator,
             channel_strategy,
-            state_backend,
-            timer_backend,
+            backend,
         }
     }
 
     /// Generates a Watermark event and sends it downstream
     #[inline]
-    pub fn generate_watermark<CD>(&mut self, source: &CD)
-    where
-        CD: ComponentDefinition + Sized + 'static,
-    {
+    pub fn generate_watermark(&mut self, source: &impl ComponentDefinition) {
         let wm_event: ArconEvent<OP::OUT> = {
             if self.has_timestamp_extractor() {
                 ArconEvent::Watermark(Watermark::new(self.current_watermark))
@@ -106,10 +83,7 @@ where
 
     /// Generates a Death event and sends it downstream
     #[inline]
-    pub fn generate_death<CD>(&mut self, msg: String, source: &CD)
-    where
-        CD: ComponentDefinition + Sized + 'static,
-    {
+    pub fn generate_death(&mut self, msg: String, source: &impl ComponentDefinition) {
         self.channel_strategy.add(ArconEvent::Death(msg), source);
     }
 
@@ -127,22 +101,18 @@ where
         }
     }
 
-    /// Calls a transformation function on the source data to generate outgoing ArconEvent<OUT>
+    /// Calls a transformation function on the source data to generate outgoing events
     #[inline]
-    pub fn process<CD>(&mut self, data: ArconElement<OP::IN>, source: &CD)
-    where
-        CD: ComponentDefinition + Sized + 'static,
-    {
-        let mut session = self.state_backend.session();
+    pub fn process(
+        &mut self,
+        data: ArconElement<OP::IN>,
+        source: &impl ComponentDefinition,
+    ) -> ArconResult<()> {
         self.operator.handle_element(
             data,
-            source,
-            OperatorContext::new(
-                &mut self.channel_strategy,
-                &mut session,
-                &mut self.timer_backend,
-            ),
-        );
+            OperatorContext::new(source, &mut self.channel_strategy),
+        )?;
+        Ok(())
     }
 
     /// Build ArconElement
