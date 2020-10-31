@@ -109,6 +109,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "arcon_build"
+version = "0.1.0"
+dependencies = [
+ "arcon",
+ "cfg-if 0.1.10",
+ "prost-build",
+]
+
+[[package]]
 name = "arcon_error"
 version = "0.1.1"
 dependencies = [
@@ -241,9 +250,9 @@ dependencies = [
 
 [[package]]
 name = "async-global-executor"
-version = "1.4.2"
+version = "1.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "124ac8c265e407641c3362b8f4d39cdb4e243885b71eef087be27199790f5a3a"
+checksum = "73079b49cd26b8fd5a15f68fc7707fc78698dc2a3d61430f2a7a9430230dfa04"
 dependencies = [
  "async-executor",
  "async-io",
@@ -1042,7 +1051,8 @@ checksum = "f7531096570974c3a9dcf9e4b8e1cede1ec26cf5046219fb3b9d897503b9be59"
 [[package]]
 name = "executors"
 version = "0.8.0"
-source = "git+https://github.com/Bathtor/rust-executors#5aa28fc023387c0ef7ccca3072dd19460d658982"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f99e7b1533b6caa2e16120bfc652aeb087c9197b1bf419edfc8587e6022f2fc9"
 dependencies = [
  "arr_macro",
  "async-task",
@@ -1331,9 +1341,9 @@ dependencies = [
 
 [[package]]
 name = "hocon"
-version = "0.3.5"
+version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "39554b1a6dc84511d3f8c0287ad63a78de60444b4032aec529d9e303ceaf0641"
+checksum = "2e7c6cbed92d004d0b286dd7446292c4d6148d1d776f4028466c8f8289ba2417"
 dependencies = [
  "failure",
  "java-properties",
@@ -1446,7 +1456,7 @@ dependencies = [
 [[package]]
 name = "kompact"
 version = "0.10.0"
-source = "git+https://github.com/kompics/kompact.git#bb52709edde9c0f315231b65f93aff3bb3b1c278"
+source = "git+https://github.com/kompics/kompact.git#b3d31ba48abd1a131c3c1815b8f1a74c07a5f804"
 dependencies = [
  "arc-swap",
  "as_num",
@@ -1482,7 +1492,7 @@ dependencies = [
 [[package]]
 name = "kompact-actor-derive"
 version = "0.10.0"
-source = "git+https://github.com/kompics/kompact.git#bb52709edde9c0f315231b65f93aff3bb3b1c278"
+source = "git+https://github.com/kompics/kompact.git#b3d31ba48abd1a131c3c1815b8f1a74c07a5f804"
 dependencies = [
  "proc-macro2 1.0.24",
  "quote 1.0.7",
@@ -1492,7 +1502,7 @@ dependencies = [
 [[package]]
 name = "kompact-component-derive"
 version = "0.10.0"
-source = "git+https://github.com/kompics/kompact.git#bb52709edde9c0f315231b65f93aff3bb3b1c278"
+source = "git+https://github.com/kompics/kompact.git#b3d31ba48abd1a131c3c1815b8f1a74c07a5f804"
 dependencies = [
  "proc-macro2 1.0.24",
  "quote 1.0.7",
@@ -1606,9 +1616,9 @@ checksum = "60302e4db3a61da70c0cb7991976248362f30319e88850c487b9b95bbf059e00"
 
 [[package]]
 name = "memchr"
-version = "2.3.3"
+version = "2.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3728d817d99e5ac407411fa471ff9800a778d88a24685968b36824eaf4bee400"
+checksum = "0ee1c47aaa256ecabcaea351eae4a9b01ef39ed810004e298d2511ed284b1525"
 
 [[package]]
 name = "memoffset"
@@ -1790,9 +1800,9 @@ dependencies = [
 
 [[package]]
 name = "num-integer"
-version = "0.1.43"
+version = "0.1.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d59457e662d541ba17869cf51cf177c0b5f0cbf476c66bdc90bf1edac4f875b"
+checksum = "d2cc698a63b549a70bc047073d2949cce27cd1c7b0a4a862d08a8031bc2801db"
 dependencies = [
  "autocfg 1.0.1",
  "num-traits",
@@ -1812,9 +1822,9 @@ dependencies = [
 
 [[package]]
 name = "num-traits"
-version = "0.2.12"
+version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac267bcc07f48ee5f8935ab0d24f316fb722d7a1292e2913f0cc196b29ffd611"
+checksum = "9a64b1ec5cda2586e284722486d802acf1f7dbdc623e2bfc57e65ca1cd099290"
 dependencies = [
  "autocfg 1.0.1",
 ]
@@ -2036,9 +2046,9 @@ dependencies = [
 
 [[package]]
 name = "proc-macro-hack"
-version = "0.5.18"
+version = "0.5.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "99c605b9a0adc77b7211c6b1f722dcb613d68d66859a44f3d485a6da332b0598"
+checksum = "dbf0c48bc1d91375ae5c3cd81e3722dff1abcf81a30960240640d223f59fe0e5"
 
 [[package]]
 name = "proc-macro-nested"
@@ -2143,9 +2153,8 @@ dependencies = [
  "abomonation",
  "abomonation_derive",
  "arcon",
- "cfg-if 0.1.10",
+ "arcon_build",
  "prost 0.6.1 (git+https://github.com/Max-Meldrum/prost.git?branch=derive_generics)",
- "prost-build",
  "serde",
 ]
 

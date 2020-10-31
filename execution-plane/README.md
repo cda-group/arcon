@@ -1,38 +1,26 @@
-# Execution Plane
+[![Build Status](https://dev.azure.com/arcon-cda/arcon/_apis/build/status/cda-group.arcon?branchName=master)](https://dev.azure.com/arcon-cda/arcon/_build/latest?definitionId=1&branchName=master)
+[![Cargo](https://img.shields.io/badge/crates.io-v0.1.3-orange)](https://crates.io/crates/arcon)
+[![License](https://img.shields.io/badge/License-AGPL--3.0--only-blue)](https://github.com/cda-group/arcon)
+
+# arcon
 
 Requires Rust nightly (See current toolchain [here](rust-toolchain)).
 
-* [`arcon`]: Crate containing the core execution engine
-* [`arcon_codegen`]: Code generation for Arcon
-* [`arcon_compiler`]: Backend compiler targeting Arcon 
+* [`arcon_allocator`]: Custom allocator.
+* [`arcon_error`]: Common error utilities.
+* [`arcon_extra`]: Contains extra 3rd party features.
+* [`arcon_macros`]: Internal Rust macros.
+* [`arcon_state`]: State management features.
+* [`arcon_tui`]: Text-based dashboard.
 
-[`arcon`]: arcon
-[`arcon_codegen`]: arcon_codegen
-[`arcon_compiler`]: arcon_compiler
+[`arcon_allocator`]: arcon_allocator
+[`arcon_error`]: arcon_error
+[`arcon_extra`]: arcon_extra
+[`arcon_macros`]: arcon_macros
+[`arcon_state`]: arcon_state
+[`arcon_tui`]: arcon_tui
 
-
-## Ubuntu
-
-Install Protobuf:
-
-```bash
-  $ wget https://github.com/protocolbuffers/protobuf/releases/download/v3.6.1/protoc-3.6.1-linux-x86_64.zip
-  $ unzip protoc-3.6.1-linux-x86_64.zip -d protoc3
-  $ sudo mv protoc3/bin/* /usr/local/bin/
-  $ sudo mv protoc3/include/* /usr/local/include/
-```
-## MacOS
-
-Install Protobuf:
-  
-```bash
-  $ brew install protobuf@3.6
-  $ sudo cp /usr/local/opt/protobuf@3.6/bin/protoc /usr/local/bin/
-  $ sudo cp /usr/local/opt/protobuf@3.6/include/* /usr/local/include/
-```
-
-
-## Other Requirements
+## Requirements
 
 Depending on what you are compiling, you might need cmake, g++ etc...
 
@@ -52,4 +40,16 @@ $ cargo test --all
 Specific test case
 ```
 $ cargo test <test-name>
+```
+
+## Criterion Benchmarks
+
+Run All
+```
+$ cargo bench
+```
+
+Run specific benchmark
+```
+$ cargo bench --bench <bench-name>
 ```
