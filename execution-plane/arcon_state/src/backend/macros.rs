@@ -1,8 +1,6 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-
-
 // region helper macros for `with_backend_type!`
 #[doc(hidden)]
 #[cfg(feature = "rocks")]

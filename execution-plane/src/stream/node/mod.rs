@@ -178,7 +178,13 @@ where
         node_state: NodeState<OP, B>,
         timer: TimerIndex<u64, OP::TimerState, B>,
     ) -> Self {
-        Self::setup(descriptor, channel_strategy, operator, node_state, Some(timer))
+        Self::setup(
+            descriptor,
+            channel_strategy,
+            operator,
+            node_state,
+            Some(timer),
+        )
     }
 
     fn setup(

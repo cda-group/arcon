@@ -1006,11 +1006,8 @@ macro_rules! read {
             let mut map_handle: Handle<MapState<u64, $type_value>> = Handle::map("mapindex");
             backend.register_map_handle(&mut map_handle);
             let state = map_handle.activate(backend.clone());
-            let mut hash_index: HashIndex<u64, $type_value, B> = HashIndex::with_capacity(
-                state,
-                $mod_capacity,
-                $read_capacity,
-            );
+            let mut hash_index: HashIndex<u64, $type_value, B> =
+                HashIndex::with_capacity(state, $mod_capacity, $read_capacity);
 
             for i in 0..TOTAL_KEYS {
                 let _ = hash_index.put(i, $type_value::new()).unwrap();
@@ -1038,11 +1035,8 @@ macro_rules! insert {
             let mut map_handle: Handle<MapState<u64, $type_value>> = Handle::map("mapindex");
             backend.register_map_handle(&mut map_handle);
             let state = map_handle.activate(backend.clone());
-            let mut hash_index: HashIndex<u64, $type_value, B> = HashIndex::with_capacity(
-                state,
-                $mod_capacity,
-                $read_capacity,
-            );
+            let mut hash_index: HashIndex<u64, $type_value, B> =
+                HashIndex::with_capacity(state, $mod_capacity, $read_capacity);
 
             if $full_eviction {
                 $bencher.iter(|| {
@@ -1072,11 +1066,8 @@ macro_rules! rmw {
             backend.register_map_handle(&mut map_handle);
             let state = map_handle.activate(backend.clone());
 
-            let mut hash_index: HashIndex<u64, $type_value, B> = HashIndex::with_capacity(
-                state,
-                $mod_capacity,
-                $read_capacity,
-            );
+            let mut hash_index: HashIndex<u64, $type_value, B> =
+                HashIndex::with_capacity(state, $mod_capacity, $read_capacity);
 
             for i in 0..TOTAL_KEYS {
                 let _ = hash_index.put(i, $type_value::new()).unwrap();

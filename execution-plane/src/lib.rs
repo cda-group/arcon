@@ -82,18 +82,18 @@ pub mod prelude {
                 },
                 Channel,
             },
-            node::{debug::DebugNode, Node, NodeState, NodeDescriptor},
+            node::{debug::DebugNode, Node, NodeDescriptor, NodeState},
             operator::{
                 function::{Filter, FlatMap, Map, MapInPlace},
                 sink::local_file::LocalFileSink,
                 Operator, OperatorContext,
             },
-            source::collection::CollectionSource,
+            source::{collection::CollectionSource, local_file::LocalFileSource},
         },
     };
 
     #[cfg(feature = "kafka")]
-    pub use crate::stream::{operator::sink::kafka::KafkaSink};
+    pub use crate::stream::operator::sink::kafka::KafkaSink;
 
     pub use crate::data::{
         flight_serde::{reliable_remote::ReliableSerde, unsafe_remote::UnsafeSerde, FlightSerde},

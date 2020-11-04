@@ -112,8 +112,6 @@ dependencies = [
 name = "arcon_build"
 version = "0.1.0"
 dependencies = [
- "arcon",
- "cfg-if 0.1.10",
  "prost-build",
 ]
 

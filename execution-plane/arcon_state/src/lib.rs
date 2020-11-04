@@ -20,7 +20,7 @@ pub use crate::backend::*;
 #[doc(hidden)]
 pub use crate::data::{Key, Metakey, Value};
 
-pub use crate::index::{TimerIndex, HashIndex, ValueIndex, AppenderIndex};
+pub use crate::index::{AppenderIndex, HashIndex, TimerIndex, ValueIndex};
 
 #[cfg(feature = "arcon_state_derive")]
 extern crate arcon_state_derive;

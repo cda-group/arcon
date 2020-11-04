@@ -20,7 +20,8 @@ impl AggregatorOps for Rocks {
     }
 
     fn aggregator_get<A: Aggregator, IK: Metakey, N: Metakey>(
-        &self, handle: &Handle<AggregatorState<A>, IK, N>,
+        &self,
+        handle: &Handle<AggregatorState<A>, IK, N>,
     ) -> Result<<A as Aggregator>::Result> {
         let key = handle.serialize_metakeys()?;
 

@@ -3,9 +3,7 @@
 
 use crate::backend::*;
 use bytes::BufMut;
-use std::cell::Cell;
-use std::sync::Arc;
-
+use std::{cell::Cell, sync::Arc};
 
 pub struct Handle<S, IK = (), N = ()>
 where
@@ -232,10 +230,7 @@ impl<S: StateType, IK: Metakey, N: Metakey> Handle<S, IK, N> {
 
 impl<S: StateType, IK: Metakey, N: Metakey> Handle<S, IK, N> {
     #[inline]
-    pub fn activate<B: Backend>(
-        self,
-        backend: Arc<B>,
-    ) -> ActiveHandle<B, S, IK, N> {
+    pub fn activate<B: Backend>(self, backend: Arc<B>) -> ActiveHandle<B, S, IK, N> {
         if !self.registered {
             panic!("State handles should be registered before activation!")
         }
@@ -246,7 +241,6 @@ impl<S: StateType, IK: Metakey, N: Metakey> Handle<S, IK, N> {
         }
     }
 }
-
 
 // region handle activators
 impl<T: Value, IK: Metakey, N: Metakey> Handle<ValueState<T>, IK, N> {
@@ -314,9 +308,7 @@ impl<B: Backend, T: Value, IK: Metakey, N: Metakey> ActiveHandle<B, ValueState<T
 }
 
 pub type BoxedIteratorOfResult<'a, T> = Box<dyn Iterator<Item = Result<T>> + 'a>;
-impl<B: Backend, K: Key, V: Value, IK: Metakey, N: Metakey>
-    ActiveHandle<B, MapState<K, V>, IK, N>
-{
+impl<B: Backend, K: Key, V: Value, IK: Metakey, N: Metakey> ActiveHandle<B, MapState<K, V>, IK, N> {
     #[inline]
     pub fn clear(&self) -> Result<()> {
         self.backend.map_clear(&self.inner)

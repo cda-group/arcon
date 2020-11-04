@@ -66,9 +66,11 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::prelude::{NodeState, ChannelStrategy};
-    use std::io::{BufRead, BufReader};
-    use std::sync::Arc;
+    use crate::prelude::{ChannelStrategy, NodeState};
+    use std::{
+        io::{BufRead, BufReader},
+        sync::Arc,
+    };
     use tempfile::NamedTempFile;
 
     #[test]

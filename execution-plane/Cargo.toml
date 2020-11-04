@@ -21,7 +21,7 @@ members = [
 exclude = [
     "arcon_compiler",
     "arcon_codegen",
-	"experiments",
+    "experiments",
 ]
 
 [features]

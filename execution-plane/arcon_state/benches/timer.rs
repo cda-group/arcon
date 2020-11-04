@@ -1,14 +1,11 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use arcon_state::{
-    index::{timer::TimerIndex},
-    Backend, *,
-};
+use arcon_state::{index::timer::TimerIndex, Backend, *};
 use criterion::{criterion_group, criterion_main, Bencher, Criterion, Throughput};
-use std::sync::Arc;
 use once_cell::sync::Lazy;
 use rand::Rng;
+use std::sync::Arc;
 use tempfile::tempdir;
 
 const TOTAL_KEYS: u64 = 10000;

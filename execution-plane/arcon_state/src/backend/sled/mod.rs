@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
-    error::*, Aggregator, AggregatorState, Backend, Handle, Key, MapState,
-    Metakey, Reducer, ReducerState, Value, ValueState, VecState,
+    error::*, Aggregator, AggregatorState, Backend, Handle, Key, MapState, Metakey, Reducer,
+    ReducerState, Value, ValueState, VecState,
 };
 use sled::{open, Batch, Db, IVec, Tree};
 use std::path::Path;
@@ -287,7 +287,10 @@ mod tests {
             dir_path.push("sled");
             fs::create_dir(&dir_path).unwrap();
             let sled = Sled::create(&dir_path).unwrap();
-            TestDb { sled: Arc::new(sled), dir }
+            TestDb {
+                sled: Arc::new(sled),
+                dir,
+            }
         }
     }
 

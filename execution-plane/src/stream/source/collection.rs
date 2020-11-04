@@ -122,7 +122,10 @@ mod tests {
         let system = pipeline.system();
 
         let sink = system.create(move || DebugNode::<u64>::new());
-        system.start(&sink);
+        system
+            .start_notify(&sink)
+            .wait_timeout(std::time::Duration::from_millis(100))
+            .expect("started");
 
         // Configure channel strategy for sink
         let actor_ref: ActorRefStrong<ArconMessage<u64>> =
@@ -153,8 +156,11 @@ mod tests {
 
         // Set up CollectionSource component
         let collection_source = CollectionSource::new(collection, source_context);
-        let source = system.create(move || collection_source);
-        system.start(&source);
+        let source_comp = system.create(move || collection_source);
+        system
+            .start_notify(&source_comp)
+            .wait_timeout(std::time::Duration::from_millis(100))
+            .expect("started");
 
         // Wait a bit in order for all results to come in...
         std::thread::sleep(std::time::Duration::from_secs(1));

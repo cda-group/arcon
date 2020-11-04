@@ -21,18 +21,18 @@ use crate::{
     widgets::node::Node,
 };
 
+use crossbeam_channel::{select, tick};
 use crossterm::{
     cursor,
     event::{Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent},
     execute, terminal,
 };
-use crossbeam_channel::{select, tick};
 use num_rational::Ratio;
 use std::{
-    sync::Arc,
     io::{self, Write},
     panic,
     str::FromStr,
+    sync::Arc,
     time::Duration,
 };
 use tui::{backend::CrosstermBackend, Terminal};

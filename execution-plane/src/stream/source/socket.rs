@@ -129,10 +129,9 @@ mod tests {
         pipeline::ArconPipeline,
         prelude::{Channel, ChannelStrategy, DebugNode, Forward, Map},
     };
-    use std::{thread, time};
-    use tokio::{net::TcpStream, prelude::*, runtime::Runtime};
     use arcon_error::ArconResult;
-    use std::sync::Arc;
+    use std::{sync::Arc, thread, time};
+    use tokio::{net::TcpStream, prelude::*, runtime::Runtime};
 
     // Shared methods for test cases
     fn wait(time: u64) -> () {
@@ -162,8 +161,17 @@ mod tests {
         let pool_info = pipeline.get_pool_info();
         let system = pipeline.system();
 
-        let (sink, _) = system.create_and_register(DebugNode::<ExtractorStruct>::new);
-        let sink_ref = sink.actor_ref().hold().expect("Failed to fetch strong ref");
+        let sink_comp = system.create(DebugNode::<ExtractorStruct>::new);
+
+        system
+            .start_notify(&sink_comp)
+            .wait_timeout(std::time::Duration::from_millis(100))
+            .expect("started");
+
+        let sink_ref = sink_comp
+            .actor_ref()
+            .hold()
+            .expect("Failed to fetch strong ref");
         let channel_strategy =
             ChannelStrategy::Forward(Forward::new(Channel::Local(sink_ref), 1.into(), pool_info));
 
@@ -189,11 +197,14 @@ mod tests {
         );
 
         let socket_source = SocketSource::new(addr, SocketKind::Tcp, source_context);
-        let (source, _) = system.create_and_register(move || socket_source);
+        let source_comp = system.create(move || socket_source);
 
-        system.start(&sink);
-        system.start(&source);
-        wait(1);
+        system
+            .start_notify(&source_comp)
+            .wait_timeout(std::time::Duration::from_millis(100))
+            .expect("started");
+
+        std::thread::sleep(std::time::Duration::from_millis(100));
 
         // The actual test:
         let client = async {
@@ -204,7 +215,7 @@ mod tests {
         Runtime::new().unwrap().block_on(client);
 
         wait(1);
-        sink.on_definition(|cd| {
+        sink_comp.on_definition(|cd| {
             assert_eq!(cd.data.len(), (1 as usize));
             assert_eq!(cd.watermarks.last().unwrap().timestamp, 1);
         });

@@ -84,7 +84,6 @@ impl MapOps for Rocks {
         handle: &Handle<MapState<K, V>, IK, N>,
         key_value_pairs: impl IntoIterator<Item = (K, V)>,
     ) -> Result<()> {
-
         let mut wb = WriteBatch::default();
         let cf = self.get_cf_handle(handle.id)?;
 
@@ -101,7 +100,6 @@ impl MapOps for Rocks {
         handle: &Handle<MapState<K, V>, IK, N>,
         key_value_pairs: impl IntoIterator<Item = (&'a K, &'a V)>,
     ) -> Result<()> {
-
         let mut wb = WriteBatch::default();
         let cf = self.get_cf_handle(handle.id)?;
 
@@ -156,14 +154,12 @@ impl MapOps for Rocks {
         &self,
         handle: &Handle<MapState<K, V>, IK, N>,
     ) -> Result<BoxedIteratorOfResult<'_, (K, V)>> {
-
         let prefix = handle.serialize_metakeys()?;
         let cf = self.get_cf_handle(handle.id)?;
         // NOTE: prefix_iterator only works as expected when the cf has proper prefix_extractor
         //   option set. We do that in Rocks::register_*_state
         let iter =
-            self
-                .db()
+            self.db()
                 .prefix_iterator_cf(cf, prefix)?
                 .map(move |(db_key, serialized_value)| {
                     let mut key_cursor = &db_key[..];

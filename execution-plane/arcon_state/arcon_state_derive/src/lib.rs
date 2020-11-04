@@ -19,7 +19,7 @@ pub fn arcon_state(input: TokenStream) -> TokenStream {
         match s.fields {
             syn::Fields::Named(ref fields_named) => {
                 for field in fields_named.named.iter() {
-                    let mut ephemeral= false;
+                    let mut ephemeral = false;
                     for attr in field.attrs.iter() {
                         let meta = attr.parse_meta().unwrap();
                         match meta {

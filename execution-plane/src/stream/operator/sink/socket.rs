@@ -85,8 +85,7 @@ where
         &mut self,
         element: ArconElement<Self::IN>,
         _ctx: OperatorContext<Self, B, impl ComponentDefinition>,
-    )  -> ArconResult<()>
-    {
+    ) -> ArconResult<()> {
         let mut tx = self.tx_channel.clone();
         let fmt_data = {
             if let Ok(mut json) = serde_json::to_string(&element.data) {
@@ -115,7 +114,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::prelude::{NodeState, ChannelStrategy};
+    use crate::prelude::{ChannelStrategy, NodeState};
     use std::sync::Arc;
 
     #[test]
@@ -140,11 +139,10 @@ mod tests {
                         NodeState::new(NodeID::new(0), vec![node_id], backend.clone()),
                     )
                 });
-
-                system.start(&socket_sink);
-                system.start(&socket_sink);
-
-                std::thread::sleep(std::time::Duration::from_millis(100));
+                system
+                    .start_notify(&socket_sink)
+                    .wait_timeout(std::time::Duration::from_millis(100))
+                    .expect("started");
 
                 let target: ActorRef<ArconMessage<i64>> = socket_sink.actor_ref();
                 target.tell(ArconMessage::element(10 as i64, None, 1.into()));

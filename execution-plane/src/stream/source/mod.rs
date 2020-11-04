@@ -17,7 +17,7 @@ use std::sync::Arc;
 pub mod collection;
 //#[cfg(feature = "kafka")]
 //pub mod kafka;
-//pub mod local_file;
+pub mod local_file;
 #[cfg(feature = "socket")]
 pub mod socket;
 

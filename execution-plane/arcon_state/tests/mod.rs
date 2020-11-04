@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use arcon_state::{
-    backend::{Backend, Sled, Handle},
+    backend::{Backend, Handle, Sled},
     index::{HashIndex, IndexOps, ValueIndex},
     ArconState,
 };

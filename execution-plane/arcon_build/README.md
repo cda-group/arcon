@@ -1,0 +1,7 @@
+[![Build Status](https://dev.azure.com/arcon-cda/arcon/_apis/build/status/cda-group.arcon?branchName=master)](https://dev.azure.com/arcon-cda/arcon/_build/latest?definitionId=1&branchName=master)
+[![Cargo](https://img.shields.io/badge/crates.io-v0.1.0-orange)](https://crates.io/crates/arcon_build)
+[![License](https://img.shields.io/badge/License-AGPL--3.0--only-blue)](https://github.com/cda-group/arcon)
+
+# arcon build
+
+`arcon_build` is a crate for generating .proto definitions into `arcon` supported data types.

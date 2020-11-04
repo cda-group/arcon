@@ -213,11 +213,12 @@ pub mod tests {
     fn tcp_io_test() {
         let system = KompactConfig::default().build().expect("KompactSystem");
         let addr = "127.0.0.1:3333".parse().unwrap();
-        let (io_source, _) = system.create_and_register(move || IOSource::new(addr, IOKind::Tcp));
-        system.start(&io_source);
+        let io_source = system.create(move || IOSource::new(addr, IOKind::Tcp));
 
-        // Make sure IO::TCP is started
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        system
+            .start_notify(&io_source)
+            .wait_timeout(std::time::Duration::from_millis(100))
+            .expect("started");
 
         let client = async {
             let mut stream = TcpStream::connect(&addr).await.expect("couldn't connect");
@@ -237,8 +238,13 @@ pub mod tests {
     fn udp_io_test() {
         let system = KompactConfig::default().build().expect("KompactSystem");
         let sock = "127.0.0.1:9313".parse().unwrap();
-        let (io_source, _) = system.create_and_register(move || IOSource::new(sock, IOKind::Udp));
-        system.start(&io_source);
+        let io_source = system.create(move || IOSource::new(sock, IOKind::Udp));
+
+        system
+            .start_notify(&io_source)
+            .wait_timeout(std::time::Duration::from_millis(100))
+            .expect("started");
+
         std::thread::sleep(std::time::Duration::from_millis(100));
 
         let client = async {
