@@ -6,16 +6,16 @@ jobs:
   pool:
     vmImage: 'ubuntu-latest'
   steps:
-  - template: ci/azure-execution-plane.yml
+  - template: ci/azure-arcon.yml
     parameters:
       name: linux_arcon
-      displayName: 'Arcon execution plane'
+      displayName: 'Arcon'
 - job: MacOSX
   pool:
     vmImage: 'macOS-latest'
   steps:
   - script: ulimit -n 20000 20000
-  - template: ci/azure-execution-plane.yml
+  - template: ci/azure-arcon.yml
     parameters:
       name: macosx_arcon
-      displayName: 'Arcon execution plane'
+      displayName: 'Arcon'
