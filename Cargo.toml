@@ -8,13 +8,13 @@ license = "AGPL-3.0-only"
 repository = "https://github.com/cda-group/arcon"
 homepage = "https://github.com/cda-group/arcon"
 description = """
-Arcon's execution plane
+Streaming-first Analytics Engine
 """
 
 [workspace]
 members = [
   "arcon_build",
-  "proto_tests",
+  "arcon_tests",
 ]
 
 # TODO fix these later again
