@@ -12,8 +12,9 @@ Requires Rust nightly (See current toolchain [here](rust-toolchain)).
 * [`arcon_build`]: Protobuf builder
 * [`arcon_error`]: Common error utilities.
 * [`arcon_extra`]: Contains extra 3rd party features.
-* [`arcon_macros`]: Internal Rust macros.
+* [`arcon_macros`]: Arcon derive macros.
 * [`arcon_state`]: State management features.
+* [`arcon_tests`]: Integration tests
 * [`arcon_tui`]: Text-based dashboard.
 
 [`arcon_allocator`]: arcon_allocator
@@ -22,6 +23,7 @@ Requires Rust nightly (See current toolchain [here](rust-toolchain)).
 [`arcon_extra`]: arcon_extra
 [`arcon_macros`]: arcon_macros
 [`arcon_state`]: arcon_state
+[`arcon_tests`]: arcon_tests
 [`arcon_tui`]: arcon_tui
 
 ## Requirements

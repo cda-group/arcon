@@ -33,7 +33,10 @@ const BOOL_IDENT: &str = "bool";
 /// ```rust,ignore
 /// #[derive(Arcon)]
 /// #[arcon(unsafe_ser_id = 104, reliable_ser_id = 105, version = 1)]
-/// struct ArconStruct {}
+/// pub struct ArconStruct {
+///     #[prost(uint32, tag = "1")]
+///     pub id: u32,
+/// }
 /// ```
 #[proc_macro_derive(Arcon, attributes(arcon))]
 pub fn arcon(input: TokenStream) -> TokenStream {

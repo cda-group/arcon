@@ -97,19 +97,6 @@ impl<OP: Operator<B> + 'static, B: Backend> NodeState<OP, B> {
             watermarks.insert(*sender, Watermark::new(0));
         }
 
-        // timer
-        /*
-        let mut timeouts_handle = Handle::map("_timeouts");
-        backend.register_map_handle(&mut timeouts_handle);
-        let timeouts_handle = timeouts_handle.activate(backend.clone());
-
-        let mut time_handle = Handle::value("_time");
-        backend.register_value_handle(&mut time_handle);
-        let time_handle = time_handle.activate(backend.clone());
-
-        let timer = TimerIndex::new(timeouts_handle, time_handle);
-        */
-
         Self {
             message_buffer,
             watermarks,
@@ -125,7 +112,11 @@ impl<OP: Operator<B> + 'static, B: Backend> NodeState<OP, B> {
 // Just a shorthand to avoid repeating the OperatorContext construction everywhere
 macro_rules! make_context {
     ($sel:ident) => {
-        OperatorContext::new($sel, &mut None, &mut (*$sel.channel_strategy.get()))
+        OperatorContext::new(
+            $sel,
+            &mut (*$sel.timer.get()),
+            &mut (*$sel.channel_strategy.get()),
+        )
     };
 }
 
@@ -230,7 +221,7 @@ where
         self.handle_events(message.sender, message.events)
     }
 
-    /// Handle a local ArconMessage that is backed by an arcon allocator
+    /// Handle a local ArconMessage that is backed by the arcon allocator
     #[inline]
     fn handle_message(&mut self, message: ArconMessage<OP::IN>) -> ArconResult<()> {
         if !self.node_state.in_channels.contains(&message.sender) {

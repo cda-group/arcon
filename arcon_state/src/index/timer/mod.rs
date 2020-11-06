@@ -12,6 +12,26 @@ use hierarchical_hash_wheel_timer::{
 use core::time::Duration;
 use std::{cmp::Eq, hash::Hash};
 
+#[derive(prost::Message, PartialEq, Clone)]
+pub struct EventTimerEvent<E: Value> {
+    #[prost(uint64, tag = "1")]
+    time_when_scheduled: u64,
+    #[prost(uint64, tag = "2")]
+    timeout_millis: u64,
+    #[prost(message, required, tag = "3")]
+    payload: E,
+}
+
+impl<E: Value> EventTimerEvent<E> {
+    fn new(time_when_scheduled: u64, timeout_millis: u64, payload: E) -> Self {
+        EventTimerEvent {
+            time_when_scheduled,
+            timeout_millis,
+            payload,
+        }
+    }
+}
+
 /// An Index for Stream Timers
 ///
 /// The Index utilises the [QuadWheelWithOverflow] data structure
@@ -24,7 +44,7 @@ where
     B: Backend,
 {
     timer: QuadWheelWithOverflow<K>,
-    timeouts: HashIndex<K, V, B>,
+    timeouts: HashIndex<K, EventTimerEvent<V>, B>,
     current_time: ValueIndex<u64, B>,
 }
 
@@ -35,7 +55,7 @@ where
     B: Backend,
 {
     pub fn new(
-        timeouts_handle: ActiveHandle<B, MapState<K, V>>,
+        timeouts_handle: ActiveHandle<B, MapState<K, EventTimerEvent<V>>>,
         time_handle: ActiveHandle<B, ValueState<u64>>,
     ) -> Self {
         Self {
@@ -46,8 +66,25 @@ where
     }
 
     fn _replay_events(&mut self) {
-        // TODO: rebuild the QuadWheelWithOverflow data structure using self.timeouts & self.current_time
         //let time = self.current_time.get().unwrap_or(&0);
+
+        // TODO: support full iter at HashIndex
+        /*
+        for res in self
+            .timeouts
+            .iter()
+            .expect("could not get timeouts")
+        {
+            let (id, entry) = res.expect("could not get timeout entry");
+            let delay = entry.time_when_scheduled + entry.timeout_millis - time;
+            if let Err(f) = self
+                .timer
+                .insert_with_delay(id, Duration::from_millis(delay))
+            {
+                panic!("A timeout has expired during replay: {:?}", f);
+            }
+        }
+        */
     }
 
     #[inline(always)]
@@ -106,7 +143,10 @@ where
     // Lookup id, remove from storage, and return Executable action
     #[inline(always)]
     fn take_entry(&mut self, id: K) -> Option<V> {
-        self.timeouts.remove(&id).expect("no timeout found for id") // this wouldn't necessarily be an error anymore if we add a cancellation API at some point
+        self.timeouts
+            .remove(&id)
+            .expect("no timeout found for id") // this wouldn't necessarily be an error anymore if we add a cancellation API at some point
+            .map(|e| e.payload)
     }
 
     #[inline(always)]
@@ -117,7 +157,8 @@ where
         {
             Ok(_) => {
                 // TODO: fix map_err
-                let _ = self.timeouts.put(id, entry);
+                let event = EventTimerEvent::new(self.current_time(), delay, entry);
+                let _ = self.timeouts.put(id, event);
                 Ok(())
             }
             Err(TimerError::Expired(_)) => Err(entry),

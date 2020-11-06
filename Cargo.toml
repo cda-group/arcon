@@ -34,7 +34,7 @@ quiet = ["slog"]
 metrics = []
 
 # state features
-arcon_rocksdb = ["arcon_state/rocks"]
+rocksdb = ["arcon_state/rocks"]
 
 [dependencies]
 arcon_macros = { version = "0.1", path = "arcon_macros" }
