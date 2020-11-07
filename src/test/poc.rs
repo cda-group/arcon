@@ -76,7 +76,7 @@ fn poc_test() {
     let test_dir_two = tempfile::tempdir().unwrap();
     let test_dir_two = test_dir_two.path();
 
-    let mut pipeline = ArconPipeline::with_conf(conf);
+    let mut pipeline = Pipeline::with_conf(conf);
     let pool_info = pipeline.get_pool_info();
     let system = &pipeline.system();
 

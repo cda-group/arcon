@@ -175,7 +175,7 @@ impl Epoch {
 /// An ArconMessage backed by a reusable EventBuffer
 #[derive(Debug, Clone)]
 pub struct ArconMessage<A: ArconType> {
-    /// Batch of ArconEvents backed by an [EventBuffer]
+    /// Batch of ArconEvents backed by an EventBuffer
     pub events: BufferReader<ArconEventWrapper<A>>,
     /// ID identifying where the message is sent from
     pub sender: NodeID,
@@ -509,7 +509,7 @@ impl Default for ArconNever {
     }
 }
 
-/// Variant of [Writer](bytess::buf::ext::Writer) for trait objects
+/// Variant of [Writer](bytes::buf::ext::Writer) for trait objects
 pub struct BufMutWriter<'a> {
     buf: &'a mut dyn BufMut,
 }

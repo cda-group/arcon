@@ -126,7 +126,7 @@ where
 mod tests {
     use super::*;
     use crate::{
-        pipeline::ArconPipeline,
+        pipeline::Pipeline,
         prelude::{Channel, ChannelStrategy, DebugNode, Forward, Map},
     };
     use arcon_error::ArconResult;
@@ -157,7 +157,7 @@ mod tests {
         let addr = "127.0.0.1:4001".parse().unwrap();
 
         // Setup
-        let mut pipeline = ArconPipeline::new();
+        let mut pipeline = Pipeline::new();
         let pool_info = pipeline.get_pool_info();
         let system = pipeline.system();
 

@@ -18,7 +18,7 @@ use kompact::{component::AbstractComponent, prelude::KompactSystem};
 use std::sync::{Arc, Mutex};
 
 #[derive(Clone)]
-pub struct ArconPipeline {
+pub struct Pipeline {
     /// [kompact] system that drives the execution of components
     system: KompactSystem,
     /// Arcon configuration for this pipeline
@@ -44,7 +44,7 @@ pub type CreatedDynamicNode<IN> = Arc<dyn AbstractComponent<Message = ArconMessa
 /// A Source with operator type, state backend type, and timer type erased
 pub type DynamicSource = Box<dyn CreateErased<()>>;
 
-impl ArconPipeline {
+impl Pipeline {
     /// Creates a new Pipeline using the default ArconConf
     pub fn new() -> Self {
         let conf = ArconConf::default();
@@ -68,7 +68,7 @@ impl ArconPipeline {
         }
     }
 
-    /// Creates a new ArconPipeline using the given ArconConf
+    /// Creates a new Pipeline using the given ArconConf
     pub fn with_conf(conf: ArconConf) -> Self {
         let allocator = Arc::new(Mutex::new(Allocator::new(conf.allocator_capacity)));
         #[cfg(feature = "arcon_tui")]

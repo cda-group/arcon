@@ -291,7 +291,7 @@ mod test {
     where
         ReceivingType: ArconType,
     {
-        let pipeline = ArconPipeline::new();
+        let pipeline = Pipeline::new();
         let pool_info = pipeline.get_pool_info();
         let (local, remote) = get_systems();
         let timeout = Duration::from_millis(150);

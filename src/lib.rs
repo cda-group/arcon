@@ -73,7 +73,7 @@ pub mod prelude {
         buffer::event::{BufferPool, BufferReader, BufferWriter, PoolInfo},
         conf::ArconConf,
         data::VersionId,
-        pipeline::ArconPipeline,
+        pipeline::Pipeline,
         stream::{
             channel::{
                 strategy::{

@@ -172,14 +172,14 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{data::ArconEvent, pipeline::ArconPipeline, stream::channel::strategy::tests::*};
+    use crate::{data::ArconEvent, pipeline::Pipeline, stream::channel::strategy::tests::*};
     use kompact::prelude::*;
     use rand::Rng;
     use std::sync::Arc;
 
     #[test]
     fn keyby_test() {
-        let mut pipeline = ArconPipeline::new();
+        let mut pipeline = Pipeline::new();
         let pool_info = pipeline.get_pool_info();
         let system = pipeline.system();
 

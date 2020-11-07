@@ -114,7 +114,7 @@ fn hash(c: &mut Criterion) {
         std::mem::size_of::<LargeStruct>()
     );
 
-    for input in MOD_CAPACITY.iter().cartesian_product(READ_CAPACITY.iter()) {
+    for input in MOD_CAPACITY.iter().zip(READ_CAPACITY.iter()) {
         let (mod_capacity, read_capacity) = input;
         let description = format!(
             "mod_capacity: {}, read_capacity: {}",

@@ -130,7 +130,7 @@ mod tests {
     use super::*;
     use crate::{
         data::ArconElement,
-        pipeline::ArconPipeline,
+        pipeline::Pipeline,
         prelude::DebugNode,
         stream::channel::strategy::{tests::*, ChannelStrategy},
     };
@@ -139,7 +139,7 @@ mod tests {
 
     #[test]
     fn broadcast_local_test() {
-        let mut pipeline = ArconPipeline::new();
+        let mut pipeline = Pipeline::new();
         let pool_info = pipeline.get_pool_info();
         let system = pipeline.system();
 

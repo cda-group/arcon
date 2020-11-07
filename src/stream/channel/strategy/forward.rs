@@ -106,7 +106,7 @@ mod tests {
 
     #[test]
     fn forward_test() {
-        let mut pipeline = ArconPipeline::new();
+        let mut pipeline = Pipeline::new();
         let pool_info = pipeline.get_pool_info();
         let system = pipeline.system();
 

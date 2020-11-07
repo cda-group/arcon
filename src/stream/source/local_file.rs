@@ -111,7 +111,7 @@ mod tests {
     use super::*;
     use crate::{
         data::{ArconF64, ArconType},
-        pipeline::ArconPipeline,
+        pipeline::Pipeline,
         prelude::{Channel, ChannelStrategy, DebugNode, Forward, Map, NodeID},
     };
     use arcon_error::ArconResult;
@@ -123,8 +123,8 @@ mod tests {
         thread::sleep(time::Duration::from_secs(time));
     }
 
-    fn test_setup<A: ArconType>() -> (ArconPipeline, Arc<Component<DebugNode<A>>>) {
-        let mut pipeline = ArconPipeline::new();
+    fn test_setup<A: ArconType>() -> (Pipeline, Arc<Component<DebugNode<A>>>) {
+        let mut pipeline = Pipeline::new();
         let system = pipeline.system();
         let sink = system.create(move || {
             let s: DebugNode<A> = DebugNode::new();

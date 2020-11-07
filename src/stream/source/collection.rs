@@ -110,14 +110,14 @@ mod tests {
     use super::*;
     use crate::{
         data::ArconMessage,
-        pipeline::ArconPipeline,
+        pipeline::Pipeline,
         prelude::{Channel, ChannelStrategy, DebugNode, Filter, Forward},
     };
     use std::sync::Arc;
 
     #[test]
     fn collection_source_test() {
-        let mut pipeline = ArconPipeline::new();
+        let mut pipeline = Pipeline::new();
         let pool_info = pipeline.get_pool_info();
         let system = pipeline.system();
 
