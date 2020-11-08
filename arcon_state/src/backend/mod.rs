@@ -249,6 +249,8 @@ impl<A: Aggregator> Default for AggregatorState<A> {
 
 //pub mod metered;
 //pub use self::metered::Metered;
+pub mod never;
+pub use self::never::BackendNever;
 
 #[cfg(feature = "rocks")]
 pub mod rocks;
