@@ -47,7 +47,7 @@ pub type DynamicSource = Box<dyn CreateErased<()>>;
 impl Pipeline {
     /// Creates a new Pipeline using the default ArconConf
     pub fn new() -> Self {
-        let conf = ArconConf::default();
+        let conf: ArconConf = Default::default();
         let allocator = Arc::new(Mutex::new(Allocator::new(conf.allocator_capacity)));
         #[cfg(feature = "arcon_tui")]
         let (system, state_manager, tui_component, arcon_receiver) = Self::setup(&conf);

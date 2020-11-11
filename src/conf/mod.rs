@@ -19,6 +19,9 @@ pub struct ArconConf {
     /// Base directory for checkpoints
     #[serde(default = "checkpoint_dir_default")]
     pub checkpoint_dir: PathBuf,
+    /// Generation interval in milliseconds for Epochs
+    #[serde(default = "epoch_interval_default")]
+    pub epoch_interval: u64,
     /// Generation interval in milliseconds for Watermarks at sources
     #[serde(default = "watermark_interval_default")]
     pub watermark_interval: u64,
@@ -60,6 +63,29 @@ pub struct ArconConf {
     #[serde(default = "kompact_encode_buf_min_free_space_default")]
     pub kompact_encode_buf_min_free_space: usize,
 }
+impl Default for ArconConf {
+    fn default() -> Self { 
+        ArconConf {
+            state_dir: state_dir_default(),
+            checkpoint_dir: checkpoint_dir_default(),
+            watermark_interval: watermark_interval_default(),
+            epoch_interval: epoch_interval_default(),
+            node_metrics_interval: node_metrics_interval_default(),
+            buffer_pool_size: buffer_pool_size_default(),
+            buffer_pool_limit: buffer_pool_limit_default(),
+            channel_batch_size: channel_batch_size_default(),
+            allocator_capacity: allocator_capacity_default(),
+            kompact_threads: kompact_threads_default(),
+            kompact_throughput: kompact_throughput_default(),
+            kompact_msg_priority: kompact_msg_priority_default(),
+            kompact_network_host: kompact_network_host_default(),
+            kompact_chunk_size: kompact_chunk_size_default(),
+            kompact_max_chunk_count: kompact_max_chunk_count_default(),
+            kompact_initial_chunk_count: kompact_initial_chunk_count_default(),
+            kompact_encode_buf_min_free_space: kompact_encode_buf_min_free_space_default(),
+        }
+    }
+}
 
 impl ArconConf {
     /// Returns a KompactConfig based on loaded ArconConf
@@ -95,28 +121,6 @@ impl ArconConf {
         cfg
     }
 
-    /// Returns the default Arcon Configuration
-    pub fn default() -> ArconConf {
-        ArconConf {
-            state_dir: state_dir_default(),
-            checkpoint_dir: checkpoint_dir_default(),
-            watermark_interval: watermark_interval_default(),
-            node_metrics_interval: node_metrics_interval_default(),
-            buffer_pool_size: buffer_pool_size_default(),
-            buffer_pool_limit: buffer_pool_limit_default(),
-            channel_batch_size: channel_batch_size_default(),
-            allocator_capacity: allocator_capacity_default(),
-            kompact_threads: kompact_threads_default(),
-            kompact_throughput: kompact_throughput_default(),
-            kompact_msg_priority: kompact_msg_priority_default(),
-            kompact_network_host: kompact_network_host_default(),
-            kompact_chunk_size: kompact_chunk_size_default(),
-            kompact_max_chunk_count: kompact_max_chunk_count_default(),
-            kompact_initial_chunk_count: kompact_initial_chunk_count_default(),
-            kompact_encode_buf_min_free_space: kompact_encode_buf_min_free_space_default(),
-        }
-    }
-
     /// Loads ArconConf from a file
     pub fn from_file(path: impl AsRef<Path>) -> ArconResult<ArconConf> {
         let data = std::fs::read_to_string(path)
@@ -145,6 +149,10 @@ fn checkpoint_dir_default() -> PathBuf {
     let mut res = std::env::temp_dir();
     res.push("arcon/checkpoints");
     res
+}
+fn epoch_interval_default() -> u64 {
+    // in milliseconds
+    2000
 }
 
 fn watermark_interval_default() -> u64 {
