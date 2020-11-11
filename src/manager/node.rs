@@ -22,11 +22,34 @@ pub struct MetricReport {
     pub(crate) parallelism: usize,
     pub(crate) metrics: NodeMetrics,
 }
+use std::sync::atomic::{AtomicBool, Ordering};
 
-#[derive(Debug, Clone)]
-pub struct CheckpointRequest(pub NodeID, pub Epoch);
-#[derive(Debug, Clone)]
-pub struct CheckpointResponse(pub bool);
+/// Checkpoint Request for a running Node
+#[derive(Debug)]
+pub struct CheckpointRequest {
+    /// Indicates which Node the request is coming from
+    pub(crate) id: NodeID,
+    /// Which Epoch the request is for
+    pub(crate) epoch: Epoch,
+    /// A flag for indicating whether the checkpoint completed
+    flag: AtomicBool,
+}
+
+impl CheckpointRequest {
+    pub fn new(id: NodeID, epoch: Epoch) -> Self {
+        Self {
+            id,
+            epoch,
+            flag: AtomicBool::new(false),
+        }
+    }
+    fn complete(&self) {
+        self.flag.store(true, Ordering::Relaxed);
+    }
+    pub(crate) fn is_complete(&self) -> bool {
+        self.flag.load(Ordering::Relaxed)
+    }
+}
 
 /// Enum containing possible local node events
 #[derive(Debug)]
@@ -35,8 +58,7 @@ pub enum NodeEvent {
     Metrics(NodeID, NodeMetrics),
     Watermark(NodeID, Watermark),
     Epoch(NodeID, Epoch),
-    //Checkpoint(NodeID, Epoch, KPromise<()>),
-    Checkpoint(NodeID, Epoch),
+    Checkpoint(Arc<CheckpointRequest>),
 }
 
 impl Clone for NodeEvent {
@@ -187,8 +209,10 @@ where
             NodeEvent::Epoch(id, e) => {
                 self.manager_state.epochs.put(id, e)?;
             }
-            NodeEvent::Checkpoint(_, _) => {
+            NodeEvent::Checkpoint(request) => {
                 self.checkpoint()?;
+                // TODO: actually have to wait for all nodes..
+                request.complete();
             }
             #[cfg(feature = "metrics")]
             NodeEvent::Metrics(_, _) => {}

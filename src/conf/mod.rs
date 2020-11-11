@@ -10,9 +10,19 @@ use kompact::{
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
+/// Types of modes that `arcon` may run in
+#[derive(Deserialize, Clone, Debug)]
+pub enum ExecutionMode {
+    Local,
+    Distributed,
+}
+
 /// Configuration for an Arcon Pipeline
 #[derive(Deserialize, Clone, Debug)]
 pub struct ArconConf {
+    /// Either a `Local` or `Distributed` Execution Mode
+    #[serde(default = "execution_mode_default")]
+    pub execution_mode: ExecutionMode,
     /// Base directory for live state backend data
     #[serde(default = "state_dir_default")]
     pub state_dir: PathBuf,
@@ -64,8 +74,9 @@ pub struct ArconConf {
     pub kompact_encode_buf_min_free_space: usize,
 }
 impl Default for ArconConf {
-    fn default() -> Self { 
+    fn default() -> Self {
         ArconConf {
+            execution_mode: execution_mode_default(),
             state_dir: state_dir_default(),
             checkpoint_dir: checkpoint_dir_default(),
             watermark_interval: watermark_interval_default(),
@@ -138,6 +149,10 @@ impl ArconConf {
 }
 
 // Default values
+
+fn execution_mode_default() -> ExecutionMode {
+    ExecutionMode::Local
+}
 
 fn state_dir_default() -> PathBuf {
     let mut res = std::env::temp_dir();

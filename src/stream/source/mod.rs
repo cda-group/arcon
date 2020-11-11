@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
-    data::{ArconElement, ArconEvent, Watermark},
+    data::{ArconElement, ArconEvent, Epoch, Watermark},
     prelude::state,
     stream::{
         channel::strategy::ChannelStrategy,
@@ -20,6 +20,12 @@ pub mod collection;
 pub mod local_file;
 #[cfg(feature = "socket")]
 pub mod socket;
+
+/// Message type Arcon sources must implement
+#[derive(Debug)]
+pub enum ArconSource {
+    Epoch(Epoch),
+}
 
 /// Common Context for all Source implementations
 pub struct SourceContext<OP: Operator<B> + 'static, B: state::Backend> {

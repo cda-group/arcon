@@ -167,8 +167,13 @@ pub struct Epoch {
 }
 
 impl Epoch {
+    /// Creates a new Epoch
     pub fn new(epoch: u64) -> Self {
         Epoch { epoch }
+    }
+    /// Helper method for bumping the epoch number
+    pub fn bump(&mut self) {
+        self.epoch += 1;
     }
 }
 

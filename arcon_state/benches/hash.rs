@@ -7,7 +7,6 @@ use arcon_state::{
     *,
 };
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use itertools::Itertools;
 use once_cell::sync::Lazy;
 use rand::Rng;
 use std::sync::Arc;

@@ -144,6 +144,8 @@ where
     node_state: NodeState<OP, B>,
     /// Event time scheduler
     timer: UnsafeCell<Option<TimerIndex<u64, OP::TimerState, B>>>,
+
+    checkpoint_request: Option<Arc<CheckpointRequest>>,
 }
 
 impl<OP, B> Node<OP, B>
@@ -195,6 +197,7 @@ where
             metrics: NodeMetrics::new(),
             node_state,
             timer: UnsafeCell::new(timer),
+            checkpoint_request: None,
         }
     }
 
@@ -210,6 +213,14 @@ where
             .blocked_channels()
             .contains_key(&message.sender)
         {
+            if let Some(req) = &self.checkpoint_request {
+                if req.is_complete() {
+                    self.complete_epoch()?;
+                    // epoch finalised, handle events as normal..
+                    return self.handle_events(message.sender, message.events);
+                }
+            }
+
             // Add the message to the back of the queue
             self.node_state.message_buffer().append(message)?;
             return Ok(());
@@ -233,6 +244,13 @@ where
             .blocked_channels()
             .contains_key(&message.sender)
         {
+            if let Some(req) = &mut self.checkpoint_request {
+                if req.is_complete() {
+                    self.complete_epoch()?;
+                    // epoch finalised, handle events as normal..
+                    return self.handle_events(message.sender, message.events);
+                }
+            }
             // Add the message to the back of the queue
             self.node_state.message_buffer().append(message.into())?;
             return Ok(());
@@ -324,7 +342,7 @@ where
                     }
                 }
                 ArconEvent::Epoch(e) => {
-                    if e <= self.node_state.current_epoch {
+                    if e < self.node_state.current_epoch {
                         continue 'event_loop;
                     }
 
@@ -334,43 +352,31 @@ where
                     // If all senders blocked we can transition to new Epoch
                     if self.node_state.blocked_channels().len() == self.node_state.in_channels.len()
                     {
-                        self.node_state.current_epoch = e;
-
                         // persist internal node state for this node
                         self.node_state.persist()?;
 
-                        // persist possible operator state..
                         unsafe {
+                            // persist timer if enabled
+                            if let Some(timer) = &mut (*self.timer.get()) {
+                                timer.persist()?;
+                            }
+                            // persist possible operator state..
                             (*self.operator.get()).persist()?;
                         };
 
-                        // TODO: Add checkpoint state here
-                        // Let NodeManager know this Node is ready for checkpointing
-                        // NOTE: This will await all nodes on the parent NodeManager
-                        // to coordinate a snapshot of the underlying backend.
-                        //
-                        // NOTE: must await this call blocking here...
-                        self.node_manager_port
-                            .trigger(Checkpoint(self.node_state.id, e));
+                        // Create checkpoint request and send it off to the NodeManager
+                        let request = Arc::new(CheckpointRequest::new(self.node_state.id, e));
+                        self.checkpoint_request = Some(request.clone());
+                        self.node_manager_port.trigger(Checkpoint(request));
 
                         // Forward the Epoch
                         unsafe {
-                            (*self.channel_strategy.get()).add(ArconEvent::Epoch(e), self);
+                            (*self.channel_strategy.get())
+                                .add(ArconEvent::Epoch(self.node_state.current_epoch), self);
                         };
 
-                        #[cfg(feature = "metrics")]
-                        {
-                            self.metrics.epoch = e;
-                            self.metrics.epoch_counter.inc();
-                        }
-
-                        // flush the blocked_channels list
-                        self.node_state.blocked_channels().clear();
-
-                        // Iterate over the message-buffer until empty
-                        for message in self.node_state.message_buffer().consume()? {
-                            self.handle_events(message.sender, message.events)?;
-                        }
+                        // Update current epoch
+                        self.node_state.current_epoch = e;
                     }
                 }
                 ArconEvent::Death(s) => {
@@ -382,6 +388,35 @@ where
                 }
             }
         }
+
+        Ok(())
+    }
+
+    #[inline]
+    fn complete_epoch(&mut self) -> ArconResult<()> {
+        // flush the blocked_channels list
+        self.node_state.blocked_channels().clear();
+
+        // Clear request
+        self.checkpoint_request = None;
+
+        //self.node_state.current_epoch.bump();
+
+        #[cfg(feature = "metrics")]
+        {
+            self.metrics.epoch = self.node_state.current_epoch;
+            self.metrics.epoch_counter.inc();
+        }
+
+        // Iterate over the message-buffer until empty
+        for message in self.node_state.message_buffer().consume()? {
+            self.handle_events(message.sender, message.events)?;
+        }
+
+        // TODO: remove
+        unsafe {
+            (*self.channel_strategy.get()).flush(self);
+        };
 
         Ok(())
     }
@@ -682,8 +717,10 @@ mod tests {
         node_ref.tell(epoch(2, 3));
         // All the elements should now have been delivered in specific order
 
+        wait(3);
         node_ref.tell(death(3)); // send death marker on unblocked channel to flush
-        wait(5);
+        wait(3);
+
         sink.on_definition(|cd| {
             let data_len = cd.data.len();
             let epoch_len = cd.epochs.len();

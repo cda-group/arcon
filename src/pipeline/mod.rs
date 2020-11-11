@@ -6,12 +6,14 @@ use arcon_tui::{component::TuiComponent, widgets::node::Node as TuiNode};
 
 use crate::{
     buffer::event::PoolInfo,
-    conf::ArconConf,
+    conf::{ArconConf, ExecutionMode},
     manager::{
+        epoch::EpochManager,
         node::*,
         state::{SnapshotRef, StateManager, StateManagerPort},
     },
     prelude::*,
+    stream::source::ArconSource,
 };
 use arcon_allocator::Allocator;
 use kompact::{component::AbstractComponent, prelude::KompactSystem};
@@ -25,12 +27,10 @@ pub struct Pipeline {
     conf: ArconConf,
     /// Arcon allocator for this pipeline
     allocator: Arc<Mutex<Allocator>>,
+    /// EpochManager component for this pipeline
+    epoch_manager: Option<Arc<Component<EpochManager>>>,
     /// StateManager component for this pipeline
     state_manager: Arc<Component<StateManager>>,
-    // NodeManagers launched on top of this pipeline
-    //node_managers: FxHashMap<String, ActorRefStrong<NodeEvent>>,
-    source: Option<Arc<dyn AbstractComponent<Message = Never>>>,
-    //sink: Option<Arc<dyn AbstractComponent<Message = Never>>>,
     #[cfg(feature = "arcon_tui")]
     tui_component: Arc<Component<TuiComponent>>,
     #[cfg(feature = "arcon_tui")]
@@ -50,17 +50,17 @@ impl Pipeline {
         let conf: ArconConf = Default::default();
         let allocator = Arc::new(Mutex::new(Allocator::new(conf.allocator_capacity)));
         #[cfg(feature = "arcon_tui")]
-        let (system, state_manager, tui_component, arcon_receiver) = Self::setup(&conf);
+        let (system, state_manager, epoch_manager, tui_component, arcon_receiver) =
+            Self::setup(&conf);
         #[cfg(not(feature = "arcon_tui"))]
-        let (system, state_manager) = Self::setup(&conf);
+        let (system, state_manager, epoch_manager) = Self::setup(&conf);
 
         Self {
             system,
             conf,
             allocator,
-            //node_managers: FxHashMap::default(),
+            epoch_manager,
             state_manager,
-            source: None,
             #[cfg(feature = "arcon_tui")]
             tui_component,
             #[cfg(feature = "arcon_tui")]
@@ -72,17 +72,17 @@ impl Pipeline {
     pub fn with_conf(conf: ArconConf) -> Self {
         let allocator = Arc::new(Mutex::new(Allocator::new(conf.allocator_capacity)));
         #[cfg(feature = "arcon_tui")]
-        let (system, state_manager, tui_component, arcon_receiver) = Self::setup(&conf);
+        let (system, state_manager, epoch_manager, tui_component, arcon_receiver) =
+            Self::setup(&conf);
         #[cfg(not(feature = "arcon_tui"))]
-        let (system, state_manager) = Self::setup(&conf);
+        let (system, state_manager, epoch_manager) = Self::setup(&conf);
 
         Self {
             system,
             conf,
             allocator,
-            //node_managers: FxHashMap::default(),
+            epoch_manager,
             state_manager,
-            source: None,
             #[cfg(feature = "arcon_tui")]
             tui_component,
             #[cfg(feature = "arcon_tui")]
@@ -102,9 +102,22 @@ impl Pipeline {
 
     /// Helper function to set up internals of the pipeline
     #[cfg(not(feature = "arcon_tui"))]
-    fn setup(arcon_conf: &ArconConf) -> (KompactSystem, Arc<Component<StateManager>>) {
+    fn setup(
+        arcon_conf: &ArconConf,
+    ) -> (
+        KompactSystem,
+        Arc<Component<StateManager>>,
+        Option<Arc<Component<EpochManager>>>,
+    ) {
         let kompact_config = arcon_conf.kompact_conf();
         let system = kompact_config.build().expect("KompactSystem");
+        let epoch_manager = match arcon_conf.execution_mode {
+            ExecutionMode::Local => {
+                let epoch_manager = EpochManager::new(arcon_conf.epoch_interval, Vec::new());
+                Some(system.create(|| epoch_manager))
+            }
+            ExecutionMode::Distributed => None,
+        };
         let state_manager = StateManager::new();
         let state_manager_comp = system.create_dedicated(|| state_manager);
         let timeout = std::time::Duration::from_millis(500);
@@ -113,7 +126,7 @@ impl Pipeline {
             .wait_timeout(timeout)
             .expect("StateManager comp never started!");
 
-        (system, state_manager_comp)
+        (system, state_manager_comp, epoch_manager)
     }
 
     /// Helper function to set up internals of the pipeline
@@ -123,11 +136,20 @@ impl Pipeline {
     ) -> (
         KompactSystem,
         Arc<Component<StateManager>>,
+        Option<Arc<Component<EpochManager>>>,
         Arc<Component<TuiComponent>>,
         arcon_tui::Receiver<TuiNode>,
     ) {
         let kompact_config = arcon_conf.kompact_conf();
         let system = kompact_config.build().expect("KompactSystem");
+
+        let epoch_manager = match arcon_conf.execution_mode {
+            ExecutionMode::Local => {
+                let epoch_manager = EpochManager::new(arcon_conf.epoch_interval, Vec::new());
+                Some(system.create(|| epoch_manager))
+            }
+            ExecutionMode::Distributed => None,
+        };
 
         let state_manager = StateManager::new();
         let state_manager_comp = system.create_dedicated(|| state_manager);
@@ -145,7 +167,13 @@ impl Pipeline {
             .start_notify(&tui_component)
             .wait_timeout(timeout)
             .expect("TuiComponent never started!");
-        (system, state_manager_comp, tui_component, arcon_receiver)
+        (
+            system,
+            state_manager_comp,
+            epoch_manager,
+            tui_component,
+            arcon_receiver,
+        )
     }
 
     pub fn connect_state_port<B: Backend>(&mut self, nm: &Arc<Component<NodeManager<B>>>) {
