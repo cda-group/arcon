@@ -75,7 +75,7 @@ where
     }
 }
 
-impl<IN, B: state::Backend> Operator<B> for KafkaSink<IN>
+impl<IN> Operator for KafkaSink<IN>
 where
     IN: ArconType + ::serde::Serialize + ::serde::de::DeserializeOwned,
 {
@@ -87,12 +87,12 @@ where
     fn handle_element(
         &mut self,
         element: ArconElement<IN>,
-        _ctx: OperatorContext<Self, B, impl ComponentDefinition>,
+        _ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
     ) -> ArconResult<()> {
         self.buffer.borrow_mut().push(element);
         Ok(())
     }
-    crate::ignore_timeout!(B);
+    crate::ignore_timeout!();
     crate::ignore_persist!();
 }
 

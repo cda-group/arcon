@@ -21,7 +21,7 @@ use prost::Message;
 pub type ArconLogger = kompact::KompactLogger;
 
 /// Defines the methods an `Operator` must implement
-pub trait Operator<B: Backend>: Send + Sized {
+pub trait Operator: Send + Sized {
     /// The type of input elements this operator processes
     type IN: ArconType;
     /// The type of output elements this operator produces
@@ -35,14 +35,14 @@ pub trait Operator<B: Backend>: Send + Sized {
     fn handle_element(
         &mut self,
         element: ArconElement<Self::IN>,
-        ctx: OperatorContext<Self, B, impl ComponentDefinition>,
+        ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
     ) -> ArconResult<()>;
 
     /// Determines how the `Operator` handles timeouts it registered earlier when they are triggered
     fn handle_timeout(
         &mut self,
         timeout: Self::TimerState,
-        ctx: OperatorContext<Self, B, impl ComponentDefinition>,
+        ctx: OperatorContext<Self,  impl Backend, impl ComponentDefinition>,
     ) -> ArconResult<()>;
 
     /// Determines how the `Operator` persists its state
@@ -52,11 +52,11 @@ pub trait Operator<B: Backend>: Send + Sized {
 /// Helper macro to implement an empty ´handle_timeout` function
 #[macro_export]
 macro_rules! ignore_timeout {
-    ($backend:ty) => {
+    () => {
         fn handle_timeout(
             &mut self,
             _timeout: Self::TimerState,
-            _ctx: OperatorContext<Self, $backend, impl ComponentDefinition>,
+            _ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
         ) -> ArconResult<()> {
             Ok(())
         }
@@ -76,7 +76,7 @@ macro_rules! ignore_persist {
 /// Context Available to an Arcon Operator
 pub struct OperatorContext<'a, 'c, 'b, OP, B, CD>
 where
-    OP: Operator<B> + 'static,
+    OP: Operator + 'static,
     B: Backend,
     CD: ComponentDefinition + Sized + 'static,
 {
@@ -90,7 +90,7 @@ where
 
 impl<'a, 'c, 'b, OP, B, CD> OperatorContext<'a, 'c, 'b, OP, B, CD>
 where
-    OP: Operator<B> + 'static,
+    OP: Operator + 'static,
     B: Backend,
     CD: ComponentDefinition + Sized + 'static,
 {

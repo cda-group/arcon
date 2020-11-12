@@ -17,7 +17,7 @@ use std::{
 #[derive(ComponentDefinition)]
 pub struct LocalFileSource<OP, B>
 where
-    OP: Operator<B> + 'static,
+    OP: Operator + 'static,
     OP::IN: FromStr,
     B: state::Backend,
 {
@@ -28,7 +28,7 @@ where
 
 impl<OP, B> LocalFileSource<OP, B>
 where
-    OP: Operator<B> + 'static,
+    OP: Operator + 'static,
     OP::IN: FromStr,
     B: state::Backend,
 {
@@ -82,7 +82,7 @@ where
 
 impl<OP, B> ComponentLifecycle for LocalFileSource<OP, B>
 where
-    OP: Operator<B> + 'static,
+    OP: Operator + 'static,
     OP::IN: FromStr,
     B: state::Backend,
 {
@@ -94,7 +94,7 @@ where
 
 impl<OP, B> NetworkActor for LocalFileSource<OP, B>
 where
-    OP: Operator<B> + 'static,
+    OP: Operator + 'static,
     OP::IN: FromStr,
     B: state::Backend,
 {

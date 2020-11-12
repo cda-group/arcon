@@ -19,7 +19,7 @@ impl Port for LoopbackPort {
 #[derive(ComponentDefinition, Actor)]
 pub struct CollectionSource<OP, B>
 where
-    OP: Operator<B> + 'static,
+    OP: Operator + 'static,
     B: state::Backend,
 {
     ctx: ComponentContext<Self>,
@@ -32,7 +32,7 @@ where
 
 impl<OP, B> CollectionSource<OP, B>
 where
-    OP: Operator<B> + 'static,
+    OP: Operator + 'static,
     B: state::Backend,
 {
     pub fn new(collection: Vec<OP::IN>, source_ctx: SourceContext<OP, B>) -> Self {
@@ -71,7 +71,7 @@ where
 
 impl<OP, B> ComponentLifecycle for CollectionSource<OP, B>
 where
-    OP: Operator<B> + 'static,
+    OP: Operator + 'static,
     B: state::Backend,
 {
     fn on_start(&mut self) -> Handled {
@@ -84,7 +84,7 @@ where
 
 impl<OP, B> Provide<LoopbackPort> for CollectionSource<OP, B>
 where
-    OP: Operator<B> + 'static,
+    OP: Operator + 'static,
     B: state::Backend,
 {
     fn handle(&mut self, _event: ContinueSending) -> Handled {
@@ -95,7 +95,7 @@ where
 
 impl<OP, B> Require<LoopbackPort> for CollectionSource<OP, B>
 where
-    OP: Operator<B> + 'static,
+    OP: Operator + 'static,
     B: state::Backend,
 {
     fn handle(&mut self, _event: Never) -> Handled {

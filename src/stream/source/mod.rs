@@ -28,7 +28,7 @@ pub enum ArconSource {
 }
 
 /// Common Context for all Source implementations
-pub struct SourceContext<OP: Operator<B> + 'static, B: state::Backend> {
+pub struct SourceContext<OP: Operator + 'static, B: state::Backend> {
     /// Timestamp extractor function
     ///
     /// If set to None, timestamps of ArconElement's will also be None.
@@ -51,7 +51,7 @@ pub struct SourceContext<OP: Operator<B> + 'static, B: state::Backend> {
 
 impl<OP, B> SourceContext<OP, B>
 where
-    OP: Operator<B> + 'static,
+    OP: Operator + 'static,
     B: state::Backend,
 {
     pub fn new(
@@ -116,7 +116,7 @@ where
     ) -> ArconResult<()> {
         self.operator.handle_element(
             data,
-            OperatorContext::new(source, &mut None, &mut self.channel_strategy),
+            OperatorContext::<_, B, _>::new(source, &mut None, &mut self.channel_strategy),
         )?;
         Ok(())
     }

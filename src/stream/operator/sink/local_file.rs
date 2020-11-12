@@ -39,10 +39,9 @@ where
     }
 }
 
-impl<IN, B> Operator<B> for LocalFileSink<IN>
+impl<IN> Operator for LocalFileSink<IN>
 where
     IN: ArconType,
-    B: state::Backend,
 {
     type IN = IN;
     type OUT = ArconNever;
@@ -52,14 +51,14 @@ where
     fn handle_element(
         &mut self,
         element: ArconElement<IN>,
-        _ctx: OperatorContext<Self, B, impl ComponentDefinition>,
+        _ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
     ) -> ArconResult<()> {
         if let Err(err) = writeln!(self.file.borrow_mut(), "{:?}", element.data) {
             eprintln!("Error while writing to file sink {}", err.to_string());
         }
         Ok(())
     }
-    crate::ignore_timeout!(B);
+    crate::ignore_timeout!();
     crate::ignore_persist!();
 }
 

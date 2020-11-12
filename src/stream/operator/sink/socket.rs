@@ -71,10 +71,9 @@ where
     }
 }
 
-impl<IN, B> Operator<B> for SocketSink<IN>
+impl<IN> Operator for SocketSink<IN>
 where
     IN: ArconType + Serialize,
-    B: state::Backend,
 {
     type IN = IN;
     type OUT = ArconNever;
@@ -84,7 +83,7 @@ where
     fn handle_element(
         &mut self,
         element: ArconElement<Self::IN>,
-        _ctx: OperatorContext<Self, B, impl ComponentDefinition>,
+        _ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
     ) -> ArconResult<()> {
         let mut tx = self.tx_channel.clone();
         let fmt_data = {
@@ -107,7 +106,7 @@ where
         self.runtime_handle.spawn(req_dispatch);
         Ok(())
     }
-    crate::ignore_timeout!(B);
+    crate::ignore_timeout!();
     crate::ignore_persist!();
 }
 

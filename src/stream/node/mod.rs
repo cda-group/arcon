@@ -59,7 +59,7 @@ impl NodeMetrics {
 }
 
 #[derive(ArconState)]
-pub struct NodeState<OP: Operator<B> + 'static, B: Backend> {
+pub struct NodeState<OP: Operator + 'static, B: Backend> {
     /// Durable message buffer used for blocked channels
     message_buffer: AppenderIndex<RawArconMessage<OP::IN>, B>,
     /// Map of senders and their corresponding Watermark
@@ -84,7 +84,7 @@ pub struct NodeState<OP: Operator<B> + 'static, B: Backend> {
     id: NodeID,
 }
 
-impl<OP: Operator<B> + 'static, B: Backend> NodeState<OP, B> {
+impl<OP: Operator + 'static, B: Backend> NodeState<OP, B> {
     pub fn new(id: NodeID, in_channels: Vec<NodeID>, backend: Arc<B>) -> Self {
         let mut handle = Handle::vec("_messagebuffer");
         backend.register_vec_handle(&mut handle);
@@ -124,7 +124,7 @@ macro_rules! make_context {
 #[derive(ComponentDefinition)]
 pub struct Node<OP, B>
 where
-    OP: Operator<B> + 'static,
+    OP: Operator + 'static,
     B: Backend,
 {
     /// Component context
@@ -150,7 +150,7 @@ where
 
 impl<OP, B> Node<OP, B>
 where
-    OP: Operator<B> + 'static,
+    OP: Operator + 'static,
     B: Backend,
 {
     /// Creates a new Node
@@ -424,7 +424,7 @@ where
 
 impl<OP, B> ComponentLifecycle for Node<OP, B>
 where
-    OP: Operator<B> + 'static,
+    OP: Operator + 'static,
     B: Backend,
 {
     fn on_start(&mut self) -> Handled {
@@ -454,7 +454,7 @@ where
 
 impl<OP, B> Require<NodeManagerPort> for Node<OP, B>
 where
-    OP: Operator<B> + 'static,
+    OP: Operator + 'static,
     B: Backend,
 {
     fn handle(&mut self, _: Never) -> Handled {
@@ -464,7 +464,7 @@ where
 
 impl<OP, B> Provide<NodeManagerPort> for Node<OP, B>
 where
-    OP: Operator<B> + 'static,
+    OP: Operator + 'static,
     B: Backend,
 {
     fn handle(&mut self, e: NodeEvent) -> Handled {
@@ -475,7 +475,7 @@ where
 
 impl<OP, B> Actor for Node<OP, B>
 where
-    OP: Operator<B> + 'static,
+    OP: Operator + 'static,
     B: Backend,
 {
     type Message = ArconMessage<OP::IN>;

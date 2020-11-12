@@ -11,60 +11,53 @@ use arcon_state::{index::ArconState, Backend};
 use kompact::prelude::ComponentDefinition;
 use std::marker::PhantomData;
 
-pub struct Filter<IN, F, S, B>
+pub struct Filter<IN, F, S>
 where
     IN: ArconType,
     F: SafelySendableFn(&IN, &mut S) -> bool,
     S: ArconState,
-    B: Backend,
 {
     state: S,
     udf: F,
     _marker: PhantomData<fn(IN) -> bool>,
-    _b: PhantomData<B>,
 }
 
-impl<IN, B> Filter<IN, fn(&IN, &mut ()) -> bool, (), B>
+impl<IN> Filter<IN, fn(&IN, &mut ()) -> bool, ()>
 where
     IN: ArconType,
-    B: Backend,
 {
     pub fn new(
         udf: impl SafelySendableFn(&IN) -> bool,
-    ) -> Filter<IN, impl SafelySendableFn(&IN, &mut ()) -> bool, (), B> {
+    ) -> Filter<IN, impl SafelySendableFn(&IN, &mut ()) -> bool, ()> {
         let udf = move |input: &IN, _: &mut ()| udf(input);
         Filter {
             state: (),
             udf,
             _marker: Default::default(),
-            _b: PhantomData,
         }
     }
 }
 
-impl<IN, F, S, B> Filter<IN, F, S, B>
+impl<IN, F, S> Filter<IN, F, S>
 where
     IN: ArconType,
     F: SafelySendableFn(&IN, &mut S) -> bool,
     S: ArconState,
-    B: Backend,
 {
     pub fn stateful(state: S, udf: F) -> Self {
         Filter {
             state,
             udf,
             _marker: Default::default(),
-            _b: PhantomData,
         }
     }
 }
 
-impl<IN, F, S, B> Operator<B> for Filter<IN, F, S, B>
+impl<IN, F, S> Operator for Filter<IN, F, S>
 where
     IN: ArconType,
     F: SafelySendableFn(&IN, &mut S) -> bool,
     S: ArconState,
-    B: Backend,
 {
     type IN = IN;
     type OUT = IN;
@@ -74,14 +67,14 @@ where
     fn handle_element(
         &mut self,
         element: ArconElement<IN>,
-        mut ctx: OperatorContext<Self, B, impl ComponentDefinition>,
+        mut ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
     ) -> ArconResult<()> {
         if (self.udf)(&element.data, &mut self.state) {
             ctx.output(element);
         }
         Ok(())
     }
-    crate::ignore_timeout!(B);
+    crate::ignore_timeout!();
 
     fn persist(&mut self) -> Result<(), arcon_state::error::ArconStateError> {
         self.state.persist()

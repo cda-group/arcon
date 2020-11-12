@@ -22,7 +22,7 @@ pub enum SocketKind {
 #[derive(ComponentDefinition)]
 pub struct SocketSource<OP, B>
 where
-    OP: Operator<B> + 'static,
+    OP: Operator + 'static,
     OP::IN: FromStr,
     B: state::Backend,
 {
@@ -34,7 +34,7 @@ where
 
 impl<OP, B> SocketSource<OP, B>
 where
-    OP: Operator<B> + 'static,
+    OP: Operator + 'static,
     OP::IN: FromStr,
     B: state::Backend,
 {
@@ -55,7 +55,7 @@ where
 
 impl<OP, B> ComponentLifecycle for SocketSource<OP, B>
 where
-    OP: Operator<B> + 'static,
+    OP: Operator + 'static,
     OP::IN: FromStr,
     B: state::Backend,
 {
@@ -88,7 +88,7 @@ where
 
 impl<OP, B> Actor for SocketSource<OP, B>
 where
-    OP: Operator<B> + 'static,
+    OP: Operator + 'static,
     OP::IN: FromStr,
     B: state::Backend,
 {
