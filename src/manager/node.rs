@@ -84,10 +84,10 @@ pub struct NodeManagerState<B: Backend> {
 
 /// A [kompact] component responsible for coordinating a set of Arcon nodes
 ///
-/// The following illustrates the role of a NodeManager in the context of an ArconPipeline
+/// The following illustrates the role of a NodeManager in the context of a Pipeline
 ///
 /// ```text
-///                 ArconPipeline
+///                    Pipeline
 ///                /             \
 ///         NodeManager <----> NodeManager
 ///             |                  |
@@ -107,7 +107,7 @@ where
     /// A text description of the operating NodeManager
     ///
     /// e.g., window_sliding_avg_price
-    description: String,
+    state_id: StateID,
     /// Port for incoming local events from nodes this manager controls
     manager_port: ProvidedPort<NodeManagerPort>,
     /// Port for the StateManager component
@@ -132,7 +132,7 @@ impl<B> NodeManager<B>
 where
     B: state::Backend,
 {
-    pub fn new(description: String, in_channels: Vec<NodeID>, backend: Arc<B>) -> Self {
+    pub fn new(state_id: String, in_channels: Vec<NodeID>, backend: Arc<B>) -> Self {
         // initialise internal state
         let mut wm_handle = Handle::map("_watermarks");
         let mut epoch_handle = Handle::map("_epochs");
@@ -153,7 +153,7 @@ where
 
         NodeManager {
             ctx: ComponentContext::uninitialised(),
-            description,
+            state_id,
             manager_port: ProvidedPort::uninitialised(),
             state_manager_port: RequiredPort::uninitialised(),
             node_parallelism: num_cpus::get(),
@@ -173,7 +173,7 @@ where
             let checkpoint_dir = format!(
                 "{}/checkpoint_{id}_{epoch}",
                 base_dir,
-                id = self.description,
+                id = self.state_id,
                 epoch = curr_epoch,
             );
 
@@ -181,7 +181,7 @@ where
 
             // Checkpoint complete, send update to the StateManager
             self.state_manager_port.trigger(StateEvent::Snapshot(
-                self.description.clone(),
+                self.state_id.clone(),
                 Snapshot::new(curr_epoch, checkpoint_dir.clone()),
             ));
 
@@ -226,13 +226,14 @@ where
     B: state::Backend,
 {
     fn on_start(&mut self) -> Handled {
-        info!(
-            self.ctx.log(),
-            "Started NodeManager for {}", self.description,
-        );
+        info!(self.ctx.log(), "Started NodeManager for {}", self.state_id,);
+
+        // Register state id
+        self.state_manager_port
+            .trigger(StateEvent::Register(self.state_id.clone()));
+
         /*
         let manager_port = &mut self.manager_port;
-
         // For each node, connect its NodeManagerPort
         for (node_id, node) in &self.nodes {
             &node.on_definition(|cd| {

@@ -42,7 +42,7 @@ pub trait Operator: Send + Sized {
     fn handle_timeout(
         &mut self,
         timeout: Self::TimerState,
-        ctx: OperatorContext<Self,  impl Backend, impl ComponentDefinition>,
+        ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
     ) -> ArconResult<()>;
 
     /// Determines how the `Operator` persists its state

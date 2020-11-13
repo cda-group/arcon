@@ -3,12 +3,14 @@
 
 use fxhash::FxHashMap;
 use kompact::prelude::*;
+use std::collections::HashSet;
 
 pub type StateID = String;
 
 #[derive(Debug, Clone)]
 pub enum StateEvent {
     Snapshot(StateID, Snapshot),
+    Register(StateID),
 }
 
 #[derive(Clone, Debug)]
@@ -39,12 +41,17 @@ impl Port for StateManagerPort {
     type Request = StateEvent;
 }
 
-#[derive(ComponentDefinition)]
+/// State Manager Component that keeps a catalog of snapshots of a given pipeline
+#[derive(ComponentDefinition, Actor)]
 pub struct StateManager {
     /// Component Context
     ctx: ComponentContext<Self>,
     /// Port for incoming events
     manager_port: ProvidedPort<StateManagerPort>,
+    /// Set of registerd state ids
+    ///
+    /// Used to verify that users do not watch for state ids that do not exist
+    pub(crate) registered_state_ids: HashSet<StateID>,
     /// Snapshot Catalog
     catalog: FxHashMap<StateID, Snapshot>,
     /// A map of subscribers per State ID
@@ -56,6 +63,7 @@ impl StateManager {
         Self {
             ctx: ComponentContext::uninitialised(),
             manager_port: ProvidedPort::uninitialised(),
+            registered_state_ids: HashSet::new(),
             catalog: FxHashMap::default(),
             subscribers: FxHashMap::default(),
         }
@@ -79,23 +87,12 @@ impl Provide<StateManagerPort> for StateManager {
                 }
                 self.catalog.insert(id, snapshot);
             }
+            StateEvent::Register(id) => {
+                self.registered_state_ids.insert(id);
+            }
         }
         Handled::Ok
     }
 }
 
-impl ComponentLifecycle for StateManager {
-    fn on_start(&mut self) -> Handled {
-        Handled::Ok
-    }
-}
-
-impl Actor for StateManager {
-    type Message = ();
-    fn receive_local(&mut self, _: Self::Message) -> Handled {
-        unreachable!();
-    }
-    fn receive_network(&mut self, _: NetMessage) -> Handled {
-        unreachable!();
-    }
-}
+ignore_lifecycle!(StateManager);

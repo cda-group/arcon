@@ -5,7 +5,7 @@ use crate::{data::Epoch, stream::source::ArconSource};
 use kompact::prelude::*;
 
 /// Component that injects epoch makers into an Arcon Pipeline
-#[derive(ComponentDefinition)]
+#[derive(ComponentDefinition, Actor)]
 pub struct EpochManager {
     /// Component Context
     ctx: ComponentContext<Self>,
@@ -13,28 +13,27 @@ pub struct EpochManager {
     current_epoch: u64,
     /// Interval in millis to schedule injection timer
     epoch_interval: u64,
-    /// Vector of sources to send epoch to
-    sources: Vec<ActorRefStrong<ArconSource>>,
+    /// Reference to the SourceManager
+    source_manager: ActorRefStrong<ArconSource>,
     /// Kompact Timer
     epoch_timeout: Option<ScheduledTimer>,
 }
 
 impl EpochManager {
-    pub fn new(epoch_interval: u64, sources: Vec<ActorRefStrong<ArconSource>>) -> Self {
+    pub fn new(epoch_interval: u64, source_manager: ActorRefStrong<ArconSource>) -> Self {
         Self {
             ctx: ComponentContext::uninitialised(),
             current_epoch: 0,
             epoch_interval,
-            sources,
+            source_manager,
             epoch_timeout: None,
         }
     }
     fn handle_timeout(&mut self, timeout_id: ScheduledTimer) -> Handled {
         match self.epoch_timeout {
             Some(ref timeout) if *timeout == timeout_id => {
-                for source in &self.sources {
-                    source.tell(ArconSource::Epoch(Epoch::new(self.current_epoch)));
-                }
+                self.source_manager
+                    .tell(ArconSource::Epoch(Epoch::new(self.current_epoch)));
                 self.current_epoch += 1;
                 Handled::Ok
             }
@@ -59,15 +58,5 @@ impl ComponentLifecycle for EpochManager {
             self.cancel_timer(timeout);
         }
         Handled::Ok
-    }
-}
-
-impl Actor for EpochManager {
-    type Message = ();
-    fn receive_local(&mut self, _: Self::Message) -> Handled {
-        unreachable!();
-    }
-    fn receive_network(&mut self, _: NetMessage) -> Handled {
-        unreachable!();
     }
 }

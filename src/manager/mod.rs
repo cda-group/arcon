@@ -5,5 +5,7 @@
 pub mod epoch;
 /// A [kompact] component that keeps track of a set of Arcon nodes
 pub mod node;
+/// A [kompact] component that keeps track of one or more source components
+pub mod source;
 /// A [kompact] component that keeps track of the state of a pipeline
 pub mod state;

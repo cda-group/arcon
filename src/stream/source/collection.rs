@@ -2,7 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use super::SourceContext;
-use crate::{prelude::state, stream::operator::Operator};
+use crate::{
+    prelude::state,
+    stream::{operator::Operator, source::ArconSource},
+};
 use kompact::prelude::*;
 use std::cell::RefCell;
 
@@ -16,7 +19,7 @@ impl Port for LoopbackPort {
     type Request = ContinueSending;
 }
 
-#[derive(ComponentDefinition, Actor)]
+#[derive(ComponentDefinition)]
 pub struct CollectionSource<OP, B>
 where
     OP: Operator + 'static,
@@ -103,7 +106,25 @@ where
     }
 }
 
-//ignore_indications!(LoopbackPort, CollectionSource);
+impl<OP, B> Actor for CollectionSource<OP, B>
+where
+    OP: Operator + 'static,
+    B: state::Backend,
+{
+    type Message = ArconSource;
+    fn receive_local(&mut self, msg: Self::Message) -> Handled {
+        match msg {
+            ArconSource::Epoch(epoch) => {
+                self.source_ctx.borrow_mut().inject_epoch(epoch, self);
+            }
+        }
+
+        Handled::Ok
+    }
+    fn receive_network(&mut self, _: NetMessage) -> Handled {
+        unreachable!();
+    }
+}
 
 #[cfg(test)]
 mod tests {

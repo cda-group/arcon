@@ -22,7 +22,7 @@ pub mod local_file;
 pub mod socket;
 
 /// Message type Arcon sources must implement
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ArconSource {
     Epoch(Epoch),
 }
@@ -87,6 +87,12 @@ where
         self.channel_strategy.add(wm_event, source);
     }
 
+    /// Inject epoch marker into the dataflow
+    #[inline]
+    pub fn inject_epoch(&mut self, epoch: Epoch, source: &impl ComponentDefinition) {
+        self.channel_strategy.add(ArconEvent::Epoch(epoch), source);
+    }
+
     /// Generates a Death event and sends it downstream
     #[inline]
     pub fn generate_death(&mut self, msg: String, source: &impl ComponentDefinition) {
@@ -117,8 +123,7 @@ where
         self.operator.handle_element(
             data,
             OperatorContext::<_, B, _>::new(source, &mut None, &mut self.channel_strategy),
-        )?;
-        Ok(())
+        )
     }
 
     /// Build ArconElement

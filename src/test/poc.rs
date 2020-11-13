@@ -78,12 +78,13 @@ fn poc_test() {
 
     let mut pipeline = Pipeline::with_conf(conf);
     let pool_info = pipeline.get_pool_info();
-    let system = &pipeline.system();
+    //let system = &pipeline.system();
 
     // Set up a Debug Sink
-    let sink = system.create(move || DebugNode::<u32>::new());
+    let sink = pipeline.system().create(move || DebugNode::<u32>::new());
 
-    system
+    pipeline
+        .system()
         .start_notify(&sink)
         .wait_timeout(std::time::Duration::from_millis(100))
         .expect("started");
@@ -108,9 +109,11 @@ fn poc_test() {
     let descriptor = String::from("map_state_two");
     let in_channels = vec![1.into()];
     let nm = NodeManager::new(descriptor.clone(), in_channels.clone(), backend.clone());
-    let node_manager_comp_two = system.create(|| nm);
+    let node_manager_comp_two = pipeline.system().create(|| nm);
+    pipeline.connect_state_port(&node_manager_comp_two);
 
-    system
+    pipeline
+        .system()
         .start_notify(&node_manager_comp_two)
         .wait_timeout(std::time::Duration::from_millis(100))
         .expect("started");
@@ -122,12 +125,13 @@ fn poc_test() {
         NodeState::new(NodeID::new(0), in_channels, backend.clone()),
     );
 
-    let map_comp_two = system.create(|| node);
+    let map_comp_two = pipeline.system().create(|| node);
 
     biconnect_components::<NodeManagerPort, _, _>(&node_manager_comp_two, &map_comp_two)
         .expect("connection");
 
-    system
+    pipeline
+        .system()
         .start_notify(&map_comp_two)
         .wait_timeout(std::time::Duration::from_millis(100))
         .expect("started");
@@ -146,14 +150,16 @@ fn poc_test() {
     let in_channels = vec![1.into(), 2.into(), 3.into()];
 
     let nm = NodeManager::new(descriptor.clone(), in_channels.clone(), backend.clone());
-    let node_manager_comp = system.create(|| nm);
+    let node_manager_comp = pipeline.system().create(|| nm);
+    pipeline.connect_state_port(&node_manager_comp);
 
-    system
+    pipeline
+        .system()
         .start_notify(&node_manager_comp)
         .wait_timeout(std::time::Duration::from_millis(100))
         .expect("started");
 
-    fn map_fn<B: Backend>(x: u32, state: &mut MapStateOne<B>) -> ArconResult<u32> {
+    fn map_fn(x: u32, state: &mut MapStateOne<impl Backend>) -> ArconResult<u32> {
         state.events().append(x)?;
         Ok(x * 2)
     }
@@ -165,27 +171,28 @@ fn poc_test() {
         NodeState::new(NodeID::new(0), in_channels, backend.clone()),
     );
 
-    let map_comp = system.create(|| node);
+    let map_comp = pipeline.system().create(|| node);
 
     biconnect_components::<NodeManagerPort, _, _>(&node_manager_comp, &map_comp)
         .expect("connection");
 
-    system
+    pipeline
+        .system()
         .start_notify(&map_comp)
         .wait_timeout(std::time::Duration::from_millis(100))
         .expect("started");
 
     // Set up Batch component
 
-    let batch_comp = system.create(|| BatchComponent::<Sled, Sled>::new());
+    let batch_comp = pipeline
+        .system()
+        .create(|| BatchComponent::<Sled, Sled>::new());
 
-    system
+    pipeline
+        .system()
         .start_notify(&batch_comp)
         .wait_timeout(std::time::Duration::from_millis(100))
         .expect("started");
-
-    pipeline.connect_state_port(&node_manager_comp);
-    pipeline.connect_state_port(&node_manager_comp_two);
 
     pipeline.watch(&["map_state_one", "map_state_two"], batch_comp);
 
@@ -201,6 +208,9 @@ fn poc_test() {
     node_ref.tell(epoch(1, 2));
     node_ref.tell(epoch(1, 3));
 
+    node_ref.tell(element(100, 1, 1));
+    node_ref.tell(element(101, 3, 1));
+    node_ref.tell(element(102, 3, 1));
     wait(5);
 }
 
