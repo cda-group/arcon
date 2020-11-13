@@ -1,7 +1,10 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 use crate::{
-    error::*, serialization::protobuf, Handle, Metakey, Rocks, Value, ValueOps, ValueState,
+    data::{Metakey, Value},
+    error::*,
+    serialization::protobuf,
+    Handle, Rocks, ValueOps, ValueState,
 };
 
 impl ValueOps for Rocks {

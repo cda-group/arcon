@@ -1,11 +1,12 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 use crate::{
+    data::{Metakey, Value},
     error::*,
     handles::BoxedIteratorOfResult,
     serialization::{fixed_bytes, fixed_bytes::FixedBytes, protobuf},
     sled::Sled,
-    Handle, Metakey, Value, VecOps, VecState,
+    Handle, VecOps, VecState,
 };
 use std::iter;
 

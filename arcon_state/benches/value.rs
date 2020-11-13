@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use arcon_state::{
-    index::{value::ValueIndex, IndexOps},
+    index::{value::Value, IndexOps},
     Aggregator, Backend, *,
 };
 use criterion::{criterion_group, criterion_main, Bencher, Criterion, Throughput};
@@ -47,7 +47,7 @@ fn index_rolling_counter(backend: BackendType, b: &mut Bencher) {
         let mut value_handle = Handle::value("_value");
         backend.register_value_handle(&mut value_handle);
         let active_handle = value_handle.activate(backend.clone());
-        let mut value_index: ValueIndex<u64, B> = ValueIndex::new(active_handle);
+        let mut value_index: Value<u64, B> = Value::new(active_handle);
         b.iter(|| {
             let curr_value = value_index.get().unwrap().clone();
             for _i in 0..OPS_PER_EPOCH {

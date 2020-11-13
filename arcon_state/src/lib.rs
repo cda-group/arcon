@@ -7,7 +7,6 @@
 //! state backend implementations [Backend]. Sled is used as the default state backend,
 //! but `arcon_state` also supports RocksDB for production use cases.
 //!
-//!
 //! Users may add their own custom indexes as long as  the [IndexOps] trait is implemented.
 
 #![feature(associated_type_defaults)]
@@ -16,20 +15,16 @@
 
 /// State Backend Implementations
 pub mod backend;
+/// State Trait types
+pub mod data;
 /// Error utilities
 pub mod error;
 /// Available Active State Indexes
 pub mod index;
 
-/// State Trait types
-mod data;
-
 #[doc(hidden)]
 pub use crate::backend::*;
-#[doc(hidden)]
-pub use crate::data::{Key, Metakey, Value};
-
-pub use crate::index::{AppenderIndex, HashIndex, IndexOps, TimerIndex, ValueIndex};
+pub use crate::index::{Appender, EagerAppender, EagerMap, IndexOps, Map, TimerIndex, Value};
 
 #[cfg(feature = "arcon_state_derive")]
 extern crate arcon_state_derive;

@@ -10,12 +10,14 @@ use crate::{
 
 const DEFAULT_APPENDER_SIZE: usize = 1024;
 
+pub mod eager;
+
 /// An Index suitable for Non-associative Windows
 ///
 /// A backing [VecState] acts as an overflow vector when
 /// the data no longer fits in the specified in-memory capacity.
 #[derive(Debug)]
-pub struct AppenderIndex<V, B>
+pub struct Appender<V, B>
 where
     V: Value,
     B: Backend,
@@ -26,22 +28,22 @@ where
     handle: ActiveHandle<B, VecState<V>>,
 }
 
-impl<V, B> AppenderIndex<V, B>
+impl<V, B> Appender<V, B>
 where
     V: Value,
     B: Backend,
 {
-    /// Creates an AppenderIndex using the default appender size
+    /// Creates an Appender using the default appender size
     pub fn new(handle: ActiveHandle<B, VecState<V>>) -> Self {
-        AppenderIndex {
+        Appender {
             elements: Vec::with_capacity(DEFAULT_APPENDER_SIZE),
             handle,
         }
     }
 
-    /// Creates an AppenderIndex with specified capacity
+    /// Creates an Appender with specified capacity
     pub fn with_capacity(capacity: usize, handle: ActiveHandle<B, VecState<V>>) -> Self {
-        AppenderIndex {
+        Appender {
             elements: Vec::with_capacity(capacity),
             handle,
         }
@@ -89,7 +91,7 @@ where
     }
 }
 
-impl<V, B> IndexOps for AppenderIndex<V, B>
+impl<V, B> IndexOps for Appender<V, B>
 where
     V: Value,
     B: Backend,
@@ -112,7 +114,7 @@ mod tests {
         let mut vec_handle = Handle::vec("_appender");
         backend.register_vec_handle(&mut vec_handle);
         let active_handle = vec_handle.activate(backend.clone());
-        let mut index: AppenderIndex<u64, Sled> = AppenderIndex::new(active_handle);
+        let mut index: Appender<u64, Sled> = Appender::new(active_handle);
 
         for i in 0..1024 {
             index.append(i as u64).unwrap();

@@ -2,15 +2,19 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 pub mod appender;
-/// HashIndex suitable for point lookups and random reads
-pub mod hash;
+pub mod map;
 pub mod timer;
 /// ValueIndex suitable for single object operations
 pub mod value;
 
 use crate::error::Result;
 
-pub use self::{appender::AppenderIndex, hash::HashIndex, timer::TimerIndex, value::ValueIndex};
+pub use self::{
+    appender::{eager::EagerAppender, Appender},
+    map::{eager::EagerMap, Map},
+    timer::TimerIndex,
+    value::Value,
+};
 
 /// Common Index Operations
 ///

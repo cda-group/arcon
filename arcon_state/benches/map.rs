@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use arcon_state::{
-    index::{hash::HashIndex, IndexOps},
+    index::{map::Map, IndexOps},
     serialization::protobuf::serialize,
-    *,
+    EagerMap, *,
 };
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use once_cell::sync::Lazy;
@@ -93,8 +93,8 @@ impl LargeStruct {
     }
 }
 
-fn hash(c: &mut Criterion) {
-    let mut group = c.benchmark_group("hash");
+fn map(c: &mut Criterion) {
+    let mut group = c.benchmark_group("map");
     group.throughput(Throughput::Elements(TOTAL_OPERATIONS));
 
     let small_bytes = serialize(&SmallStruct::new()).unwrap();
@@ -886,110 +886,110 @@ fn hash(c: &mut Criterion) {
         );
     }
 
-    // Finished with the HashIndex benches
+    // Finished with the Map benches
     // Now onto pure backend stuff..
 
     let unused_param = 0;
     #[cfg(feature = "rocks")]
     group.bench_with_input(
-        BenchmarkId::new("RMW SmallStruct Uniform Keys Pure Rocks", ""),
+        BenchmarkId::new("RMW SmallStruct Uniform Keys Eager Rocks", ""),
         &unused_param,
         |b, &_| {
-            rmw_pure_backend!(UNIFORM_KEYS, b, SmallStruct, BackendType::Rocks);
+            rmw_eager!(UNIFORM_KEYS, b, SmallStruct, BackendType::Rocks);
         },
     );
     #[cfg(feature = "rocks")]
     group.bench_with_input(
-        BenchmarkId::new("RMW SmallStruct Hot Keys Pure Rocks", ""),
+        BenchmarkId::new("RMW SmallStruct Hot Keys Eager Rocks", ""),
         &unused_param,
         |b, &_| {
-            rmw_pure_backend!(HOT_KEYS, b, SmallStruct, BackendType::Rocks);
+            rmw_eager!(HOT_KEYS, b, SmallStruct, BackendType::Rocks);
         },
     );
     #[cfg(feature = "rocks")]
     group.bench_with_input(
-        BenchmarkId::new("RMW LargeStruct Uniform Keys Pure Rocks", ""),
+        BenchmarkId::new("RMW LargeStruct Uniform Keys Eager Rocks", ""),
         &unused_param,
         |b, &_| {
-            rmw_pure_backend!(UNIFORM_KEYS, b, LargeStruct, BackendType::Rocks);
+            rmw_eager!(UNIFORM_KEYS, b, LargeStruct, BackendType::Rocks);
         },
     );
     #[cfg(feature = "rocks")]
     group.bench_with_input(
-        BenchmarkId::new("RMW LargeStruct Hot Keys Pure Rocks", ""),
+        BenchmarkId::new("RMW LargeStruct Hot Keys Eager Rocks", ""),
         &unused_param,
         |b, &_| {
-            rmw_pure_backend!(HOT_KEYS, b, LargeStruct, BackendType::Rocks);
+            rmw_eager!(HOT_KEYS, b, LargeStruct, BackendType::Rocks);
         },
     );
 
     #[cfg(feature = "rocks")]
     group.bench_with_input(
-        BenchmarkId::new("Read SmallStruct Uniform Keys Pure Rocks", ""),
+        BenchmarkId::new("Read SmallStruct Uniform Keys Eager Rocks", ""),
         &unused_param,
         |b, &_| {
-            read_pure_backend!(UNIFORM_KEYS, b, SmallStruct, BackendType::Rocks);
+            read_eager!(UNIFORM_KEYS, b, SmallStruct, BackendType::Rocks);
         },
     );
     #[cfg(feature = "rocks")]
     group.bench_with_input(
-        BenchmarkId::new("Read SmallStruct Hot Keys Pure Rocks", ""),
+        BenchmarkId::new("Read SmallStruct Hot Keys Eager Rocks", ""),
         &unused_param,
         |b, &_| {
-            read_pure_backend!(HOT_KEYS, b, SmallStruct, BackendType::Rocks);
+            read_eager!(HOT_KEYS, b, SmallStruct, BackendType::Rocks);
         },
     );
 
     #[cfg(feature = "rocks")]
     group.bench_with_input(
-        BenchmarkId::new("Read LargeStruct Uniform Keys Pure Rocks", ""),
+        BenchmarkId::new("Read LargeStruct Uniform Keys Eager Rocks", ""),
         &unused_param,
         |b, &_| {
-            read_pure_backend!(UNIFORM_KEYS, b, LargeStruct, BackendType::Rocks);
+            read_eager!(UNIFORM_KEYS, b, LargeStruct, BackendType::Rocks);
         },
     );
 
     #[cfg(feature = "rocks")]
     group.bench_with_input(
-        BenchmarkId::new("Read LargeStruct Hot Keys Pure Rocks", ""),
+        BenchmarkId::new("Read LargeStruct Hot Keys Eager Rocks", ""),
         &unused_param,
         |b, &_| {
-            read_pure_backend!(HOT_KEYS, b, LargeStruct, BackendType::Rocks);
-        },
-    );
-
-    #[cfg(feature = "sled")]
-    group.bench_with_input(
-        BenchmarkId::new("Read SmallStruct Uniform Keys Pure Sled", ""),
-        &unused_param,
-        |b, &_| {
-            read_pure_backend!(UNIFORM_KEYS, b, SmallStruct, BackendType::Sled);
-        },
-    );
-    #[cfg(feature = "sled")]
-    group.bench_with_input(
-        BenchmarkId::new("Read SmallStruct Hot Keys Pure Sled", ""),
-        &unused_param,
-        |b, &_| {
-            read_pure_backend!(HOT_KEYS, b, SmallStruct, BackendType::Sled);
+            read_eager!(HOT_KEYS, b, LargeStruct, BackendType::Rocks);
         },
     );
 
     #[cfg(feature = "sled")]
     group.bench_with_input(
-        BenchmarkId::new("Read LargeStruct Uniform Keys Pure Sled", ""),
+        BenchmarkId::new("Read SmallStruct Uniform Keys Eager Sled", ""),
         &unused_param,
         |b, &_| {
-            read_pure_backend!(UNIFORM_KEYS, b, LargeStruct, BackendType::Sled);
+            read_eager!(UNIFORM_KEYS, b, SmallStruct, BackendType::Sled);
+        },
+    );
+    #[cfg(feature = "sled")]
+    group.bench_with_input(
+        BenchmarkId::new("Read SmallStruct Hot Keys Eager Sled", ""),
+        &unused_param,
+        |b, &_| {
+            read_eager!(HOT_KEYS, b, SmallStruct, BackendType::Sled);
         },
     );
 
     #[cfg(feature = "sled")]
     group.bench_with_input(
-        BenchmarkId::new("Read LargeStruct Hot Keys Pure Sled", ""),
+        BenchmarkId::new("Read LargeStruct Uniform Keys Eager Sled", ""),
         &unused_param,
         |b, &_| {
-            read_pure_backend!(HOT_KEYS, b, LargeStruct, BackendType::Sled);
+            read_eager!(UNIFORM_KEYS, b, LargeStruct, BackendType::Sled);
+        },
+    );
+
+    #[cfg(feature = "sled")]
+    group.bench_with_input(
+        BenchmarkId::new("Read LargeStruct Hot Keys Eager Sled", ""),
+        &unused_param,
+        |b, &_| {
+            read_eager!(HOT_KEYS, b, LargeStruct, BackendType::Sled);
         },
     );
 
@@ -1005,20 +1005,16 @@ macro_rules! read {
             let mut map_handle: Handle<MapState<u64, $type_value>> = Handle::map("mapindex");
             backend.register_map_handle(&mut map_handle);
             let state = map_handle.activate(backend.clone());
-            let mut hash_index: HashIndex<u64, $type_value, B> =
-                HashIndex::with_capacity(state, $mod_capacity, $read_capacity);
+            let mut map: Map<u64, $type_value, B> =
+                Map::with_capacity(state, $mod_capacity, $read_capacity);
 
             for i in 0..TOTAL_KEYS {
-                let _ = hash_index.put(i, $type_value::new()).unwrap();
+                let _ = map.put(i, $type_value::new()).unwrap();
             }
 
             $bencher.iter(|| {
                 for i in $keys.iter() {
-                    assert_eq!(
-                        hash_index.get(&i).unwrap().is_some(),
-                        true,
-                        "Failed to get()"
-                    );
+                    assert_eq!(map.get(&i).unwrap().is_some(), true, "Failed to get()");
                 }
             });
         });
@@ -1034,20 +1030,20 @@ macro_rules! insert {
             let mut map_handle: Handle<MapState<u64, $type_value>> = Handle::map("mapindex");
             backend.register_map_handle(&mut map_handle);
             let state = map_handle.activate(backend.clone());
-            let mut hash_index: HashIndex<u64, $type_value, B> =
-                HashIndex::with_capacity(state, $mod_capacity, $read_capacity);
+            let mut map: Map<u64, $type_value, B> =
+                Map::with_capacity(state, $mod_capacity, $read_capacity);
 
             if $full_eviction {
                 $bencher.iter(|| {
                     for id in $keys.iter() {
-                        let _ = hash_index.put(*id, $type_value::new()).unwrap();
+                        let _ = map.put(*id, $type_value::new()).unwrap();
                     }
-                    let _ = hash_index.persist().unwrap();
+                    let _ = map.persist().unwrap();
                 });
             } else {
                 $bencher.iter(|| {
                     for id in $keys.iter() {
-                        let _ = hash_index.put(*id, $type_value::new()).unwrap();
+                        let _ = map.put(*id, $type_value::new()).unwrap();
                     }
                 });
             }
@@ -1065,33 +1061,31 @@ macro_rules! rmw {
             backend.register_map_handle(&mut map_handle);
             let state = map_handle.activate(backend.clone());
 
-            let mut hash_index: HashIndex<u64, $type_value, B> =
-                HashIndex::with_capacity(state, $mod_capacity, $read_capacity);
+            let mut map: Map<u64, $type_value, B> =
+                Map::with_capacity(state, $mod_capacity, $read_capacity);
 
             for i in 0..TOTAL_KEYS {
-                let _ = hash_index.put(i, $type_value::new()).unwrap();
+                let _ = map.put(i, $type_value::new()).unwrap();
             }
-            let _ = hash_index.persist().unwrap();
+            let _ = map.persist().unwrap();
 
             if $full_eviction {
                 $bencher.iter(|| {
                     for i in $keys.iter() {
-                        hash_index
-                            .rmw(&i, |val| {
-                                val.x2 += 10;
-                            })
-                            .unwrap();
+                        map.rmw(&i, |val| {
+                            val.x2 += 10;
+                        })
+                        .unwrap();
                     }
-                    hash_index.persist().unwrap()
+                    map.persist().unwrap()
                 });
             } else {
                 $bencher.iter(|| {
                     for i in $keys.iter() {
-                        hash_index
-                            .rmw(&i, |val| {
-                                val.x2 += 10;
-                            })
-                            .unwrap();
+                        map.rmw(&i, |val| {
+                            val.x2 += 10;
+                        })
+                        .unwrap();
                     }
                 });
             }
@@ -1100,25 +1094,26 @@ macro_rules! rmw {
 }
 
 #[macro_export]
-macro_rules! rmw_pure_backend {
+macro_rules! rmw_eager {
     ($keys: expr, $bencher: expr, $type_value:ident, $backend:expr) => {{
         let dir = tempdir().unwrap();
         with_backend_type!($backend, |B| {
             let backend = Arc::new(B::create(dir.as_ref()).unwrap());
             let mut map_handle: Handle<MapState<u64, $type_value>> = Handle::map("mapindex");
             backend.register_map_handle(&mut map_handle);
-
             let state = map_handle.activate(backend.clone());
+            let mut eager_map = EagerMap::new(state);
+
             // Fill in some keys
             for i in 0..TOTAL_KEYS {
-                let _ = state.fast_insert(i, $type_value::new());
+                let _ = eager_map.put(i, $type_value::new());
             }
 
             $bencher.iter(|| {
                 for i in $keys.iter() {
-                    let mut s = state.get(&i).unwrap().unwrap();
+                    let mut s = eager_map.get(&i).unwrap().unwrap();
                     s.x2 += 10;
-                    state.fast_insert(*i, s).unwrap()
+                    eager_map.put(*i, s).unwrap()
                 }
             });
         });
@@ -1126,23 +1121,24 @@ macro_rules! rmw_pure_backend {
 }
 
 #[macro_export]
-macro_rules! read_pure_backend {
+macro_rules! read_eager {
     ($keys: expr, $bencher: expr, $type_value:ident, $backend:expr) => {{
         let dir = tempdir().unwrap();
         with_backend_type!($backend, |B| {
             let backend = Arc::new(B::create(dir.as_ref()).unwrap());
             let mut map_handle: Handle<MapState<u64, $type_value>> = Handle::map("mapindex");
             backend.register_map_handle(&mut map_handle);
-
             let state = map_handle.activate(backend.clone());
+            let mut eager_map = EagerMap::new(state);
+
             // Fill in some keys
             for i in 0..TOTAL_KEYS {
-                let _ = state.fast_insert(i, $type_value::new());
+                let _ = eager_map.put(i, $type_value::new());
             }
 
             $bencher.iter(|| {
                 for i in $keys.iter() {
-                    assert_eq!(state.get(&i).unwrap().is_some(), true);
+                    assert_eq!(eager_map.get(&i).unwrap().is_some(), true);
                 }
             });
         });
@@ -1156,7 +1152,7 @@ fn custom_criterion() -> Criterion {
 criterion_group! {
     name = benches;
     config = custom_criterion();
-    targets = hash,
+    targets = map,
 }
 
 criterion_main!(benches);

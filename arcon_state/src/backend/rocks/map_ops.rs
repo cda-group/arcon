@@ -1,11 +1,12 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 use crate::{
+    data::{Key, Metakey, Value},
     error::*,
     handles::BoxedIteratorOfResult,
     rocks::default_write_opts,
     serialization::{fixed_bytes, protobuf},
-    Handle, Key, MapOps, MapState, Metakey, Rocks, Value,
+    Handle, MapOps, MapState, Rocks,
 };
 use rocksdb::WriteBatch;
 

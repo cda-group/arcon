@@ -1,11 +1,12 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 use crate::{
+    data::{Key, Metakey, Value},
     error::*,
     handles::BoxedIteratorOfResult,
     serialization::{fixed_bytes, protobuf},
     sled::Sled,
-    Handle, Key, MapOps, MapState, Metakey, Value,
+    Handle, MapOps, MapState,
 };
 use sled::Batch;
 

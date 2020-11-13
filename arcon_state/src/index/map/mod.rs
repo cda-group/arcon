@@ -41,12 +41,13 @@ cfg_if::cfg_if! {
 }
 
 mod bitmask;
+pub mod eager;
 mod table;
 
 use self::table::RawTable;
 #[cfg(test)]
-use crate::index::hash::table::TableModIterator;
-use crate::{backend::Backend, index::hash::table::ProbeModIterator};
+use crate::index::map::table::TableModIterator;
+use crate::{backend::Backend, index::map::table::ProbeModIterator};
 use std::cell::UnsafeCell;
 
 const DEFAULT_READ_LANE_SIZE: usize = 8192;
@@ -55,10 +56,10 @@ const DEFAULT_MOD_LANE_SIZE: usize = 1024;
 // Set FxHash to default as most keys tend to be small
 pub type DefaultHashBuilder = fxhash::FxBuildHasher;
 
-/// A HashIndex suitable for point lookups and in-place
+/// A Map suitable for point lookups and in-place
 /// updates of hot values. It holds a handle to a MapState
 /// type where it may persist or fetch data from.
-pub struct HashIndex<K, V, B>
+pub struct Map<K, V, B>
 where
     K: Key + Hash,
     V: Value,
@@ -79,15 +80,15 @@ pub(crate) fn make_hash<K: Hash + ?Sized>(hash_builder: &impl BuildHasher, val: 
     state.finish()
 }
 
-impl<K, V, B> HashIndex<K, V, B>
+impl<K, V, B> Map<K, V, B>
 where
     K: Key + Eq + Hash,
     V: Value,
     B: Backend,
 {
-    /// Creates a HashIndex with default settings
+    /// Creates a Map with default settings
     pub fn new(handle: ActiveHandle<B, MapState<K, V>>) -> Self {
-        HashIndex {
+        Map {
             hash_builder: DefaultHashBuilder::default(),
             raw_table: UnsafeCell::new(RawTable::with_capacity(
                 DEFAULT_MOD_LANE_SIZE,
@@ -97,7 +98,7 @@ where
         }
     }
 
-    /// Creates a HashIndex with specified capacities
+    /// Creates a Map with specified capacities
     pub fn with_capacity(
         handle: ActiveHandle<B, MapState<K, V>>,
         mod_capacity: usize,
@@ -106,7 +107,7 @@ where
         assert!(mod_capacity.is_power_of_two());
         assert!(read_capacity.is_power_of_two());
 
-        HashIndex {
+        Map {
             hash_builder: DefaultHashBuilder::default(),
             raw_table: UnsafeCell::new(RawTable::with_capacity(mod_capacity, read_capacity)),
             handle,
@@ -327,7 +328,7 @@ where
     }
 }
 
-impl<K, V, B> IndexOps for HashIndex<K, V, B>
+impl<K, V, B> IndexOps for Map<K, V, B>
 where
     K: Key + Eq + Hash,
     V: Value,
@@ -358,8 +359,8 @@ mod tests {
 
         let mod_capacity = 1024;
         let read_capacity = 1024;
-        let mut hash_index: HashIndex<u64, u64, Sled> =
-            HashIndex::with_capacity(active, mod_capacity, read_capacity);
+        let mut hash_index: Map<u64, u64, Sled> =
+            Map::with_capacity(active, mod_capacity, read_capacity);
         for i in 0..1024 {
             hash_index.put(i as u64, i as u64).unwrap();
             let key: u64 = i as u64;
@@ -392,8 +393,7 @@ mod tests {
         let active = handle.activate(backend.clone());
         let capacity = 64;
 
-        let mut hash_index: HashIndex<u64, u64, Sled> =
-            HashIndex::with_capacity(active, capacity, capacity);
+        let mut hash_index: Map<u64, u64, Sled> = Map::with_capacity(active, capacity, capacity);
         for i in 0..10 {
             hash_index.put(i as u64, i as u64).unwrap();
         }

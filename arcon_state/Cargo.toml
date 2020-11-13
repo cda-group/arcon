@@ -50,7 +50,7 @@ name = "value"
 harness = false
 
 [[bench]]
-name = "hash"
+name = "map"
 harness = false
 
 [[bench]]

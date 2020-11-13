@@ -1,7 +1,7 @@
-use super::{hash::HashIndex, value::ValueIndex, IndexOps};
+use super::{map::Map, value::Value, IndexOps};
 use crate::{
     backend::{handles::ActiveHandle, Backend, MapState, ValueState},
-    data::{Key, Value},
+    data::Key,
     error::Result,
 };
 use hierarchical_hash_wheel_timer::{
@@ -13,7 +13,7 @@ use core::time::Duration;
 use std::{cmp::Eq, hash::Hash};
 
 #[derive(prost::Message, PartialEq, Clone)]
-pub struct EventTimerEvent<E: Value> {
+pub struct EventTimerEvent<E: crate::data::Value> {
     #[prost(uint64, tag = "1")]
     time_when_scheduled: u64,
     #[prost(uint64, tag = "2")]
@@ -22,7 +22,7 @@ pub struct EventTimerEvent<E: Value> {
     payload: E,
 }
 
-impl<E: Value> EventTimerEvent<E> {
+impl<E: crate::data::Value> EventTimerEvent<E> {
     fn new(time_when_scheduled: u64, timeout_millis: u64, payload: E) -> Self {
         EventTimerEvent {
             time_when_scheduled,
@@ -36,22 +36,22 @@ impl<E: Value> EventTimerEvent<E> {
 ///
 /// The Index utilises the [QuadWheelWithOverflow] data structure
 /// in order to manage the timers. The remaining state is kept in
-/// other indexes such as HashIndex/ValueIndex.
+/// other indexes such as Map/Value.
 pub struct TimerIndex<K, V, B>
 where
     K: Key + Eq + Hash,
-    V: Value,
+    V: crate::data::Value,
     B: Backend,
 {
     timer: QuadWheelWithOverflow<K>,
-    timeouts: HashIndex<K, EventTimerEvent<V>, B>,
-    current_time: ValueIndex<u64, B>,
+    timeouts: Map<K, EventTimerEvent<V>, B>,
+    current_time: Value<u64, B>,
 }
 
 impl<K, V, B> TimerIndex<K, V, B>
 where
     K: Key + Eq + Hash,
-    V: Value,
+    V: crate::data::Value,
     B: Backend,
 {
     pub fn new(
@@ -60,8 +60,8 @@ where
     ) -> Self {
         Self {
             timer: QuadWheelWithOverflow::default(),
-            timeouts: HashIndex::new(timeouts_handle),
-            current_time: ValueIndex::new(time_handle),
+            timeouts: Map::new(timeouts_handle),
+            current_time: Value::new(time_handle),
         }
     }
 
@@ -201,7 +201,7 @@ where
 impl<K, V, B> IndexOps for TimerIndex<K, V, B>
 where
     K: Key + Eq + Hash,
-    V: Value,
+    V: crate::data::Value,
     B: Backend,
 {
     fn persist(&mut self) -> crate::error::Result<()> {

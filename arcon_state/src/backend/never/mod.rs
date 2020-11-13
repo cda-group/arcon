@@ -5,8 +5,11 @@ use crate::backend::ops::{AggregatorOps, MapOps, ReducerOps, ValueOps, VecOps};
 use std::path::Path;
 
 use crate::{
-    error::*, handles::BoxedIteratorOfResult, Aggregator, AggregatorState, Backend, Handle, Key,
-    MapState, Metakey, Reducer, ReducerState, Value, ValueState, VecState,
+    data::{Key, Metakey, Value},
+    error::*,
+    handles::BoxedIteratorOfResult,
+    Aggregator, AggregatorState, Backend, Handle, MapState, Reducer, ReducerState, ValueState,
+    VecState,
 };
 
 /// `BackendNever` may be used as an empty Backend type.

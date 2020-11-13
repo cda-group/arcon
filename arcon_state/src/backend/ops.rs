@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
-    error::*, handles::BoxedIteratorOfResult, Aggregator, AggregatorState, Handle, Key, MapState,
-    Metakey, Reducer, ReducerState, Value, ValueState, VecState,
+    data::{Key, Metakey, Value},
+    error::*,
+    handles::BoxedIteratorOfResult,
+    Aggregator, AggregatorState, Handle, MapState, Reducer, ReducerState, ValueState, VecState,
 };
 
 pub trait ValueOps {

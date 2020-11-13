@@ -1,8 +1,8 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 use crate::{
-    error::*, rocks::default_write_opts, serialization::protobuf, Aggregator, AggregatorOps,
-    AggregatorState, Handle, Metakey, Rocks,
+    data::Metakey, error::*, rocks::default_write_opts, serialization::protobuf, Aggregator,
+    AggregatorOps, AggregatorState, Handle, Rocks,
 };
 use rocksdb::{merge_operator::MergeFn, MergeOperands};
 

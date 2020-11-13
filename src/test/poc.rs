@@ -11,7 +11,7 @@ use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 #[derive(ArconState)]
 pub struct MapStateOne<B: Backend> {
-    events: AppenderIndex<u32, B>,
+    events: Appender<u32, B>,
 }
 
 impl<B: Backend> MapStateOne<B> {
@@ -20,14 +20,14 @@ impl<B: Backend> MapStateOne<B> {
         backend.register_vec_handle(&mut events_handle);
 
         MapStateOne {
-            events: AppenderIndex::new(events_handle.activate(backend)),
+            events: Appender::new(events_handle.activate(backend)),
         }
     }
 }
 
 #[derive(ArconState)]
 pub struct MapStateTwo<B: Backend> {
-    rolling_counter: ValueIndex<u64, B>,
+    rolling_counter: Value<u64, B>,
 }
 
 impl<B: Backend> MapStateTwo<B> {
@@ -36,7 +36,7 @@ impl<B: Backend> MapStateTwo<B> {
         backend.register_value_handle(&mut counter_handle);
 
         MapStateTwo {
-            rolling_counter: ValueIndex::new(counter_handle.activate(backend)),
+            rolling_counter: Value::new(counter_handle.activate(backend)),
         }
     }
 }
@@ -44,9 +44,9 @@ impl<B: Backend> MapStateTwo<B> {
 #[derive(ArconState)]
 pub struct QueryState<A: Backend, B: Backend> {
     // MapStateOne.events
-    events: AppenderIndex<u32, A>,
+    events: Appender<u32, A>,
     // MapStateTwo.rolling_counter
-    rolling_counter: ValueIndex<u64, B>,
+    rolling_counter: Value<u64, B>,
 }
 
 impl<A: Backend, B: Backend> QueryState<A, B> {
@@ -58,8 +58,8 @@ impl<A: Backend, B: Backend> QueryState<A, B> {
         b2.register_value_handle(&mut counter_handle);
 
         QueryState {
-            events: AppenderIndex::new(events_handle.activate(b1)),
-            rolling_counter: ValueIndex::new(counter_handle.activate(b2)),
+            events: Appender::new(events_handle.activate(b1)),
+            rolling_counter: Value::new(counter_handle.activate(b2)),
         }
     }
 }

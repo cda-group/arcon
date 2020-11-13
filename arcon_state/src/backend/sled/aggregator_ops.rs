@@ -1,8 +1,8 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 use crate::{
-    error::*, serialization::protobuf, sled::Sled, Aggregator, AggregatorOps, AggregatorState,
-    Handle, Metakey,
+    data::Metakey, error::*, serialization::protobuf, sled::Sled, Aggregator, AggregatorOps,
+    AggregatorState, Handle,
 };
 use sled::MergeOperator;
 use std::iter;

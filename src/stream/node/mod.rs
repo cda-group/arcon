@@ -10,7 +10,7 @@ use crate::{
     prelude::*,
     stream::operator::{Operator, OperatorContext},
 };
-use arcon_state::{index::IndexOps, AppenderIndex, ArconState, Backend, TimerIndex};
+use arcon_state::{index::IndexOps, Appender, ArconState, Backend, TimerIndex};
 use fxhash::*;
 use std::{cell::UnsafeCell, sync::Arc};
 
@@ -61,7 +61,7 @@ impl NodeMetrics {
 #[derive(ArconState)]
 pub struct NodeState<OP: Operator + 'static, B: Backend> {
     /// Durable message buffer used for blocked channels
-    message_buffer: AppenderIndex<RawArconMessage<OP::IN>, B>,
+    message_buffer: Appender<RawArconMessage<OP::IN>, B>,
     /// Map of senders and their corresponding Watermark
     #[ephemeral]
     watermarks: FxHashMap<NodeID, Watermark>,
@@ -89,7 +89,7 @@ impl<OP: Operator + 'static, B: Backend> NodeState<OP, B> {
         let mut handle = Handle::vec("_messagebuffer");
         backend.register_vec_handle(&mut handle);
         let active_handle = handle.activate(backend.clone());
-        let message_buffer = AppenderIndex::with_capacity(MESSAGE_BUFFER_SIZE, active_handle);
+        let message_buffer = Appender::with_capacity(MESSAGE_BUFFER_SIZE, active_handle);
 
         // initialise watermarks
         let mut watermarks: FxHashMap<NodeID, Watermark> = FxHashMap::default();

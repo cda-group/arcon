@@ -1,7 +1,7 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use arcon_state::{index::appender::AppenderIndex, Backend, *};
+use arcon_state::{Appender, Backend, *};
 use criterion::{criterion_group, criterion_main, Bencher, BenchmarkId, Criterion};
 use std::sync::Arc;
 use tempfile::tempdir;
@@ -32,16 +32,16 @@ fn appender(c: &mut Criterion) {
     let window_size = WINDOW_SIZE;
     #[cfg(feature = "sled")]
     group.bench_with_input(
-        BenchmarkId::new("Mean Index Pure Sled", ""),
+        BenchmarkId::new("Mean Index Eager Sled", ""),
         &(window_size),
-        |b, window_size| appender_mean_pure_backend(BackendType::Sled, *window_size, b),
+        |b, window_size| appender_mean_eager(BackendType::Sled, *window_size, b),
     );
 
     #[cfg(feature = "rocks")]
     group.bench_with_input(
-        BenchmarkId::new("Mean Index Pure Rocks", ""),
+        BenchmarkId::new("Mean Index Eager Rocks", ""),
         &(window_size),
-        |b, window_size| appender_mean_pure_backend(BackendType::Rocks, *window_size, b),
+        |b, window_size| appender_mean_eager(BackendType::Rocks, *window_size, b),
     );
 
     group.finish()
@@ -69,8 +69,7 @@ fn appender_mean_index(backend: BackendType, window_size: usize, capacity: usize
         let mut vec_handle = Handle::vec("agger");
         backend.register_vec_handle(&mut vec_handle);
         let state = vec_handle.activate(backend.clone());
-        let mut appender_index: AppenderIndex<u64, B> =
-            AppenderIndex::with_capacity(capacity, state);
+        let mut appender_index: Appender<u64, B> = Appender::with_capacity(capacity, state);
         b.iter(|| {
             for i in 0..window_size {
                 let _ = appender_index.append(i as u64).unwrap();
@@ -81,20 +80,20 @@ fn appender_mean_index(backend: BackendType, window_size: usize, capacity: usize
     });
 }
 
-fn appender_mean_pure_backend(backend: BackendType, window_size: usize, b: &mut Bencher) {
+fn appender_mean_eager(backend: BackendType, window_size: usize, b: &mut Bencher) {
     let dir = tempdir().unwrap();
     with_backend_type!(backend, |B| {
         let backend = Arc::new(B::create(dir.as_ref()).unwrap());
         let mut vec_handle: Handle<VecState<u64>> = Handle::vec("agger");
         backend.register_vec_handle(&mut vec_handle);
         let state = vec_handle.activate(backend.clone());
+        let mut eager_appender = EagerAppender::new(state);
 
         b.iter(|| {
             for i in 0..window_size {
-                let _ = state.append(i as u64).unwrap();
+                let _ = eager_appender.append(i as u64).unwrap();
             }
-            let consumed = state.get().unwrap();
-            state.clear().unwrap();
+            let consumed = eager_appender.consume().unwrap();
             mean(&consumed)
         });
     });

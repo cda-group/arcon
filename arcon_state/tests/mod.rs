@@ -3,15 +3,15 @@
 
 use arcon_state::{
     backend::{Backend, Handle, Sled},
-    index::{HashIndex, IndexOps, ValueIndex},
+    index::{IndexOps, Map, Value},
     ArconState,
 };
 
 #[derive(ArconState)]
 pub struct StreamingState<B: Backend> {
-    watermark: ValueIndex<u64, B>,
-    epoch: ValueIndex<u64, B>,
-    counters: HashIndex<u64, u64, B>,
+    watermark: Value<u64, B>,
+    epoch: Value<u64, B>,
+    counters: Map<u64, u64, B>,
     #[ephemeral]
     emph: u64,
 }
@@ -33,9 +33,9 @@ fn streaming_state_test() {
     let active_counters_handle = counters_handle.activate(backend.clone());
 
     let mut state = StreamingState {
-        watermark: ValueIndex::new(active_watermark_handle),
-        epoch: ValueIndex::new(active_epoch_handle),
-        counters: HashIndex::new(active_counters_handle),
+        watermark: Value::new(active_watermark_handle),
+        epoch: Value::new(active_epoch_handle),
+        counters: Map::new(active_counters_handle),
         emph: 0,
     };
 

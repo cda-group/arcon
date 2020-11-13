@@ -7,7 +7,7 @@ use crate::{
     prelude::{state, NodeID},
 };
 use arcon_error::*;
-use arcon_state::{ArconState, Backend, Handle, HashIndex, ValueIndex};
+use arcon_state::{ArconState, Backend, Handle, Map, Value};
 use kompact::prelude::*;
 use std::sync::Arc;
 
@@ -76,10 +76,10 @@ impl Port for NodeManagerPort {
 
 #[derive(ArconState)]
 pub struct NodeManagerState<B: Backend> {
-    watermarks: HashIndex<NodeID, Watermark, B>,
-    epochs: HashIndex<NodeID, Epoch, B>,
-    current_watermark: ValueIndex<Watermark, B>,
-    current_epoch: ValueIndex<Epoch, B>,
+    watermarks: Map<NodeID, Watermark, B>,
+    epochs: Map<NodeID, Epoch, B>,
+    current_watermark: Value<Watermark, B>,
+    current_epoch: Value<Epoch, B>,
 }
 
 /// A [kompact] component responsible for coordinating a set of Arcon nodes
@@ -145,10 +145,10 @@ where
         backend.register_value_handle(&mut curr_epoch_handle);
 
         let manager_state = NodeManagerState {
-            watermarks: HashIndex::with_capacity(wm_handle.activate(backend.clone()), 64, 64),
-            epochs: HashIndex::with_capacity(epoch_handle.activate(backend.clone()), 64, 64),
-            current_watermark: ValueIndex::new(curr_wm_handle.activate(backend.clone())),
-            current_epoch: ValueIndex::new(curr_epoch_handle.activate(backend.clone())),
+            watermarks: Map::with_capacity(wm_handle.activate(backend.clone()), 64, 64),
+            epochs: Map::with_capacity(epoch_handle.activate(backend.clone()), 64, 64),
+            current_watermark: Value::new(curr_wm_handle.activate(backend.clone())),
+            current_epoch: Value::new(curr_epoch_handle.activate(backend.clone())),
         };
 
         NodeManager {

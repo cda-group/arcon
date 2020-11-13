@@ -4,7 +4,6 @@
 // Modifications Copyright (c) KTH Royal Institute of Technology
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::index::hash::bitmask::BitMaskIter;
 use core::{
     alloc::Layout,
     hint,
@@ -18,7 +17,10 @@ use std::alloc::{alloc, dealloc, handle_alloc_error};
 
 use crate::{
     data::{Key, Value},
-    index::hash::{bitmask::BitMask, imp::Group},
+    index::map::{
+        bitmask::{BitMask, BitMaskIter},
+        imp::Group,
+    },
 };
 
 /// Augments `AllocErr` with a `CapacityOverflow` variant.

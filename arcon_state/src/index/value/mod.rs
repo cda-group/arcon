@@ -3,7 +3,6 @@
 
 use crate::{
     backend::{handles::ActiveHandle, Backend, ValueState},
-    data::Value,
     error::*,
     index::IndexOps,
 };
@@ -12,9 +11,9 @@ use crate::{
 ///
 /// Examples include rolling counters, watermarks, and epochs.
 #[derive(Debug)]
-pub struct ValueIndex<V, B>
+pub struct Value<V, B>
 where
-    V: Value,
+    V: crate::data::Value,
     B: Backend,
 {
     /// The data itself
@@ -25,12 +24,12 @@ where
     handle: ActiveHandle<B, ValueState<V>>,
 }
 
-impl<V, B> ValueIndex<V, B>
+impl<V, B> Value<V, B>
 where
-    V: Value,
+    V: crate::data::Value,
     B: Backend,
 {
-    /// Creates a ValueIndex
+    /// Creates a Value
     pub fn new(handle: ActiveHandle<B, ValueState<V>>) -> Self {
         // Attempt to fetch data from backend, otherwise set to default value..
         let data = match handle.get() {
@@ -39,7 +38,7 @@ where
             Err(_) => V::default(),
         };
 
-        ValueIndex {
+        Value {
             data: Some(data),
             modified: false,
             handle,
@@ -70,7 +69,7 @@ where
 
     /// Read-Modify-Write Operation
     ///
-    /// If the ValueIndex is set, then the function `F`
+    /// If the Value is set, then the function `F`
     /// is passed a mutable reference to the data. It is then assumed
     /// that the data has been changed, thus the modified flag is set to true.
     #[inline(always)]
@@ -86,14 +85,14 @@ where
             // indicate that the rmw has successfully modified the data
             return true;
         }
-        // Failed to modify ValueIndex
+        // Failed to modify Value
         return false;
     }
 }
 
-impl<V, B> IndexOps for ValueIndex<V, B>
+impl<V, B> IndexOps for Value<V, B>
 where
-    V: Value,
+    V: crate::data::Value,
     B: Backend,
 {
     fn persist(&mut self) -> Result<()> {
@@ -122,7 +121,7 @@ mod tests {
         let mut handle = Handle::value("_value");
         backend.register_value_handle(&mut handle);
         let active = handle.activate(backend.clone());
-        let mut index: ValueIndex<u64, Sled> = ValueIndex::new(active);
+        let mut index: Value<u64, Sled> = Value::new(active);
         assert_eq!(index.get(), Some(&0u64));
         index.put(10u64);
         assert_eq!(index.get(), Some(&10u64));
