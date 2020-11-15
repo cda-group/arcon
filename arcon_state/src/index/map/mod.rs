@@ -273,10 +273,14 @@ where
     ///
     /// The `F` function will execute in-place if the value is found in the RawTable.
     /// Otherwise, there will be an attempt to find the value in the Backend.
+    ///
+    /// The `P` function defines how a default value is created if there is
+    /// no entry in the Map.
     #[inline(always)]
-    pub fn rmw<F: Sized>(&mut self, key: &K, mut f: F) -> Result<bool>
+    pub fn rmw<F: Sized, P>(&mut self, key: &K, p: P, mut f: F) -> Result<()>
     where
         F: FnMut(&mut V),
+        P: FnOnce() -> V,
     {
         let hash = make_hash(&self.hash_builder, key);
         // In best case, we find the record in the RawTable's MOD lane
@@ -284,8 +288,7 @@ where
         if let Some(mut entry) = self.table_find_mod_lane(key, hash) {
             // run the udf on the data
             f(&mut entry);
-            // indicate that the operation was successful
-            return Ok(true);
+            return Ok(());
         }
 
         // Attempt to find the value in the READ lane. If found,
@@ -293,7 +296,7 @@ where
         if let Some((key, mut value)) = self.table_take_read_lane(key, hash) {
             f(&mut value);
             self.insert(key, value, hash)?;
-            return Ok(true);
+            return Ok(());
         }
 
         // Otherwise, check the backing state backend if it has the key.
@@ -303,14 +306,15 @@ where
                 f(&mut value);
                 // insert the value into the RawTable
                 self.insert(key.clone(), value, hash)?;
-                // indicate that the operation was successful
-                Ok(true)
             }
             None => {
-                // return false as the rmw operation did not modify the given key
-                Ok(false)
+                let mut value = p();
+                f(&mut value);
+                self.insert(key.clone(), value, hash)?;
             }
         }
+
+        Ok(())
     }
 
     /// Inserts Modified elements in a MOD lane probe sequence into the
@@ -346,13 +350,15 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::{sled::Sled, Handle};
+    use crate::{
+        backend::{sled::Sled, Handle},
+        index::temp_backend,
+    };
     use std::sync::Arc;
 
     #[test]
     fn basic_test() {
-        let backend = Sled::create(&std::path::Path::new("/tmp/h1")).unwrap();
-        let backend = Arc::new(backend);
+        let backend = Arc::new(temp_backend());
         let mut handle = Handle::map("_map");
         backend.register_map_handle(&mut handle);
         let active = handle.activate(backend.clone());
@@ -361,21 +367,10 @@ mod tests {
         let read_capacity = 1024;
         let mut hash_index: Map<u64, u64, Sled> =
             Map::with_capacity(active, mod_capacity, read_capacity);
-        for i in 0..1024 {
-            hash_index.put(i as u64, i as u64).unwrap();
-            let key: u64 = i as u64;
-            assert_eq!(hash_index.get(&key).unwrap(), Some(&key));
-        }
+
         for i in 0..1024 {
             let key: u64 = i as u64;
-            assert_eq!(
-                hash_index
-                    .rmw(&key, |v| {
-                        *v += 1;
-                    })
-                    .unwrap(),
-                true
-            );
+            hash_index.rmw(&key, || key, |v| *v += 1).expect("failure");
         }
         for i in 0..1024 {
             let key: u64 = i as u64;
@@ -386,8 +381,7 @@ mod tests {
 
     #[test]
     fn modified_test() {
-        let backend = Sled::create(&std::path::Path::new("/tmp/h2")).unwrap();
-        let backend = Arc::new(backend);
+        let backend = Arc::new(temp_backend());
         let mut handle = Handle::map("_map");
         backend.register_map_handle(&mut handle);
         let active = handle.activate(backend.clone());
@@ -407,14 +401,7 @@ mod tests {
         // returned from our modified_iterator.
         let rmw_keys = vec![0, 1, 2];
         for key in &rmw_keys {
-            assert_eq!(
-                hash_index
-                    .rmw(&key, |v| {
-                        *v += 1;
-                    })
-                    .unwrap(),
-                true
-            );
+            assert!(hash_index.rmw(&key, || 0, |v| *v += 1).is_ok());
         }
 
         for (key, value) in hash_index.modified_iterator() {

@@ -1072,9 +1072,13 @@ macro_rules! rmw {
             if $full_eviction {
                 $bencher.iter(|| {
                     for i in $keys.iter() {
-                        map.rmw(&i, |val| {
-                            val.x2 += 10;
-                        })
+                        map.rmw(
+                            &i,
+                            || $type_value::new(),
+                            |val| {
+                                val.x2 += 10;
+                            },
+                        )
                         .unwrap();
                     }
                     map.persist().unwrap()
@@ -1082,9 +1086,13 @@ macro_rules! rmw {
             } else {
                 $bencher.iter(|| {
                     for i in $keys.iter() {
-                        map.rmw(&i, |val| {
-                            val.x2 += 10;
-                        })
+                        map.rmw(
+                            &i,
+                            || $type_value::new(),
+                            |val| {
+                                val.x2 += 10;
+                            },
+                        )
                         .unwrap();
                     }
                 });

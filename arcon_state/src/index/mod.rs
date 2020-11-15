@@ -33,3 +33,11 @@ impl IndexOps for () {
         Ok(())
     }
 }
+
+#[cfg(test)]
+pub(crate) fn temp_backend() -> crate::Sled {
+    use crate::backend::Backend;
+    let test_dir = tempfile::tempdir().unwrap();
+    let path = test_dir.path();
+    crate::backend::Sled::create(path).unwrap()
+}
