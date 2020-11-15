@@ -25,6 +25,7 @@ pub mod socket;
 #[derive(Debug, Clone)]
 pub enum ArconSource {
     Epoch(Epoch),
+    Start,
 }
 
 /// Common Context for all Source implementations

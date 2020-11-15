@@ -208,11 +208,7 @@ where
             return arcon_err!("Message from invalid sender");
         }
 
-        if self
-            .node_state
-            .blocked_channels()
-            .contains_key(&message.sender)
-        {
+        if self.sender_blocked(&message.sender) {
             if let Some(req) = &self.checkpoint_request {
                 if req.is_complete() {
                     self.complete_epoch()?;
@@ -239,11 +235,7 @@ where
             return arcon_err!("Message from invalid sender");
         }
 
-        if self
-            .node_state
-            .blocked_channels()
-            .contains_key(&message.sender)
-        {
+        if self.sender_blocked(&message.sender) {
             if let Some(req) = &mut self.checkpoint_request {
                 if req.is_complete() {
                     self.complete_epoch()?;
@@ -260,6 +252,11 @@ where
         self.record_incoming_events(message.events.len() as u64);
 
         self.handle_events(message.sender, message.events)
+    }
+
+    #[inline(always)]
+    fn sender_blocked(&mut self, sender: &NodeID) -> bool {
+        self.node_state.blocked_channels().contains_key(sender)
     }
 
     #[cfg(feature = "metrics")]
@@ -400,8 +397,6 @@ where
         // Clear request
         self.checkpoint_request = None;
 
-        //self.node_state.current_epoch.bump();
-
         #[cfg(feature = "metrics")]
         {
             self.metrics.epoch = self.node_state.current_epoch;
@@ -412,11 +407,6 @@ where
         for message in self.node_state.message_buffer().consume()? {
             self.handle_events(message.sender, message.events)?;
         }
-
-        // TODO: remove
-        unsafe {
-            (*self.channel_strategy.get()).flush(self);
-        };
 
         Ok(())
     }

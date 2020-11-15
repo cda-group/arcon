@@ -37,6 +37,11 @@ impl Actor for SourceManager {
                     source.actor_ref().tell(msg.clone());
                 }
             }
+            ArconSource::Start => {
+                for source in &self.sources {
+                    source.actor_ref().tell(msg.clone());
+                }
+            }
         }
         Handled::Ok
     }

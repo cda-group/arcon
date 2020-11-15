@@ -80,7 +80,6 @@ where
     fn on_start(&mut self) -> Handled {
         let shared = self.loopback_receive.share();
         self.loopback_send.connect(shared);
-        self.loopback_send.trigger(ContinueSending);
         Handled::Ok
     }
 }
@@ -116,6 +115,10 @@ where
         match msg {
             ArconSource::Epoch(epoch) => {
                 self.source_ctx.borrow_mut().inject_epoch(epoch, self);
+            }
+            ArconSource::Start => {
+                // trigger start of the processing...
+                self.loopback_send.trigger(ContinueSending);
             }
         }
 
