@@ -42,6 +42,7 @@ arcon_error = { version = "0.1", path = "arcon_error" }
 arcon_extra = { version = "0.1", path = "arcon_extra" }
 arcon_state = { version = "0.1", path = "arcon_state" }
 arcon_allocator = { version = "0.1", path = "arcon_allocator" }
+[target.'cfg(unix)'.dependencies]
 arcon_tui = { version = "0.1", path = "arcon_tui", optional = true }
 
 kompact = { git = "https://github.com/kompics/kompact.git", branch = "master", features = ["type_erasure"] }

@@ -186,6 +186,8 @@ mod tests {
             .wait_timeout(std::time::Duration::from_millis(100))
             .expect("started");
 
+        source_comp.actor_ref().tell(ArconSource::Start);
+
         // Wait a bit in order for all results to come in...
         std::thread::sleep(std::time::Duration::from_secs(1));
 
