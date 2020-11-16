@@ -39,6 +39,9 @@ jobs:
             toolchain: ${{ matrix.toolchain }}
             default: true
             profile: minimal
+      - name: Install dependencies
+        if: runner.os == 'Windows'
+        run: choco install llvm -y
       - name: test
         uses: actions-rs/cargo@v1
         with:
