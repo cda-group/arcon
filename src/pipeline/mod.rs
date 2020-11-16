@@ -128,7 +128,6 @@ impl Pipeline {
         )
     }
 
-
     pub fn connect_state_port<B: Backend>(&mut self, nm: &Arc<Component<NodeManager<B>>>) {
         biconnect_components::<StateManagerPort, _, _>(&self.state_manager, nm)
             .expect("connection");
