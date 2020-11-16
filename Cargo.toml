@@ -21,13 +21,14 @@ members = [
 exclude = [
     "arcon_compiler",
     "arcon_codegen",
+    "arcon_tui",
     "experiments",
 ]
 
 [features]
 default = ["serde"]
 arcon_serde = ["serde_json", "bincode", "serde", "uuid/serde"]
-kafka = ["rdkafka", "futures", "serde_json", "serde"]
+#kafka = ["rdkafka", "futures", "serde_json", "serde"]
 thread_pinning = ["kompact/thread_pinning"]
 socket = ["tokio-util", "tokio", "futures", "serde_json", "serde"]
 quiet = ["slog"]
@@ -42,8 +43,6 @@ arcon_error = { version = "0.1", path = "arcon_error" }
 arcon_extra = { version = "0.1", path = "arcon_extra" }
 arcon_state = { version = "0.1", path = "arcon_state" }
 arcon_allocator = { version = "0.1", path = "arcon_allocator" }
-[target.'cfg(unix)'.dependencies]
-arcon_tui = { version = "0.1", path = "arcon_tui", optional = true }
 
 kompact = { git = "https://github.com/kompics/kompact.git", branch = "master", features = ["type_erasure"] }
 uuid = "0.8"
@@ -64,7 +63,7 @@ prost-types = "0.6"
 bytes = "0.5"
 
 # Optional
-rdkafka = { version = "0.23", optional = true }
+#rdkafka = { version = "0.23", optional = true }
 tokio = { version = "0.2", optional = true, features = ["full"] } # TODO: figure out which are truly needed
 tokio-util = { version = "0.2", optional = true, features = ["full"] }
 futures = { version = "0.3", optional = true }

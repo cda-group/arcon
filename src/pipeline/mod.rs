@@ -1,9 +1,6 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-#[cfg(feature = "arcon_tui")]
-use arcon_tui::{component::TuiComponent, widgets::node::Node as TuiNode};
-
 use crate::{
     buffer::event::PoolInfo,
     conf::{ArconConf, ExecutionMode},
@@ -33,10 +30,6 @@ pub struct Pipeline {
     epoch_manager: Option<Arc<Component<EpochManager>>>,
     /// StateManager component for this pipeline
     state_manager: Arc<Component<StateManager>>,
-    #[cfg(feature = "arcon_tui")]
-    tui_component: Arc<Component<TuiComponent>>,
-    #[cfg(feature = "arcon_tui")]
-    arcon_event_receiver: Arc<arcon_tui::Receiver<TuiNode>>,
 }
 
 /// A Node with operator type, state backend type, and timer type erased
@@ -51,10 +44,6 @@ impl Pipeline {
     pub fn new() -> Self {
         let conf: ArconConf = Default::default();
         let allocator = Arc::new(Mutex::new(Allocator::new(conf.allocator_capacity)));
-        #[cfg(feature = "arcon_tui")]
-        let (system, state_manager, epoch_manager, source_manager, tui_component, arcon_receiver) =
-            Self::setup(&conf);
-        #[cfg(not(feature = "arcon_tui"))]
         let (system, state_manager, epoch_manager, source_manager) = Self::setup(&conf);
 
         Self {
@@ -64,20 +53,12 @@ impl Pipeline {
             epoch_manager,
             state_manager,
             source_manager,
-            #[cfg(feature = "arcon_tui")]
-            tui_component,
-            #[cfg(feature = "arcon_tui")]
-            arcon_event_receiver: Arc::new(arcon_receiver),
         }
     }
 
     /// Creates a new Pipeline using the given ArconConf
     pub fn with_conf(conf: ArconConf) -> Self {
         let allocator = Arc::new(Mutex::new(Allocator::new(conf.allocator_capacity)));
-        #[cfg(feature = "arcon_tui")]
-        let (system, state_manager, epoch_manager, source_manager, tui_component, arcon_receiver) =
-            Self::setup(&conf);
-        #[cfg(not(feature = "arcon_tui"))]
         let (system, state_manager, epoch_manager, source_manager) = Self::setup(&conf);
 
         Self {
@@ -87,10 +68,6 @@ impl Pipeline {
             epoch_manager,
             state_manager,
             source_manager,
-            #[cfg(feature = "arcon_tui")]
-            tui_component,
-            #[cfg(feature = "arcon_tui")]
-            arcon_event_receiver: Arc::new(arcon_receiver),
         }
     }
 
@@ -105,7 +82,6 @@ impl Pipeline {
     }
 
     /// Helper function to set up internals of the pipeline
-    #[cfg(not(feature = "arcon_tui"))]
     fn setup(
         arcon_conf: &ArconConf,
     ) -> (
@@ -152,63 +128,6 @@ impl Pipeline {
         )
     }
 
-    /// Helper function to set up internals of the pipeline
-    #[cfg(feature = "arcon_tui")]
-    fn setup(
-        arcon_conf: &ArconConf,
-    ) -> (
-        KompactSystem,
-        Arc<Component<StateManager>>,
-        Option<Arc<Component<EpochManager>>>,
-        Arc<Component<SourceManager>>,
-        Arc<Component<TuiComponent>>,
-        arcon_tui::Receiver<TuiNode>,
-    ) {
-        let kompact_config = arcon_conf.kompact_conf();
-        let system = kompact_config.build().expect("KompactSystem");
-
-        let state_manager = StateManager::new();
-        let state_manager_comp = system.create_dedicated(|| state_manager);
-        let timeout = std::time::Duration::from_millis(500);
-        system
-            .start_notify(&state_manager_comp)
-            .wait_timeout(timeout)
-            .expect("StateManager comp never started!");
-
-        let source_manager = SourceManager::new();
-        let source_manager_comp = system.create(|| source_manager);
-
-        let epoch_manager = match arcon_conf.execution_mode {
-            ExecutionMode::Local => {
-                let source_manager_ref = source_manager_comp.actor_ref().hold().expect("fail");
-                let epoch_manager =
-                    EpochManager::new(arcon_conf.epoch_interval, source_manager_ref);
-                Some(system.create(|| epoch_manager))
-            }
-            ExecutionMode::Distributed => None,
-        };
-
-        system
-            .start_notify(&source_manager_comp)
-            .wait_timeout(timeout)
-            .expect("SourceManager comp never started!");
-
-        let (arcon_sender, arcon_receiver) = arcon_tui::unbounded::<TuiNode>();
-        let tui_c = TuiComponent::new(arcon_sender);
-        let tui_component = system.create_dedicated(|| tui_c);
-        system
-            .start_notify(&tui_component)
-            .wait_timeout(timeout)
-            .expect("TuiComponent never started!");
-        (
-            system,
-            state_manager_comp,
-            epoch_manager,
-            source_manager_comp,
-            tui_component,
-            arcon_receiver,
-        )
-    }
 
     pub fn connect_state_port<B: Backend>(&mut self, nm: &Arc<Component<NodeManager<B>>>) {
         biconnect_components::<StateManagerPort, _, _>(&self.state_manager, nm)
@@ -272,11 +191,5 @@ impl Pipeline {
     /// Shuts the pipeline down and consumes the struct
     pub fn shutdown(self) {
         let _ = self.system.shutdown();
-    }
-
-    /// Launches tui dashboard
-    #[cfg(feature = "arcon_tui")]
-    pub fn tui(&mut self) {
-        arcon_tui::tui(self.arcon_event_receiver.clone());
     }
 }
