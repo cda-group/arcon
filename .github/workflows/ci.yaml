@@ -1,9 +1,5 @@
-name: arcon
-on: 
-  pull_request:
-    branches: [state_index_experiment]
-  push:
-    branches: [state_index_experiment]
+name: ci
+on: pull_request 
 
 jobs:
   rustfmt:
@@ -29,7 +25,6 @@ jobs:
         os:
           - ubuntu-latest
           - macos-latest
-          - windows-latest
     steps:
       - name: checkout
         uses: actions/checkout@v2

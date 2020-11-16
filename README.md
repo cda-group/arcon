@@ -1,4 +1,4 @@
-[![Build Status](https://dev.azure.com/arcon-cda/arcon/_apis/build/status/cda-group.arcon?branchName=master)](https://dev.azure.com/arcon-cda/arcon/_build/latest?definitionId=1&branchName=master)
+[![Build Status][https://github.com/cda-group/arcon/workflows/ci/badge.svg]][https://github.com/cda-group/arcon/actions?query=workflow%3Aci+branch%3Amaster]
 [![Cargo](https://img.shields.io/badge/crates.io-v0.1.3-orange)](https://crates.io/crates/arcon)
 [![License](https://img.shields.io/badge/License-AGPL--3.0--only-blue)](https://github.com/cda-group/arcon)
 
