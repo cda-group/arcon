@@ -1,7 +1,0 @@
-steps:
-  - script: echo "##vso[task.setvariable variable=rust_toolchain]$(cat execution-plane/rust-toolchain)"
-  - template: azure-install-rust.yml
-  - template: azure-rust-deps.yml
-  - template: azure-rustfmt.yml
-  - script: cd execution-plane && ./run_checks.sh
-    displayName: 'tests and benches'

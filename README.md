@@ -1,34 +1,58 @@
-[![Build Status](https://dev.azure.com/arcon-cda/arcon/_apis/build/status/cda-group.arcon?branchName=master)](https://dev.azure.com/arcon-cda/arcon/_build/latest?definitionId=1&branchName=master)
+[![Build Status][https://github.com/cda-group/arcon/workflows/ci/badge.svg]][https://github.com/cda-group/arcon/actions?query=workflow%3Aci+branch%3Amaster]
+[![Cargo](https://img.shields.io/badge/crates.io-v0.1.3-orange)](https://crates.io/crates/arcon)
 [![License](https://img.shields.io/badge/License-AGPL--3.0--only-blue)](https://github.com/cda-group/arcon)
 
-# Arcon
+# arcon
 
-Arcon is a streaming-first execution engine for the [Arc](https://github.com/cda-group/arc) language.
+A Streaming-first Analytics Engine.
 
-## Overview
+Requires Rust nightly (See current toolchain [here](rust-toolchain)).
 
-**Note**: The project is still in an early development stage.
+* [`arcon_allocator`]: Custom allocator.
+* [`arcon_build`]: Protobuf builder
+* [`arcon_error`]: Common error utilities.
+* [`arcon_extra`]: Contains extra 3rd party features.
+* [`arcon_macros`]: Arcon derive macros.
+* [`arcon_state`]: State management features.
+* [`arcon_tests`]: Integration tests
+* [`arcon_tui`]: Text-based dashboard.
 
-<p align="center">
-  <img width="600" height="300" src=".github/arcon_overview.jpg">
-</p>
+[`arcon_allocator`]: arcon_allocator
+[`arcon_build`]: arcon_build
+[`arcon_error`]: arcon_error
+[`arcon_extra`]: arcon_extra
+[`arcon_macros`]: arcon_macros
+[`arcon_state`]: arcon_state
+[`arcon_tests`]: arcon_tests
+[`arcon_tui`]: arcon_tui
 
+## Requirements
 
-## Project Layout
+Depending on what you are compiling, you might need cmake, g++ etc...
 
-* [`execution-plane`]: The execution plane provides a Rust-based distributed dataflow runtime that executes Arc applications.
-* [`operational-plane`]: The operational plane is responsible for the coordination of the distributed execution of an Arc application.
-* [`protobuf`]: Protobuf messages used between Arcon's operational and execution plane.
+## Testing
 
-[`execution-plane`]: execution-plane
-[`operational-plane`]: operational-plane
-[`protobuf`]: protobuf
+General
+```
+$ cargo test --all
+```
 
-## Related Projects
+Specific test case
+```
+$ cargo test <test-name>
+```
 
-* [Arc](https://github.com/cda-group/arc): An IR and compiler for data analytics.
-* [Kompact](https://github.com/kompics/kompact): A hybrid Actor + Component model framework.
+## Criterion Benchmarks
 
+Run All
+```
+$ cargo bench
+```
+
+Run specific benchmark
+```
+$ cargo bench --bench <bench-name>
+```
 
 ## License
 
