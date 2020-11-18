@@ -50,6 +50,11 @@ where
     }
 
     #[inline(always)]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    #[inline(always)]
     pub fn len(&self) -> usize {
         let mem_len = self.elements.len();
         let raw_len = self.handle.len().unwrap();
@@ -113,7 +118,7 @@ mod tests {
         let backend = Arc::new(backend);
         let mut vec_handle = Handle::vec("_appender");
         backend.register_vec_handle(&mut vec_handle);
-        let active_handle = vec_handle.activate(backend.clone());
+        let active_handle = vec_handle.activate(backend);
         let mut index: Appender<u64, Sled> = Appender::new(active_handle);
 
         for i in 0..1024 {
@@ -122,10 +127,8 @@ mod tests {
         assert_eq!(index.len(), 1024);
         let consumed = index.consume().unwrap();
         assert_eq!(consumed.len(), 1024);
-        let mut c = 0;
-        for i in consumed {
-            assert_eq!(c, i);
-            c += 1;
+        for (c, i) in consumed.into_iter().enumerate() {
+            assert_eq!(c as u64, i);
         }
         index.clear().unwrap();
         let consumed = index.consume().unwrap();

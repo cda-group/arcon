@@ -17,11 +17,9 @@ fn arcon_allocator(c: &mut Criterion) {
 fn arcon_alloc(b: &mut Bencher) {
     let mut a = Allocator::new(81920);
     b.iter(|| {
-        black_box({
-            if let AllocResult::Alloc(id, _) = unsafe { a.alloc::<u64>(ALLOC_SIZE) } {
-                unsafe { a.dealloc(id) };
-            }
-        });
+        if let AllocResult::Alloc(id, _) = unsafe { a.alloc::<u64>(ALLOC_SIZE) } {
+            unsafe { a.dealloc(id) };
+        }
     });
 }
 

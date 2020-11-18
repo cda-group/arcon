@@ -223,7 +223,7 @@ impl<S: StateType, IK: Metakey, N: Metakey> Handle<S, IK, N> {
 
     #[inline(always)]
     pub fn metakey_size(&self) -> usize {
-        return IK::SIZE + N::SIZE;
+        IK::SIZE + N::SIZE
     }
 }
 //endregion

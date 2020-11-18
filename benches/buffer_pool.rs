@@ -71,15 +71,13 @@ fn pool_multi_threaded_large(b: &mut Bencher) {
 
 fn buffer_pool_single_thread(b: &mut Bencher, buffer_size: usize) {
     let allocator = Arc::new(Mutex::new(Allocator::new(ALLOCATOR_BYTES)));
-    let mut pool: BufferPool<u64> =
-        BufferPool::new(POOL_CAPACITY, buffer_size, allocator.clone()).unwrap();
+    let mut pool: BufferPool<u64> = BufferPool::new(POOL_CAPACITY, buffer_size, allocator).unwrap();
 
     b.iter(|| {
         // fetch BufferWriter
         let mut writer = pool.get();
         for i in 0..buffer_size {
             black_box(writer.push(i as u64));
-            ()
         }
         // Create BufferReader
         let reader = writer.reader();
@@ -92,8 +90,7 @@ fn buffer_pool_single_thread(b: &mut Bencher, buffer_size: usize) {
 
 fn buffer_pool_multi_threaded(buffer_size: usize) {
     let allocator = Arc::new(Mutex::new(Allocator::new(ALLOCATOR_BYTES)));
-    let mut pool: BufferPool<u64> =
-        BufferPool::new(POOL_CAPACITY, buffer_size, allocator.clone()).unwrap();
+    let mut pool: BufferPool<u64> = BufferPool::new(POOL_CAPACITY, buffer_size, allocator).unwrap();
 
     let (tx, rx): (Sender<BufferReader<u64>>, Receiver<BufferReader<u64>>) = channel();
 
@@ -110,7 +107,6 @@ fn buffer_pool_multi_threaded(buffer_size: usize) {
         let mut writer = pool.get();
         for i in 0..buffer_size {
             black_box(writer.push(i as u64));
-            ()
         }
         let reader = writer.reader();
         tx.send(reader).unwrap();
@@ -131,7 +127,7 @@ fn rust_vec_single_thread(b: &mut Bencher, buffer_size: usize) {
     b.iter(|| {
         let mut vec: Vec<u64> = Vec::with_capacity(buffer_size);
         for i in 0..buffer_size {
-            black_box(vec.push(i as u64))
+            vec.push(i as u64);
         }
         for i in 0..buffer_size {
             let _ = black_box(vec.get(i).unwrap());
@@ -160,7 +156,7 @@ fn rust_vec_multi_threaded(buffer_size: usize) {
     for _ in 0..THREAD_ITERATIONS {
         let mut vec: Vec<u64> = Vec::with_capacity(buffer_size);
         for i in 0..buffer_size {
-            black_box(vec.push(i as u64))
+            vec.push(i as u64);
         }
         tx.send(vec).unwrap();
     }

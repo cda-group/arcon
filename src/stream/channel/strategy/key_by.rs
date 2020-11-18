@@ -190,7 +190,7 @@ mod tests {
         let mut comps: Vec<Arc<crate::prelude::Component<DebugNode<Input>>>> = Vec::new();
 
         for _i in 0..parallelism {
-            let comp = system.create(move || DebugNode::<Input>::new());
+            let comp = system.create(DebugNode::<Input>::new);
             system.start(&comp);
             let actor_ref: ActorRefStrong<ArconMessage<Input>> =
                 comp.actor_ref().hold().expect("failed to fetch");
@@ -228,7 +228,7 @@ mod tests {
         // Each of the 8 components should at least get some hits
         for comp in comps {
             comp.on_definition(|cd| {
-                assert!(cd.data.len() > 0);
+                assert!(!cd.data.is_empty());
             });
         }
         pipeline.shutdown();

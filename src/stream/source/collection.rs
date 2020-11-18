@@ -145,7 +145,7 @@ mod tests {
         let pool_info = pipeline.get_pool_info();
         let system = pipeline.system();
 
-        let sink = system.create(move || DebugNode::<u64>::new());
+        let sink = system.create(DebugNode::<u64>::new);
         system
             .start_notify(&sink)
             .wait_timeout(std::time::Duration::from_millis(100))

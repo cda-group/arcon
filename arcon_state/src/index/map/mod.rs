@@ -122,6 +122,7 @@ where
 
     /// Internal helper function to access a mutable RawTable
     #[inline(always)]
+    #[allow(clippy::mut_from_ref)]
     fn raw_table_mut(&self) -> &mut RawTable<K, V> {
         unsafe { &mut *self.raw_table.get() }
     }
@@ -134,12 +135,10 @@ where
         // If the key exists in the mod lane already, we simply update the value..
         if let Some(item) = table.find_mod_lane_mut(hash, |x| k.eq(&x.0)) {
             *item = v;
-        } else {
-            if let Some((mod_iter, (k, v))) = table.insert_mod_lane(hash, (k, v)) {
-                self.drain_modified(mod_iter)?;
-                // This shall not fail now
-                let _ = table.insert_mod_lane(hash, (k, v));
-            }
+        } else if let Some((mod_iter, (k, v))) = table.insert_mod_lane(hash, (k, v)) {
+            self.drain_modified(mod_iter)?;
+            // This shall not fail now
+            let _ = table.insert_mod_lane(hash, (k, v));
         }
         Ok(())
     }
@@ -224,11 +223,11 @@ where
         match table.remove(hash, |x| k.eq(x.0.borrow())) {
             Some(item) => {
                 self.backend_remove_fast(k)?;
-                return Ok(Some(item.1));
+                Ok(Some(item.1))
             }
             None => {
                 // Key was not found in RawTable, attempt to remove from the backend
-                return self.backend_remove(k);
+                self.backend_remove(k)
             }
         }
     }
@@ -361,7 +360,7 @@ mod tests {
         let backend = Arc::new(temp_backend());
         let mut handle = Handle::map("_map");
         backend.register_map_handle(&mut handle);
-        let active = handle.activate(backend.clone());
+        let active = handle.activate(backend);
 
         let mod_capacity = 1024;
         let read_capacity = 1024;
@@ -384,7 +383,7 @@ mod tests {
         let backend = Arc::new(temp_backend());
         let mut handle = Handle::map("_map");
         backend.register_map_handle(&mut handle);
-        let active = handle.activate(backend.clone());
+        let active = handle.activate(backend);
         let capacity = 64;
 
         let mut hash_index: Map<u64, u64, Sled> = Map::with_capacity(active, capacity, capacity);

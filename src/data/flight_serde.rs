@@ -295,21 +295,20 @@ mod test {
         let pool_info = pipeline.get_pool_info();
         let (local, remote) = get_systems();
         let timeout = Duration::from_millis(150);
-        let comp = remote.create(move || DebugNode::<ReceivingType>::new());
+        let comp = remote.create(DebugNode::<ReceivingType>::new);
         remote
             .start_notify(&comp)
             .wait_timeout(timeout)
             .expect("comp never started");
 
-        let comp_id = format!("comp");
+        let comp_id = String::from("comp");
         let reg = remote.register_by_alias(&comp, comp_id.clone());
         reg.wait_expect(
             Duration::from_millis(1000),
             "Failed to register alias for DebugNode",
         );
-        let remote_path = ActorPath::Named(NamedPath::with_system(remote.system_path(), vec![
-            comp_id.into(),
-        ]));
+        let remote_path =
+            ActorPath::Named(NamedPath::with_system(remote.system_path(), vec![comp_id]));
 
         let channel = Channel::Remote(remote_path, serde);
         let mut channel_strategy: ChannelStrategy<ArconDataTest> =
@@ -320,7 +319,7 @@ mod test {
             items: ITEMS.clone(),
             price: PRICE,
         };
-        let element = ArconElement::new(data.clone());
+        let element = ArconElement::new(data);
 
         comp.on_definition(|cd| {
             channel_strategy.add(ArconEvent::Element(element.clone()), cd);
@@ -340,6 +339,6 @@ mod test {
         let _ = local.shutdown();
         let _ = remote.shutdown();
 
-        return data;
+        data
     }
 }

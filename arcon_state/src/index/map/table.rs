@@ -554,7 +554,7 @@ where
                 }
 
                 // bit = 0-15, here we pick 0.
-                let insert_index = (pos + 0) & self.read_mask;
+                let insert_index = pos & self.read_mask;
                 let bucket = self.read_bucket(insert_index);
                 self.set_read_ctrl(insert_index, h2(hash));
                 // write the data to the bucket
@@ -569,8 +569,8 @@ where
     /// If `find_insert_slot` fails to find a suitable position for insertion,
     /// a ProbeModIterator is then returned in order to make some space.
     #[inline(always)]
-    pub fn insert_mod_lane<'a>(
-        &'a mut self,
+    pub fn insert_mod_lane(
+        &mut self,
         hash: u64,
         value: (K, V),
     ) -> Option<(ProbeModIterator<K, V>, (K, V))> {
@@ -674,7 +674,7 @@ where
                 }
             }
         }
-        return None;
+        None
     }
 
     /// Searches for an element in the table.
@@ -710,7 +710,7 @@ where
                 }
             }
         }
-        return None;
+        None
     }
 
     /// Returns the number of elements in the table.
@@ -747,7 +747,7 @@ where
     ///
     /// Safety: It is up to the caller to properly persist the buckets from the [TableModIterator]
     #[inline]
-    pub(crate) unsafe fn iter_modified<'a>(&'a mut self) -> TableModIterator<'a, K, V> {
+    pub(crate) unsafe fn iter_modified(&mut self) -> TableModIterator<K, V> {
         TableModIterator::new(self, 0)
     }
 

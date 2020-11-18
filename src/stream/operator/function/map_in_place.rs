@@ -26,6 +26,7 @@ impl<IN> MapInPlace<IN, fn(&mut IN, &mut ()) -> ArconResult<()>, ()>
 where
     IN: ArconType,
 {
+    #[allow(clippy::new_ret_no_self)]
     pub fn new(
         udf: impl SafelySendableFn(&mut IN) -> ArconResult<()>,
     ) -> MapInPlace<IN, impl SafelySendableFn(&mut IN, &mut ()) -> ArconResult<()>, ()> {

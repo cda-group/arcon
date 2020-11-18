@@ -30,7 +30,7 @@ fn streaming_state_test() {
 
     let active_watermark_handle = watermark_handle.activate(backend.clone());
     let active_epoch_handle = epoch_handle.activate(backend.clone());
-    let active_counters_handle = counters_handle.activate(backend.clone());
+    let active_counters_handle = counters_handle.activate(backend);
 
     let mut state = StreamingState {
         watermark: Value::new(active_watermark_handle),

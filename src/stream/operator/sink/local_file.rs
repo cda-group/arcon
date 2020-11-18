@@ -86,7 +86,7 @@ mod tests {
                 String::from("sink_comp"),
                 ChannelStrategy::Mute,
                 LocalFileSink::new(&file_path),
-                NodeState::new(NodeID::new(0), vec![node_id], backend.clone()),
+                NodeState::new(NodeID::new(0), vec![node_id], backend),
             )
         });
         system.start(&sink_comp);

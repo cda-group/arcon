@@ -134,7 +134,7 @@ mod tests {
     use tokio::{net::TcpStream, prelude::*, runtime::Runtime};
 
     // Shared methods for test cases
-    fn wait(time: u64) -> () {
+    fn wait(time: u64) {
         thread::sleep(time::Duration::from_secs(time));
     }
 

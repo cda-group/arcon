@@ -154,7 +154,7 @@ pub fn protobuf_deser_small_struct(b: &mut Bencher) {
 
     // prost consumes the whole buffer, hence the clone....
     b.iter_batched(
-        || buf.clone(),
+        || &(*buf),
         |mut buf| {
             assert_eq!(&SmallStruct::decode(&mut buf).unwrap(), &small);
         },
@@ -170,7 +170,7 @@ pub fn protobuf_deser_large_struct(b: &mut Bencher) {
 
     // prost consumes the whole buffer, hence the clone....
     b.iter_batched(
-        || buf.clone(),
+        || &(*buf),
         |mut buf| {
             assert_eq!(&LargeStruct::decode(&mut buf).unwrap(), &large);
         },
@@ -180,10 +180,10 @@ pub fn protobuf_deser_large_struct(b: &mut Bencher) {
 
 pub fn bincode_deser_small_struct(b: &mut Bencher) {
     let small = SmallStruct::new();
-    let mut bytes = bincode::serialize(&small).unwrap();
+    let bytes = bincode::serialize(&small).unwrap();
     b.iter(|| {
         assert_eq!(
-            &bincode::deserialize::<SmallStruct>(&mut bytes).unwrap(),
+            &bincode::deserialize::<SmallStruct>(&bytes).unwrap(),
             &small
         );
     });
@@ -191,10 +191,10 @@ pub fn bincode_deser_small_struct(b: &mut Bencher) {
 
 pub fn bincode_deser_large_struct(b: &mut Bencher) {
     let large = LargeStruct::new();
-    let mut bytes = bincode::serialize(&large).unwrap();
+    let bytes = bincode::serialize(&large).unwrap();
     b.iter(|| {
         assert_eq!(
-            &bincode::deserialize::<LargeStruct>(&mut bytes).unwrap(),
+            &bincode::deserialize::<LargeStruct>(&bytes).unwrap(),
             &large
         );
     });

@@ -57,7 +57,7 @@ fn index_mean_sled(b: &mut Bencher, window_size: usize, capacity: usize) {
 }
 
 #[inline(always)]
-fn mean(numbers: &Vec<u64>) -> f32 {
+fn mean(numbers: &[u64]) -> f32 {
     let sum: u64 = numbers.iter().sum();
     sum as f32 / numbers.len() as f32
 }
@@ -68,7 +68,7 @@ fn appender_mean_index(backend: BackendType, window_size: usize, capacity: usize
         let backend = Arc::new(B::create(dir.as_ref()).unwrap());
         let mut vec_handle = Handle::vec("agger");
         backend.register_vec_handle(&mut vec_handle);
-        let state = vec_handle.activate(backend.clone());
+        let state = vec_handle.activate(backend);
         let mut appender_index: Appender<u64, B> = Appender::with_capacity(capacity, state);
         b.iter(|| {
             for i in 0..window_size {
@@ -86,7 +86,7 @@ fn appender_mean_eager(backend: BackendType, window_size: usize, b: &mut Bencher
         let backend = Arc::new(B::create(dir.as_ref()).unwrap());
         let mut vec_handle: Handle<VecState<u64>> = Handle::vec("agger");
         backend.register_vec_handle(&mut vec_handle);
-        let state = vec_handle.activate(backend.clone());
+        let state = vec_handle.activate(backend);
         let mut eager_appender = EagerAppender::new(state);
 
         b.iter(|| {

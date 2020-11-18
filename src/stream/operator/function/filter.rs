@@ -26,6 +26,7 @@ impl<IN> Filter<IN, fn(&IN, &mut ()) -> bool, ()>
 where
     IN: ArconType,
 {
+    #[allow(clippy::new_ret_no_self)]
     pub fn new(
         udf: impl SafelySendableFn(&IN) -> bool,
     ) -> Filter<IN, impl SafelySendableFn(&IN, &mut ()) -> bool, ()> {

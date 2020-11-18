@@ -30,6 +30,7 @@ where
     OUTS: IntoIterator,
     OUTS::Item: ArconType,
 {
+    #[allow(clippy::new_ret_no_self)]
     pub fn new(
         udf: impl SafelySendableFn(IN) -> ArconResult<OUTS>,
     ) -> FlatMap<IN, OUTS, impl SafelySendableFn(IN, &mut ()) -> ArconResult<OUTS>, ()> {

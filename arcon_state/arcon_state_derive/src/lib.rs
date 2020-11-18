@@ -16,29 +16,24 @@ pub fn arcon_state(input: TokenStream) -> TokenStream {
         let mut idents = Vec::new();
         let mut ephemerals = Vec::new();
 
-        match s.fields {
-            syn::Fields::Named(ref fields_named) => {
-                for field in fields_named.named.iter() {
-                    let mut ephemeral = false;
-                    for attr in field.attrs.iter() {
-                        let meta = attr.parse_meta().unwrap();
-                        match meta {
-                            syn::Meta::Path(ref path)
-                                if path.get_ident().unwrap().to_string() == "ephemeral" =>
-                            {
-                                idents.push((field.ident.clone(), &field.ty));
-                                ephemerals.push((field.ident.clone(), &field.ty));
-                                ephemeral = true;
-                            }
-                            _ => (),
+        if let syn::Fields::Named(ref fields_named) = s.fields {
+            for field in fields_named.named.iter() {
+                let mut ephemeral = false;
+                for attr in field.attrs.iter() {
+                    let meta = attr.parse_meta().unwrap();
+                    match meta {
+                        syn::Meta::Path(ref path) if path.get_ident().unwrap() == "ephemeral" => {
+                            idents.push((field.ident.clone(), &field.ty));
+                            ephemerals.push((field.ident.clone(), &field.ty));
+                            ephemeral = true;
                         }
-                    }
-                    if !ephemeral {
-                        idents.push((field.ident.clone(), &field.ty));
+                        _ => (),
                     }
                 }
+                if !ephemeral {
+                    idents.push((field.ident.clone(), &field.ty));
+                }
             }
-            _ => {}
         }
 
         let mut field_getters = Vec::new();
@@ -79,7 +74,7 @@ pub fn arcon_state(input: TokenStream) -> TokenStream {
             }
         };
 
-        return proc_macro::TokenStream::from(output);
+        proc_macro::TokenStream::from(output)
     } else {
         panic!("#[derive(ArconState)] only works for structs");
     }

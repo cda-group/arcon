@@ -58,6 +58,9 @@ impl Allocator {
         }
     }
     /// Allocate memory block of type T with given capacity
+    ///
+    /// # Safety
+    /// It is up to the caller to ensure `dealloc` with the generated AllocId
     pub unsafe fn alloc<T>(&mut self, capacity: usize) -> AllocResult {
         if capacity == 0 {
             return AllocResult::CapacityErr("Cannot alloc for 0 sized pointer".into());
@@ -95,6 +98,9 @@ impl Allocator {
         AllocResult::Alloc((self.alloc_epoch, id), mem)
     }
     /// Deallocate memory through the given AllocId
+    ///
+    /// # Safety
+    /// It is up to the caller to ensure that the given AllocId is active
     pub unsafe fn dealloc(&mut self, id: AllocId) {
         if let Some((ptr, layout)) = self.allocations.remove(&id) {
             System.dealloc(ptr, layout);
