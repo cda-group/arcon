@@ -81,7 +81,7 @@ fn poc_test() {
     //let system = &pipeline.system();
 
     // Set up a Debug Sink
-    let sink = pipeline.system().create(move || DebugNode::<u32>::new());
+    let sink = pipeline.system().create(DebugNode::<u32>::new);
 
     pipeline
         .system()
@@ -122,7 +122,7 @@ fn poc_test() {
         descriptor,
         channel_strategy,
         Map::stateful(MapStateTwo::new(backend.clone()), &map_fn_two),
-        NodeState::new(NodeID::new(0), in_channels, backend.clone()),
+        NodeState::new(NodeID::new(0), in_channels, backend),
     );
 
     let map_comp_two = pipeline.system().create(|| node);
@@ -168,7 +168,7 @@ fn poc_test() {
         descriptor,
         channel_strategy,
         Map::stateful(MapStateOne::new(backend.clone()), &map_fn),
-        NodeState::new(NodeID::new(0), in_channels, backend.clone()),
+        NodeState::new(NodeID::new(0), in_channels, backend),
     );
 
     let map_comp = pipeline.system().create(|| node);
@@ -184,9 +184,7 @@ fn poc_test() {
 
     // Set up Batch component
 
-    let batch_comp = pipeline
-        .system()
-        .create(|| BatchComponent::<Sled, Sled>::new());
+    let batch_comp = pipeline.system().create(BatchComponent::<Sled, Sled>::new);
 
     pipeline
         .system()

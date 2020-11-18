@@ -202,7 +202,7 @@ pub struct RawArconMessage<A: ArconType> {
 impl<A: ArconType> From<ArconMessage<A>> for RawArconMessage<A> {
     fn from(msg: ArconMessage<A>) -> Self {
         RawArconMessage {
-            events: msg.events.into_vec(),
+            events: msg.events.to_vec(),
             sender: msg.sender,
         }
     }
@@ -503,11 +503,7 @@ impl prost::Message for ArconNever {
     }
 }
 impl Abomonation for ArconNever {}
-impl Hash for ArconNever {
-    fn hash<H: Hasher>(&self, _state: &mut H) {
-        unreachable!(ArconNever::IS_UNREACHABLE);
-    }
-}
+
 impl Default for ArconNever {
     fn default() -> Self {
         unreachable!(ArconNever::IS_UNREACHABLE);

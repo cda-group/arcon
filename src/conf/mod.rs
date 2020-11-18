@@ -257,7 +257,6 @@ mod tests {
         assert_eq!(conf.allocator_capacity, allocator_capacity_default());
         assert_eq!(conf.kompact_threads, kompact_threads_default());
         assert_eq!(conf.kompact_throughput, kompact_throughput_default());
-        assert_eq!(conf.kompact_msg_priority, kompact_msg_priority_default());
         assert_eq!(conf.kompact_network_host, kompact_network_host_default());
     }
 }

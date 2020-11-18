@@ -43,6 +43,13 @@ pub struct NodeMetrics {
 }
 
 #[cfg(feature = "metrics")]
+impl Default for NodeMetrics {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(feature = "metrics")]
 impl NodeMetrics {
     /// Creates a NodeMetrics struct
     pub fn new() -> NodeMetrics {
@@ -88,7 +95,7 @@ impl<OP: Operator + 'static, B: Backend> NodeState<OP, B> {
     pub fn new(id: NodeID, in_channels: Vec<NodeID>, backend: Arc<B>) -> Self {
         let mut handle = Handle::vec("_messagebuffer");
         backend.register_vec_handle(&mut handle);
-        let active_handle = handle.activate(backend.clone());
+        let active_handle = handle.activate(backend);
         let message_buffer = Appender::with_capacity(MESSAGE_BUFFER_SIZE, active_handle);
 
         // initialise watermarks
@@ -309,8 +316,7 @@ where
                         continue 'event_loop;
                     }
 
-                    let new_watermark =
-                        self.node_state.watermarks().values().min().unwrap().clone();
+                    let new_watermark = *self.node_state.watermarks().values().min().unwrap();
 
                     if new_watermark.timestamp > self.node_state.current_watermark.timestamp {
                         self.node_state.current_watermark = new_watermark;
@@ -327,7 +333,7 @@ where
                         // Set current watermark
                         #[cfg(feature = "metrics")]
                         {
-                            self.metrics.watermark = new_watermark.clone();
+                            self.metrics.watermark = new_watermark;
                             self.metrics.watermark_counter.inc();
                         }
 
@@ -523,7 +529,7 @@ mod tests {
         let pool_info = pipeline.get_pool_info();
         let system = &pipeline.system();
 
-        let sink = system.create(move || DebugNode::<i32>::new());
+        let sink = system.create(DebugNode::<i32>::new);
 
         system
             .start_notify(&sink)
@@ -558,7 +564,7 @@ mod tests {
             descriptor,
             channel_strategy,
             Filter::new(&filter_fn),
-            NodeState::new(NodeID::new(0), in_channels, backend.clone()),
+            NodeState::new(NodeID::new(0), in_channels, backend),
         );
 
         let filter_comp = system.create(|| node);
@@ -571,7 +577,7 @@ mod tests {
             .wait_timeout(std::time::Duration::from_millis(100))
             .expect("started");
 
-        return (filter_comp.actor_ref(), sink);
+        (filter_comp.actor_ref(), sink)
     }
 
     fn watermark(time: u64, sender: u32) -> ArconMessage<i32> {

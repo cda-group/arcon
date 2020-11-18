@@ -143,7 +143,7 @@ fn hashable_fields(s: &syn::DataStruct) -> Vec<String> {
             Some(ref ident) => {
                 if let syn::Type::Path(p) = &field.ty {
                     for segment in &p.path.segments {
-                        let ref inner_ident = segment.ident.to_string();
+                        let inner_ident = &segment.ident.to_string();
                         match inner_ident.as_str() {
                             STRING_IDENT | U32_IDENT | U64_IDENT | I32_IDENT | I64_IDENT
                             | BOOL_IDENT => {
@@ -185,7 +185,7 @@ fn bytes_estimation(s: &syn::DataStruct, fields: Vec<String>) -> usize {
                 if fields.contains(&ident.to_string()) {
                     if let syn::Type::Path(p) = &field.ty {
                         for segment in &p.path.segments {
-                            let ref inner_ident = segment.ident.to_string();
+                            let inner_ident = &segment.ident.to_string();
                             match inner_ident.as_str() {
                                 STRING_IDENT => {
                                     bytes += STRING_BYTES_ESTIMATION;
@@ -346,24 +346,21 @@ fn arcon_doc_attr(
             let value = s.value();
             let attr_str = value.trim();
             let str_parts: Vec<String> = attr_str
-                .clone()
                 .trim()
                 .to_string()
-                .split(" ")
+                .split(' ')
                 .map(|s| s.to_string())
                 .collect();
 
-            if str_parts.len() == 3 {
-                if str_parts[1] == "=" {
-                    if str_parts[0] == "unsafe_ser_id" {
-                        unsafe_ser_id = Some(str_parts[2].parse::<u64>().unwrap());
-                    } else if str_parts[0] == "reliable_ser_id" {
-                        reliable_ser_id = Some(str_parts[2].parse::<u64>().unwrap());
-                    } else if str_parts[0] == "version" {
-                        version = Some(str_parts[2].parse::<u32>().unwrap());
-                    } else if str_parts[0] == "keys" {
-                        keys = Some(str_parts[2].to_string())
-                    }
+            if str_parts.len() == 3 && str_parts[1] == "=" {
+                if str_parts[0] == "unsafe_ser_id" {
+                    unsafe_ser_id = Some(str_parts[2].parse::<u64>().unwrap());
+                } else if str_parts[0] == "reliable_ser_id" {
+                    reliable_ser_id = Some(str_parts[2].parse::<u64>().unwrap());
+                } else if str_parts[0] == "version" {
+                    version = Some(str_parts[2].parse::<u32>().unwrap());
+                } else if str_parts[0] == "keys" {
+                    keys = Some(str_parts[2].to_string())
                 }
             }
         } else {

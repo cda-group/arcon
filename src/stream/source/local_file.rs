@@ -136,7 +136,7 @@ mod tests {
             .wait_timeout(std::time::Duration::from_millis(100))
             .expect("started");
 
-        return (pipeline, sink);
+        (pipeline, sink)
     }
 
     #[test]

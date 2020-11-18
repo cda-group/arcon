@@ -46,10 +46,10 @@ fn index_rolling_counter(backend: BackendType, b: &mut Bencher) {
         let backend = Arc::new(B::create(dir.as_ref()).unwrap());
         let mut value_handle = Handle::value("_value");
         backend.register_value_handle(&mut value_handle);
-        let active_handle = value_handle.activate(backend.clone());
+        let active_handle = value_handle.activate(backend);
         let mut value_index: Value<u64, B> = Value::new(active_handle);
         b.iter(|| {
-            let curr_value = value_index.get().unwrap().clone();
+            let curr_value = *value_index.get().unwrap();
             for _i in 0..OPS_PER_EPOCH {
                 value_index.rmw(|v| {
                     *v += 1;
@@ -108,7 +108,7 @@ fn naive_rolling_counter(backend: BackendType, b: &mut Bencher) {
         let backend = Arc::new(B::create(dir.as_ref()).unwrap());
         let mut value_handle: Handle<ValueState<u64>> = Handle::value("_valueindex");
         backend.register_value_handle(&mut value_handle);
-        let mut state = value_handle.activate(backend.clone());
+        let mut state = value_handle.activate(backend);
         b.iter(|| {
             let curr_value: u64 = state.get().unwrap().unwrap_or(0);
             for _i in 0..OPS_PER_EPOCH {
@@ -139,7 +139,7 @@ fn specialised_rolling_counter(backend: BackendType, b: &mut Bencher) {
         let mut agg_handle = Handle::aggregator("agger", CounterAggregator);
         backend.register_aggregator_handle(&mut agg_handle);
 
-        let state = agg_handle.activate(backend.clone());
+        let state = agg_handle.activate(backend);
         b.iter(|| {
             let curr_value: u64 = state.get().unwrap();
             for _i in 0..OPS_PER_EPOCH {

@@ -32,6 +32,12 @@ pub struct Pipeline {
     state_manager: Arc<Component<StateManager>>,
 }
 
+impl Default for Pipeline {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// A Node with operator type, state backend type, and timer type erased
 pub type DynamicNode<IN> = Box<dyn CreateErased<ArconMessage<IN>>>;
 /// Result of creating a [`DynamicNode`] in a [`KompactSystem`](kompact::KompactSystem)
@@ -82,6 +88,7 @@ impl Pipeline {
     }
 
     /// Helper function to set up internals of the pipeline
+    #[allow(clippy::type_complexity)]
     fn setup(
         arcon_conf: &ArconConf,
     ) -> (
@@ -140,7 +147,7 @@ impl Pipeline {
         c: Arc<dyn AbstractComponent<Message = SnapshotRef>>,
     ) {
         self.state_manager.on_definition(|cd| {
-            for id in state_ids.into_iter() {
+            for id in state_ids.iter() {
                 let state_id = id.to_owned().to_string();
 
                 if !cd.registered_state_ids.contains(&state_id) {
@@ -154,7 +161,7 @@ impl Pipeline {
 
                 cd.subscribers
                     .entry(state_id)
-                    .or_insert(Vec::new())
+                    .or_insert_with(Vec::new)
                     .push(actor_ref);
             }
         });

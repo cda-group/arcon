@@ -86,7 +86,7 @@ where
             return true;
         }
         // Failed to modify Value
-        return false;
+        false
     }
 }
 
@@ -120,7 +120,7 @@ mod tests {
         let backend = Arc::new(backend);
         let mut handle = Handle::value("_value");
         backend.register_value_handle(&mut handle);
-        let active = handle.activate(backend.clone());
+        let active = handle.activate(backend);
         let mut index: Value<u64, Sled> = Value::new(active);
         assert_eq!(index.get(), Some(&0u64));
         index.put(10u64);

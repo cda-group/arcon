@@ -52,7 +52,7 @@ fn timer_inserts(backend: BackendType, b: &mut Bencher) {
 
         let mut time_handle = Handle::value("_time");
         backend.register_value_handle(&mut time_handle);
-        let time_handle = time_handle.activate(backend.clone());
+        let time_handle = time_handle.activate(backend);
 
         let mut index: TimerIndex<u64, u64, B> = TimerIndex::new(timeouts_handle, time_handle);
         b.iter(|| {

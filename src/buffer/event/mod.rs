@@ -171,6 +171,11 @@ impl<T> BufferWriter<T> {
     pub fn len(&self) -> usize {
         self.len
     }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
 }
 
 /// An EventBuffer reader
@@ -210,7 +215,7 @@ impl<T> BufferReader<T> {
 
     /// Convert into Vec
     #[inline]
-    pub fn into_vec(&self) -> Vec<T> {
+    pub fn to_vec(&self) -> Vec<T> {
         let mut dst = Vec::with_capacity(self.len);
         unsafe {
             dst.set_len(self.len);
@@ -223,6 +228,11 @@ impl<T> BufferReader<T> {
     #[inline]
     pub fn len(&self) -> usize {
         self.len
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
     }
 }
 impl<T> Drop for BufferReader<T> {
@@ -452,7 +462,7 @@ mod tests {
         let buffer_size = 100;
         let pool_capacity = 2;
         let mut pool: BufferPool<u64> =
-            BufferPool::new(pool_capacity, buffer_size, allocator.clone()).unwrap();
+            BufferPool::new(pool_capacity, buffer_size, allocator).unwrap();
 
         let mut buffer = pool.try_get().unwrap();
 

@@ -97,10 +97,8 @@ where
         let bytes = Bytes::from(fmt_data);
         let req_dispatch = async move {
             let res = tx.send(bytes).await;
-
-            match res {
-                Ok(_) => {}  // everything ok
-                Err(_) => {} // ignore errors
+            if let Err(e) = res {
+                panic!("{:?}", e);
             }
         };
         self.runtime_handle.spawn(req_dispatch);
@@ -135,7 +133,7 @@ mod tests {
                         String::from("socket_sink"),
                         ChannelStrategy::Mute,
                         SocketSink::udp(addr),
-                        NodeState::new(NodeID::new(0), vec![node_id], backend.clone()),
+                        NodeState::new(NodeID::new(0), vec![node_id], backend),
                     )
                 });
                 system

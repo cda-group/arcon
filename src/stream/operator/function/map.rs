@@ -28,6 +28,7 @@ where
     IN: ArconType,
     OUT: ArconType,
 {
+    #[allow(clippy::new_ret_no_self)]
     pub fn new(
         udf: impl SafelySendableFn(IN) -> ArconResult<OUT>,
     ) -> Map<IN, OUT, impl SafelySendableFn(IN, &mut ()) -> ArconResult<OUT>, ()> {

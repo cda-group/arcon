@@ -37,6 +37,7 @@ fn default_write_opts() -> WriteOptions {
 
 impl Rocks {
     #[inline(always)]
+    #[allow(clippy::mut_from_ref)]
     fn db_mut(&self) -> &mut DB {
         unsafe { &mut (*self.inner.get()) }
     }
@@ -158,7 +159,7 @@ impl Backend for Rocks {
             Ok(cfs) => cfs.into_iter().filter(|n| n != "default").collect(),
             // TODO: possibly platform-dependant error message check
             Err(e) if e.to_string().contains("No such file or directory") => HashSet::new(),
-            Err(e) => Err(e)?,
+            Err(e) => return Err(e.into()),
         };
 
         let cfds = if !column_families.is_empty() {
@@ -185,9 +186,7 @@ impl Backend for Rocks {
 
         ensure!(
             fs::read_dir(live_path)?.next().is_none(),
-            RocksRestoreDirNotEmpty {
-                dir: live_path.clone()
-            }
+            RocksRestoreDirNotEmpty { dir: &(*live_path) }
         );
 
         let mut target_path: PathBuf = live_path.into();
@@ -316,6 +315,7 @@ pub mod tests {
     }
 
     impl TestDb {
+        #[allow(clippy::new_without_default)]
         pub fn new() -> TestDb {
             let dir = TempDir::new().unwrap();
             let mut dir_path = dir.path().to_path_buf();

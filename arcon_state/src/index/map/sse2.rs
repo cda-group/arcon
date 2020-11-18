@@ -102,6 +102,7 @@ impl Group {
     /// - MODIFIED => SAFE
     /// - MODIFIED_TOUCHED => SAFE_TOUCHED
     #[inline]
+    #[allow(clippy::cast_ptr_alignment)]
     pub fn convert_mod_to_safe(self, ptr: *mut u8) -> Group {
         // All bytes that match MODIFIED_TOUCHED are set to 1111_1111
         // in the resulting cmp_eq_epi8. The remainder will show as 0000_0000.
