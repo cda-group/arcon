@@ -4,6 +4,7 @@
 //! Arcon is a Streaming-first Analytics Engine.
 
 #![feature(unboxed_closures)]
+#![feature(unsized_fn_params)]
 
 // Enable use of arcon_macros within this crate
 #[cfg_attr(test, macro_use)]
