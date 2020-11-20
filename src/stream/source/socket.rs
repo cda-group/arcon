@@ -216,7 +216,7 @@ mod tests {
 
         wait(1);
         sink_comp.on_definition(|cd| {
-            assert_eq!(cd.data.len(), (1 as usize));
+            assert_eq!(cd.data.len(), (1_usize));
             assert_eq!(cd.watermarks.last().unwrap().timestamp, 1);
         });
     }

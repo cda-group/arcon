@@ -19,8 +19,8 @@ sled_checkpoints = ["sled"]
 
 [dependencies]
 arcon_state_derive = { version = "0.1", path = "arcon_state_derive", optional = true }
-prost = { git = "https://github.com/Max-Meldrum/prost.git", branch = "derive_generics" }
-bytes = "0.5"
+prost = { git = "https://github.com/danburkert/prost.git" }
+bytes = "0.6"
 snafu = "0.6"
 once_cell = "1.3"
 fxhash = "0.2.1"
@@ -29,6 +29,12 @@ hierarchical_hash_wheel_timer = "1.0"
 serde = { version = "1.0", features = ["serde_derive"], optional = true }
 rocksdb = { git = "https://github.com/mrobakowski/rust-rocksdb.git", branch = "arcon", optional = true } # TODO
 sled = { version = "0.34", optional = true }
+
+# Downgrade cc 
+# https://github.com/rust-rocksdb/rust-rocksdb/issues/474
+[build-dependencies.cc]
+version = "=1.0.61"
+features = ["parallel"]
 
 #[dependencies.rocksdb]
 #default-features = false

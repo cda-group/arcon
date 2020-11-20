@@ -37,13 +37,13 @@ where
         let th = Builder::new()
             .name(String::from("UdpSinkThread"))
             .spawn(move || {
-                let mut runtime = Runtime::new().expect("Could not create Tokio Runtime!");
+                let runtime = Runtime::new().expect("Could not create Tokio Runtime!");
                 let runtime_handle = runtime.handle().clone();
 
                 runtime.block_on(async move {
                     // Let OS handle port alloc
                     let self_addr: SocketAddr = "0.0.0.0:0".parse().unwrap();
-                    let mut socket = UdpSocket::bind(self_addr).await.expect("Failed to bind");
+                    let socket = UdpSocket::bind(self_addr).await.expect("Failed to bind");
 
                     tx_exec
                         .send(runtime_handle)
@@ -124,7 +124,7 @@ mod tests {
             .expect("couln't create tokio runtime")
             .block_on(async {
                 let addr = "127.0.0.1:9999".parse().unwrap();
-                let mut socket = UdpSocket::bind(&addr).await.unwrap();
+                let socket = UdpSocket::bind(&addr).await.unwrap();
 
                 let backend = Arc::new(crate::util::temp_backend());
                 let node_id = NodeID::new(1);
@@ -142,7 +142,7 @@ mod tests {
                     .expect("started");
 
                 let target: ActorRef<ArconMessage<i64>> = socket_sink.actor_ref();
-                target.tell(ArconMessage::element(10 as i64, None, 1.into()));
+                target.tell(ArconMessage::element(10_i64, None, 1.into()));
 
                 let (len, _) = socket.recv_from(&mut buf).await.expect("did not receive");
                 len

@@ -14,7 +14,7 @@ arcon = { path = "../"}
 serde = { version = "1.0.104", features = ["derive"] }
 abomonation = "0.7.3"
 abomonation_derive = "0.5.0"
-prost = { git = "https://github.com/Max-Meldrum/prost.git", branch = "derive_generics" }
+prost = { git = "https://github.com/danburkert/prost.git" }
 
 [build-dependencies]
 arcon_build = { path = "../arcon_build"}

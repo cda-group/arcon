@@ -10,7 +10,7 @@
 //! Users may add their own custom indexes as long as  the [IndexOps] trait is implemented.
 
 #![feature(associated_type_defaults)]
-#![feature(const_generics)]
+#![feature(min_const_generics)]
 #![feature(core_intrinsics)]
 
 /// State Backend Implementations
