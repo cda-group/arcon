@@ -51,6 +51,8 @@ mod stream;
 mod test;
 /// Internal Arcon Utilities
 mod util;
+/// Dataflow API
+mod dataflow;
 
 /// A module containing test utilities such as a global Arcon Allocator
 #[cfg(test)]
