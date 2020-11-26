@@ -10,7 +10,7 @@ use crate::{
 use arcon_error::ArconResult;
 use arcon_state::index::ArconState;
 use core::any::Any;
-use std::{collections::HashMap, marker::PhantomData};
+use std::{cell::RefCell, collections::HashMap, marker::PhantomData, rc::Rc};
 
 pub trait ChannelTrait {
     // whatever you like to put inside of your trait
@@ -49,19 +49,25 @@ pub enum DFGType {
     Node(Box<dyn Any>),
 }
 
+#[derive(Default)]
+pub struct Context {
+    graph: HashMap<DFGNodeID, DFGNode>,
+    // Kompact-stuff
+}
+
 use crate::prelude::Map;
 
 pub type DFGNodeID = usize;
 
 pub struct Stream<IN: ArconType> {
     _marker: PhantomData<IN>,
-    previous_dfg_id: DFGNodeID,
-    graph: HashMap<DFGNodeID, DFGNode>,
+    prev_dfg_id: DFGNodeID,
+    ctx: Rc<RefCell<Context>>,
 }
 
 impl<IN: ArconType> Stream<IN> {
     pub fn map<OUT: ArconType, F: SafelySendableFn(IN) -> ArconResult<OUT>>(
-        mut self,
+        &self,
         f: F,
     ) -> Stream<OUT> {
         // Operator, Backend, ChannelStrategy<A>
@@ -75,21 +81,21 @@ impl<IN: ArconType> Stream<IN> {
             let c: Box<ChannelStrategy<OUT>> = channel.downcast().unwrap();
             //let node = ERASEDNODE
             // return (Box<dyn ErasedNode>, Vec<Box<dyn ChannelTrait>>)
-            
         };
         let boxed_closure = Box::new(closure);
 
-        let previous = self.previous_dfg_id;
-        let next_id = previous + 1;
+        let mut ctx = self.ctx.borrow_mut();
+        let next_dfg_id = ctx.graph.len() + 1;
+        let prev_dfg_id = self.prev_dfg_id;
 
-        self.graph.insert(
-            next_id,
-            DFGNode::new(DFGType::Node(Box::new(())), vec![previous]),
+        ctx.graph.insert(
+            next_dfg_id,
+            DFGNode::new(DFGType::Node(Box::new(())), vec![prev_dfg_id]),
         );
         Stream {
             _marker: PhantomData,
-            previous_dfg_id: next_id,
-            graph: self.graph,
+            prev_dfg_id: next_dfg_id,
+            ctx: self.ctx.clone(),
         }
     }
 
@@ -114,8 +120,8 @@ impl<IN: ArconType> Stream<IN> {
 
         Self {
             _marker: PhantomData,
-            previous_dfg_id: source_id,
-            graph,
+            prev_dfg_id: source_id,
+            ctx: Default::default(),
         }
     }
 }
@@ -124,10 +130,15 @@ impl<IN: ArconType> Stream<IN> {
 mod tests {
     use super::*;
 
+    fn mapper(x: u64) -> ArconResult<u64> {
+        Ok(x + 1)
+    }
+
     #[test]
     #[should_panic]
     fn just_testing_things() {
-        let stream: Stream<u64> = Stream::new();
-        let new_stream = stream.map(|x| Ok(x + 1));
+        let stream0: Stream<u64> = Stream::new();
+        let _stream1 = stream0.map(Box::new(|x| Ok(x + 1)));
+        let _stream2 = stream0.map(mapper);
     }
 }
