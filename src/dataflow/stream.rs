@@ -17,7 +17,7 @@ pub trait ChannelTrait {
 }
 
 use downcast::*;
-downcast!(ChannelTrait);
+downcast!(dyn ChannelTrait);
 
 pub struct DFGNode {
     dfg_type: DFGType,
@@ -45,8 +45,8 @@ impl DFGNode {
 
 // OP::IN OP::OUT
 pub enum DFGType {
-    Source(Box<Any>),
-    Node(Box<Any>),
+    Source(Box<dyn Any>),
+    Node(Box<dyn Any>),
 }
 
 use crate::prelude::Map;
