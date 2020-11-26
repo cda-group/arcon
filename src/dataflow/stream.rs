@@ -3,12 +3,12 @@
 
 use crate::{
     data::{ArconType, NodeID},
+    prelude::ChannelStrategy,
     stream::operator::Operator,
     util::SafelySendableFn,
 };
 use arcon_error::ArconResult;
 use arcon_state::index::ArconState;
-use crate::prelude::ChannelStrategy;
 use core::any::Any;
 use std::{collections::HashMap, marker::PhantomData};
 
@@ -52,7 +52,6 @@ pub enum DFGType {
 use crate::prelude::Map;
 
 pub type DFGNodeID = usize;
-
 
 pub struct Stream<IN: ArconType> {
     _marker: PhantomData<IN>,
