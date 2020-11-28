@@ -2,33 +2,22 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
-    data::{ArconType, NodeID},
+    data::ArconType,
+    dataflow::dfg::{DFGNode, DFGNodeID, DFGNodeKind, DFG},
+    prelude::ChannelStrategy,
     stream::operator::Operator,
     util::SafelySendableFn,
 };
 use arcon_error::ArconResult;
 use arcon_state::index::ArconState;
-use crate::prelude::ChannelStrategy;
-use core::any::Any;
-use std::{collections::HashMap, marker::PhantomData};
+use std::{cell::RefCell, marker::PhantomData, rc::Rc};
 
 pub trait ChannelTrait {
     // whatever you like to put inside of your trait
 }
 
 use downcast::*;
-downcast!(ChannelTrait);
-
-pub struct DFGNode {
-    dfg_type: DFGType,
-    ingoing: Vec<DFGNodeID>,
-    //op_fn: Box<Fn(Vec<Box<dyn ChannelTrait>>) -> (Box<dyn ErasedNode>, Vec<Box<dyn ChannelTrait>>)>,
-}
-impl DFGNode {
-    pub fn new(dfg_type: DFGType, ingoing: Vec<DFGNodeID>) -> Self {
-        Self { dfg_type, ingoing }
-    }
-}
+downcast!(dyn ChannelTrait);
 
 // NOTES.
 //
@@ -43,26 +32,24 @@ impl DFGNode {
 // (2): stream.map(..).state_id("map_state")
 // (3): stream.map(..).parallelism(12)
 
-// OP::IN OP::OUT
-pub enum DFGType {
-    Source(Box<Any>),
-    Node(Box<Any>),
+#[derive(Default)]
+pub struct Context {
+    dfg: DFG,
+    // Kompact-stuff
 }
 
 use crate::prelude::Map;
 
-pub type DFGNodeID = usize;
-
-
 pub struct Stream<IN: ArconType> {
     _marker: PhantomData<IN>,
-    previous_dfg_id: DFGNodeID,
-    graph: HashMap<DFGNodeID, DFGNode>,
+    /// ID of the node which outputs this stream.
+    prev_dfg_id: DFGNodeID,
+    ctx: Rc<RefCell<Context>>,
 }
 
 impl<IN: ArconType> Stream<IN> {
-    pub fn map<OUT: ArconType, F: SafelySendableFn(IN) -> ArconResult<OUT>>(
-        mut self,
+    pub fn map<OUT: ArconType, F: 'static + SafelySendableFn(IN) -> ArconResult<OUT>>(
+        &self,
         f: F,
     ) -> Stream<OUT> {
         // Operator, Backend, ChannelStrategy<A>
@@ -70,27 +57,25 @@ impl<IN: ArconType> Stream<IN> {
 
         // Collection -> Map -> Sink
         // (ChannelStrategy, NodeID) -> Into Map Closure
-        let closure = |mut channels: Vec<Box<dyn ChannelTrait>>| {
-            let map = Map::new(f); // Operator impl
-            let channel = channels.remove(0);
-            let c: Box<ChannelStrategy<OUT>> = channel.downcast().unwrap();
+        let constructor = Box::new(|mut channels: Vec<Box<dyn ChannelTrait>>| {
+            let operator = Map::new(f); // Operator impl
+            let channel: Box<ChannelStrategy<OUT>> = channels.remove(0).downcast().unwrap();
             //let node = ERASEDNODE
             // return (Box<dyn ErasedNode>, Vec<Box<dyn ChannelTrait>>)
-            
-        };
-        let boxed_closure = Box::new(closure);
+        });
 
-        let previous = self.previous_dfg_id;
-        let next_id = previous + 1;
+        let next_dfg_id = self
+            .ctx
+            .borrow_mut()
+            .dfg
+            .insert(DFGNode::new(DFGNodeKind::Node(constructor), vec![
+                self.prev_dfg_id,
+            ]));
 
-        self.graph.insert(
-            next_id,
-            DFGNode::new(DFGType::Node(Box::new(())), vec![previous]),
-        );
         Stream {
             _marker: PhantomData,
-            previous_dfg_id: next_id,
-            graph: self.graph,
+            prev_dfg_id: next_dfg_id,
+            ctx: self.ctx.clone(),
         }
     }
 
@@ -108,15 +93,13 @@ impl<IN: ArconType> Stream<IN> {
     }
 
     pub fn new() -> Self {
-        let source_id = 0;
-        let source_dfg_node = DFGNode::new(DFGType::Source(Box::new(())), vec![]);
-        let mut graph = HashMap::new();
-        graph.insert(source_id, source_dfg_node);
-
+        let mut dfg = DFG::default();
+        let node = DFGNode::new(DFGNodeKind::Source(Box::new(())), vec![]);
+        let id = dfg.insert(node);
         Self {
             _marker: PhantomData,
-            previous_dfg_id: source_id,
-            graph,
+            prev_dfg_id: id,
+            ctx: Default::default(),
         }
     }
 }
@@ -128,7 +111,12 @@ mod tests {
     #[test]
     #[should_panic]
     fn just_testing_things() {
-        let stream: Stream<u64> = Stream::new();
-        let new_stream = stream.map(|x| Ok(x + 1));
+        fn mapper(x: u64) -> ArconResult<u64> {
+            Ok(x + 1)
+        }
+
+        let stream0: Stream<u64> = Stream::new();
+        let _stream1 = stream0.map(Box::new(|x| Ok(x + 1)));
+        let _stream2 = stream0.map(mapper);
     }
 }
