@@ -41,11 +41,21 @@ jobs:
 
   test:
     runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.experimental }}
     strategy:
+      fail-fast: false
       matrix:
-        os:
-          - ubuntu-latest
-          - macos-latest
+        build: [Linux, macOS, Windows]
+        include:
+          - build: Linux
+            os: ubuntu-latest
+            experimental: false
+          - build: macOS
+            os: macos-latest
+            experimental: false
+          - build: Windows
+            os: windows-latest
+            experimental: true
     steps:
       - name: checkout
         uses: actions/checkout@v2
