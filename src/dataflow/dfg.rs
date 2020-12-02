@@ -1,3 +1,5 @@
+use crate::manager::state::StateID;
+use arcon_state::BackendType;
 use std::any::Any;
 
 /// A logical dataflow-graph.
@@ -21,6 +23,11 @@ impl DFG {
     pub fn get(&self, id: &DFGNodeID) -> &DFGNode {
         self.graph.get(id.0).unwrap()
     }
+
+    /// Returns a mutable reference to the [`DFGNode`] associated to a [`DFGNodeID`].
+    pub fn get_mut(&mut self, id: &DFGNodeID) -> &mut DFGNode {
+        self.graph.get_mut(id.0).unwrap()
+    }
 }
 
 /// The ID of a [`DFGNode`] in the dataflow graph.
@@ -32,16 +39,36 @@ pub struct DFGNode {
     kind: DFGNodeKind,
     /// Ingoing edges to a node.
     ingoing: Vec<DFGNodeID>,
-    //     constructor: Box<dyn Fn(Vec<Box<dyn ChannelTrait>>) -> (Box<dyn ErasedNode>, Vec<Box<dyn ChannelTrait>>)>,
+    /// State Backend type to use for this DFG Node
+    ///
+    /// Default backend is Sled
+    backend_type: BackendType,
+    /// State ID for this DFG node
+    ///
+    /// Default ID is a random generated one
+    state_id: StateID,
+    // TODO: constructor
 }
 
 impl DFGNode {
     pub fn new(kind: DFGNodeKind, ingoing: Vec<DFGNodeID>) -> Self {
-        Self { kind, ingoing }
+        Self {
+            kind,
+            ingoing,
+            backend_type: Default::default(),
+            state_id: String::from("FIXME"),
+        }
+    }
+    /// Modifies the [`BackendType`] of this logical DFGNode
+    pub fn set_backend_type(&mut self, backend_type: BackendType) {
+        self.backend_type = backend_type;
+    }
+    /// Modifies the [`StateID`] of this logical DFGNode
+    pub fn set_state_id(&mut self, state_id: StateID) {
+        self.state_id = state_id;
     }
 }
 
-// OP::IN OP::OUT
 pub enum DFGNodeKind {
     Source(Box<dyn Any>),
     Node(Box<dyn Any>),

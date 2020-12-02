@@ -16,6 +16,8 @@ use arcon_allocator::Allocator;
 use kompact::{component::AbstractComponent, prelude::KompactSystem};
 use std::sync::{Arc, Mutex};
 
+pub use crate::dataflow::stream::Stream;
+
 #[derive(Clone)]
 pub struct Pipeline {
     /// [kompact] system that drives the execution of components
@@ -40,7 +42,7 @@ impl Default for Pipeline {
 
 /// A Node with operator type, state backend type, and timer type erased
 pub type DynamicNode<IN> = Box<dyn CreateErased<ArconMessage<IN>>>;
-/// Result of creating a [`DynamicNode`] in a [`KompactSystem`](kompact::KompactSystem)
+/// Result of creating a [`DynamicNode`] in a [`KompactSystem`](kompact::prelude::KompactSystem)
 pub type CreatedDynamicNode<IN> = Arc<dyn AbstractComponent<Message = ArconMessage<IN>>>;
 /// A Source with operator type, state backend type, and timer type erased
 pub type DynamicSource = Box<dyn CreateErased<()>>;
