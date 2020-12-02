@@ -5,7 +5,7 @@ use crate::{
     data::{ArconType, NodeID},
     dataflow::dfg::{DFGNode, DFGNodeID, DFGNodeKind, DFG},
     manager::state::StateID,
-    prelude::{ChannelStrategy, Filter, FlatMap, Map, Node, NodeState},
+    prelude::{ChannelStrategy, Filter, FlatMap, Map, MapInPlace, Node, NodeState},
     stream::operator::Operator,
     util::SafelySendableFn,
 };
@@ -80,6 +80,26 @@ impl<IN: ArconType> Stream<IN> {
         F: 'static + SafelySendableFn(IN, &mut S) -> ArconResult<OUT>,
     {
         self.operator(Map::stateful(sc(), f))
+    }
+
+    /// Adds an in-place Map transformation to the dataflow graph
+    pub fn map_in_place<F: 'static + SafelySendableFn(&mut IN) -> ArconResult<()>>(
+        &self,
+        f: F,
+    ) -> Stream<IN> {
+        self.operator(MapInPlace::new(f))
+    }
+
+    /// Adds a stateful in-place Map transformation to the dataflow graph
+    ///
+    /// A state constructor `SC` must be defined and passed in.
+    pub fn map_in_place_with_state<S, SC, F>(&self, f: F, sc: SC) -> Stream<IN>
+    where
+        S: ArconState,
+        SC: SafelySendableFn() -> S,
+        F: 'static + SafelySendableFn(&mut IN, &mut S) -> ArconResult<()>,
+    {
+        self.operator(MapInPlace::stateful(sc(), f))
     }
 
     /// Adds a Filter transformation to the dataflow graph
