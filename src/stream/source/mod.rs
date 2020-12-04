@@ -10,7 +10,7 @@ use crate::{
     },
     util::SafelySendableFn,
 };
-use arcon_error::ArconResult;
+use arcon_error::OperatorResult;
 use kompact::prelude::ComponentDefinition;
 use std::sync::Arc;
 
@@ -120,7 +120,7 @@ where
         &mut self,
         data: ArconElement<OP::IN>,
         source: &impl ComponentDefinition,
-    ) -> ArconResult<()> {
+    ) -> OperatorResult<()> {
         self.operator.handle_element(
             data,
             OperatorContext::<_, B, _>::new(source, &mut None, &mut self.channel_strategy),

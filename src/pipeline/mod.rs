@@ -4,6 +4,7 @@
 use crate::{
     buffer::event::PoolInfo,
     conf::{ArconConf, ExecutionMode},
+    dataflow::stream::Context,
     manager::{
         epoch::EpochManager,
         node::*,
@@ -11,6 +12,7 @@ use crate::{
         state::{SnapshotRef, StateManager, StateManagerPort},
     },
     prelude::*,
+    stream::source::ArconSource,
 };
 use arcon_allocator::Allocator;
 use kompact::{component::AbstractComponent, prelude::KompactSystem};
@@ -187,6 +189,31 @@ impl Pipeline {
         _backend: impl Backend,
     ) {
         unimplemented!();
+    }
+
+    pub fn from_collection<I, A>(self, i: I) -> Stream<A>
+    where
+        I: Into<Vec<A>>,
+        A: ArconType,
+    {
+        // TODO: Add DFGNode with Collection type..
+        // DFGNode::Source(...)
+        let ctx = Context::new(self);
+        Stream::new(ctx)
+    }
+
+    /// Instructs the SourceManager of the pipeline
+    /// to inject a start message to the source components
+    /// of the pipeline.
+    ///
+    /// The function will panic if no sources have been created
+    pub fn start(&self) {
+        let sources = self.source_manager.on_definition(|cd| cd.sources.len());
+        assert_ne!(
+            sources, 0,
+            "No source components have been created, cannot start the pipeline!"
+        );
+        self.source_manager.actor_ref().tell(ArconSource::Start);
     }
 
     /// Awaits termination from the pipeline

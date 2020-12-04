@@ -82,6 +82,8 @@ impl From<ArconStateError> for Error {
 
 /// A Result type for Arcon related crates
 pub type ArconResult<T> = ::std::result::Result<T, crate::Error>;
+/// A Result type used by Arcon Operators
+pub type OperatorResult<T> = ::std::result::Result<T, ArconStateError>;
 
 pub trait ResultExt<T> {
     fn ctx(self, message: &str) -> ArconResult<T>;

@@ -114,7 +114,6 @@ mod tests {
         pipeline::Pipeline,
         prelude::{Channel, ChannelStrategy, DebugNode, Forward, Map, NodeID},
     };
-    use arcon_error::ArconResult;
     use std::{io::prelude::*, sync::Arc, thread, time};
     use tempfile::NamedTempFile;
 
@@ -159,11 +158,6 @@ mod tests {
         let channel_strategy =
             ChannelStrategy::Forward(Forward::new(channel, NodeID::new(1), pool_info));
 
-        // just pass it on
-        fn map_fn(x: ArconF64) -> ArconResult<ArconF64> {
-            Ok(x)
-        }
-
         // Set up SourceContext
         let watermark_interval = 25;
         let backend = std::sync::Arc::new(crate::util::temp_backend());
@@ -172,7 +166,7 @@ mod tests {
             watermark_interval,
             None, // no timestamp extractor
             channel_strategy,
-            Map::new(&map_fn),
+            Map::new(Box::new(|x: ArconF64| x)),
             backend,
         );
 

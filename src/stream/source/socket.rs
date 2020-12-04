@@ -129,7 +129,6 @@ mod tests {
         pipeline::Pipeline,
         prelude::{Channel, ChannelStrategy, DebugNode, Forward, Map},
     };
-    use arcon_error::ArconResult;
     use std::{sync::Arc, thread, time};
     use tokio::{net::TcpStream, prelude::*, runtime::Runtime};
 
@@ -176,8 +175,8 @@ mod tests {
             ChannelStrategy::Forward(Forward::new(Channel::Local(sink_ref), 1.into(), pool_info));
 
         // just pass it on
-        fn map_fn(x: ExtractorStruct) -> ArconResult<ExtractorStruct> {
-            Ok(x)
+        fn map_fn(x: ExtractorStruct) -> ExtractorStruct {
+            x
         }
 
         // Set up SourceContext

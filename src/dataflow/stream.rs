@@ -3,21 +3,21 @@
 
 use crate::{
     data::{ArconType, NodeID},
-    dataflow::dfg::{DFGNode, DFGNodeID, DFGNodeKind, DFG},
-    manager::state::StateID,
+    dataflow::dfg::{DFGNode, DFGNodeID, DFGNodeKind, OperatorConfig, DFG},
+    pipeline::Pipeline,
     prelude::{ChannelStrategy, Filter, FlatMap, Map, MapInPlace, Node, NodeState},
     stream::operator::Operator,
     util::SafelySendableFn,
 };
-use arcon_error::ArconResult;
+use arcon_error::OperatorResult;
 use arcon_state::{index::ArconState, BackendType};
 use downcast::*;
-use kompact::prelude::KompactSystem;
-use std::{cell::RefCell, marker::PhantomData, rc::Rc, sync::Arc};
+use std::{marker::PhantomData, sync::Arc};
 
 pub trait ChannelTrait {}
 downcast!(dyn ChannelTrait);
 
+// TODO: Fix this.
 macro_rules! node_cons {
     ($op:expr, $out_type:ty) => {
         Box::new(|backend_type: BackendType| {
@@ -50,120 +50,142 @@ macro_rules! node_cons {
 #[derive(Default)]
 pub struct Context {
     dfg: DFG,
-    // Kompact-stuff
+    pipeline: Pipeline,
+}
+
+impl Context {
+    pub fn new(pipeline: Pipeline) -> Self {
+        Self {
+            dfg: Default::default(),
+            pipeline,
+        }
+    }
 }
 
 pub struct Stream<IN: ArconType> {
     _marker: PhantomData<IN>,
     /// ID of the node which outputs this stream.
     prev_dfg_id: DFGNodeID,
-    ctx: Rc<RefCell<Context>>,
+    ctx: Context,
 }
 
 impl<IN: ArconType> Stream<IN> {
     /// Adds a Map transformation to the dataflow graph
-    pub fn map<OUT: ArconType, F: 'static + SafelySendableFn(IN) -> ArconResult<OUT>>(
-        &self,
-        f: F,
-    ) -> Stream<OUT> {
-        self.operator(Map::new(f))
+    pub fn map<OUT, F>(self, f: F) -> Stream<OUT>
+    where
+        OUT: ArconType,
+        F: 'static + SafelySendableFn(IN) -> OUT,
+    {
+        self.operator(Map::new(f), OperatorConfig::default())
     }
 
     /// Adds a stateful Map transformation to the dataflow graph
     ///
     /// A state constructor `SC` must be defined and passed in.
-    pub fn map_with_state<OUT, S, SC, F>(&self, f: F, sc: SC) -> Stream<OUT>
+    pub fn map_with_state<OUT, S, SC, F, C>(self, f: F, sc: SC, conf: C) -> Stream<OUT>
     where
         OUT: ArconType,
         S: ArconState,
         SC: SafelySendableFn() -> S,
-        F: 'static + SafelySendableFn(IN, &mut S) -> ArconResult<OUT>,
+        F: 'static + SafelySendableFn(IN, &mut S) -> OperatorResult<OUT>,
+        C: FnOnce(&mut OperatorConfig),
     {
-        self.operator(Map::stateful(sc(), f))
+        let mut c = OperatorConfig::default();
+        conf(&mut c);
+        self.operator(Map::stateful(sc(), f), c)
     }
 
     /// Adds an in-place Map transformation to the dataflow graph
-    pub fn map_in_place<F: 'static + SafelySendableFn(&mut IN) -> ArconResult<()>>(
-        &self,
-        f: F,
-    ) -> Stream<IN> {
-        self.operator(MapInPlace::new(f))
+    pub fn map_in_place<F: 'static + SafelySendableFn(&mut IN)>(self, f: F) -> Stream<IN> {
+        self.operator(MapInPlace::new(f), OperatorConfig::default())
     }
 
     /// Adds a stateful in-place Map transformation to the dataflow graph
     ///
     /// A state constructor `SC` must be defined and passed in.
-    pub fn map_in_place_with_state<S, SC, F>(&self, f: F, sc: SC) -> Stream<IN>
+    pub fn map_in_place_with_state<S, SC, F, C>(self, f: F, sc: SC, conf: C) -> Stream<IN>
     where
         S: ArconState,
         SC: SafelySendableFn() -> S,
-        F: 'static + SafelySendableFn(&mut IN, &mut S) -> ArconResult<()>,
+        F: 'static + SafelySendableFn(&mut IN, &mut S) -> OperatorResult<()>,
+        C: FnOnce(&mut OperatorConfig),
     {
-        self.operator(MapInPlace::stateful(sc(), f))
+        let mut c = OperatorConfig::default();
+        conf(&mut c);
+        self.operator(MapInPlace::stateful(sc(), f), c)
     }
 
     /// Adds a Filter transformation to the dataflow graph
-    pub fn filter<F: 'static + SafelySendableFn(&IN) -> bool>(&self, f: F) -> Stream<IN> {
-        self.operator(Filter::new(f))
+    pub fn filter<F: 'static + SafelySendableFn(&IN) -> bool>(self, f: F) -> Stream<IN> {
+        self.operator(Filter::new(f), OperatorConfig::default())
     }
 
     /// Adds a stateful Filter transformation to the dataflow graph
     ///
     /// A state constructor `SC` must be defined and passed in.
-    pub fn filter_with_state<S, SC, F>(&self, f: F, sc: SC) -> Stream<IN>
+    pub fn filter_with_state<S, SC, F, C>(self, f: F, sc: SC, conf: C) -> Stream<IN>
     where
         S: ArconState,
         SC: SafelySendableFn() -> S,
         F: 'static + SafelySendableFn(&IN, &mut S) -> bool,
+        C: FnOnce(&mut OperatorConfig),
     {
-        self.operator(Filter::stateful(sc(), f))
+        let mut c = OperatorConfig::default();
+        conf(&mut c);
+        self.operator(Filter::stateful(sc(), f), c)
     }
 
     /// Adds a FlatMap transformation to the dataflow graph
-    pub fn flatmap<OUT, OUTS, F>(&self, f: F) -> Stream<OUTS::Item>
+    pub fn flatmap<OUTS, F>(self, f: F) -> Stream<OUTS::Item>
     where
-        OUT: ArconType,
         OUTS: IntoIterator + 'static,
         OUTS::Item: ArconType,
-        F: 'static + SafelySendableFn(IN) -> ArconResult<OUTS>,
+        F: 'static + SafelySendableFn(IN) -> OUTS,
     {
-        self.operator(FlatMap::new(f))
+        self.operator(FlatMap::new(f), OperatorConfig::default())
     }
 
     /// Adds a stateful FlatMap transformation to the dataflow graph
     ///
     /// A state constructor `SC` must be defined and passed in.
-    pub fn flatmap_with_state<OUT, OUTS, S, SC, F>(&self, f: F, sc: SC) -> Stream<OUTS::Item>
+    pub fn flatmap_with_state<OUTS, S, SC, F, C>(self, f: F, sc: SC, conf: C) -> Stream<OUTS::Item>
     where
-        OUT: ArconType,
         OUTS: IntoIterator + 'static,
         OUTS::Item: ArconType,
         S: ArconState,
         SC: SafelySendableFn() -> S,
-        F: 'static + SafelySendableFn(IN, &mut S) -> ArconResult<OUTS>,
+        F: 'static + SafelySendableFn(IN, &mut S) -> OperatorResult<OUTS>,
+        C: FnOnce(&mut OperatorConfig),
     {
-        self.operator(FlatMap::stateful(sc(), f))
+        let mut c = OperatorConfig::default();
+        conf(&mut c);
+        self.operator(FlatMap::stateful(sc(), f), c)
     }
 
     /// This method may be used to add a custom defined [`Operator`] to the dataflow graph
-    pub fn operator<OP: Operator + 'static>(&self, operator: OP) -> Stream<OP::OUT> {
-        let constructor = node_cons!(operator, OP::OUT);
+    pub fn operator<OP: Operator + 'static>(
+        mut self,
+        operator: OP,
+        conf: OperatorConfig,
+    ) -> Stream<OP::OUT> {
+        // TODO
+        let constructor = Box::new(());
 
-        let next_dfg_id = self
-            .ctx
-            .borrow_mut()
-            .dfg
-            .insert(DFGNode::new(DFGNodeKind::Node(constructor), vec![
-                self.prev_dfg_id,
-            ]));
+        let next_dfg_id =
+            self.ctx
+                .dfg
+                .insert(DFGNode::new(DFGNodeKind::Node(constructor), conf, vec![
+                    self.prev_dfg_id,
+                ]));
 
         Stream {
             _marker: PhantomData,
             prev_dfg_id: next_dfg_id,
-            ctx: self.ctx.clone(),
+            ctx: self.ctx,
         }
     }
 
+    /*
     /// Set [`BackendType`] to the previous node in the graph
     pub fn with_backend(&mut self, backend_type: BackendType) -> Stream<IN> {
         self.ctx
@@ -196,15 +218,30 @@ impl<IN: ArconType> Stream<IN> {
             ctx: self.ctx.clone(),
         }
     }
+    */
 
-    pub fn new() -> Self {
+    /// Builds the Dataflow graph
+    ///
+    /// Returns a [`Pipeline`] where all runtime components
+    /// have been conneted and started.
+    ///
+    /// Note that this method only builds the pipeline. In order
+    /// to start it, see the following [method](Pipeline::start).
+    pub fn build(self) -> Pipeline {
+        // TODO: Iterate over Dataflow graph
+        //       and connect components!
+        self.ctx.pipeline
+    }
+
+    pub(crate) fn new(ctx: Context) -> Self {
         let mut dfg = DFG::default();
-        let node = DFGNode::new(DFGNodeKind::Source(Box::new(())), vec![]);
+        let conf = OperatorConfig::default();
+        let node = DFGNode::new(DFGNodeKind::Source(Box::new(())), conf, vec![]);
         let id = dfg.insert(node);
         Self {
             _marker: PhantomData,
             prev_dfg_id: id,
-            ctx: Default::default(),
+            ctx,
         }
     }
 }
@@ -215,20 +252,20 @@ mod tests {
 
     #[test]
     fn just_testing_things() {
-        fn mapper(x: u64) -> ArconResult<u64> {
-            Ok(x + 1)
+        fn state_map(x: u64, _: &mut ()) -> OperatorResult<u64> {
+            Ok(x)
         }
 
-        fn filter_fn(x: &u64) -> bool {
-            *x > 0
-        }
+        // TODO: Actually make this build the specified pipeline
+        let pipeline = Pipeline::default()
+            .from_collection((0..10).collect::<Vec<u64>>())
+            .filter(Box::new(|x: &u64| *x > 5))
+            .map_with_state(state_map, Box::new(|| ()), |conf| {
+                conf.set_backend(BackendType::Sled);
+                conf.set_state_id("map_state");
+            })
+            .build();
 
-        let stream0: Stream<u64> = Stream::new();
-        let _stream1 = stream0.map(Box::new(|x| Ok(x + 1)));
-        let _stream2 = stream0
-            .map(mapper)
-            .with_backend(BackendType::Sled)
-            .with_state_id("map_state")
-            .filter(filter_fn);
+        pipeline.shutdown();
     }
 }

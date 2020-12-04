@@ -3,6 +3,7 @@
 
 use crate::prelude::*;
 use ::serde::Serialize;
+use arcon_error::OperatorResult;
 use bytes::Bytes;
 use futures::{channel, executor::block_on, SinkExt, StreamExt};
 use std::{
@@ -84,7 +85,7 @@ where
         &mut self,
         element: ArconElement<Self::IN>,
         _ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> ArconResult<()> {
+    ) -> OperatorResult<()> {
         let mut tx = self.tx_channel.clone();
         let fmt_data = {
             if let Ok(mut json) = serde_json::to_string(&element.data) {
