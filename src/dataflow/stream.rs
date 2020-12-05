@@ -245,27 +245,3 @@ impl<IN: ArconType> Stream<IN> {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn just_testing_things() {
-        fn state_map(x: u64, _: &mut ()) -> OperatorResult<u64> {
-            Ok(x)
-        }
-
-        // TODO: Actually make this build the specified pipeline
-        let pipeline = Pipeline::default()
-            .from_collection((0..10).collect::<Vec<u64>>())
-            .filter(Box::new(|x: &u64| *x > 5))
-            .map_with_state(state_map, Box::new(|| ()), |conf| {
-                conf.set_backend(BackendType::Sled);
-                conf.set_state_id("map_state");
-            })
-            .build();
-
-        pipeline.shutdown();
-    }
-}

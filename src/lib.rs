@@ -103,7 +103,7 @@ pub mod prelude {
         flight_serde::{reliable_remote::ReliableSerde, unsafe_remote::UnsafeSerde, FlightSerde},
         *,
     };
-    pub use arcon_error::{arcon_err, arcon_err_kind, ArconResult};
+    pub use arcon_error::{arcon_err, arcon_err_kind, ArconResult, OperatorResult};
 
     pub use kompact::{default_components::*, prelude::*};
     #[cfg(feature = "thread_pinning")]

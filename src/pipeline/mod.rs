@@ -191,7 +191,8 @@ impl Pipeline {
         unimplemented!();
     }
 
-    pub fn from_collection<I, A>(self, i: I) -> Stream<A>
+    /// Creates a bounded data source using a Vector of [`ArconType`]
+    pub fn collection<I, A>(self, i: I) -> Stream<A>
     where
         I: Into<Vec<A>>,
         A: ArconType,
