@@ -156,7 +156,7 @@ mod tests {
         let addr = "127.0.0.1:4001".parse().unwrap();
 
         // Setup
-        let mut pipeline = Pipeline::new();
+        let mut pipeline = Pipeline::default();
         let pool_info = pipeline.get_pool_info();
         let system = pipeline.system();
 

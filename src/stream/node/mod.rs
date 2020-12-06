@@ -525,7 +525,7 @@ mod tests {
     fn node_test_setup() -> (ActorRef<ArconMessage<i32>>, Arc<Component<DebugNode<i32>>>) {
         // Returns a filter Node with input channels: sender1..sender3
         // And a debug sink receiving its results
-        let mut pipeline = Pipeline::new();
+        let mut pipeline = Pipeline::default();
         let pool_info = pipeline.get_pool_info();
         let system = &pipeline.system();
 

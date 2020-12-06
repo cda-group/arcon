@@ -22,8 +22,10 @@ pub use crate::dataflow::stream::Stream;
 
 #[derive(Clone)]
 pub struct Pipeline {
-    /// [kompact] system that drives the execution of components
-    system: KompactSystem,
+    /// [`KompactSystem`] for Control Components
+    ctrl_system: KompactSystem,
+    /// [`KompactSystem`] for Data Processing Components
+    data_system: KompactSystem,
     /// Arcon configuration for this pipeline
     conf: ArconConf,
     /// Arcon allocator for this pipeline
@@ -38,7 +40,8 @@ pub struct Pipeline {
 
 impl Default for Pipeline {
     fn default() -> Self {
-        Self::new()
+        let conf: ArconConf = Default::default();
+        Self::new(conf)
     }
 }
 
@@ -50,14 +53,15 @@ pub type CreatedDynamicNode<IN> = Arc<dyn AbstractComponent<Message = ArconMessa
 pub type DynamicSource = Box<dyn CreateErased<()>>;
 
 impl Pipeline {
-    /// Creates a new Pipeline using the default ArconConf
-    pub fn new() -> Self {
-        let conf: ArconConf = Default::default();
+    /// Creates a new Pipeline using the given ArconConf
+    fn new(conf: ArconConf) -> Self {
         let allocator = Arc::new(Mutex::new(Allocator::new(conf.allocator_capacity)));
-        let (system, state_manager, epoch_manager, source_manager) = Self::setup(&conf);
+        let (ctrl_system, data_system, state_manager, epoch_manager, source_manager) =
+            Self::setup(&conf);
 
         Self {
-            system,
+            ctrl_system,
+            data_system,
             conf,
             allocator,
             epoch_manager,
@@ -68,17 +72,57 @@ impl Pipeline {
 
     /// Creates a new Pipeline using the given ArconConf
     pub fn with_conf(conf: ArconConf) -> Self {
-        let allocator = Arc::new(Mutex::new(Allocator::new(conf.allocator_capacity)));
-        let (system, state_manager, epoch_manager, source_manager) = Self::setup(&conf);
+        Self::new(conf)
+    }
 
-        Self {
-            system,
-            conf,
-            allocator,
+    /// Helper function to set up internals of the pipeline
+    #[allow(clippy::type_complexity)]
+    fn setup(
+        arcon_conf: &ArconConf,
+    ) -> (
+        KompactSystem,
+        KompactSystem,
+        Arc<Component<StateManager>>,
+        Option<Arc<Component<EpochManager>>>,
+        Arc<Component<SourceManager>>,
+    ) {
+        let kompact_config = arcon_conf.kompact_conf();
+        let data_system = kompact_config.build().expect("KompactSystem");
+        // just build a default system for control layer
+        let ctrl_system = KompactConfig::default().build().unwrap();
+
+        let state_manager_comp = ctrl_system.create_dedicated(StateManager::new);
+        let source_manager_comp = ctrl_system.create(SourceManager::new);
+
+        let epoch_manager = match arcon_conf.execution_mode {
+            ExecutionMode::Local => {
+                let source_manager_ref = source_manager_comp.actor_ref().hold().expect("fail");
+                let epoch_manager =
+                    EpochManager::new(arcon_conf.epoch_interval, source_manager_ref);
+                Some(ctrl_system.create(|| epoch_manager))
+            }
+            ExecutionMode::Distributed => None,
+        };
+
+        let timeout = std::time::Duration::from_millis(500);
+
+        ctrl_system
+            .start_notify(&state_manager_comp)
+            .wait_timeout(timeout)
+            .expect("StateManager comp never started!");
+
+        ctrl_system
+            .start_notify(&source_manager_comp)
+            .wait_timeout(timeout)
+            .expect("SourceManager comp never started!");
+
+        (
+            ctrl_system,
+            data_system,
+            state_manager_comp,
             epoch_manager,
-            state_manager,
-            source_manager,
-        }
+            source_manager_comp,
+        )
     }
 
     /// Creates a PoolInfo struct to be used by a ChannelStrategy
@@ -91,54 +135,6 @@ impl Pipeline {
         )
     }
 
-    /// Helper function to set up internals of the pipeline
-    #[allow(clippy::type_complexity)]
-    fn setup(
-        arcon_conf: &ArconConf,
-    ) -> (
-        KompactSystem,
-        Arc<Component<StateManager>>,
-        Option<Arc<Component<EpochManager>>>,
-        Arc<Component<SourceManager>>,
-    ) {
-        let kompact_config = arcon_conf.kompact_conf();
-        let system = kompact_config.build().expect("KompactSystem");
-        let state_manager = StateManager::new();
-        let state_manager_comp = system.create_dedicated(|| state_manager);
-
-        let source_manager = SourceManager::new();
-        let source_manager_comp = system.create(|| source_manager);
-
-        let epoch_manager = match arcon_conf.execution_mode {
-            ExecutionMode::Local => {
-                let source_manager_ref = source_manager_comp.actor_ref().hold().expect("fail");
-                let epoch_manager =
-                    EpochManager::new(arcon_conf.epoch_interval, source_manager_ref);
-                Some(system.create(|| epoch_manager))
-            }
-            ExecutionMode::Distributed => None,
-        };
-
-        let timeout = std::time::Duration::from_millis(500);
-
-        system
-            .start_notify(&state_manager_comp)
-            .wait_timeout(timeout)
-            .expect("StateManager comp never started!");
-
-        system
-            .start_notify(&source_manager_comp)
-            .wait_timeout(timeout)
-            .expect("SourceManager comp never started!");
-
-        (
-            system,
-            state_manager_comp,
-            epoch_manager,
-            source_manager_comp,
-        )
-    }
-
     pub fn connect_state_port<B: Backend>(&mut self, nm: &Arc<Component<NodeManager<B>>>) {
         biconnect_components::<StateManagerPort, _, _>(&self.state_manager, nm)
             .expect("connection");
@@ -147,12 +143,12 @@ impl Pipeline {
     /// Add component `c` to receive state snapshots from `state_id`
     pub fn watch(
         &mut self,
-        state_ids: &'static [&str],
+        state_ids: Vec<impl Into<StateID>>,
         c: Arc<dyn AbstractComponent<Message = SnapshotRef>>,
     ) {
         self.state_manager.on_definition(|cd| {
-            for id in state_ids.iter() {
-                let state_id = id.to_owned().to_string();
+            for id in state_ids.into_iter() {
+                let state_id = id.into();
 
                 if !cd.registered_state_ids.contains(&state_id) {
                     panic!(
@@ -173,7 +169,7 @@ impl Pipeline {
 
     /// Give out a mutable reference to the KompactSystem of the pipeline
     pub fn system(&mut self) -> &mut KompactSystem {
-        &mut self.system
+        &mut self.data_system
     }
 
     /// Give out a reference to the ArconConf of the pipeline
@@ -221,11 +217,13 @@ impl Pipeline {
     ///
     /// Note that this blocks the current thread
     pub fn await_termination(self) {
-        self.system.await_termination();
+        self.data_system.await_termination();
+        self.ctrl_system.await_termination();
     }
 
     /// Shuts the pipeline down and consumes the struct
     pub fn shutdown(self) {
-        let _ = self.system.shutdown();
+        let _ = self.data_system.shutdown();
+        let _ = self.ctrl_system.shutdown();
     }
 }

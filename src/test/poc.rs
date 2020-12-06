@@ -193,7 +193,7 @@ fn poc_test() {
         .wait_timeout(std::time::Duration::from_millis(100))
         .expect("started");
 
-    pipeline.watch(&["map_state_one", "map_state_two"], batch_comp);
+    pipeline.watch(vec!["map_state_one", "map_state_two"], batch_comp);
 
     let node_ref = map_comp.actor_ref().hold().expect("fail");
 

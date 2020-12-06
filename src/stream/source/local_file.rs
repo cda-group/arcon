@@ -123,7 +123,7 @@ mod tests {
     }
 
     fn test_setup<A: ArconType>() -> (Pipeline, Arc<Component<DebugNode<A>>>) {
-        let mut pipeline = Pipeline::new();
+        let mut pipeline = Pipeline::default();
         let system = pipeline.system();
         let sink = system.create(move || {
             let s: DebugNode<A> = DebugNode::new();
