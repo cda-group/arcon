@@ -356,3 +356,9 @@ impl FromStr for BackendType {
         }
     }
 }
+
+impl Default for BackendType {
+    fn default() -> Self {
+        BackendType::Sled
+    }
+}

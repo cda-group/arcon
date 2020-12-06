@@ -510,7 +510,7 @@ impl Default for ArconNever {
     }
 }
 
-/// Variant of [Writer](bytes::buf::ext::Writer) for trait objects
+/// Variant of [Writer](bytes::buf::Writer) for trait objects
 pub struct BufMutWriter<'a> {
     buf: &'a mut dyn BufMut,
 }

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{prelude::*, stream::operator::OperatorContext};
+use arcon_error::OperatorResult;
 use std::{
     cell::RefCell,
     fs::{File, OpenOptions},
@@ -52,7 +53,7 @@ where
         &mut self,
         element: ArconElement<IN>,
         _ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> ArconResult<()> {
+    ) -> OperatorResult<()> {
         if let Err(err) = writeln!(self.file.borrow_mut(), "{:?}", element.data) {
             eprintln!("Error while writing to file sink {}", err.to_string());
         }

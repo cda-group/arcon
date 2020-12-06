@@ -129,7 +129,6 @@ mod tests {
         pipeline::Pipeline,
         prelude::{Channel, ChannelStrategy, DebugNode, Forward, Map},
     };
-    use arcon_error::ArconResult;
     use std::{sync::Arc, thread, time};
     use tokio::{net::TcpStream, prelude::*, runtime::Runtime};
 
@@ -157,7 +156,7 @@ mod tests {
         let addr = "127.0.0.1:4001".parse().unwrap();
 
         // Setup
-        let mut pipeline = Pipeline::new();
+        let mut pipeline = Pipeline::default();
         let pool_info = pipeline.get_pool_info();
         let system = pipeline.system();
 
@@ -176,8 +175,8 @@ mod tests {
             ChannelStrategy::Forward(Forward::new(Channel::Local(sink_ref), 1.into(), pool_info));
 
         // just pass it on
-        fn map_fn(x: ExtractorStruct) -> ArconResult<ExtractorStruct> {
-            Ok(x)
+        fn map_fn(x: ExtractorStruct) -> ExtractorStruct {
+            x
         }
 
         // Set up SourceContext

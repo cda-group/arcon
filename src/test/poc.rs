@@ -6,6 +6,7 @@ use crate::{
     prelude::*,
     stream::{node::NodeState, operator::function::Map},
 };
+use arcon_error::OperatorResult;
 use arcon_state::Sled;
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
@@ -96,7 +97,7 @@ fn poc_test() {
     let channel_strategy: ChannelStrategy<u32> =
         ChannelStrategy::Forward(Forward::new(channel, NodeID::new(0), pool_info.clone()));
 
-    fn map_fn_two(x: u32, state: &mut MapStateTwo<impl Backend>) -> ArconResult<u32> {
+    fn map_fn_two(x: u32, state: &mut MapStateTwo<impl Backend>) -> OperatorResult<u32> {
         state.rolling_counter().rmw(|v| {
             *v += 1;
         });
@@ -159,7 +160,7 @@ fn poc_test() {
         .wait_timeout(std::time::Duration::from_millis(100))
         .expect("started");
 
-    fn map_fn(x: u32, state: &mut MapStateOne<impl Backend>) -> ArconResult<u32> {
+    fn map_fn(x: u32, state: &mut MapStateOne<impl Backend>) -> OperatorResult<u32> {
         state.events().append(x)?;
         Ok(x * 2)
     }
@@ -192,7 +193,7 @@ fn poc_test() {
         .wait_timeout(std::time::Duration::from_millis(100))
         .expect("started");
 
-    pipeline.watch(&["map_state_one", "map_state_two"], batch_comp);
+    pipeline.watch(vec!["map_state_one", "map_state_two"], batch_comp);
 
     let node_ref = map_comp.actor_ref().hold().expect("fail");
 

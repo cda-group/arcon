@@ -17,8 +17,7 @@ pub mod round_robin;
 
 use crate::dataflow::stream::ChannelTrait;
 
-impl<A: ArconType> ChannelTrait for ChannelStrategy<A> {
-}
+impl<A: ArconType> ChannelTrait for ChannelStrategy<A> {}
 
 /// A `ChannelStrategy` defines a strategy of how messages are sent downstream
 ///

@@ -7,7 +7,6 @@ pub mod strategy;
 use crate::data::{flight_serde::FlightSerde, ArconMessage, ArconType};
 use kompact::prelude::{ActorPath, ActorRefStrong};
 
-
 /// A Channel represents a connection to another Component
 #[derive(Clone)]
 pub enum Channel<A: ArconType> {

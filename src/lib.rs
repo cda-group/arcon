@@ -39,6 +39,8 @@ pub mod pipeline;
 mod buffer;
 /// Arcon data types, serialisers/deserialisers
 mod data;
+/// Dataflow API
+mod dataflow;
 /// Module containing different runtime managers
 mod manager;
 #[cfg(feature = "metrics")]
@@ -51,8 +53,6 @@ mod stream;
 mod test;
 /// Internal Arcon Utilities
 mod util;
-/// Dataflow API
-mod dataflow;
 
 /// A module containing test utilities such as a global Arcon Allocator
 #[cfg(test)]
@@ -76,6 +76,7 @@ pub mod prelude {
         buffer::event::{BufferPool, BufferReader, BufferWriter, PoolInfo},
         conf::ArconConf,
         data::VersionId,
+        manager::state::StateID,
         pipeline::Pipeline,
         stream::{
             channel::{
@@ -102,7 +103,7 @@ pub mod prelude {
         flight_serde::{reliable_remote::ReliableSerde, unsafe_remote::UnsafeSerde, FlightSerde},
         *,
     };
-    pub use arcon_error::{arcon_err, arcon_err_kind, ArconResult};
+    pub use arcon_error::{arcon_err, arcon_err_kind, ArconResult, OperatorResult};
 
     pub use kompact::{default_components::*, prelude::*};
     #[cfg(feature = "thread_pinning")]
@@ -111,8 +112,8 @@ pub mod prelude {
     pub use arcon_state as state;
 
     pub use arcon_state::{
-        AggregatorState, Appender, ArconState, Backend, BackendNever, EagerAppender, Handle,
-        MapState, ReducerState, Sled, Value, ValueState, VecState,
+        AggregatorState, Appender, ArconState, Backend, BackendNever, BackendType, EagerAppender,
+        Handle, MapState, ReducerState, Sled, Value, ValueState, VecState,
     };
 
     #[cfg(feature = "rayon")]

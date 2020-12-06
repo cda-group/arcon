@@ -16,15 +16,15 @@ where
     IN: ArconType,
     OUTS: IntoIterator,
     OUTS::Item: ArconType,
-    F: SafelySendableFn(IN, &mut S) -> ArconResult<OUTS>,
+    F: SafelySendableFn(IN, &mut S) -> OperatorResult<OUTS>,
     S: ArconState,
 {
     state: S,
     udf: F,
-    _marker: PhantomData<fn(IN) -> ArconResult<OUTS>>,
+    _marker: PhantomData<fn(IN) -> OperatorResult<OUTS>>,
 }
 
-impl<IN, OUTS> FlatMap<IN, OUTS, fn(IN, &mut ()) -> ArconResult<OUTS>, ()>
+impl<IN, OUTS> FlatMap<IN, OUTS, fn(IN, &mut ()) -> OperatorResult<OUTS>, ()>
 where
     IN: ArconType,
     OUTS: IntoIterator,
@@ -32,9 +32,9 @@ where
 {
     #[allow(clippy::new_ret_no_self)]
     pub fn new(
-        udf: impl SafelySendableFn(IN) -> ArconResult<OUTS>,
-    ) -> FlatMap<IN, OUTS, impl SafelySendableFn(IN, &mut ()) -> ArconResult<OUTS>, ()> {
-        let udf = move |input: IN, _: &mut ()| udf(input);
+        udf: impl SafelySendableFn(IN) -> OUTS,
+    ) -> FlatMap<IN, OUTS, impl SafelySendableFn(IN, &mut ()) -> OperatorResult<OUTS>, ()> {
+        let udf = move |input: IN, _: &mut ()| Ok(udf(input));
         FlatMap {
             state: (),
             udf,
@@ -48,7 +48,7 @@ where
     IN: ArconType,
     OUTS: IntoIterator,
     OUTS::Item: ArconType,
-    F: SafelySendableFn(IN, &mut S) -> ArconResult<OUTS>,
+    F: SafelySendableFn(IN, &mut S) -> OperatorResult<OUTS>,
     S: ArconState,
 {
     pub fn stateful(state: S, udf: F) -> Self {
@@ -65,7 +65,7 @@ where
     IN: ArconType,
     OUTS: IntoIterator,
     OUTS::Item: ArconType,
-    F: SafelySendableFn(IN, &mut S) -> ArconResult<OUTS>,
+    F: SafelySendableFn(IN, &mut S) -> OperatorResult<OUTS>,
     S: ArconState,
 {
     type IN = IN;
@@ -77,7 +77,7 @@ where
         &mut self,
         element: ArconElement<IN>,
         mut ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> ArconResult<()> {
+    ) -> OperatorResult<()> {
         let result = (self.udf)(element.data, &mut self.state)?;
         for item in result {
             ctx.output(ArconElement {

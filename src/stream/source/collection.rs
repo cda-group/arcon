@@ -141,7 +141,7 @@ mod tests {
 
     #[test]
     fn collection_source_test() {
-        let mut pipeline = Pipeline::new();
+        let mut pipeline = Pipeline::default();
         let pool_info = pipeline.get_pool_info();
         let system = pipeline.system();
 
