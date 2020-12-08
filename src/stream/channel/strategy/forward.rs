@@ -100,7 +100,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{Channel, *};
     use crate::stream::channel::strategy::{tests::*, ChannelStrategy};
     use kompact::prelude::*;
 

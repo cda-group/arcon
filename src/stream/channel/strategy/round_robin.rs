@@ -121,7 +121,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{Channel, *};
     use crate::{
         data::ArconElement,
         pipeline::Pipeline,
