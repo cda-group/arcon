@@ -126,7 +126,7 @@ pub mod unsafe_remote {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::prelude::*;
+    use crate::prelude::{Channel, *};
     use kompact::prelude::*;
     use once_cell::sync::Lazy;
     use std::time::Duration;

@@ -171,7 +171,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{Channel, *};
     use crate::{data::ArconEvent, pipeline::Pipeline, stream::channel::strategy::tests::*};
     use kompact::prelude::*;
     use rand::Rng;
