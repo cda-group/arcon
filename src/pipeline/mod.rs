@@ -4,7 +4,7 @@
 use crate::{
     buffer::event::PoolInfo,
     conf::{ArconConf, ExecutionMode},
-    dataflow::stream::Context,
+    dataflow::{dfg::CollectionKind, stream::Context},
     manager::{
         epoch::EpochManager,
         node::*,
@@ -51,6 +51,9 @@ pub type DynamicNode<IN> = Box<dyn CreateErased<ArconMessage<IN>>>;
 pub type CreatedDynamicNode<IN> = Arc<dyn AbstractComponent<Message = ArconMessage<IN>>>;
 /// A Source with operator type, state backend type, and timer type erased
 pub type DynamicSource = Box<dyn CreateErased<()>>;
+
+pub type ErasedManager = Box<dyn CreateErased<Never>>;
+pub type ErasedNode<IN> = Box<dyn CreateErased<ArconMessage<IN>>>;
 
 impl Pipeline {
     /// Creates a new Pipeline using the given ArconConf
@@ -178,13 +181,13 @@ impl Pipeline {
     }
 
     /// Adds a NodeManager to the Arcon Pipeline
-    pub fn create_node_manager(
+    fn create_node_manager(
         &mut self,
-        _id: String,
-        _in_channels: Vec<NodeID>,
-        _backend: impl Backend,
-    ) {
-        unimplemented!();
+        id: String,
+        in_channels: Vec<NodeID>,
+        backend: Arc<impl Backend>,
+    ) -> ErasedManager {
+        Box::new(NodeManager::new(id, in_channels, backend))
     }
 
     /// Creates a bounded data source using a Vector of [`ArconType`]
@@ -194,8 +197,23 @@ impl Pipeline {
         A: ArconType,
     {
         // TODO: Add DFGNode with Collection type..
-        // DFGNode::Source(...)
-        let ctx = Context::new(self);
+        // TODO: DFGNode::Source(...):
+        /*
+        let b = Box::new(|strategy: Box<dyn ChannelTrait>| {
+            let source_ctx = SourceContext::new(
+                self.arcon_conf.watermark_interval,
+                None,
+
+        });
+        */
+        let c = Box::new(i.into()) as Box<dyn Any>;
+        let collection_kind = CollectionKind::new(c);
+        let mut ctx = Context::new(self);
+        use crate::dataflow::dfg::*;
+        let node_kind =
+            DFGNodeKind::Source(SourceKind::Collection(collection_kind), Default::default());
+        ctx.dfg
+            .insert(DFGNode::new(node_kind, OperatorConfig::default(), vec![]));
         Stream::new(ctx)
     }
 
@@ -225,5 +243,14 @@ impl Pipeline {
     pub fn shutdown(self) {
         let _ = self.data_system.shutdown();
         let _ = self.ctrl_system.shutdown();
+    }
+
+    pub(crate) fn add_source_comp(
+        &mut self,
+        comp: Arc<dyn AbstractComponent<Message = ArconSource>>,
+    ) {
+        self.source_manager.on_definition(|cd| {
+            cd.sources.push(comp);
+        });
     }
 }

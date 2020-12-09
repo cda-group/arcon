@@ -1,6 +1,10 @@
-use crate::manager::state::StateID;
+use crate::{
+    data::NodeID, dataflow::stream::ChannelTrait, manager::state::StateID,
+    stream::source::ArconSource,
+};
 use arcon_state::BackendType;
-use std::any::Any;
+use kompact::{component::AbstractComponent, prelude::KompactSystem};
+use std::{any::Any, sync::Arc};
 
 /// A logical dataflow-graph.
 #[allow(dead_code)]
@@ -8,7 +12,7 @@ use std::any::Any;
 pub struct DFG {
     /// The graph is represented as a Vec for maximum space-efficiency.
     /// This works since nodes are never deleted from the graph.
-    graph: Vec<DFGNode>,
+    pub(crate) graph: Vec<DFGNode>,
 }
 
 impl DFG {
@@ -24,22 +28,32 @@ impl DFG {
     pub fn get(&self, id: &DFGNodeID) -> &DFGNode {
         self.graph.get(id.0).unwrap()
     }
+
+    /// Returns a mutable reference to the [`DFGNode`] associated to a [`DFGNodeID`].
+    pub fn get_mut(&mut self, id: &DFGNodeID) -> &mut DFGNode {
+        self.graph.get_mut(id.0).unwrap()
+    }
+
+    /// Returns the length of the graph
+    pub fn len(&self) -> usize {
+        self.graph.len()
+    }
 }
 
 /// The ID of a [`DFGNode`] in the dataflow graph.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
-pub struct DFGNodeID(usize);
+pub struct DFGNodeID(pub usize);
 
 #[derive(Debug)]
 pub struct OperatorConfig {
     /// State Backend type to use for this DFG Node
     ///
     /// Default backend is Sled
-    backend_type: BackendType,
+    pub(crate) backend_type: BackendType,
     /// State ID for this DFG node
     ///
     /// Default ID is a random generated one
-    state_id: StateID,
+    pub(crate) state_id: StateID,
 }
 
 impl OperatorConfig {
@@ -68,11 +82,12 @@ impl Default for OperatorConfig {
 /// A logical node in the dataflow graph.
 #[allow(dead_code)]
 pub struct DFGNode {
-    kind: DFGNodeKind,
+    pub(crate) kind: DFGNodeKind,
     /// Ingoing edges to a node.
     ingoing: Vec<DFGNodeID>,
-    config: OperatorConfig,
-    // TODO: constructor
+    /// Operator Configuration for this node
+    pub(crate) config: OperatorConfig,
+    pub(crate) channel_kind: ChannelKind,
 }
 
 impl DFGNode {
@@ -81,15 +96,78 @@ impl DFGNode {
             kind,
             ingoing,
             config,
+            channel_kind: Default::default(),
+        }
+    }
+    pub fn is_source(&self) -> bool {
+        match self.kind {
+            DFGNodeKind::Source(_, _) => true,
+            _ => false,
         }
     }
 }
 
 pub enum DFGNodeKind {
-    Source(Box<dyn Any>),
-    Node(Box<dyn Any>),
+    Source(SourceKind, ChannelKind),
+    Node(NodeConstructor),
 }
 
+pub enum SourceKind {
+    Collection(CollectionKind),
+}
+
+pub type NodeConstructor = Box<
+    dyn FnOnce(
+        String,
+        NodeID,
+        Vec<NodeID>,
+        Vec<Box<dyn Any>>,
+        ChannelKind,
+        &mut KompactSystem,
+    ) -> Box<dyn Any>,
+>;
+
+pub type CollectionConstructor = Box<
+    dyn FnOnce(
+        Box<dyn Any>,
+        Vec<Box<dyn Any>>,
+        ChannelKind,
+        &mut KompactSystem,
+    ) -> Arc<dyn AbstractComponent<Message = ArconSource>>,
+>;
+
+pub struct CollectionKind {
+    pub(crate) collection: Box<dyn Any>,
+    pub(crate) constructor: Option<CollectionConstructor>,
+}
+
+impl CollectionKind {
+    pub fn new(collection: Box<dyn Any>) -> Self {
+        Self {
+            collection,
+            constructor: None,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum ChannelKind {
+    Forward,
+    Broadcast,
+    RoundRobin,
+    KeyBy,
+    Console,
+    Mute,
+}
+
+impl Default for ChannelKind {
+    fn default() -> Self {
+        ChannelKind::Forward
+    }
+}
+
+// TODO: Fix
+/*
 #[test]
 fn create_dfg() {
     use DFGNodeKind::*;
@@ -129,3 +207,4 @@ fn create_dfg() {
     assert_eq!(DFGNodeID(2), node2);
     assert_eq!(DFGNodeID(3), node3);
 }
+*/

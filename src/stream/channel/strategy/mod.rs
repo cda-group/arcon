@@ -34,6 +34,8 @@ where
     KeyBy(key_by::KeyBy<A>),
     /// Send messages to a Vec of `Channels` in a Round Robin fashion
     RoundRobin(round_robin::RoundRobin<A>),
+    /// A strategy that prints to the console
+    Console,
     /// A strategy that simply does nothing
     Mute,
 }
@@ -50,6 +52,9 @@ where
             ChannelStrategy::Broadcast(s) => s.add(event, source),
             ChannelStrategy::KeyBy(s) => s.add(event, source),
             ChannelStrategy::RoundRobin(s) => s.add(event, source),
+            ChannelStrategy::Console => {
+                println!("{:?}", event);
+            }
             ChannelStrategy::Mute => (),
         }
     }
@@ -61,6 +66,7 @@ where
             ChannelStrategy::Broadcast(s) => s.flush(source),
             ChannelStrategy::KeyBy(s) => s.flush(source),
             ChannelStrategy::RoundRobin(s) => s.flush(source),
+            ChannelStrategy::Console => (),
             ChannelStrategy::Mute => (),
         }
     }
@@ -72,6 +78,7 @@ where
             ChannelStrategy::Broadcast(s) => s.num_channels(),
             ChannelStrategy::KeyBy(s) => s.num_channels(),
             ChannelStrategy::RoundRobin(s) => s.num_channels(),
+            ChannelStrategy::Console => 0,
             ChannelStrategy::Mute => 0,
         }
     }

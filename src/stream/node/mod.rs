@@ -238,6 +238,7 @@ where
     /// Handle a local ArconMessage that is backed by the arcon allocator
     #[inline]
     fn handle_message(&mut self, message: ArconMessage<OP::IN>) -> ArconResult<()> {
+        //info!(self.ctx.log(), "Got elem {:?}", e);
         if !self.node_state.in_channels.contains(&message.sender) {
             return arcon_err!("Message from invalid sender");
         }
