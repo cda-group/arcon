@@ -65,6 +65,9 @@ jobs:
             toolchain: ${{ matrix.toolchain }}
             default: true
             profile: minimal
+      - name: Remove msys64 # taken from rust-rocksdb
+        if: runner.os == 'Windows'
+        run: Remove-Item -LiteralPath "C:\msys64\" -Force -Recurse
       - name: Install dependencies
         if: runner.os == 'Windows'
         run: choco install llvm -y
