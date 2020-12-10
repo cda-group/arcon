@@ -6,12 +6,12 @@
 
 A Streaming-first Analytics Engine.
 
-Requires Rust nightly (See current toolchain [here](rust-toolchain)).
+Arcon currently only works on Rust nightly (See current toolchain [here](rust-toolchain)). 
+It is recommended to use either the same toolchain or version higher than it.
 
 * [`arcon_allocator`]: Custom allocator.
 * [`arcon_build`]: Protobuf builder
 * [`arcon_error`]: Common error utilities.
-* [`arcon_extra`]: Contains extra 3rd party features.
 * [`arcon_macros`]: Arcon derive macros.
 * [`arcon_state`]: State management features.
 * [`arcon_tests`]: Integration tests
@@ -20,7 +20,6 @@ Requires Rust nightly (See current toolchain [here](rust-toolchain)).
 [`arcon_allocator`]: arcon_allocator
 [`arcon_build`]: arcon_build
 [`arcon_error`]: arcon_error
-[`arcon_extra`]: arcon_extra
 [`arcon_macros`]: arcon_macros
 [`arcon_state`]: arcon_state
 [`arcon_tests`]: arcon_tests

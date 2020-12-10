@@ -70,7 +70,6 @@ dependencies = [
  "abomonation_derive",
  "arcon_allocator",
  "arcon_error",
- "arcon_extra",
  "arcon_macros",
  "arcon_state",
  "bincode",
@@ -119,10 +118,6 @@ version = "0.1.1"
 dependencies = [
  "arcon_state",
 ]
-
-[[package]]
-name = "arcon_extra"
-version = "0.1.1"
 
 [[package]]
 name = "arcon_macros"
