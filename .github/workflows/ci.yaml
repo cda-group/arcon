@@ -41,11 +41,21 @@ jobs:
 
   test:
     runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.experimental }}
     strategy:
+      fail-fast: false
       matrix:
-        os:
-          - ubuntu-latest
-          - macos-latest
+        build: [Linux, macOS, Windows]
+        include:
+          - build: Linux
+            os: ubuntu-latest
+            experimental: false
+          - build: macOS
+            os: macos-latest
+            experimental: false
+          - build: Windows
+            os: windows-latest
+            experimental: true
     steps:
       - name: checkout
         uses: actions/checkout@v2
@@ -55,6 +65,9 @@ jobs:
             toolchain: ${{ matrix.toolchain }}
             default: true
             profile: minimal
+      - name: Remove msys64 # taken from rust-rocksdb
+        if: runner.os == 'Windows'
+        run: Remove-Item -LiteralPath "C:\msys64\" -Force -Recurse
       - name: Install dependencies
         if: runner.os == 'Windows'
         run: choco install llvm -y
