@@ -1,8 +1,4 @@
-use crate::{
-    data::NodeID, dataflow::stream::ChannelTrait, manager::state::StateID,
-    stream::source::ArconSource,
-};
-use arcon_state::BackendType;
+use crate::{data::NodeID, manager::state::StateID, stream::source::ArconSource};
 use kompact::{component::AbstractComponent, prelude::KompactSystem};
 use std::{any::Any, sync::Arc};
 
@@ -44,12 +40,8 @@ impl DFG {
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct DFGNodeID(pub usize);
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct OperatorConfig {
-    /// State Backend type to use for this DFG Node
-    ///
-    /// Default backend is Sled
-    pub(crate) backend_type: BackendType,
     /// State ID for this DFG node
     ///
     /// Default ID is a random generated one
@@ -57,10 +49,6 @@ pub struct OperatorConfig {
 }
 
 impl OperatorConfig {
-    /// Modifies the [`BackendType`] of this logical DFGNode
-    pub fn set_backend(&mut self, backend_type: BackendType) {
-        self.backend_type = backend_type;
-    }
     /// Modifies the [`StateID`] of this logical DFGNode
     pub fn set_state_id<I: Into<StateID>>(&mut self, i: I) {
         self.state_id = i.into();
@@ -70,10 +58,6 @@ impl OperatorConfig {
 impl Default for OperatorConfig {
     fn default() -> Self {
         Self {
-            #[cfg(feature = "rocksdb")]
-            backend_type: BackendType::Rocks,
-            #[cfg(not(feature = "rocksdb"))]
-            backend_type: Default::default(),
             state_id: format!("op_{}", uuid::Uuid::new_v4().to_string()),
         }
     }

@@ -15,10 +15,6 @@ pub mod forward;
 pub mod key_by;
 pub mod round_robin;
 
-use crate::dataflow::stream::ChannelTrait;
-
-impl<A: ArconType> ChannelTrait for ChannelStrategy<A> {}
-
 /// A `ChannelStrategy` defines a strategy of how messages are sent downstream
 ///
 /// Common strategies include (one-to-one)[forward::Forward] and (one-to-many)[broadcast::Broadcast]

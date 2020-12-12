@@ -4,7 +4,10 @@
 use crate::{
     buffer::event::PoolInfo,
     conf::{ArconConf, ExecutionMode},
-    dataflow::{dfg::CollectionKind, stream::Context},
+    dataflow::{
+        dfg::{CollectionKind, *},
+        stream::Context,
+    },
     manager::{
         epoch::EpochManager,
         node::*,
@@ -138,7 +141,7 @@ impl Pipeline {
         )
     }
 
-    pub fn connect_state_port<B: Backend>(&mut self, nm: &Arc<Component<NodeManager<B>>>) {
+    pub(crate) fn connect_state_port<B: Backend>(&mut self, nm: &Arc<Component<NodeManager<B>>>) {
         biconnect_components::<StateManagerPort, _, _>(&self.state_manager, nm)
             .expect("connection");
     }
@@ -196,24 +199,11 @@ impl Pipeline {
         I: Into<Vec<A>>,
         A: ArconType,
     {
-        // TODO: Add DFGNode with Collection type..
-        // TODO: DFGNode::Source(...):
-        /*
-        let b = Box::new(|strategy: Box<dyn ChannelTrait>| {
-            let source_ctx = SourceContext::new(
-                self.arcon_conf.watermark_interval,
-                None,
-
-        });
-        */
-        let c = Box::new(i.into()) as Box<dyn Any>;
-        let collection_kind = CollectionKind::new(c);
+        let collection_kind = CollectionKind::new(Box::new(i.into()));
         let mut ctx = Context::new(self);
-        use crate::dataflow::dfg::*;
-        let node_kind =
-            DFGNodeKind::Source(SourceKind::Collection(collection_kind), Default::default());
-        ctx.dfg
-            .insert(DFGNode::new(node_kind, OperatorConfig::default(), vec![]));
+        let kind = DFGNodeKind::Source(SourceKind::Collection(collection_kind), Default::default());
+        let dfg_node = DFGNode::new(kind, Default::default(), vec![]);
+        ctx.dfg.insert(dfg_node);
         Stream::new(ctx)
     }
 
@@ -245,6 +235,7 @@ impl Pipeline {
         let _ = self.ctrl_system.shutdown();
     }
 
+    /// Internal helper method to add a source component to the [`SourceManager`]
     pub(crate) fn add_source_comp(
         &mut self,
         comp: Arc<dyn AbstractComponent<Message = ArconSource>>,
