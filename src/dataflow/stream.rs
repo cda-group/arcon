@@ -4,28 +4,27 @@
 use crate::{
     data::{ArconType, NodeID},
     dataflow::dfg::{
-        ChannelKind, CollectionConstructor, DFGNode, DFGNodeID, DFGNodeKind, NodeConstructor,
-        OperatorConfig, SourceKind, DFG,
+        ChannelKind, CollectionConstructor, DFGNode, DFGNodeID, DFGNodeKind, ErasedNodeManager,
+        LocalFileConstructor, NodeConstructor, OperatorConfig, SourceKind, DFG,
     },
-    manager::node::NodeManager,
-    pipeline::{ErasedNode, Pipeline},
+    manager::node::{NodeManager, NodeManagerPort},
+    pipeline::Pipeline,
     prelude::{
         ArconMessage, Channel, ChannelStrategy, CollectionSource, Filter, FlatMap, Forward, Map,
         MapInPlace, Node, NodeState,
     },
     stream::{
         operator::Operator,
-        source::{ArconSource, SourceContext},
+        source::{local_file::LocalFileSource, SourceContext},
     },
-    util::SafelySendableFn,
 };
 use arcon_error::OperatorResult;
-use arcon_state::{index::ArconState, Backend, BackendType};
+use arcon_state::{index::ArconState, Backend};
 use kompact::{
     component::AbstractComponent,
-    prelude::{ActorRefFactory, KompactSystem},
+    prelude::{biconnect_ports, ActorRefFactory, KompactSystem},
 };
-use std::{marker::PhantomData, path::Path, sync::Arc};
+use std::{marker::PhantomData, sync::Arc};
 
 // Defines a Default State Backend for high-level operators that do not use any
 // custom-defined state but still need a backend defined for internal runtime state.
@@ -194,81 +193,149 @@ impl<IN: ArconType> Stream<IN> {
         // Yeah, fix this..
         let is_source =
             self.ctx.dfg.get(&self.prev_dfg_id).is_source() && !self.ctx.source_complete;
-        let state_id = conf.state_id.clone();
-        let mut state_dir = self.ctx.pipeline.arcon_conf().state_dir.clone();
         let pool_info = self.ctx.pipeline.get_pool_info();
 
+        // Set up directory for the operator and create Backend
+        let state_id = conf.state_id.clone();
+        let mut state_dir = self.ctx.pipeline.arcon_conf().state_dir.clone();
+        state_dir.push(conf.state_id.clone());
+        let backend = Arc::new(B::create(&state_dir).unwrap());
+
         if is_source {
-            // NOTE: Hardcoded Collection Source for now...
+            let dfg_node = self.ctx.dfg.get_mut(&self.prev_dfg_id);
+            let (mut source_kind, channel_kind) = match &mut dfg_node.kind {
+                DFGNodeKind::Source(s, c) => (s, c),
+                _ => panic!("Expected a Source, Found Node!"),
+            };
 
             let watermark_interval = self.ctx.pipeline.arcon_conf().watermark_interval;
 
-            let cons: CollectionConstructor = Box::new(
-                move |collection: Box<dyn std::any::Any>,
-                      mut components: Vec<Box<dyn std::any::Any>>,
-                      channel_kind: ChannelKind,
-                      system: &mut KompactSystem| {
-                    let channel_strategy = match channel_kind {
-                        ChannelKind::Forward => {
-                            let component = components.remove(0);
-                            let target_node = component
-                        .downcast::<Arc<dyn AbstractComponent<Message = ArconMessage<OP::OUT>>>>()
-                        .unwrap();
-                            let actor_ref =
-                                target_node.actor_ref().hold().expect("failed to fetch");
-                            ChannelStrategy::Forward(Forward::new(
-                                Channel::Local(actor_ref),
-                                0.into(),
-                                pool_info,
-                            ))
-                        }
-                        _ => return unimplemented!(),
-                    };
-
-                    let collection: Vec<OP::IN> = *collection.downcast().unwrap();
-                    state_dir.push(state_id.clone());
-                    // set up the backend
-                    let backend = Arc::new(B::create(&state_dir).unwrap());
-                    let source_ctx = SourceContext::new(
-                        watermark_interval,
-                        None,
-                        channel_strategy,
-                        operator(backend.clone()),
-                        backend,
-                    );
-                    let collection_source = CollectionSource::new(collection, source_ctx);
-                    let comp = system.create_erased(Box::new(collection_source));
-                    system
-                        .start_notify(&comp)
-                        .wait_timeout(std::time::Duration::from_millis(2000))
-                        .expect("");
-                    return comp;
-                },
-            );
-            let mut dfg_source = self.ctx.dfg.get_mut(&self.prev_dfg_id);
-            dfg_source.config = conf.clone();
-            let source_kind = match &mut dfg_source.kind {
-                DFGNodeKind::Source(s, _) => s,
-                _ => panic!("Expected a source kind"),
-            };
             match source_kind {
-                SourceKind::Collection(col) => {
-                    col.constructor = Some(cons);
+                SourceKind::Collection(col_source) => {
+                    let cons: CollectionConstructor = Box::new(
+                        move |collection: Box<dyn std::any::Any>,
+                              mut components: Vec<Box<dyn std::any::Any>>,
+                              channel_kind: ChannelKind,
+                              system: &mut KompactSystem| {
+                            let channel_strategy = match channel_kind {
+                                ChannelKind::Forward => {
+                                    let component = components.remove(0);
+                                    let target_node =
+                                        component
+                                            .downcast::<Arc<
+                                                dyn AbstractComponent<
+                                                    Message = ArconMessage<OP::OUT>,
+                                                >,
+                                            >>()
+                                            .unwrap();
+                                    let actor_ref =
+                                        target_node.actor_ref().hold().expect("failed to fetch");
+                                    ChannelStrategy::Forward(Forward::new(
+                                        Channel::Local(actor_ref),
+                                        0.into(),
+                                        pool_info,
+                                    ))
+                                }
+                                _ => panic!("TODO"),
+                            };
+
+                            let collection: Vec<OP::IN> = *collection.downcast().unwrap();
+                            state_dir.push(state_id.clone());
+                            // set up the backend
+                            let backend = Arc::new(B::create(&state_dir).unwrap());
+                            let source_ctx = SourceContext::new(
+                                watermark_interval,
+                                None,
+                                channel_strategy,
+                                operator(backend.clone()),
+                                backend,
+                            );
+                            let collection_source = CollectionSource::new(collection, source_ctx);
+                            let comp = system.create_erased(Box::new(collection_source));
+                            system
+                                .start_notify(&comp)
+                                .wait_timeout(std::time::Duration::from_millis(2000))
+                                .expect("");
+                            return comp;
+                        },
+                    );
+
+                    col_source.constructor = Some(cons);
+                }
+                SourceKind::LocalFile(_file_source) => {
+                    let cons: LocalFileConstructor = Box::new(
+                        move |_path: String,
+                              mut _components: Vec<Box<dyn std::any::Any>>,
+                              _channel_kind: ChannelKind,
+                              _system: &mut KompactSystem| {
+                            /*
+                            let channel_strategy = match channel_kind {
+                                ChannelKind::Forward => {
+                                    let component = components.remove(0);
+                                    let target_node =
+                                        component
+                                            .downcast::<Arc<
+                                                dyn AbstractComponent<
+                                                    Message = ArconMessage<OP::OUT>,
+                                                >,
+                                            >>()
+                                            .unwrap();
+                                    let actor_ref =
+                                        target_node.actor_ref().hold().expect("failed to fetch");
+                                    ChannelStrategy::Forward(Forward::new(
+                                        Channel::Local(actor_ref),
+                                        0.into(),
+                                        pool_info,
+                                    ))
+                                }
+                                _ => panic!("TODO"),
+                            };
+
+                            state_dir.push(state_id.clone());
+                            // set up the backend
+                            let backend = Arc::new(B::create(&state_dir).unwrap());
+
+                            let source_ctx = SourceContext::new(
+                                watermark_interval,
+                                None,
+                                channel_strategy,
+                                operator(backend.clone()),
+                                backend,
+                            );
+                                  */
+
+                            panic!("Not working yet");
+                            /*
+                            let source = LocalFileSource::new(path, source_ctx);
+                            let comp = system.create_erased(Box::new(source));
+                            system
+                                .start_notify(&comp)
+                                .wait_timeout(std::time::Duration::from_millis(2000))
+                                .expect("");
+                            return comp;
+                            */
+                        },
+                    );
                 }
             }
+
+            //let mut dfg_source = self.ctx.dfg.get_mut(&self.prev_dfg_id);
+            //dfg_node.config = conf.clone();
             self.ctx.source_complete = true;
         } else {
-            // Set up constructors for Node and a NodeManager
-            // create an entry for this state_id within state_dir directory
-            //let mut dir = self.ctx.pipeline.arcon_conf().state_dir.clone();
-            state_dir.push(conf.state_id.clone());
-            // set up the backend
-            let backend = Arc::new(B::create(&state_dir).unwrap());
-
+            let manager_backend_ref = backend.clone();
             let manager_constructor = Box::new(
-                |descriptor: String, in_channels: Vec<NodeID>, system: &mut KompactSystem| {
-                    let manager = NodeManager::new(descriptor, in_channels, backend.clone());
-                    let comp = system.create_erased(Box::new(manager));
+                move |descriptor: String, in_channels: Vec<NodeID>, pipeline: &mut Pipeline| {
+                    let manager = NodeManager::new(descriptor, in_channels, manager_backend_ref);
+                    let comp = pipeline.system().create_erased(Box::new(manager));
+                    // Connect to StateManager
+                    pipeline.connect_state_porty(&comp);
+
+                    pipeline
+                        .system()
+                        .start_notify(&comp)
+                        .wait_timeout(std::time::Duration::from_millis(2000))
+                        .expect("Failed to start NodeManager");
                     comp
                 },
             );
@@ -279,7 +346,8 @@ impl<IN: ArconType> Stream<IN> {
                       in_channels: Vec<NodeID>,
                       mut components: Vec<Box<dyn std::any::Any>>,
                       channel_kind: ChannelKind,
-                      system: &mut KompactSystem| {
+                      system: &mut KompactSystem,
+                      manager: ErasedNodeManager| {
                     let channel_strategy = match channel_kind {
                         ChannelKind::Forward => {
                             assert_eq!(components.len(), 1, "Expected a single component target");
@@ -304,10 +372,19 @@ impl<IN: ArconType> Stream<IN> {
                         descriptor,
                         channel_strategy,
                         operator(backend.clone()),
-                        NodeState::new(node_id, in_channels, backend),
+                        NodeState::new(node_id, in_channels, backend.clone()),
                     );
 
                     let node_comp = system.create_erased(Box::new(node));
+
+                    // Connect node_comp with NodeManager
+                    manager.on_dyn_definition(|cd| {
+                        let nm_port = cd.get_provided_port::<NodeManagerPort>().unwrap();
+                        node_comp.on_dyn_definition(|ncd| {
+                            let node_port = ncd.get_required_port::<NodeManagerPort>().unwrap();
+                            biconnect_ports(nm_port, node_port);
+                        });
+                    });
 
                     system
                         .start_notify(&node_comp)
@@ -319,7 +396,7 @@ impl<IN: ArconType> Stream<IN> {
             );
 
             let next_dfg_id = self.ctx.dfg.insert(DFGNode::new(
-                DFGNodeKind::Node(node_constructor),
+                DFGNodeKind::Node(node_constructor, manager_constructor),
                 conf,
                 vec![self.prev_dfg_id],
             ));
@@ -341,8 +418,6 @@ impl<IN: ArconType> Stream<IN> {
     /// Note that this method only builds the pipeline. In order
     /// to start it, see the following [method](Pipeline::start).
     pub fn build(mut self) -> Pipeline {
-        let dfg_len = self.ctx.dfg.len();
-
         let mut target_nodes: Option<Vec<Box<dyn std::any::Any>>> = None;
 
         for dfg_node in self.ctx.dfg.graph.into_iter().rev() {
@@ -359,8 +434,18 @@ impl<IN: ArconType> Stream<IN> {
                         );
                         self.ctx.pipeline.add_source_comp(comp);
                     }
+                    SourceKind::LocalFile(lf) => {
+                        let constructor = lf.constructor.unwrap();
+                        let comp = constructor(
+                            lf.path,
+                            target_nodes.take().unwrap(),
+                            channel_kind,
+                            &mut self.ctx.pipeline.system(),
+                        );
+                        self.ctx.pipeline.add_source_comp(comp);
+                    }
                 },
-                DFGNodeKind::Node(node_cons) => {
+                DFGNodeKind::Node(node_cons, manager_cons) => {
                     let (channel_kind, components) = {
                         match target_nodes {
                             Some(comps) => (dfg_node.channel_kind, comps),
@@ -375,6 +460,15 @@ impl<IN: ArconType> Stream<IN> {
                         }
                     };
 
+                    // Establish NodeManager for this Operator
+
+                    println!("Creating NodeManager for {}", dfg_node.config.state_id);
+                    let manager = manager_cons(
+                        dfg_node.config.state_id.clone(),
+                        vec![NodeID::new(0)],
+                        &mut self.ctx.pipeline,
+                    );
+
                     let node: Box<dyn std::any::Any> = node_cons(
                         String::from("node_1"), // Fix
                         NodeID::new(0),         // Fix
@@ -382,6 +476,7 @@ impl<IN: ArconType> Stream<IN> {
                         components,
                         channel_kind,
                         self.ctx.pipeline.system(),
+                        manager,
                     );
 
                     target_nodes = Some(vec![node]);

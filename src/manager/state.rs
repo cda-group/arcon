@@ -3,7 +3,7 @@
 
 use fxhash::FxHashMap;
 use kompact::prelude::*;
-use std::collections::HashSet;
+use std::{collections::HashSet, sync::mpsc::Sender};
 
 pub type StateID = String;
 
@@ -47,14 +47,15 @@ pub struct StateManager {
     /// Component Context
     ctx: ComponentContext<Self>,
     /// Port for incoming events
-    manager_port: ProvidedPort<StateManagerPort>,
+    pub(crate) manager_port: ProvidedPort<StateManagerPort>,
     /// Set of registerd state ids
     ///
     /// Used to verify that users do not watch for state ids that do not exist
     pub(crate) registered_state_ids: HashSet<StateID>,
     /// Snapshot Catalog
     catalog: FxHashMap<StateID, Snapshot>,
-    /// A map of subscribers per State ID
+    pub(crate) channels: FxHashMap<StateID, Sender<SnapshotRef>>,
+    /// A map of component subscribers per State ID
     pub(crate) subscribers: FxHashMap<StateID, Vec<ActorRefStrong<SnapshotRef>>>,
 }
 
@@ -65,6 +66,7 @@ impl StateManager {
             manager_port: ProvidedPort::uninitialised(),
             registered_state_ids: HashSet::new(),
             catalog: FxHashMap::default(),
+            channels: FxHashMap::default(),
             subscribers: FxHashMap::default(),
         }
     }
@@ -84,6 +86,13 @@ impl Provide<StateManagerPort> for StateManager {
                     for sub in subscribers {
                         sub.tell(state_ref.clone());
                     }
+                }
+                if let Some(channel) = self.channels.get(&id) {
+                    let state_ref = SnapshotRef {
+                        state_id: id.clone(),
+                        snapshot: snapshot.clone(),
+                    };
+                    channel.send(state_ref).unwrap();
                 }
                 self.catalog.insert(id, snapshot);
             }

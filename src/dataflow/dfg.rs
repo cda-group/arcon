@@ -1,5 +1,7 @@
-use crate::{data::NodeID, manager::state::StateID, stream::source::ArconSource};
-use kompact::{component::AbstractComponent, prelude::KompactSystem};
+use crate::{
+    data::NodeID, manager::state::StateID, pipeline::Pipeline, stream::source::ArconSource,
+};
+use kompact::{component::AbstractComponent, prelude::KompactSystem, Never};
 use std::{any::Any, sync::Arc};
 
 /// A logical dataflow-graph.
@@ -93,12 +95,17 @@ impl DFGNode {
 
 pub enum DFGNodeKind {
     Source(SourceKind, ChannelKind),
-    Node(NodeConstructor),
+    Node(NodeConstructor, ManagerConstructor),
 }
 
 pub enum SourceKind {
     Collection(CollectionKind),
+    LocalFile(LocalFileKind),
 }
+pub type ErasedNodeManager = Arc<dyn AbstractComponent<Message = Never>>;
+
+pub type ManagerConstructor =
+    Box<dyn FnOnce(String, Vec<NodeID>, &mut Pipeline) -> ErasedNodeManager>;
 
 pub type NodeConstructor = Box<
     dyn FnOnce(
@@ -108,6 +115,7 @@ pub type NodeConstructor = Box<
         Vec<Box<dyn Any>>,
         ChannelKind,
         &mut KompactSystem,
+        ErasedNodeManager,
     ) -> Box<dyn Any>,
 >;
 
@@ -129,6 +137,29 @@ impl CollectionKind {
     pub fn new(collection: Box<dyn Any>) -> Self {
         Self {
             collection,
+            constructor: None,
+        }
+    }
+}
+
+pub type LocalFileConstructor = Box<
+    dyn FnOnce(
+        String,
+        Vec<Box<dyn Any>>,
+        ChannelKind,
+        &mut KompactSystem,
+    ) -> Arc<dyn AbstractComponent<Message = ArconSource>>,
+>;
+
+pub struct LocalFileKind {
+    pub(crate) path: String,
+    pub(crate) constructor: Option<LocalFileConstructor>,
+}
+
+impl LocalFileKind {
+    pub fn new(path: String) -> Self {
+        Self {
+            path,
             constructor: None,
         }
     }

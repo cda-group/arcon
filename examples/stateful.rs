@@ -17,12 +17,20 @@ impl<B: Backend> MyState<B> {
     }
 }
 
+impl<B: Backend> From<SnapshotRef> for MyState<B> {
+    fn from(snapshot: SnapshotRef) -> Self {
+        let s1_snapshot_dir = std::path::Path::new(&snapshot.snapshot.snapshot_path);
+        let backend = Arc::new(B::restore(&s1_snapshot_dir, &s1_snapshot_dir).unwrap());
+        MyState::new(backend)
+    }
+}
+
 fn main() {
-    let pipeline = Pipeline::default()
+    let mut pipeline = Pipeline::default()
         .collection((0..100).collect::<Vec<u64>>())
-        .filter(|x: &u64| *x > 50)
+        .filter(|x| *x > 50)
         .map_with_state(
-            |x: u64, state: &mut MyState<Sled>| {
+            |x, state: &mut MyState<Sled>| {
                 state.events().append(x)?;
                 Ok(x)
             },
@@ -33,6 +41,10 @@ fn main() {
         )
         .to_console()
         .build();
+
+    pipeline.watch("map_state_one", |epoch, _: MyState<Sled>| {
+        println!("Got State For Epoch {}", epoch);
+    });
 
     pipeline.start();
     pipeline.await_termination();

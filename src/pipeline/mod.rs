@@ -18,8 +18,13 @@ use crate::{
     stream::source::ArconSource,
 };
 use arcon_allocator::Allocator;
+use arcon_state::index::ArconState;
 use kompact::{component::AbstractComponent, prelude::KompactSystem};
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    mpsc,
+    mpsc::{Receiver, Sender},
+    Arc, Mutex,
+};
 
 pub use crate::dataflow::stream::Stream;
 
@@ -141,13 +146,33 @@ impl Pipeline {
         )
     }
 
-    pub(crate) fn connect_state_port<B: Backend>(&mut self, nm: &Arc<Component<NodeManager<B>>>) {
-        biconnect_components::<StateManagerPort, _, _>(&self.state_manager, nm)
-            .expect("connection");
+    pub fn watch<S, F>(&mut self, state_id: impl Into<StateID>, f: F)
+    where
+        S: ArconState + std::convert::From<SnapshotRef>,
+        F: Fn(u64, S) + Send + Sync + 'static,
+    {
+        let (tx, rx): (Sender<SnapshotRef>, Receiver<SnapshotRef>) = mpsc::channel();
+        std::thread::spawn(move || loop {
+            let snapshot_ref = rx.recv().unwrap();
+            let epoch = snapshot_ref.snapshot.epoch;
+            let state: S = snapshot_ref.into();
+            f(epoch, state);
+        });
+
+        self.state_manager.on_definition(|cd| {
+            let state_id = state_id.into();
+            if !cd.registered_state_ids.contains(&state_id) {
+                panic!(
+                    "State id {} has not been registered at the StateManager",
+                    state_id
+                );
+            }
+            cd.channels.insert(state_id, tx);
+        });
     }
 
     /// Add component `c` to receive state snapshots from `state_id`
-    pub fn watch(
+    pub fn watch_with(
         &mut self,
         state_ids: Vec<impl Into<StateID>>,
         c: Arc<dyn AbstractComponent<Message = SnapshotRef>>,
@@ -193,6 +218,28 @@ impl Pipeline {
         Box::new(NodeManager::new(id, in_channels, backend))
     }
 
+    /// Creates a bounded data source using a local file
+    pub fn file<I, A>(self, i: I) -> Stream<A>
+    where
+        I: Into<String>,
+        A: ArconType + std::str::FromStr,
+    {
+        let path = i.into();
+        assert_eq!(
+            std::path::Path::new(&path).exists(),
+            true,
+            "File does not exist"
+        );
+
+        let mut ctx = Context::new(self);
+        let file_kind = LocalFileKind::new(path);
+        let kind = DFGNodeKind::Source(SourceKind::LocalFile(file_kind), Default::default());
+        let dfg_node = DFGNode::new(kind, Default::default(), vec![]);
+        ctx.dfg.insert(dfg_node);
+
+        Stream::new(ctx)
+    }
+
     /// Creates a bounded data source using a Vector of [`ArconType`]
     pub fn collection<I, A>(self, i: I) -> Stream<A>
     where
@@ -218,7 +265,17 @@ impl Pipeline {
             sources, 0,
             "No source components have been created, cannot start the pipeline!"
         );
+
         self.source_manager.actor_ref().tell(ArconSource::Start);
+
+        // Start epoch manager to begin the injection of
+        // epochs into the pipeline.
+        if let Some(epoch_manager) = &self.epoch_manager {
+            self.ctrl_system
+                .start_notify(&epoch_manager)
+                .wait_timeout(std::time::Duration::from_millis(500))
+                .expect("Failed to start EpochManager");
+        }
     }
 
     /// Awaits termination from the pipeline
@@ -235,7 +292,7 @@ impl Pipeline {
         let _ = self.ctrl_system.shutdown();
     }
 
-    /// Internal helper method to add a source component to the [`SourceManager`]
+    // Internal helper method to add a source component to the [`SourceManager`]
     pub(crate) fn add_source_comp(
         &mut self,
         comp: Arc<dyn AbstractComponent<Message = ArconSource>>,
@@ -243,5 +300,20 @@ impl Pipeline {
         self.source_manager.on_definition(|cd| {
             cd.sources.push(comp);
         });
+    }
+
+    pub(crate) fn connect_state_porty(&mut self, nm: &Arc<dyn AbstractComponent<Message = Never>>) {
+        self.state_manager.on_definition(|scd| {
+            nm.on_dyn_definition(|cd| match cd.get_required_port() {
+                Some(p) => biconnect_ports(&mut scd.manager_port, p),
+                None => panic!("Failed to connect NodeManager port to StateManager"),
+            });
+        });
+    }
+
+    // Internal helper method to connect a NodeManager to the StateManager of the Pipeline
+    pub(crate) fn connect_state_port<B: Backend>(&mut self, nm: &Arc<Component<NodeManager<B>>>) {
+        biconnect_components::<StateManagerPort, _, _>(&self.state_manager, nm)
+            .expect("connection");
     }
 }

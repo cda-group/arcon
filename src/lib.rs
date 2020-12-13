@@ -76,7 +76,7 @@ pub mod prelude {
         buffer::event::{BufferPool, BufferReader, BufferWriter, PoolInfo},
         conf::ArconConf,
         data::VersionId,
-        manager::state::StateID,
+        manager::state::{SnapshotRef, StateID},
         pipeline::Pipeline,
         stream::{
             channel::{
