@@ -1,5 +1,5 @@
 use arcon::prelude::*;
-use std::sync::Arc;
+use std::{path::Path, sync::Arc};
 
 #[derive(ArconState)]
 pub struct MyState<B: Backend> {
@@ -19,15 +19,18 @@ impl<B: Backend> MyState<B> {
 
 impl<B: Backend> From<SnapshotRef> for MyState<B> {
     fn from(snapshot: SnapshotRef) -> Self {
-        let s1_snapshot_dir = std::path::Path::new(&snapshot.snapshot.snapshot_path);
-        let backend = Arc::new(B::restore(&s1_snapshot_dir, &s1_snapshot_dir).unwrap());
+        let snapshot_dir = Path::new(&snapshot.snapshot.snapshot_path);
+        let backend = Arc::new(B::restore(&snapshot_dir, &snapshot_dir).unwrap());
         MyState::new(backend)
     }
 }
 
 fn main() {
-    let mut pipeline = Pipeline::default()
-        .collection((0..100).collect::<Vec<u64>>())
+    let mut conf = ArconConf::default();
+    conf.epoch_interval = 10000;
+
+    let mut pipeline = Pipeline::with_conf(conf)
+        .collection((0..10000000).collect::<Vec<u64>>())
         .filter(|x| *x > 50)
         .map_with_state(
             |x, state: &mut MyState<Sled>| {
@@ -39,11 +42,11 @@ fn main() {
                 conf.set_state_id("map_state_one");
             },
         )
-        .to_console()
         .build();
 
-    pipeline.watch("map_state_one", |epoch, _: MyState<Sled>| {
-        println!("Got State For Epoch {}", epoch);
+    pipeline.watch("map_state_one", |epoch, mut s: MyState<Sled>| {
+        let events_len = s.events().len();
+        println!("Events Length {:?} for Epoch {}", events_len, epoch);
     });
 
     pipeline.start();

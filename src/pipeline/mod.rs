@@ -146,6 +146,8 @@ impl Pipeline {
         )
     }
 
+    /// Spawns a new thread to run the function `F` on
+    /// an ArconState object defined through its `StateID` per epoch.
     pub fn watch<S, F>(&mut self, state_id: impl Into<StateID>, f: F)
     where
         S: ArconState + std::convert::From<SnapshotRef>,

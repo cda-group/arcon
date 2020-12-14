@@ -462,7 +462,6 @@ impl<IN: ArconType> Stream<IN> {
 
                     // Establish NodeManager for this Operator
 
-                    println!("Creating NodeManager for {}", dfg_node.config.state_id);
                     let manager = manager_cons(
                         dfg_node.config.state_id.clone(),
                         vec![NodeID::new(0)],
