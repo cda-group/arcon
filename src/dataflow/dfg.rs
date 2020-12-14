@@ -166,6 +166,7 @@ impl LocalFileKind {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum ChannelKind {
     Forward,
     Broadcast,

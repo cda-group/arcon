@@ -1,7 +1,7 @@
 use arcon::prelude::*;
 
 fn main() {
-    let pipeline = Pipeline::default()
+    let mut pipeline = Pipeline::default()
         .collection((0..100).collect::<Vec<u64>>())
         .filter(|x| *x > 50)
         .map(|x| x + 10)

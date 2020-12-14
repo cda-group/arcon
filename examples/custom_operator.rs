@@ -26,7 +26,7 @@ impl Operator for MyOperator {
 }
 
 fn main() {
-    let pipeline = Pipeline::default()
+    let mut pipeline = Pipeline::default()
         .collection((0..100).collect::<Vec<u64>>())
         .filter(|x: &u64| *x > 50)
         .operator(

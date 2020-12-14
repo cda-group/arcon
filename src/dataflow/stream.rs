@@ -8,7 +8,7 @@ use crate::{
         LocalFileConstructor, NodeConstructor, OperatorConfig, SourceKind, DFG,
     },
     manager::node::{NodeManager, NodeManagerPort},
-    pipeline::Pipeline,
+    pipeline::{assembled::AssembledPipeline, Pipeline},
     prelude::{
         ArconMessage, Channel, ChannelStrategy, CollectionSource, Filter, FlatMap, Forward, Map,
         MapInPlace, Node, NodeState,
@@ -203,7 +203,7 @@ impl<IN: ArconType> Stream<IN> {
 
         if is_source {
             let dfg_node = self.ctx.dfg.get_mut(&self.prev_dfg_id);
-            let (mut source_kind, channel_kind) = match &mut dfg_node.kind {
+            let (source_kind, _channel_kind) = match &mut dfg_node.kind {
                 DFGNodeKind::Source(s, c) => (s, c),
                 _ => panic!("Expected a Source, Found Node!"),
             };
@@ -319,20 +319,18 @@ impl<IN: ArconType> Stream<IN> {
                 }
             }
 
-            //let mut dfg_source = self.ctx.dfg.get_mut(&self.prev_dfg_id);
-            //dfg_node.config = conf.clone();
             self.ctx.source_complete = true;
         } else {
             let manager_backend_ref = backend.clone();
             let manager_constructor = Box::new(
                 move |descriptor: String, in_channels: Vec<NodeID>, pipeline: &mut Pipeline| {
                     let manager = NodeManager::new(descriptor, in_channels, manager_backend_ref);
-                    let comp = pipeline.system().create_erased(Box::new(manager));
+                    let comp = pipeline.ctrl_system().create_erased(Box::new(manager));
                     // Connect to StateManager
-                    pipeline.connect_state_porty(&comp);
+                    pipeline.connect_state_port(&comp);
 
                     pipeline
-                        .system()
+                        .ctrl_system()
                         .start_notify(&comp)
                         .wait_timeout(std::time::Duration::from_millis(2000))
                         .expect("Failed to start NodeManager");
@@ -412,12 +410,12 @@ impl<IN: ArconType> Stream<IN> {
 
     /// Builds the Dataflow graph
     ///
-    /// Returns a [`Pipeline`] where all runtime components
+    /// Returns a [`AssembledPipeline`] where all runtime components
     /// have been conneted and started.
     ///
     /// Note that this method only builds the pipeline. In order
     /// to start it, see the following [method](Pipeline::start).
-    pub fn build(mut self) -> Pipeline {
+    pub fn build(mut self) -> AssembledPipeline {
         let mut target_nodes: Option<Vec<Box<dyn std::any::Any>>> = None;
 
         for dfg_node in self.ctx.dfg.graph.into_iter().rev() {
@@ -482,7 +480,7 @@ impl<IN: ArconType> Stream<IN> {
                 }
             }
         }
-        self.ctx.pipeline
+        AssembledPipeline::new(self.ctx.pipeline)
     }
 
     pub(crate) fn new(ctx: Context) -> Self {

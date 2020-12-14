@@ -26,8 +26,10 @@ impl<B: Backend> From<SnapshotRef> for MyState<B> {
 }
 
 fn main() {
-    let mut conf = ArconConf::default();
-    conf.epoch_interval = 10000;
+    let conf = ArconConf {
+        epoch_interval: 10000,
+        ..Default::default()
+    };
 
     let mut pipeline = Pipeline::with_conf(conf)
         .collection((0..10000000).collect::<Vec<u64>>())
