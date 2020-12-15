@@ -1,3 +1,6 @@
+// Copyright (c) 2020, KTH Royal Institute of Technology.
+// SPDX-License-Identifier: AGPL-3.0-only
+
 use super::Pipeline;
 use crate::{
     manager::state::{SnapshotRef, StateID},
@@ -27,20 +30,6 @@ impl AssembledPipeline {
 }
 
 impl AssembledPipeline {
-    /// Awaits termination from the pipeline
-    ///
-    /// Note that this blocks the current thread
-    pub fn await_termination(self) {
-        self.pipeline.data_system.await_termination();
-        self.pipeline.ctrl_system.await_termination();
-    }
-
-    /// Shuts the pipeline down and consumes the struct
-    pub fn shutdown(self) {
-        let _ = self.pipeline.data_system.shutdown();
-        let _ = self.pipeline.ctrl_system.shutdown();
-    }
-
     /// Instructs the SourceManager of the pipeline
     /// to inject a start message to the source components
     /// of the pipeline.
@@ -76,6 +65,20 @@ impl AssembledPipeline {
         }
 
         self.start_flag = true;
+    }
+
+    /// Awaits termination from the pipeline
+    ///
+    /// Note that this blocks the current thread
+    pub fn await_termination(self) {
+        self.pipeline.data_system.await_termination();
+        self.pipeline.ctrl_system.await_termination();
+    }
+
+    /// Shuts the pipeline down and consumes the struct
+    pub fn shutdown(self) {
+        let _ = self.pipeline.data_system.shutdown();
+        let _ = self.pipeline.ctrl_system.shutdown();
     }
 
     /// Spawns a new thread to run the function `F` on the ArconState `S` per epoch.

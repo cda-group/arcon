@@ -8,7 +8,7 @@ use crate::{
         LocalFileConstructor, NodeConstructor, OperatorConfig, SourceKind, DFG,
     },
     manager::node::{NodeManager, NodeManagerPort},
-    pipeline::{assembled::AssembledPipeline, Pipeline},
+    pipeline::{AssembledPipeline, Pipeline},
     prelude::{
         ArconMessage, Channel, ChannelStrategy, CollectionSource, Filter, FlatMap, Forward, Map,
         MapInPlace, Node, NodeState,
@@ -59,9 +59,10 @@ impl Context {
     }
 }
 
+/// High-level object representing a sequence of stream transformations.
 pub struct Stream<IN: ArconType> {
     _marker: PhantomData<IN>,
-    /// ID of the node which outputs this stream.
+    // ID of the node which outputs this stream.
     prev_dfg_id: DFGNodeID,
     ctx: Context,
 }
@@ -302,7 +303,7 @@ impl<IN: ArconType> Stream<IN> {
                                 operator(backend.clone()),
                                 backend,
                             );
-                                  */
+                            */
 
                             panic!("Not working yet");
                             /*
@@ -414,7 +415,7 @@ impl<IN: ArconType> Stream<IN> {
     /// have been conneted and started.
     ///
     /// Note that this method only builds the pipeline. In order
-    /// to start it, see the following [method](Pipeline::start).
+    /// to start it, see the following [method](AssembledPipeline::start).
     pub fn build(mut self) -> AssembledPipeline {
         let mut target_nodes: Option<Vec<Box<dyn std::any::Any>>> = None;
 

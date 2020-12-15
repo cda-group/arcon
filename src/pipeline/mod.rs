@@ -16,10 +16,36 @@ use arcon_allocator::Allocator;
 use kompact::{component::AbstractComponent, prelude::KompactSystem};
 use std::sync::{Arc, Mutex};
 
-pub mod assembled;
+mod assembled;
 
 pub use crate::dataflow::stream::Stream;
+pub use assembled::AssembledPipeline;
 
+/// A Pipeline is the starting point of all Arcon applications.
+/// It contains all necessary runtime components, configuration,
+/// and a custom allocator.
+///
+/// # Creating a Pipeline
+///
+/// See [Configuration](ArconConf)
+///
+/// With the default configuration
+/// ```
+/// use arcon::prelude::Pipeline;
+///
+/// let pipeline = Pipeline::default();
+/// ```
+///
+/// With configuration
+/// ```
+/// use arcon::prelude::{Pipeline, ArconConf};
+///
+/// let conf = ArconConf {
+///     watermark_interval: 2000,
+///     ..Default::default()
+/// };
+/// let pipeline = Pipeline::with_conf(conf);
+/// ```
 #[derive(Clone)]
 pub struct Pipeline {
     /// [`KompactSystem`] for Control Components
@@ -44,16 +70,6 @@ impl Default for Pipeline {
         Self::new(conf)
     }
 }
-
-// A Node with operator type, state backend type, and timer type erased
-//pub type DynamicNode<IN> = Box<dyn CreateErased<ArconMessage<IN>>>;
-// Result of creating a [`DynamicNode`] in a [`KompactSystem`](kompact::prelude::KompactSystem)
-//pub type CreatedDynamicNode<IN> = Arc<dyn AbstractComponent<Message = ArconMessage<IN>>>;
-// A Source with operator type, state backend type, and timer type erased
-//pub type DynamicSource = Box<dyn CreateErased<()>>;
-
-pub type ErasedManager = Box<dyn CreateErased<Never>>;
-pub type ErasedNode<IN> = Box<dyn CreateErased<ArconMessage<IN>>>;
 
 impl Pipeline {
     /// Creates a new Pipeline using the given ArconConf
@@ -151,6 +167,15 @@ impl Pipeline {
     }
 
     /// Creates a bounded data source using a Vector of [`ArconType`]
+    ///
+    /// Returns a [`Stream`] object that users may execute transformations on.
+    ///
+    /// Example
+    /// ```
+    /// use arcon::prelude::*;
+    /// let stream: Stream<u64> = Pipeline::default()
+    ///     .collection((0..100).collect::<Vec<u64>>());
+    /// ```
     pub fn collection<I, A>(self, i: I) -> Stream<A>
     where
         I: Into<Vec<A>>,

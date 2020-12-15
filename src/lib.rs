@@ -1,7 +1,30 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Arcon is a Streaming-first Analytics Engine.
+//! Arcon is a Streaming Analytics Engine.
+//!
+//! # Example
+//!
+//! ```no_run
+//! use arcon::prelude::*;
+//!
+//! let mut pipeline = Pipeline::default()
+//!     .collection((0..100).collect::<Vec<u64>>())
+//!     .filter(|x| *x > 50)
+//!     .map(|x| x + 10)
+//!     .to_console()
+//!     .build();
+//!
+//! pipeline.start();
+//! pipeline.await_termination();
+//! ```
+//!
+//! # Feature Flags
+//!
+//! - `rocksdb`
+//!     - Enables RocksDB to be used as a Backend
+//! - `arcon_serde`
+//!     - Adds serde support for Arcon Types
 
 #![feature(unboxed_closures)]
 #![feature(unsized_fn_params)]
@@ -77,7 +100,7 @@ pub mod prelude {
         conf::ArconConf,
         data::VersionId,
         manager::state::{SnapshotRef, StateID},
-        pipeline::Pipeline,
+        pipeline::{Pipeline, Stream},
         stream::{
             channel::{
                 strategy::{
@@ -105,6 +128,7 @@ pub mod prelude {
     };
     pub use arcon_error::{arcon_err, arcon_err_kind, ArconResult, OperatorResult};
 
+    #[doc(hidden)]
     pub use kompact::{default_components::*, prelude::*};
     #[cfg(feature = "thread_pinning")]
     pub use kompact::{get_core_ids, CoreId};
