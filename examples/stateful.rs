@@ -17,9 +17,9 @@ impl<B: Backend> MyState<B> {
     }
 }
 
-impl<B: Backend> From<SnapshotRef> for MyState<B> {
-    fn from(snapshot: SnapshotRef) -> Self {
-        let snapshot_dir = Path::new(&snapshot.snapshot.snapshot_path);
+impl<B: Backend> From<Snapshot> for MyState<B> {
+    fn from(snapshot: Snapshot) -> Self {
+        let snapshot_dir = Path::new(&snapshot.snapshot_path);
         let backend = Arc::new(B::restore(&snapshot_dir, &snapshot_dir).unwrap());
         MyState::new(backend)
     }

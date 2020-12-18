@@ -98,8 +98,8 @@ pub mod prelude {
     pub use crate::{
         buffer::event::{BufferPool, BufferReader, BufferWriter, PoolInfo},
         conf::ArconConf,
-        data::VersionId,
-        manager::state::{SnapshotRef, StateID},
+        data::{StateID, VersionId},
+        manager::snapshot::Snapshot,
         pipeline::{Pipeline, Stream},
         stream::{
             channel::{

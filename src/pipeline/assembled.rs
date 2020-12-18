@@ -2,10 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use super::Pipeline;
-use crate::{
-    manager::state::{SnapshotRef, StateID},
-    stream::source::ArconSource,
-};
+use crate::{data::StateID, manager::snapshot::Snapshot, stream::source::ArconSource};
 use arcon_state::index::ArconState;
 use kompact::{component::AbstractComponent, prelude::ActorRefFactory};
 use std::sync::{
@@ -41,19 +38,13 @@ impl AssembledPipeline {
             "The AssembledPipeline has already been started"
         );
 
-        assert_ne!(
-            self.pipeline
-                .source_manager
-                .on_definition(|cd| cd.sources.len()),
-            0,
-            "No source components have been created, cannot start the pipeline!"
-        );
-
         // Send start message to manager component
-        self.pipeline
-            .source_manager
-            .actor_ref()
-            .tell(ArconSource::Start);
+        match &self.pipeline.source_manager {
+            Some(source_manager) => {
+                source_manager.actor_ref().tell(ArconSource::Start);
+            }
+            None => panic!("Something went wrong, no source manager has been created!"),
+        }
 
         // Start epoch manager to begin the injection of epochs into the pipeline.
         if let Some(epoch_manager) = &self.pipeline.epoch_manager {
@@ -84,18 +75,18 @@ impl AssembledPipeline {
     /// Spawns a new thread to run the function `F` on the ArconState `S` per epoch.
     pub fn watch<S, F>(&mut self, state_id: impl Into<StateID>, f: F)
     where
-        S: ArconState + std::convert::From<SnapshotRef>,
+        S: ArconState + std::convert::From<Snapshot>,
         F: Fn(u64, S) + Send + Sync + 'static,
     {
-        let (tx, rx): (Sender<SnapshotRef>, Receiver<SnapshotRef>) = mpsc::channel();
+        let (tx, rx): (Sender<Snapshot>, Receiver<Snapshot>) = mpsc::channel();
         std::thread::spawn(move || loop {
-            let snapshot_ref = rx.recv().unwrap();
-            let epoch = snapshot_ref.snapshot.epoch;
-            let state: S = snapshot_ref.into();
+            let snapshot = rx.recv().unwrap();
+            let epoch = snapshot.epoch;
+            let state: S = snapshot.into();
             f(epoch, state);
         });
 
-        self.pipeline.state_manager.on_definition(|cd| {
+        self.pipeline.snapshot_manager.on_definition(|cd| {
             let state_id = state_id.into();
             if !cd.registered_state_ids.contains(&state_id) {
                 panic!(
@@ -114,9 +105,9 @@ impl AssembledPipeline {
     pub fn watch_with(
         &mut self,
         state_ids: Vec<impl Into<StateID>>,
-        c: Arc<dyn AbstractComponent<Message = SnapshotRef>>,
+        c: Arc<dyn AbstractComponent<Message = Snapshot>>,
     ) {
-        self.pipeline.state_manager.on_definition(|cd| {
+        self.pipeline.snapshot_manager.on_definition(|cd| {
             for id in state_ids.into_iter() {
                 let state_id = id.into();
 

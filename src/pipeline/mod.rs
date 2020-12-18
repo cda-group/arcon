@@ -8,7 +8,11 @@ use crate::{
         dfg::{CollectionKind, *},
         stream::Context,
     },
-    manager::{epoch::EpochManager, source::SourceManager, state::StateManager},
+    manager::{
+        epoch::{EpochEvent, EpochManager},
+        snapshot::SnapshotManager,
+        source::SourceManager,
+    },
     prelude::*,
     stream::source::ArconSource,
 };
@@ -57,11 +61,11 @@ pub struct Pipeline {
     /// Arcon allocator for this pipeline
     pub(crate) allocator: Arc<Mutex<Allocator>>,
     /// SourceManager component for this pipeline
-    pub(crate) source_manager: Arc<Component<SourceManager>>,
+    pub(crate) source_manager: Option<Arc<dyn AbstractComponent<Message = ArconSource>>>,
     /// EpochManager component for this pipeline
     pub(crate) epoch_manager: Option<Arc<Component<EpochManager>>>,
-    /// StateManager component for this pipeline
-    pub(crate) state_manager: Arc<Component<StateManager>>,
+    /// SnapshotManager component for this pipeline
+    pub(crate) snapshot_manager: Arc<Component<SnapshotManager>>,
 }
 
 impl Default for Pipeline {
@@ -75,17 +79,16 @@ impl Pipeline {
     /// Creates a new Pipeline using the given ArconConf
     fn new(conf: ArconConf) -> Self {
         let allocator = Arc::new(Mutex::new(Allocator::new(conf.allocator_capacity)));
-        let (ctrl_system, data_system, state_manager, epoch_manager, source_manager) =
-            Self::setup(&conf);
+        let (ctrl_system, data_system, snapshot_manager, epoch_manager) = Self::setup(&conf);
 
         Self {
             ctrl_system,
             data_system,
             conf,
             allocator,
+            snapshot_manager,
             epoch_manager,
-            state_manager,
-            source_manager,
+            source_manager: None,
         }
     }
 
@@ -101,23 +104,19 @@ impl Pipeline {
     ) -> (
         KompactSystem,
         KompactSystem,
-        Arc<Component<StateManager>>,
+        Arc<Component<SnapshotManager>>,
         Option<Arc<Component<EpochManager>>>,
-        Arc<Component<SourceManager>>,
     ) {
-        let kompact_config = arcon_conf.kompact_conf();
-        let data_system = kompact_config.build().expect("KompactSystem");
-        // just build a default system for control layer
-        let ctrl_system = KompactConfig::default().build().unwrap();
+        let data_system = arcon_conf.kompact_conf().build().expect("KompactSystem");
+        let ctrl_system = arcon_conf.kompact_conf().build().expect("KompactSystem");
 
-        let state_manager_comp = ctrl_system.create_dedicated(StateManager::new);
-        let source_manager_comp = ctrl_system.create(SourceManager::new);
+        let snapshot_manager = ctrl_system.create_dedicated(SnapshotManager::new);
 
         let epoch_manager = match arcon_conf.execution_mode {
             ExecutionMode::Local => {
-                let source_manager_ref = source_manager_comp.actor_ref().hold().expect("fail");
+                let snapshot_manager_ref = snapshot_manager.actor_ref().hold().expect("fail");
                 let epoch_manager =
-                    EpochManager::new(arcon_conf.epoch_interval, source_manager_ref);
+                    EpochManager::new(arcon_conf.epoch_interval, snapshot_manager_ref);
                 Some(ctrl_system.create(|| epoch_manager))
             }
             ExecutionMode::Distributed => None,
@@ -126,22 +125,11 @@ impl Pipeline {
         let timeout = std::time::Duration::from_millis(500);
 
         ctrl_system
-            .start_notify(&state_manager_comp)
+            .start_notify(&snapshot_manager)
             .wait_timeout(timeout)
-            .expect("StateManager comp never started!");
+            .expect("SnapshotManager comp never started!");
 
-        ctrl_system
-            .start_notify(&source_manager_comp)
-            .wait_timeout(timeout)
-            .expect("SourceManager comp never started!");
-
-        (
-            ctrl_system,
-            data_system,
-            state_manager_comp,
-            epoch_manager,
-            source_manager_comp,
-        )
+        (ctrl_system, data_system, snapshot_manager, epoch_manager)
     }
 
     /// Creates a bounded data source using a local file
@@ -159,7 +147,7 @@ impl Pipeline {
 
         let mut ctx = Context::new(self);
         let file_kind = LocalFileKind::new(path);
-        let kind = DFGNodeKind::Source(SourceKind::LocalFile(file_kind), Default::default());
+        let kind = DFGNodeKind::Source(SourceKind::LocalFile(file_kind), Default::default(), None);
         let dfg_node = DFGNode::new(kind, Default::default(), vec![]);
         ctx.dfg.insert(dfg_node);
 
@@ -183,7 +171,11 @@ impl Pipeline {
     {
         let collection_kind = CollectionKind::new(Box::new(i.into()));
         let mut ctx = Context::new(self);
-        let kind = DFGNodeKind::Source(SourceKind::Collection(collection_kind), Default::default());
+        let kind = DFGNodeKind::Source(
+            SourceKind::Collection(collection_kind),
+            Default::default(),
+            None,
+        );
         let dfg_node = DFGNode::new(kind, Default::default(), vec![]);
         ctx.dfg.insert(dfg_node);
         Stream::new(ctx)
@@ -219,24 +211,29 @@ impl Pipeline {
         &self.conf
     }
 
-    // Internal helper method to add a source component to the [`SourceManager`]
-    pub(crate) fn add_source_comp(
+    // Internal helper method to connect a SnapshotManagerPort between the
+    // SnapshotManager and NodeManager.
+    pub(crate) fn connect_snapshot_port(
         &mut self,
-        comp: Arc<dyn AbstractComponent<Message = ArconSource>>,
+        nm: &Arc<dyn AbstractComponent<Message = Never>>,
     ) {
-        self.source_manager.on_definition(|cd| {
-            cd.sources.push(comp);
-        });
-    }
-
-    // Internal helper method to connect a StateManagerPort between the
-    // StateManager and NodeManager.
-    pub(crate) fn connect_state_port(&mut self, nm: &Arc<dyn AbstractComponent<Message = Never>>) {
-        self.state_manager.on_definition(|scd| {
+        self.snapshot_manager.on_definition(|scd| {
             nm.on_dyn_definition(|cd| match cd.get_required_port() {
                 Some(p) => biconnect_ports(&mut scd.manager_port, p),
-                None => panic!("Failed to connect NodeManager port to StateManager"),
+                None => panic!("Failed to connect NodeManager port to SnapshotManager"),
             });
         });
+    }
+    pub(crate) fn epoch_manager(&self) -> ActorRefStrong<EpochEvent> {
+        if let Some(epoch_manager) = &self.epoch_manager {
+            epoch_manager
+                .actor_ref()
+                .hold()
+                .expect("Failed to fetch actor ref")
+        } else {
+            panic!(
+                "Only local reference supported for now. should really be an ActorPath later on"
+            );
+        }
     }
 }

@@ -2,12 +2,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
-    data::{ArconType, NodeID},
+    data::{ArconType, NodeID, StateID},
     dataflow::dfg::{
         ChannelKind, CollectionConstructor, DFGNode, DFGNodeID, DFGNodeKind, ErasedNodeManager,
-        LocalFileConstructor, NodeConstructor, OperatorConfig, SourceKind, DFG,
+        LocalFileConstructor, NodeConstructor, OperatorConfig, SourceKind, SourceManagerCons, DFG,
     },
-    manager::node::{NodeManager, NodeManagerPort},
+    manager::{
+        node::{NodeManager, NodeManagerPort},
+        source::SourceManager,
+    },
     pipeline::{AssembledPipeline, Pipeline},
     prelude::{
         ArconMessage, Channel, ChannelStrategy, CollectionSource, Filter, FlatMap, Forward, Map,
@@ -15,14 +18,14 @@ use crate::{
     },
     stream::{
         operator::Operator,
-        source::{local_file::LocalFileSource, SourceContext},
+        source::{local_file::LocalFileSource, ArconSource, SourceContext},
     },
 };
 use arcon_error::OperatorResult;
 use arcon_state::{index::ArconState, Backend};
 use kompact::{
     component::AbstractComponent,
-    prelude::{biconnect_ports, ActorRefFactory, KompactSystem},
+    prelude::{biconnect_ports, ActorRefFactory, ActorRefStrong, KompactSystem},
 };
 use std::{marker::PhantomData, sync::Arc};
 
@@ -204,12 +207,56 @@ impl<IN: ArconType> Stream<IN> {
 
         if is_source {
             let dfg_node = self.ctx.dfg.get_mut(&self.prev_dfg_id);
-            let (source_kind, _channel_kind) = match &mut dfg_node.kind {
-                DFGNodeKind::Source(s, c) => (s, c),
+            let (source_kind, _channel_kind, mut manager_cons) = match &mut dfg_node.kind {
+                DFGNodeKind::Source(s, c, m) => (s, c, m),
                 _ => panic!("Expected a Source, Found Node!"),
             };
 
             let watermark_interval = self.ctx.pipeline.arcon_conf().watermark_interval;
+
+            // source_manager_cons
+            let manager_constructor: SourceManagerCons = Box::new(
+                move |state_id: StateID, source_comps, pipeline: &mut Pipeline| {
+                    let epoch_manager_ref = pipeline.epoch_manager();
+
+                    let manager = SourceManager::new(
+                        state_id,
+                        source_comps,
+                        epoch_manager_ref,
+                        backend.clone(),
+                    );
+                    let comp = pipeline.ctrl_system().create_erased(Box::new(manager));
+
+                    let source_ref: ActorRefStrong<ArconSource> =
+                        comp.actor_ref().hold().expect("fail");
+
+                    pipeline.snapshot_manager.on_definition(|scd| {
+                        comp.on_dyn_definition(|cd| match cd.get_required_port() {
+                            Some(p) => biconnect_ports(&mut scd.manager_port, p),
+                            None => {
+                                panic!("Failed to connect SourceManager port to SnapshotManager")
+                            }
+                        });
+                    });
+
+                    if let Some(epoch_manager) = &pipeline.epoch_manager {
+                        epoch_manager.on_definition(|cd| {
+                            cd.source_manager = Some(source_ref);
+                        });
+                    }
+
+                    pipeline
+                        .ctrl_system()
+                        .start_notify(&comp)
+                        .wait_timeout(std::time::Duration::from_millis(2000))
+                        .expect("Failed to start SourceManager");
+
+                    pipeline.source_manager = Some(comp.clone());
+                    comp
+                },
+            );
+
+            *manager_cons = Some(manager_constructor);
 
             match source_kind {
                 SourceKind::Collection(col_source) => {
@@ -325,10 +372,16 @@ impl<IN: ArconType> Stream<IN> {
             let manager_backend_ref = backend.clone();
             let manager_constructor = Box::new(
                 move |descriptor: String, in_channels: Vec<NodeID>, pipeline: &mut Pipeline| {
-                    let manager = NodeManager::new(descriptor, in_channels, manager_backend_ref);
+                    let epoch_manager_ref = pipeline.epoch_manager();
+                    let manager = NodeManager::new(
+                        descriptor,
+                        epoch_manager_ref,
+                        in_channels,
+                        manager_backend_ref,
+                    );
                     let comp = pipeline.ctrl_system().create_erased(Box::new(manager));
-                    // Connect to StateManager
-                    pipeline.connect_state_port(&comp);
+
+                    pipeline.connect_snapshot_port(&comp);
 
                     pipeline
                         .ctrl_system()
@@ -421,29 +474,40 @@ impl<IN: ArconType> Stream<IN> {
 
         for dfg_node in self.ctx.dfg.graph.into_iter().rev() {
             match dfg_node.kind {
-                DFGNodeKind::Source(source_kind, channel_kind) => match source_kind {
-                    SourceKind::Collection(c) => {
-                        let collection: Box<dyn std::any::Any> = c.collection;
-                        let constructor = c.constructor.unwrap();
-                        let comp = constructor(
-                            collection,
-                            target_nodes.take().unwrap(),
-                            channel_kind,
-                            &mut self.ctx.pipeline.system(),
-                        );
-                        self.ctx.pipeline.add_source_comp(comp);
+                DFGNodeKind::Source(source_kind, channel_kind, manager_cons) => {
+                    let source_manager_cons =
+                        manager_cons.expect("no source manager constructor set");
+
+                    match source_kind {
+                        SourceKind::Collection(c) => {
+                            let collection: Box<dyn std::any::Any> = c.collection;
+                            let constructor = c.constructor.unwrap();
+                            let comp = constructor(
+                                collection,
+                                target_nodes.take().unwrap(),
+                                channel_kind,
+                                &mut self.ctx.pipeline.system(),
+                            );
+                            let source_manager = source_manager_cons(
+                                dfg_node.config.state_id,
+                                vec![comp],
+                                &mut self.ctx.pipeline,
+                            );
+                        }
+                        SourceKind::LocalFile(lf) => {
+                            /*
+                            let constructor = lf.constructor.unwrap();
+                            let comp = constructor(
+                                lf.path,
+                                target_nodes.take().unwrap(),
+                                channel_kind,
+                                &mut self.ctx.pipeline.system(),
+                            );
+                            */
+                            //self.ctx.pipeline.add_source_comp(comp);
+                        }
                     }
-                    SourceKind::LocalFile(lf) => {
-                        let constructor = lf.constructor.unwrap();
-                        let comp = constructor(
-                            lf.path,
-                            target_nodes.take().unwrap(),
-                            channel_kind,
-                            &mut self.ctx.pipeline.system(),
-                        );
-                        self.ctx.pipeline.add_source_comp(comp);
-                    }
-                },
+                }
                 DFGNodeKind::Node(node_cons, manager_cons) => {
                     let (channel_kind, components) = {
                         match target_nodes {

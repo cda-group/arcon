@@ -1,5 +1,7 @@
 use crate::{
-    data::NodeID, manager::state::StateID, pipeline::Pipeline, stream::source::ArconSource,
+    data::{NodeID, StateID},
+    pipeline::Pipeline,
+    stream::source::ArconSource,
 };
 use kompact::{component::AbstractComponent, prelude::KompactSystem, Never};
 use std::{any::Any, sync::Arc};
@@ -87,14 +89,14 @@ impl DFGNode {
     }
     pub fn is_source(&self) -> bool {
         match self.kind {
-            DFGNodeKind::Source(_, _) => true,
+            DFGNodeKind::Source(_, _, _) => true,
             _ => false,
         }
     }
 }
 
 pub enum DFGNodeKind {
-    Source(SourceKind, ChannelKind),
+    Source(SourceKind, ChannelKind, Option<SourceManagerCons>),
     Node(NodeConstructor, ManagerConstructor),
 }
 
@@ -103,6 +105,11 @@ pub enum SourceKind {
     LocalFile(LocalFileKind),
 }
 pub type ErasedNodeManager = Arc<dyn AbstractComponent<Message = Never>>;
+pub type ErasedSourceManager = Arc<dyn AbstractComponent<Message = ArconSource>>;
+
+pub type SourceComponent = Arc<dyn AbstractComponent<Message = ArconSource>>;
+pub type SourceManagerCons =
+    Box<dyn FnOnce(StateID, Vec<SourceComponent>, &mut Pipeline) -> ErasedSourceManager>;
 
 pub type ManagerConstructor =
     Box<dyn FnOnce(String, Vec<NodeID>, &mut Pipeline) -> ErasedNodeManager>;
