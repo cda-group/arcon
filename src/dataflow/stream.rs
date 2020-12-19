@@ -2,31 +2,17 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
-    data::{ArconType, NodeID, StateID},
-    dataflow::dfg::{
-        ChannelKind, CollectionConstructor, DFGNode, DFGNodeID, DFGNodeKind, ErasedNodeManager,
-        LocalFileConstructor, NodeConstructor, OperatorConfig, SourceKind, SourceManagerCons, DFG,
-    },
-    manager::{
-        node::{NodeManager, NodeManagerPort},
-        source::SourceManager,
+    data::{ArconType, NodeID},
+    dataflow::{
+        constructor::*,
+        dfg::{ChannelKind, DFGNode, DFGNodeID, DFGNodeKind, OperatorConfig, SourceKind, DFG},
     },
     pipeline::{AssembledPipeline, Pipeline},
-    prelude::{
-        ArconMessage, Channel, ChannelStrategy, CollectionSource, Filter, FlatMap, Forward, Map,
-        MapInPlace, Node, NodeState,
-    },
-    stream::{
-        operator::Operator,
-        source::{local_file::LocalFileSource, ArconSource, SourceContext},
-    },
+    prelude::{Filter, FlatMap, Map, MapInPlace},
+    stream::operator::Operator,
 };
 use arcon_error::OperatorResult;
 use arcon_state::{index::ArconState, Backend};
-use kompact::{
-    component::AbstractComponent,
-    prelude::{biconnect_ports, ActorRefFactory, ActorRefStrong, KompactSystem},
-};
 use std::{marker::PhantomData, sync::Arc};
 
 // Defines a Default State Backend for high-level operators that do not use any
@@ -47,7 +33,6 @@ impl<T> StreamFnBounds for T where T: Send + Sync + Clone + 'static {}
 pub struct Context {
     pub(crate) dfg: DFG,
     pipeline: Pipeline,
-    source_complete: bool,
     console_output: bool,
 }
 
@@ -56,7 +41,6 @@ impl Context {
         Self {
             dfg: Default::default(),
             pipeline,
-            source_complete: false,
             console_output: false,
         }
     }
@@ -195,266 +179,23 @@ impl<IN: ArconType> Stream<IN> {
         c(&mut conf);
 
         // Yeah, fix this..
-        let is_source =
-            self.ctx.dfg.get(&self.prev_dfg_id).is_source() && !self.ctx.source_complete;
         let pool_info = self.ctx.pipeline.get_pool_info();
 
         // Set up directory for the operator and create Backend
-        let state_id = conf.state_id.clone();
         let mut state_dir = self.ctx.pipeline.arcon_conf().state_dir.clone();
         state_dir.push(conf.state_id.clone());
         let backend = Arc::new(B::create(&state_dir).unwrap());
 
-        if is_source {
-            let dfg_node = self.ctx.dfg.get_mut(&self.prev_dfg_id);
-            let (source_kind, _channel_kind, mut manager_cons) = match &mut dfg_node.kind {
-                DFGNodeKind::Source(s, c, m) => (s, c, m),
-                _ => panic!("Expected a Source, Found Node!"),
-            };
+        let node_constructor = node_cons(operator, backend.clone(), pool_info);
+        let manager_constructor = node_manager_cons(backend);
 
-            let watermark_interval = self.ctx.pipeline.arcon_conf().watermark_interval;
+        let next_dfg_id = self.ctx.dfg.insert(DFGNode::new(
+            DFGNodeKind::Node(node_constructor, manager_constructor),
+            conf,
+            vec![self.prev_dfg_id],
+        ));
 
-            // source_manager_cons
-            let manager_constructor: SourceManagerCons = Box::new(
-                move |state_id: StateID, source_comps, pipeline: &mut Pipeline| {
-                    let epoch_manager_ref = pipeline.epoch_manager();
-
-                    let manager = SourceManager::new(
-                        state_id,
-                        source_comps,
-                        epoch_manager_ref,
-                        backend.clone(),
-                    );
-                    let comp = pipeline.ctrl_system().create_erased(Box::new(manager));
-
-                    let source_ref: ActorRefStrong<ArconSource> =
-                        comp.actor_ref().hold().expect("fail");
-
-                    pipeline.snapshot_manager.on_definition(|scd| {
-                        comp.on_dyn_definition(|cd| match cd.get_required_port() {
-                            Some(p) => biconnect_ports(&mut scd.manager_port, p),
-                            None => {
-                                panic!("Failed to connect SourceManager port to SnapshotManager")
-                            }
-                        });
-                    });
-
-                    if let Some(epoch_manager) = &pipeline.epoch_manager {
-                        epoch_manager.on_definition(|cd| {
-                            cd.source_manager = Some(source_ref);
-                        });
-                    }
-
-                    pipeline
-                        .ctrl_system()
-                        .start_notify(&comp)
-                        .wait_timeout(std::time::Duration::from_millis(2000))
-                        .expect("Failed to start SourceManager");
-
-                    pipeline.source_manager = Some(comp.clone());
-                    comp
-                },
-            );
-
-            *manager_cons = Some(manager_constructor);
-
-            match source_kind {
-                SourceKind::Collection(col_source) => {
-                    let cons: CollectionConstructor = Box::new(
-                        move |collection: Box<dyn std::any::Any>,
-                              mut components: Vec<Box<dyn std::any::Any>>,
-                              channel_kind: ChannelKind,
-                              system: &mut KompactSystem| {
-                            let channel_strategy = match channel_kind {
-                                ChannelKind::Forward => {
-                                    let component = components.remove(0);
-                                    let target_node =
-                                        component
-                                            .downcast::<Arc<
-                                                dyn AbstractComponent<
-                                                    Message = ArconMessage<OP::OUT>,
-                                                >,
-                                            >>()
-                                            .unwrap();
-                                    let actor_ref =
-                                        target_node.actor_ref().hold().expect("failed to fetch");
-                                    ChannelStrategy::Forward(Forward::new(
-                                        Channel::Local(actor_ref),
-                                        0.into(),
-                                        pool_info,
-                                    ))
-                                }
-                                _ => panic!("TODO"),
-                            };
-
-                            let collection: Vec<OP::IN> = *collection.downcast().unwrap();
-                            state_dir.push(state_id.clone());
-                            // set up the backend
-                            let backend = Arc::new(B::create(&state_dir).unwrap());
-                            let source_ctx = SourceContext::new(
-                                watermark_interval,
-                                None,
-                                channel_strategy,
-                                operator(backend.clone()),
-                                backend,
-                            );
-                            let collection_source = CollectionSource::new(collection, source_ctx);
-                            let comp = system.create_erased(Box::new(collection_source));
-                            system
-                                .start_notify(&comp)
-                                .wait_timeout(std::time::Duration::from_millis(2000))
-                                .expect("");
-                            return comp;
-                        },
-                    );
-
-                    col_source.constructor = Some(cons);
-                }
-                SourceKind::LocalFile(_file_source) => {
-                    let cons: LocalFileConstructor = Box::new(
-                        move |_path: String,
-                              mut _components: Vec<Box<dyn std::any::Any>>,
-                              _channel_kind: ChannelKind,
-                              _system: &mut KompactSystem| {
-                            /*
-                            let channel_strategy = match channel_kind {
-                                ChannelKind::Forward => {
-                                    let component = components.remove(0);
-                                    let target_node =
-                                        component
-                                            .downcast::<Arc<
-                                                dyn AbstractComponent<
-                                                    Message = ArconMessage<OP::OUT>,
-                                                >,
-                                            >>()
-                                            .unwrap();
-                                    let actor_ref =
-                                        target_node.actor_ref().hold().expect("failed to fetch");
-                                    ChannelStrategy::Forward(Forward::new(
-                                        Channel::Local(actor_ref),
-                                        0.into(),
-                                        pool_info,
-                                    ))
-                                }
-                                _ => panic!("TODO"),
-                            };
-
-                            state_dir.push(state_id.clone());
-                            // set up the backend
-                            let backend = Arc::new(B::create(&state_dir).unwrap());
-
-                            let source_ctx = SourceContext::new(
-                                watermark_interval,
-                                None,
-                                channel_strategy,
-                                operator(backend.clone()),
-                                backend,
-                            );
-                            */
-
-                            panic!("Not working yet");
-                            /*
-                            let source = LocalFileSource::new(path, source_ctx);
-                            let comp = system.create_erased(Box::new(source));
-                            system
-                                .start_notify(&comp)
-                                .wait_timeout(std::time::Duration::from_millis(2000))
-                                .expect("");
-                            return comp;
-                            */
-                        },
-                    );
-                }
-            }
-
-            self.ctx.source_complete = true;
-        } else {
-            let manager_backend_ref = backend.clone();
-            let manager_constructor = Box::new(
-                move |descriptor: String, in_channels: Vec<NodeID>, pipeline: &mut Pipeline| {
-                    let epoch_manager_ref = pipeline.epoch_manager();
-                    let manager = NodeManager::new(
-                        descriptor,
-                        epoch_manager_ref,
-                        in_channels,
-                        manager_backend_ref,
-                    );
-                    let comp = pipeline.ctrl_system().create_erased(Box::new(manager));
-
-                    pipeline.connect_snapshot_port(&comp);
-
-                    pipeline
-                        .ctrl_system()
-                        .start_notify(&comp)
-                        .wait_timeout(std::time::Duration::from_millis(2000))
-                        .expect("Failed to start NodeManager");
-                    comp
-                },
-            );
-
-            let node_constructor: NodeConstructor = Box::new(
-                move |descriptor: String,
-                      node_id: NodeID,
-                      in_channels: Vec<NodeID>,
-                      mut components: Vec<Box<dyn std::any::Any>>,
-                      channel_kind: ChannelKind,
-                      system: &mut KompactSystem,
-                      manager: ErasedNodeManager| {
-                    let channel_strategy = match channel_kind {
-                        ChannelKind::Forward => {
-                            assert_eq!(components.len(), 1, "Expected a single component target");
-                            let component = components.remove(0);
-                            let target_node = component
-                        .downcast::<Arc<dyn AbstractComponent<Message = ArconMessage<OP::OUT>>>>()
-                        .unwrap();
-                            let actor_ref =
-                                target_node.actor_ref().hold().expect("failed to fetch");
-                            ChannelStrategy::Forward(Forward::new(
-                                Channel::Local(actor_ref),
-                                node_id,
-                                pool_info,
-                            ))
-                        }
-                        ChannelKind::Console => ChannelStrategy::Console,
-                        ChannelKind::Mute => ChannelStrategy::Mute,
-                        _ => unimplemented!(),
-                    };
-
-                    let node = Node::new(
-                        descriptor,
-                        channel_strategy,
-                        operator(backend.clone()),
-                        NodeState::new(node_id, in_channels, backend.clone()),
-                    );
-
-                    let node_comp = system.create_erased(Box::new(node));
-
-                    // Connect node_comp with NodeManager
-                    manager.on_dyn_definition(|cd| {
-                        let nm_port = cd.get_provided_port::<NodeManagerPort>().unwrap();
-                        node_comp.on_dyn_definition(|ncd| {
-                            let node_port = ncd.get_required_port::<NodeManagerPort>().unwrap();
-                            biconnect_ports(nm_port, node_port);
-                        });
-                    });
-
-                    system
-                        .start_notify(&node_comp)
-                        .wait_timeout(std::time::Duration::from_millis(2000))
-                        .expect("");
-
-                    Box::new(node_comp) as Box<dyn std::any::Any>
-                },
-            );
-
-            let next_dfg_id = self.ctx.dfg.insert(DFGNode::new(
-                DFGNodeKind::Node(node_constructor, manager_constructor),
-                conf,
-                vec![self.prev_dfg_id],
-            ));
-
-            self.prev_dfg_id = next_dfg_id;
-        }
+        self.prev_dfg_id = next_dfg_id;
         Stream {
             _marker: PhantomData,
             prev_dfg_id: self.prev_dfg_id,
@@ -474,38 +215,22 @@ impl<IN: ArconType> Stream<IN> {
 
         for dfg_node in self.ctx.dfg.graph.into_iter().rev() {
             match dfg_node.kind {
-                DFGNodeKind::Source(source_kind, channel_kind, manager_cons) => {
-                    let source_manager_cons =
-                        manager_cons.expect("no source manager constructor set");
-
+                DFGNodeKind::Source(source_kind, channel_kind, source_manager_cons) => {
                     match source_kind {
-                        SourceKind::Collection(c) => {
-                            let collection: Box<dyn std::any::Any> = c.collection;
-                            let constructor = c.constructor.unwrap();
+                        SourceKind::Single(constructor) => {
                             let comp = constructor(
-                                collection,
                                 target_nodes.take().unwrap(),
                                 channel_kind,
-                                &mut self.ctx.pipeline.system(),
+                                &mut self.ctx.pipeline.data_system(),
                             );
+
                             let source_manager = source_manager_cons(
                                 dfg_node.config.state_id,
                                 vec![comp],
                                 &mut self.ctx.pipeline,
                             );
                         }
-                        SourceKind::LocalFile(lf) => {
-                            /*
-                            let constructor = lf.constructor.unwrap();
-                            let comp = constructor(
-                                lf.path,
-                                target_nodes.take().unwrap(),
-                                channel_kind,
-                                &mut self.ctx.pipeline.system(),
-                            );
-                            */
-                            //self.ctx.pipeline.add_source_comp(comp);
-                        }
+                        SourceKind::Parallel => {}
                     }
                 }
                 DFGNodeKind::Node(node_cons, manager_cons) => {

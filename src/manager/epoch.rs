@@ -3,10 +3,8 @@
 
 use crate::{
     data::{Epoch, StateID},
-    manager::snapshot::Snapshot,
-    stream::source::ArconSource,
+    stream::source::SourceEvent,
 };
-use fxhash::*;
 use kompact::prelude::*;
 use std::collections::HashSet;
 
@@ -30,7 +28,7 @@ pub struct EpochManager {
     /// Interval in millis to schedule injection timer
     epoch_interval: u64,
     /// Reference to the SourceManager
-    pub(crate) source_manager: Option<ActorRefStrong<ArconSource>>,
+    pub(crate) source_manager: Option<ActorRefStrong<SourceEvent>>,
     /// Kompact Timer
     epoch_timeout: Option<ScheduledTimer>,
     /// Set of known state ids the EpochManager expects acknowledgements from
@@ -64,7 +62,7 @@ impl EpochManager {
         match self.epoch_timeout {
             Some(ref timeout) if *timeout == timeout_id => {
                 if let Some(source_manager) = &self.source_manager {
-                    source_manager.tell(ArconSource::Epoch(Epoch::new(self.next_epoch)));
+                    source_manager.tell(SourceEvent::Epoch(Epoch::new(self.next_epoch)));
                     self.next_epoch += 1;
                 } else {
                     error!(self.ctx.log(), "SourceManager was never set");
@@ -81,7 +79,6 @@ impl EpochManager {
     fn handle_epoch_event(&mut self, event: EpochEvent) {
         match event {
             EpochEvent::Ack(state_id, epoch) => {
-                println!("I GOT ACK");
                 // verify the state_id
                 if self.known_state_ids.contains(&state_id) {
                     // Make sure the epoch is for the ongoing checkpoint
@@ -90,7 +87,6 @@ impl EpochManager {
                         if self.epoch_acks.len() == self.known_state_ids.len() {
                             self.last_committed_epoch = epoch.epoch;
                             self.ongoing_epoch_commit = epoch.epoch + 1;
-                            println!("SENDING COMMIT MSG");
                             self.snapshot_manager.tell(EpochCommit(epoch));
                             self.epoch_acks.clear();
                         }

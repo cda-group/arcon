@@ -5,16 +5,16 @@ use crate::{
     buffer::event::PoolInfo,
     conf::{ArconConf, ExecutionMode},
     dataflow::{
-        dfg::{CollectionKind, *},
-        stream::Context,
+        constructor::{source_cons, source_manager_cons},
+        dfg::*,
+        stream::{Context, DefaultBackend},
     },
     manager::{
         epoch::{EpochEvent, EpochManager},
         snapshot::SnapshotManager,
-        source::SourceManager,
     },
     prelude::*,
-    stream::source::ArconSource,
+    stream::source::{local_file::LocalFileSource, Source, SourceEvent},
 };
 use arcon_allocator::Allocator;
 use kompact::{component::AbstractComponent, prelude::KompactSystem};
@@ -61,7 +61,7 @@ pub struct Pipeline {
     /// Arcon allocator for this pipeline
     pub(crate) allocator: Arc<Mutex<Allocator>>,
     /// SourceManager component for this pipeline
-    pub(crate) source_manager: Option<Arc<dyn AbstractComponent<Message = ArconSource>>>,
+    pub(crate) source_manager: Option<Arc<dyn AbstractComponent<Message = SourceEvent>>>,
     /// EpochManager component for this pipeline
     pub(crate) epoch_manager: Option<Arc<Component<EpochManager>>>,
     /// SnapshotManager component for this pipeline
@@ -132,6 +132,20 @@ impl Pipeline {
         (ctrl_system, data_system, snapshot_manager, epoch_manager)
     }
 
+    pub fn source<S: Source>(self, source: S) -> Stream<S::Data> {
+        let cons = source_cons(source, self.get_pool_info());
+        let mut state_dir = self.arcon_conf().state_dir.clone();
+        state_dir.push("source_manager");
+        let backend = Arc::new(DefaultBackend::create(&state_dir).unwrap());
+        let manager_cons = source_manager_cons(backend);
+
+        let mut ctx = Context::new(self);
+        let kind = DFGNodeKind::Source(SourceKind::Single(cons), Default::default(), manager_cons);
+        let dfg_node = DFGNode::new(kind, Default::default(), vec![]);
+        ctx.dfg.insert(dfg_node);
+        Stream::new(ctx)
+    }
+
     /// Creates a bounded data source using a local file
     pub fn file<I, A>(self, i: I) -> Stream<A>
     where
@@ -144,14 +158,8 @@ impl Pipeline {
             true,
             "File does not exist"
         );
-
-        let mut ctx = Context::new(self);
-        let file_kind = LocalFileKind::new(path);
-        let kind = DFGNodeKind::Source(SourceKind::LocalFile(file_kind), Default::default(), None);
-        let dfg_node = DFGNode::new(kind, Default::default(), vec![]);
-        ctx.dfg.insert(dfg_node);
-
-        Stream::new(ctx)
+        let source = LocalFileSource::new(path);
+        self.source(source)
     }
 
     /// Creates a bounded data source using a Vector of [`ArconType`]
@@ -169,16 +177,9 @@ impl Pipeline {
         I: Into<Vec<A>>,
         A: ArconType,
     {
-        let collection_kind = CollectionKind::new(Box::new(i.into()));
-        let mut ctx = Context::new(self);
-        let kind = DFGNodeKind::Source(
-            SourceKind::Collection(collection_kind),
-            Default::default(),
-            None,
-        );
-        let dfg_node = DFGNode::new(kind, Default::default(), vec![]);
-        ctx.dfg.insert(dfg_node);
-        Stream::new(ctx)
+        let collection = i.into();
+        let source = CollectionSource::new(collection);
+        self.source(source)
     }
 
     /// Creates a PoolInfo struct to be used by a ChannelStrategy
@@ -199,6 +200,10 @@ impl Pipeline {
 
     /// Give out a mutable reference to the KompactSystem of the pipeline
     pub(crate) fn system(&mut self) -> &mut KompactSystem {
+        &mut self.data_system
+    }
+
+    pub(crate) fn data_system(&mut self) -> &mut KompactSystem {
         &mut self.data_system
     }
 

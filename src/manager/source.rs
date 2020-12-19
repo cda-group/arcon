@@ -5,7 +5,7 @@ use super::{
     epoch::EpochEvent,
     snapshot::{SnapshotEvent, SnapshotManagerPort},
 };
-use crate::{data::StateID, stream::source::ArconSource};
+use crate::{data::StateID, stream::source::SourceEvent};
 use arcon_error::ArconResult;
 use arcon_state::Backend;
 use kompact::{component::AbstractComponent, prelude::*};
@@ -26,7 +26,7 @@ pub(crate) struct SourceManager<B: Backend> {
     /// Vector of source components
     ///
     /// May contain more than 1 component if the source supports parallelism
-    pub(crate) sources: Vec<Arc<dyn AbstractComponent<Message = ArconSource>>>,
+    pub(crate) sources: Vec<Arc<dyn AbstractComponent<Message = SourceEvent>>>,
     /// A shared backend for sources
     backend: Arc<B>,
     /// Port to the SnapshotManager
@@ -38,7 +38,7 @@ pub(crate) struct SourceManager<B: Backend> {
 impl<B: Backend> SourceManager<B> {
     pub fn new(
         state_id: StateID,
-        sources: Vec<Arc<dyn AbstractComponent<Message = ArconSource>>>,
+        sources: Vec<Arc<dyn AbstractComponent<Message = SourceEvent>>>,
         epoch_manager: ActorRefStrong<EpochEvent>,
         backend: Arc<B>,
     ) -> Self {
@@ -51,49 +51,6 @@ impl<B: Backend> SourceManager<B> {
             epoch_manager,
         }
     }
-    #[inline]
-    fn checkpoint(&mut self) -> ArconResult<()> {
-        /*
-        if let Some(base_dir) = &self.ctx.config()["checkpoint_dir"].as_string() {
-            let curr_epoch = self.manager_state.current_epoch().get().unwrap().epoch;
-
-            let checkpoint_dir = format!(
-                "{}/checkpoint_{id}_{epoch}",
-                base_dir,
-                id = self.state_id,
-                epoch = curr_epoch,
-            );
-
-            self.backend.checkpoint(checkpoint_dir.as_ref())?;
-
-            // Send snapshot to SnapshotManager
-            self.snapshot_manager_port.trigger(SnapshotEvent::Snapshot(
-                self.state_id.clone(),
-                Snapshot::new(curr_epoch, checkpoint_dir.clone()),
-            ));
-
-            // Send Ack to EpochManager
-            self.epoch_manager.tell(EpochEvent::Ack(
-                self.state_id.clone(),
-                Epoch::new(curr_epoch),
-            ));
-
-            // bump epoch
-            self.manager_state.current_epoch().rmw(|e| {
-                e.epoch += 1;
-            });
-
-            debug!(
-                self.ctx.log(),
-                "Completed a Checkpoint to path {}", checkpoint_dir
-            );
-        } else {
-            return arcon_err!("Failed to fetch checkpoint_dir from Config");
-        }
-            */
-
-        Ok(())
-    }
 }
 
 impl<B: Backend> ComponentLifecycle for SourceManager<B> {
@@ -102,11 +59,6 @@ impl<B: Backend> ComponentLifecycle for SourceManager<B> {
             self.ctx.log(),
             "Started SourceManager for {}", self.state_id,
         );
-        // Register state id
-        self.snapshot_manager_port
-            .trigger(SnapshotEvent::Register(self.state_id.clone()));
-        self.epoch_manager
-            .tell(EpochEvent::Register(self.state_id.clone()));
         Handled::Ok
     }
 }
@@ -130,20 +82,11 @@ where
 }
 
 impl<B: Backend> Actor for SourceManager<B> {
-    type Message = ArconSource;
+    type Message = SourceEvent;
 
     fn receive_local(&mut self, msg: Self::Message) -> Handled {
-        match msg {
-            ArconSource::Epoch(_) => {
-                for source in &self.sources {
-                    source.actor_ref().tell(msg.clone());
-                }
-            }
-            ArconSource::Start => {
-                for source in &self.sources {
-                    source.actor_ref().tell(msg.clone());
-                }
-            }
+        for source in &self.sources {
+            source.actor_ref().tell(msg.clone());
         }
         Handled::Ok
     }

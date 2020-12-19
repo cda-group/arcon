@@ -2,32 +2,78 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
-    data::{ArconElement, ArconEvent, Epoch, Watermark},
-    prelude::state,
-    stream::{
-        channel::strategy::ChannelStrategy,
-        operator::{Operator, OperatorContext},
-    },
+    data::{ArconElement, ArconEvent, ArconType, Epoch, Watermark},
+    stream::channel::strategy::ChannelStrategy,
     util::SafelySendableFn,
 };
-use arcon_error::OperatorResult;
 use kompact::prelude::ComponentDefinition;
-use std::sync::Arc;
 
 pub mod collection;
+pub mod local_file;
 //#[cfg(feature = "kafka")]
 //pub mod kafka;
-pub mod local_file;
-#[cfg(feature = "socket")]
-pub mod socket;
+//#[cfg(feature = "socket")]
+//pub mod socket;
 
-/// Message type Arcon sources must implement
+/// Source Event
 #[derive(Debug, Clone)]
-pub enum ArconSource {
+pub enum SourceEvent {
+    Watermark(Watermark),
     Epoch(Epoch),
     Start,
 }
 
+pub trait Source: Send + Sized + 'static {
+    /// The type of data produced by the Source
+    type Data: ArconType;
+
+    /// Process a batch of source data
+    ///
+    /// Safety: This method must be non-blocking
+    fn process_batch(&mut self, ctx: SourceContext<Self, impl ComponentDefinition>);
+}
+
+pub struct SourceContext<'a, 'b, 'c, S, CD>
+where
+    S: Source,
+    CD: ComponentDefinition + Sized + 'static,
+{
+    ts_extractor: &'b Option<&'static dyn SafelySendableFn(&S::Data) -> u64>,
+    /// Channel Strategy that is used to pass on events
+    channel_strategy: &'c mut ChannelStrategy<S::Data>,
+    /// A reference to the backing ComponentDefinition
+    source: &'a CD,
+}
+
+impl<'a, 'b, 'c, S, CD> SourceContext<'a, 'b, 'c, S, CD>
+where
+    S: Source,
+    CD: ComponentDefinition + Sized + 'static,
+{
+    #[inline]
+    pub(crate) fn new(source: &'a CD, channel_strategy: &'c mut ChannelStrategy<S::Data>) -> Self {
+        Self {
+            ts_extractor: &None,
+            channel_strategy,
+            source,
+        }
+    }
+    pub fn output(&mut self, data: S::Data) {
+        let elem = match &self.ts_extractor {
+            Some(ts_fn) => {
+                let ts = (ts_fn)(&data);
+                ArconElement::with_timestamp(data, ts)
+            }
+            None => ArconElement::new(data),
+        };
+
+        self.channel_strategy
+            .add(ArconEvent::Element(elem), self.source);
+    }
+    pub fn signal_end(&mut self) {}
+}
+
+/*
 /// Common Context for all Source implementations
 pub struct SourceContext<OP: Operator + 'static, B: state::Backend> {
     /// Timestamp extractor function
@@ -142,3 +188,4 @@ where
         }
     }
 }
+*/

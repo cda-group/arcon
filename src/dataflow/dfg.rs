@@ -1,7 +1,8 @@
+use super::constructor::*;
 use crate::{
     data::{NodeID, StateID},
     pipeline::Pipeline,
-    stream::source::ArconSource,
+    stream::source::SourceEvent,
 };
 use kompact::{component::AbstractComponent, prelude::KompactSystem, Never};
 use std::{any::Any, sync::Arc};
@@ -96,80 +97,13 @@ impl DFGNode {
 }
 
 pub enum DFGNodeKind {
-    Source(SourceKind, ChannelKind, Option<SourceManagerCons>),
-    Node(NodeConstructor, ManagerConstructor),
+    Source(SourceKind, ChannelKind, SourceManagerConstructor),
+    Node(NodeConstructor, NodeManagerConstructor),
 }
 
 pub enum SourceKind {
-    Collection(CollectionKind),
-    LocalFile(LocalFileKind),
-}
-pub type ErasedNodeManager = Arc<dyn AbstractComponent<Message = Never>>;
-pub type ErasedSourceManager = Arc<dyn AbstractComponent<Message = ArconSource>>;
-
-pub type SourceComponent = Arc<dyn AbstractComponent<Message = ArconSource>>;
-pub type SourceManagerCons =
-    Box<dyn FnOnce(StateID, Vec<SourceComponent>, &mut Pipeline) -> ErasedSourceManager>;
-
-pub type ManagerConstructor =
-    Box<dyn FnOnce(String, Vec<NodeID>, &mut Pipeline) -> ErasedNodeManager>;
-
-pub type NodeConstructor = Box<
-    dyn FnOnce(
-        String,
-        NodeID,
-        Vec<NodeID>,
-        Vec<Box<dyn Any>>,
-        ChannelKind,
-        &mut KompactSystem,
-        ErasedNodeManager,
-    ) -> Box<dyn Any>,
->;
-
-pub type CollectionConstructor = Box<
-    dyn FnOnce(
-        Box<dyn Any>,
-        Vec<Box<dyn Any>>,
-        ChannelKind,
-        &mut KompactSystem,
-    ) -> Arc<dyn AbstractComponent<Message = ArconSource>>,
->;
-
-pub struct CollectionKind {
-    pub(crate) collection: Box<dyn Any>,
-    pub(crate) constructor: Option<CollectionConstructor>,
-}
-
-impl CollectionKind {
-    pub fn new(collection: Box<dyn Any>) -> Self {
-        Self {
-            collection,
-            constructor: None,
-        }
-    }
-}
-
-pub type LocalFileConstructor = Box<
-    dyn FnOnce(
-        String,
-        Vec<Box<dyn Any>>,
-        ChannelKind,
-        &mut KompactSystem,
-    ) -> Arc<dyn AbstractComponent<Message = ArconSource>>,
->;
-
-pub struct LocalFileKind {
-    pub(crate) path: String,
-    pub(crate) constructor: Option<LocalFileConstructor>,
-}
-
-impl LocalFileKind {
-    pub fn new(path: String) -> Self {
-        Self {
-            path,
-            constructor: None,
-        }
-    }
+    Single(SourceConstructor),
+    Parallel,
 }
 
 #[derive(Debug)]

@@ -1,134 +1,37 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use super::SourceContext;
-use crate::{
-    prelude::state,
-    stream::{operator::Operator, source::ArconSource},
-};
+use super::{Source, SourceContext};
+use crate::data::ArconType;
 use kompact::prelude::*;
-use std::cell::RefCell;
 
 const RESCHEDULE_EVERY: usize = 10000;
 
-#[derive(Debug, Clone, Copy)]
-struct ContinueSending;
-struct LoopbackPort;
-impl Port for LoopbackPort {
-    type Indication = Never;
-    type Request = ContinueSending;
+pub struct CollectionSource<A: ArconType> {
+    data: Vec<A>,
 }
 
-#[derive(ComponentDefinition)]
-pub struct CollectionSource<OP, B>
-where
-    OP: Operator + 'static,
-    B: state::Backend,
-{
-    ctx: ComponentContext<Self>,
-    loopback_send: RequiredPort<LoopbackPort>,
-    loopback_receive: ProvidedPort<LoopbackPort>,
-    pub source_ctx: RefCell<SourceContext<OP, B>>,
-    collection: RefCell<Vec<OP::IN>>,
-    counter: usize,
-}
-
-impl<OP, B> CollectionSource<OP, B>
-where
-    OP: Operator + 'static,
-    B: state::Backend,
-{
-    pub fn new(collection: Vec<OP::IN>, source_ctx: SourceContext<OP, B>) -> Self {
-        CollectionSource {
-            ctx: ComponentContext::uninitialised(),
-            loopback_send: RequiredPort::uninitialised(),
-            loopback_receive: ProvidedPort::uninitialised(),
-            source_ctx: RefCell::new(source_ctx),
-            collection: RefCell::new(collection),
-            counter: 0,
-        }
+impl<A: ArconType> CollectionSource<A> {
+    pub fn new(data: Vec<A>) -> Self {
+        Self { data }
     }
-    fn process_collection(&mut self) {
-        let mut collection = self.collection.borrow_mut();
-        let drain_to = RESCHEDULE_EVERY.min(collection.len());
-        let mut source_ctx = self.source_ctx.borrow_mut();
-        for record in collection.drain(..drain_to) {
-            let elem = source_ctx.extract_element(record);
-            if let Err(err) = source_ctx.process(elem, self) {
-                error!(self.ctx.log(), "Error while processing record {:?}", err);
-            }
+}
 
-            self.counter += 1;
-            if (self.counter as u64) == source_ctx.watermark_interval {
-                source_ctx.generate_watermark(self);
-                self.counter = 0;
-            }
+impl<A: ArconType> Source for CollectionSource<A> {
+    type Data = A;
+
+    fn process_batch(&mut self, mut ctx: SourceContext<Self, impl ComponentDefinition>) {
+        let drain_to = RESCHEDULE_EVERY.min(self.data.len());
+        for record in self.data.drain(..drain_to) {
+            ctx.output(record);
         }
-        if !collection.is_empty() {
-            self.loopback_send.trigger(ContinueSending);
-        } else {
-            source_ctx.generate_watermark(self);
+        if self.data.is_empty() {
+            ctx.signal_end();
         }
     }
 }
 
-impl<OP, B> ComponentLifecycle for CollectionSource<OP, B>
-where
-    OP: Operator + 'static,
-    B: state::Backend,
-{
-    fn on_start(&mut self) -> Handled {
-        let shared = self.loopback_receive.share();
-        self.loopback_send.connect(shared);
-        Handled::Ok
-    }
-}
-
-impl<OP, B> Provide<LoopbackPort> for CollectionSource<OP, B>
-where
-    OP: Operator + 'static,
-    B: state::Backend,
-{
-    fn handle(&mut self, _event: ContinueSending) -> Handled {
-        self.process_collection();
-        Handled::Ok
-    }
-}
-
-impl<OP, B> Require<LoopbackPort> for CollectionSource<OP, B>
-where
-    OP: Operator + 'static,
-    B: state::Backend,
-{
-    fn handle(&mut self, _event: Never) -> Handled {
-        unreachable!("Never type has no instance");
-    }
-}
-
-impl<OP, B> Actor for CollectionSource<OP, B>
-where
-    OP: Operator + 'static,
-    B: state::Backend,
-{
-    type Message = ArconSource;
-    fn receive_local(&mut self, msg: Self::Message) -> Handled {
-        match msg {
-            ArconSource::Epoch(epoch) => {
-                self.source_ctx.borrow_mut().inject_epoch(epoch, self);
-            }
-            ArconSource::Start => {
-                // trigger start of the processing...
-                self.loopback_send.trigger(ContinueSending);
-            }
-        }
-
-        Handled::Ok
-    }
-    fn receive_network(&mut self, _: NetMessage) -> Handled {
-        unreachable!();
-    }
-}
-
+/*
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -205,3 +108,4 @@ mod tests {
         pipeline.shutdown();
     }
 }
+*/

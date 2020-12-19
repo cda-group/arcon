@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use super::Pipeline;
-use crate::{data::StateID, manager::snapshot::Snapshot, stream::source::ArconSource};
+use crate::{data::StateID, manager::snapshot::Snapshot, stream::source::SourceEvent};
 use arcon_state::index::ArconState;
 use kompact::{component::AbstractComponent, prelude::ActorRefFactory};
 use std::sync::{
@@ -41,7 +41,7 @@ impl AssembledPipeline {
         // Send start message to manager component
         match &self.pipeline.source_manager {
             Some(source_manager) => {
-                source_manager.actor_ref().tell(ArconSource::Start);
+                source_manager.actor_ref().tell(SourceEvent::Start);
             }
             None => panic!("Something went wrong, no source manager has been created!"),
         }

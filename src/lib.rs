@@ -90,11 +90,13 @@ pub mod test_utils {
 
 /// Helper module that imports everything related to arcon into scope
 pub mod prelude {
+    /*
     #[cfg(feature = "socket")]
     pub use crate::stream::{
         operator::sink::socket::SocketSink,
         source::socket::{SocketKind, SocketSource},
     };
+    */
     pub use crate::{
         buffer::event::{BufferPool, BufferReader, BufferWriter, PoolInfo},
         conf::ArconConf,
@@ -115,7 +117,7 @@ pub mod prelude {
                 sink::local_file::LocalFileSink,
                 Operator, OperatorContext,
             },
-            source::{collection::CollectionSource, local_file::LocalFileSource},
+            source::collection::CollectionSource,
         },
     };
 

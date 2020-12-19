@@ -4,6 +4,8 @@
 /// Debug version of [Node]
 pub mod debug;
 
+pub mod source;
+
 use crate::{
     data::RawArconMessage,
     manager::node::{NodeEvent::Checkpoint, *},
