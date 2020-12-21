@@ -39,6 +39,9 @@ cfg_if::cfg_if! {
     }
 }
 
+/// A type alias for registered state within Arcon
+pub type StateID = String;
+
 /// A type alias for an ArconType version id
 pub type VersionId = u32;
 

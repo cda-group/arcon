@@ -1,6 +1,5 @@
-use crate::manager::state::StateID;
-use arcon_state::BackendType;
-use std::any::Any;
+use super::constructor::*;
+use crate::data::StateID;
 
 /// A logical dataflow-graph.
 #[allow(dead_code)]
@@ -8,7 +7,7 @@ use std::any::Any;
 pub struct DFG {
     /// The graph is represented as a Vec for maximum space-efficiency.
     /// This works since nodes are never deleted from the graph.
-    graph: Vec<DFGNode>,
+    pub(crate) graph: Vec<DFGNode>,
 }
 
 impl DFG {
@@ -21,6 +20,7 @@ impl DFG {
     }
 
     /// Returns a reference to the [`DFGNode`] associated to a [`DFGNodeID`].
+    #[allow(dead_code)]
     pub fn get(&self, id: &DFGNodeID) -> &DFGNode {
         self.graph.get(id.0).unwrap()
     }
@@ -28,25 +28,17 @@ impl DFG {
 
 /// The ID of a [`DFGNode`] in the dataflow graph.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
-pub struct DFGNodeID(usize);
+pub struct DFGNodeID(pub usize);
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct OperatorConfig {
-    /// State Backend type to use for this DFG Node
-    ///
-    /// Default backend is Sled
-    backend_type: BackendType,
     /// State ID for this DFG node
     ///
     /// Default ID is a random generated one
-    state_id: StateID,
+    pub(crate) state_id: StateID,
 }
 
 impl OperatorConfig {
-    /// Modifies the [`BackendType`] of this logical DFGNode
-    pub fn set_backend(&mut self, backend_type: BackendType) {
-        self.backend_type = backend_type;
-    }
     /// Modifies the [`StateID`] of this logical DFGNode
     pub fn set_state_id<I: Into<StateID>>(&mut self, i: I) {
         self.state_id = i.into();
@@ -56,10 +48,6 @@ impl OperatorConfig {
 impl Default for OperatorConfig {
     fn default() -> Self {
         Self {
-            #[cfg(feature = "rocksdb")]
-            backend_type: BackendType::Rocks,
-            #[cfg(not(feature = "rocksdb"))]
-            backend_type: Default::default(),
             state_id: format!("op_{}", uuid::Uuid::new_v4().to_string()),
         }
     }
@@ -68,11 +56,12 @@ impl Default for OperatorConfig {
 /// A logical node in the dataflow graph.
 #[allow(dead_code)]
 pub struct DFGNode {
-    kind: DFGNodeKind,
+    pub(crate) kind: DFGNodeKind,
     /// Ingoing edges to a node.
     ingoing: Vec<DFGNodeID>,
-    config: OperatorConfig,
-    // TODO: constructor
+    /// Operator Configuration for this node
+    pub(crate) config: OperatorConfig,
+    pub(crate) channel_kind: ChannelKind,
 }
 
 impl DFGNode {
@@ -81,15 +70,41 @@ impl DFGNode {
             kind,
             ingoing,
             config,
+            channel_kind: Default::default(),
         }
     }
 }
 
 pub enum DFGNodeKind {
-    Source(Box<dyn Any>),
-    Node(Box<dyn Any>),
+    Source(SourceKind, ChannelKind, SourceManagerConstructor),
+    Node(NodeConstructor, NodeManagerConstructor),
 }
 
+#[allow(dead_code)]
+pub enum SourceKind {
+    Single(SourceConstructor),
+    Parallel,
+}
+
+#[derive(Debug)]
+#[allow(dead_code)]
+pub enum ChannelKind {
+    Forward,
+    Broadcast,
+    RoundRobin,
+    KeyBy,
+    Console,
+    Mute,
+}
+
+impl Default for ChannelKind {
+    fn default() -> Self {
+        ChannelKind::Forward
+    }
+}
+
+// TODO: Fix
+/*
 #[test]
 fn create_dfg() {
     use DFGNodeKind::*;
@@ -129,3 +144,4 @@ fn create_dfg() {
     assert_eq!(DFGNodeID(2), node2);
     assert_eq!(DFGNodeID(3), node3);
 }
+*/

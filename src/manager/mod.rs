@@ -7,5 +7,5 @@ pub mod epoch;
 pub mod node;
 /// A [kompact] component that keeps track of one or more source components
 pub mod source;
-/// A [kompact] component that keeps track of the state of a pipeline
-pub mod state;
+
+pub mod snapshot;

@@ -2,9 +2,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
-    data::ArconNever,
-    prelude::state,
-    stream::{operator::Operator, source::SourceContext},
+    data::ArconType,
+    dataflow::source::SourceConf,
+    stream::{
+        source::{Source, SourceContext},
+        time::ArconTime,
+    },
 };
 use kompact::prelude::*;
 use std::{
@@ -14,98 +17,67 @@ use std::{
     str::FromStr,
 };
 
-#[derive(ComponentDefinition)]
-pub struct LocalFileSource<OP, B>
+const RESCHEDULE_EVERY: usize = 10000;
+
+pub struct LocalFileSource<A>
 where
-    OP: Operator + 'static,
-    OP::IN: FromStr,
-    B: state::Backend,
+    A: ArconType + FromStr,
 {
-    ctx: ComponentContext<Self>,
-    source_ctx: RefCell<SourceContext<OP, B>>,
-    file_path: String,
+    lines: RefCell<Vec<String>>,
+    conf: SourceConf<A>,
 }
 
-impl<OP, B> LocalFileSource<OP, B>
+impl<A> LocalFileSource<A>
 where
-    OP: Operator + 'static,
-    OP::IN: FromStr,
-    B: state::Backend,
+    A: ArconType + FromStr,
 {
-    pub fn new(file_path: String, source_ctx: SourceContext<OP, B>) -> Self {
+    pub fn new(file_path: String, conf: SourceConf<A>) -> Self {
+        let f = File::open(file_path).expect("failed to open file");
+        let reader = BufReader::new(f);
+        let lines = reader
+            .lines()
+            .collect::<std::io::Result<Vec<String>>>()
+            .expect("");
         LocalFileSource {
-            ctx: ComponentContext::uninitialised(),
-            source_ctx: RefCell::new(source_ctx),
-            file_path,
+            lines: RefCell::new(lines),
+            conf,
         }
     }
-    pub fn process_file(&mut self) {
-        if let Ok(f) = File::open(&self.file_path) {
-            let reader = BufReader::new(f);
-            let mut counter: u64 = 0;
-            let mut source_ctx = self.source_ctx.borrow_mut();
-            let interval = source_ctx.watermark_interval;
-            for line in reader.lines() {
-                match line {
-                    Ok(l) => {
-                        if let Ok(data) = l.parse::<OP::IN>() {
-                            let elem = source_ctx.extract_element(data);
-                            if let Err(err) = source_ctx.process(elem, self) {
-                                error!(self.ctx.log(), "Error while processing record {:?}", err);
-                            }
-                            counter += 1;
+}
 
-                            if counter == interval {
-                                source_ctx.generate_watermark(self);
-                                counter = 0;
-                            }
-                        } else {
-                            error!(self.ctx.log(), "Unable to parse line {}", l);
+impl<A> Source for LocalFileSource<A>
+where
+    A: ArconType + FromStr,
+{
+    type Data = A;
+
+    fn process_batch(&self, mut ctx: SourceContext<Self, impl ComponentDefinition>) {
+        let drain_to = RESCHEDULE_EVERY.min(self.lines.borrow().len());
+        for line in self.lines.borrow_mut().drain(..drain_to) {
+            match line.parse::<A>() {
+                Ok(record) => match &self.conf.time {
+                    ArconTime::Event => match &self.conf.extractor {
+                        Some(extractor) => {
+                            let timestamp = extractor(&record);
+                            ctx.output_with_timestamp(record, timestamp);
                         }
-                    }
-                    Err(e) => {
-                        error!(
-                            self.ctx.log(),
-                            "Unable to read line with err {}",
-                            e.to_string()
-                        );
-                    }
-                }
+                        None => {
+                            panic!("Cannot use ArconTime::Event without an timestamp extractor")
+                        }
+                    },
+                    ArconTime::Process => ctx.output(record),
+                },
+                Err(_) => (), // TODO: log parsing error
             }
-            // We are done, generate a watermark...
-            source_ctx.generate_watermark(self);
-        } else {
-            error!(self.ctx.log(), "Unable to open file {}", self.file_path);
+        }
+
+        if self.lines.borrow().is_empty() {
+            ctx.signal_end();
         }
     }
 }
 
-impl<OP, B> ComponentLifecycle for LocalFileSource<OP, B>
-where
-    OP: Operator + 'static,
-    OP::IN: FromStr,
-    B: state::Backend,
-{
-    fn on_start(&mut self) -> Handled {
-        self.process_file();
-        Handled::Ok
-    }
-}
-
-impl<OP, B> NetworkActor for LocalFileSource<OP, B>
-where
-    OP: Operator + 'static,
-    OP::IN: FromStr,
-    B: state::Backend,
-{
-    type Message = Never;
-    type Deserialiser = Never;
-
-    fn receive(&mut self, _sender: Option<ActorPath>, _msg: Self::Message) -> Handled {
-        unreachable!(ArconNever::IS_UNREACHABLE);
-    }
-}
-
+/*
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -189,3 +161,4 @@ mod tests {
         });
     }
 }
+*/

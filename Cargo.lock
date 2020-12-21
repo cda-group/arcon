@@ -78,7 +78,6 @@ dependencies = [
  "cfg-if 0.1.10",
  "criterion",
  "crossbeam-utils 0.7.2",
- "downcast",
  "futures",
  "fxhash",
  "hocon",
@@ -826,12 +825,6 @@ name = "doc-comment"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fea41bba32d969b513997752735605054bc0dfa92b4c56bf1189f2e174be7a10"
-
-[[package]]
-name = "downcast"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4bb454f0228b18c7f4c3b0ebbee346ed9c52e7443b0999cd543ff3571205701d"
 
 [[package]]
 name = "either"

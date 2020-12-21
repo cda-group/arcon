@@ -1,7 +1,32 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Arcon is a Streaming-first Analytics Engine.
+//! Arcon is a Streaming Analytics Engine.
+//!
+//! # Example
+//!
+//! ```no_run
+//! use arcon::prelude::*;
+//!
+//! let mut pipeline = Pipeline::default()
+//!     .collection((0..100).collect::<Vec<u64>>(), |conf| {
+//!         conf.set_arcon_time(ArconTime::Process);
+//!     })
+//!     .filter(|x| *x > 50)
+//!     .map(|x| x + 10)
+//!     .to_console()
+//!     .build();
+//!
+//! pipeline.start();
+//! pipeline.await_termination();
+//! ```
+//!
+//! # Feature Flags
+//!
+//! - `rocksdb`
+//!     - Enables RocksDB to be used as a Backend
+//! - `arcon_serde`
+//!     - Adds serde support for Arcon Types
 
 #![feature(unboxed_closures)]
 #![feature(unsized_fn_params)]
@@ -67,17 +92,19 @@ pub mod test_utils {
 
 /// Helper module that imports everything related to arcon into scope
 pub mod prelude {
+    /*
     #[cfg(feature = "socket")]
     pub use crate::stream::{
         operator::sink::socket::SocketSink,
         source::socket::{SocketKind, SocketSource},
     };
+    */
     pub use crate::{
         buffer::event::{BufferPool, BufferReader, BufferWriter, PoolInfo},
         conf::ArconConf,
-        data::VersionId,
-        manager::state::StateID,
-        pipeline::Pipeline,
+        data::{StateID, VersionId},
+        manager::snapshot::Snapshot,
+        pipeline::{AssembledPipeline, Pipeline, Stream},
         stream::{
             channel::{
                 strategy::{
@@ -92,7 +119,8 @@ pub mod prelude {
                 sink::local_file::LocalFileSink,
                 Operator, OperatorContext,
             },
-            source::{collection::CollectionSource, local_file::LocalFileSource},
+            source::collection::CollectionSource,
+            time::ArconTime,
         },
     };
 
@@ -105,6 +133,7 @@ pub mod prelude {
     };
     pub use arcon_error::{arcon_err, arcon_err_kind, ArconResult, OperatorResult};
 
+    #[doc(hidden)]
     pub use kompact::{default_components::*, prelude::*};
     #[cfg(feature = "thread_pinning")]
     pub use kompact::{get_core_ids, CoreId};

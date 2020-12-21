@@ -12,6 +12,8 @@ spec.json
 run-pass/
 shell.nix
 
+op_*
+
 # Compile workspace
 build/
 

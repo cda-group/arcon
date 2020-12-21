@@ -4,6 +4,8 @@
 /// Debug version of [Node]
 pub mod debug;
 
+pub mod source;
+
 use crate::{
     data::RawArconMessage,
     manager::node::{NodeEvent::Checkpoint, *},
@@ -74,7 +76,7 @@ pub struct NodeState<OP: Operator + 'static, B: Backend> {
     watermarks: FxHashMap<NodeID, Watermark>,
     /// Map of blocked senders
     #[ephemeral]
-    blocked_channels: FxHashMap<NodeID, ()>,
+    blocked_channels: FxHashSet<NodeID>,
     /// Current Watermark value for the Node
     #[ephemeral]
     current_watermark: Watermark,
@@ -107,7 +109,7 @@ impl<OP: Operator + 'static, B: Backend> NodeState<OP, B> {
         Self {
             message_buffer,
             watermarks,
-            blocked_channels: FxHashMap::default(),
+            blocked_channels: FxHashSet::default(),
             current_watermark: Watermark::new(0),
             current_epoch: Epoch::new(0),
             in_channels,
@@ -263,7 +265,7 @@ where
 
     #[inline(always)]
     fn sender_blocked(&mut self, sender: &NodeID) -> bool {
-        self.node_state.blocked_channels().contains_key(sender)
+        self.node_state.blocked_channels().contains(sender)
     }
 
     #[cfg(feature = "metrics")]
@@ -350,7 +352,7 @@ where
                     }
 
                     // Add the sender to the blocked set.
-                    self.node_state.blocked_channels().insert(sender, ());
+                    self.node_state.blocked_channels().insert(sender);
 
                     // If all senders blocked we can transition to new Epoch
                     if self.node_state.blocked_channels().len() == self.node_state.in_channels.len()
@@ -527,6 +529,7 @@ mod tests {
         // And a debug sink receiving its results
         let mut pipeline = Pipeline::default();
         let pool_info = pipeline.get_pool_info();
+        let epoch_manager_ref = pipeline.epoch_manager();
         let system = &pipeline.system();
 
         let sink = system.create(DebugNode::<i32>::new);
@@ -548,7 +551,12 @@ mod tests {
         let descriptor = String::from("node_");
         let in_channels = vec![1.into(), 2.into(), 3.into()];
 
-        let nm = NodeManager::new(descriptor.clone(), in_channels.clone(), backend.clone());
+        let nm = NodeManager::new(
+            descriptor.clone(),
+            epoch_manager_ref,
+            in_channels.clone(),
+            backend.clone(),
+        );
         let node_manager_comp = system.create(|| nm);
 
         system

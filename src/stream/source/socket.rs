@@ -19,6 +19,38 @@ pub enum SocketKind {
     Udp,
 }
 
+pub struct SocketSource<A, F>
+where
+    A: ArconType + FromStr,
+    F: SafelySendableFn(&A) -> Option<u64> + 'static,
+{
+    data: RefCell<Vec<A>>,
+    extractor: F,
+    sock_addr: SocketAddr,
+    sock_kind: SocketKind,
+}
+
+impl<A, F> SocketSource<A, F> 
+where
+    A: ArconType + FromStr,
+    F: SafelySendableFn(&A) -> Option<u64> + 'static,
+{
+    pub fn new(
+        extractor: F,
+        sock_addr: SocketAddr,
+        sock_kind: SocketKind,
+    ) -> Self {
+        SocketSource {
+            data: RefCell::new(Vec::new()),
+            extractor,
+            sock_addr,
+            sock_kind,
+        }
+    }
+
+}
+
+
 #[derive(ComponentDefinition)]
 pub struct SocketSource<OP, B>
 where
@@ -28,8 +60,6 @@ where
 {
     ctx: ComponentContext<Self>,
     source_ctx: RefCell<SourceContext<OP, B>>,
-    sock_addr: SocketAddr,
-    sock_kind: SocketKind,
 }
 
 impl<OP, B> SocketSource<OP, B>
@@ -38,19 +68,6 @@ where
     OP::IN: FromStr,
     B: state::Backend,
 {
-    pub fn new(
-        sock_addr: SocketAddr,
-        sock_kind: SocketKind,
-        source_ctx: SourceContext<OP, B>,
-    ) -> Self {
-        assert!(source_ctx.watermark_interval > 0);
-        SocketSource {
-            ctx: ComponentContext::uninitialised(),
-            source_ctx: RefCell::new(source_ctx),
-            sock_addr,
-            sock_kind,
-        }
-    }
 }
 
 impl<OP, B> ComponentLifecycle for SocketSource<OP, B>
