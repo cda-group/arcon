@@ -2,54 +2,55 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use super::{Source, SourceContext};
-use crate::{data::ArconType, util::SafelySendableFn};
+use crate::{data::ArconType, dataflow::source::SourceConf, stream::time::ArconTime};
 use kompact::prelude::*;
 use std::cell::RefCell;
 
 const RESCHEDULE_EVERY: usize = 10000;
 
-pub struct CollectionSource<A, F>
+pub struct CollectionSource<A>
 where
     A: ArconType,
-    F: SafelySendableFn(&A) -> Option<u64> + 'static,
 {
     data: RefCell<Vec<A>>,
-    extractor: F,
+    conf: SourceConf<A>,
 }
 
-impl<A, F> CollectionSource<A, F>
+impl<A> CollectionSource<A>
 where
     A: ArconType,
-    F: SafelySendableFn(&A) -> Option<u64> + 'static,
 {
-    pub fn new(data: Vec<A>, extractor: F) -> Self {
+    pub fn new(data: Vec<A>, conf: SourceConf<A>) -> Self {
         Self {
             data: RefCell::new(data),
-            extractor,
+            conf,
         }
     }
 }
 
-impl<A, F> Source for CollectionSource<A, F>
+impl<A> Source for CollectionSource<A>
 where
     A: ArconType,
-    F: SafelySendableFn(&A) -> Option<u64> + 'static,
 {
     type Data = A;
 
     fn process_batch(&self, mut ctx: SourceContext<Self, impl ComponentDefinition>) {
         let drain_to = RESCHEDULE_EVERY.min(self.data.borrow().len());
         for record in self.data.borrow_mut().drain(..drain_to) {
-            let timestamp = self.extract_timestamp(&record);
-            ctx.output(record, timestamp);
+            match &self.conf.time {
+                ArconTime::Event => match &self.conf.extractor {
+                    Some(extractor) => {
+                        let timestamp = extractor(&record);
+                        ctx.output_with_timestamp(record, timestamp);
+                    }
+                    None => panic!("Cannot use ArconTime::Event without an timestamp extractor"),
+                },
+                ArconTime::Process => ctx.output(record),
+            }
         }
         if self.data.borrow().is_empty() {
             ctx.signal_end();
         }
-    }
-
-    fn extract_timestamp(&self, data: &Self::Data) -> Option<u64> {
-        (self.extractor)(data)
     }
 }
 

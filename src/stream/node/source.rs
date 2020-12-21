@@ -6,6 +6,7 @@ use crate::{
     stream::{
         channel::strategy::ChannelStrategy,
         source::{NodeContext, Source, SourceContext},
+        time::ArconTime,
     },
 };
 use kompact::prelude::*;
@@ -15,7 +16,7 @@ use std::cell::RefCell;
 #[derive(Debug, PartialEq, Clone)]
 pub enum SourceEvent {
     Epoch(Epoch),
-    Watermark,
+    Watermark(ArconTime),
     Start,
 }
 
@@ -66,8 +67,19 @@ where
                     .channel_strategy
                     .add(ArconEvent::Epoch(epoch), self);
             }
-            SourceEvent::Watermark => {
-                let wm = Watermark::new(self.node_context.borrow().watermark);
+            SourceEvent::Watermark(time) => {
+                let wm = match time {
+                    ArconTime::Event => Watermark::new(self.node_context.borrow().watermark),
+                    ArconTime::Process => {
+                        let system_time = crate::util::get_system_time();
+                        Watermark::new(system_time)
+                    }
+                };
+
+                // update internal watermark
+                self.node_context.borrow_mut().watermark = wm.timestamp;
+
+                // send watermark downstream
                 self.node_context
                     .borrow_mut()
                     .channel_strategy

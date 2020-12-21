@@ -9,7 +9,9 @@
 //! use arcon::prelude::*;
 //!
 //! let mut pipeline = Pipeline::default()
-//!     .collection((0..100).collect::<Vec<u64>>(), |x| Some(*x))
+//!     .collection((0..100).collect::<Vec<u64>>(), |conf| {
+//!         conf.set_arcon_time(ArconTime::Process);
+//!     })
 //!     .filter(|x| *x > 50)
 //!     .map(|x| x + 10)
 //!     .to_console()
@@ -118,6 +120,7 @@ pub mod prelude {
                 Operator, OperatorContext,
             },
             source::collection::CollectionSource,
+            time::ArconTime,
         },
     };
 

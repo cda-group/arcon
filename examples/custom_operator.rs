@@ -27,7 +27,9 @@ impl Operator for MyOperator {
 
 fn main() {
     let mut pipeline = Pipeline::default()
-        .collection((0..100).collect::<Vec<u64>>(), |_| None)
+        .collection((0..100).collect::<Vec<u64>>(), |conf| {
+            conf.set_arcon_time(ArconTime::Process);
+        })
         .filter(|x: &u64| *x > 50)
         .operator(
             |_: Arc<Sled>| MyOperator,

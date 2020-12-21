@@ -4,7 +4,6 @@
 use crate::{
     data::{ArconElement, ArconEvent, ArconType},
     stream::channel::strategy::ChannelStrategy,
-    util::get_system_time,
 };
 use kompact::prelude::ComponentDefinition;
 
@@ -24,9 +23,6 @@ pub trait Source: Send + Sized + 'static {
     ///
     /// Safety: This method must be non-blocking
     fn process_batch(&self, ctx: SourceContext<Self, impl ComponentDefinition>);
-
-    /// Define how the source should extract timestamps
-    fn extract_timestamp(&self, data: &Self::Data) -> Option<u64>;
 }
 
 pub struct NodeContext<S>
@@ -62,28 +58,29 @@ where
     }
 
     #[inline]
-    pub fn output(&mut self, data: S::Data, timestamp: Option<u64>) {
-        let ts = match timestamp {
-            Some(ts) => ts,
-            None => get_system_time(),
-        };
+    pub fn output(&mut self, data: S::Data) {
+        self.send(ArconEvent::Element(ArconElement::new(data)));
+    }
 
-        self.update_watermark(ts);
+    #[inline]
+    pub fn output_with_timestamp(&mut self, data: S::Data, timestamp: u64) {
+        self.update_watermark(timestamp);
+        self.send(ArconEvent::Element(ArconElement::with_timestamp(
+            data, timestamp,
+        )));
+    }
 
-        let elem = ArconElement::with_timestamp(data, ts);
-
-        self.node_context
-            .channel_strategy
-            .add(ArconEvent::Element(elem), self.source);
+    #[inline(always)]
+    fn send(&mut self, event: ArconEvent<S::Data>) {
+        self.node_context.channel_strategy.add(event, self.source);
     }
 
     #[inline(always)]
     fn update_watermark(&mut self, ts: u64) {
-        if ts > self.node_context.watermark {
-            self.node_context.watermark = ts;
-        }
+        self.node_context.watermark = std::cmp::max(ts, self.node_context.watermark);
     }
+
     pub fn signal_end(&mut self) {
-        unimplemented!();
+        // TODO
     }
 }

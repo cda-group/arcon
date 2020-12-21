@@ -2,7 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use super::epoch::EpochEvent;
-use crate::{data::StateID, stream::node::source::SourceEvent};
+use crate::{
+    data::StateID,
+    stream::{node::source::SourceEvent, time::ArconTime},
+};
 use arcon_state::Backend;
 use kompact::{component::AbstractComponent, prelude::*};
 use std::sync::Arc;
@@ -18,6 +21,11 @@ impl Port for SourceManagerPort {
 pub(crate) struct SourceManager<B: Backend> {
     /// Component Context
     ctx: ComponentContext<Self>,
+    /// What type of time that is used.
+    ///
+    /// Either Event or Processing
+    arcon_time: ArconTime,
+    /// Decides how often in milliseconds we produce watermarks
     watermark_interval: u64,
     /// Kompact Timer
     watermark_timeout: Option<ScheduledTimer>,
@@ -35,6 +43,7 @@ pub(crate) struct SourceManager<B: Backend> {
 impl<B: Backend> SourceManager<B> {
     pub fn new(
         state_id: StateID,
+        arcon_time: ArconTime,
         watermark_interval: u64,
         sources: Vec<Arc<dyn AbstractComponent<Message = SourceEvent>>>,
         epoch_manager: ActorRefStrong<EpochEvent>,
@@ -42,6 +51,7 @@ impl<B: Backend> SourceManager<B> {
     ) -> Self {
         Self {
             ctx: ComponentContext::uninitialised(),
+            arcon_time,
             watermark_interval,
             watermark_timeout: None,
             state_id,
@@ -55,7 +65,9 @@ impl<B: Backend> SourceManager<B> {
         match self.watermark_timeout {
             Some(ref timeout) if *timeout == timeout_id => {
                 for source in &self.sources {
-                    source.actor_ref().tell(SourceEvent::Watermark);
+                    source
+                        .actor_ref()
+                        .tell(SourceEvent::Watermark(self.arcon_time));
                 }
                 Handled::Ok
             }

@@ -7,7 +7,8 @@ use crate::{
     dataflow::{
         constructor::{source_cons, source_manager_cons},
         dfg::*,
-        stream::{Context, DefaultBackend, StreamFnBounds},
+        source::SourceConf,
+        stream::{Context, DefaultBackend},
     },
     manager::{
         epoch::{EpochEvent, EpochManager},
@@ -138,7 +139,7 @@ impl Pipeline {
     /// Create a non-parallel data source
     ///
     /// Returns a [`Stream`] object that users may execute transformations on.
-    pub fn source<S>(self, source: S) -> Stream<S::Data>
+    pub fn source<S>(self, source: S, time: ArconTime) -> Stream<S::Data>
     where
         S: Source,
     {
@@ -146,7 +147,7 @@ impl Pipeline {
         let mut state_dir = self.arcon_conf().state_dir.clone();
         state_dir.push("source_manager");
         let backend = Arc::new(DefaultBackend::create(&state_dir).unwrap());
-        let manager_cons = source_manager_cons(backend, self.arcon_conf().watermark_interval);
+        let manager_cons = source_manager_cons(backend, self.arcon_conf().watermark_interval, time);
 
         let mut ctx = Context::new(self);
         let kind = DFGNodeKind::Source(SourceKind::Single(cons), Default::default(), manager_cons);
@@ -163,13 +164,14 @@ impl Pipeline {
     /// ```no_run
     /// use arcon::prelude::*;
     /// let stream: Stream<u64> = Pipeline::default()
-    ///     .file("/tmp/source_file", |_| None);
+    ///     .file("/tmp/source_file", |conf| {
+    ///         conf.set_arcon_time(ArconTime::Process);
+    ///     });
     /// ```
-    pub fn file<I, A, E>(self, i: I, e: E) -> Stream<A>
+    pub fn file<I, A>(self, i: I, f: impl FnOnce(&mut SourceConf<A>)) -> Stream<A>
     where
         I: Into<String>,
         A: ArconType + std::str::FromStr,
-        E: Fn(&A) -> Option<u64> + StreamFnBounds,
     {
         let path = i.into();
         assert_eq!(
@@ -178,8 +180,11 @@ impl Pipeline {
             "File {} does not exist",
             path
         );
-        let source = LocalFileSource::new(path, e);
-        self.source(source)
+        let mut conf = SourceConf::default();
+        f(&mut conf);
+        let time = conf.time;
+        let source = LocalFileSource::new(path, conf);
+        self.source(source, time)
     }
 
     /// Creates a bounded data Stream using a Collection
@@ -190,17 +195,21 @@ impl Pipeline {
     /// ```
     /// use arcon::prelude::*;
     /// let stream: Stream<u64> = Pipeline::default()
-    ///     .collection((0..100).collect::<Vec<u64>>(), |x| Some(*x));
+    ///     .collection((0..100).collect::<Vec<u64>>(), |conf| {
+    ///         conf.set_arcon_time(ArconTime::Process);
+    ///     });
     /// ```
-    pub fn collection<I, A, E>(self, i: I, e: E) -> Stream<A>
+    pub fn collection<I, A>(self, i: I, f: impl FnOnce(&mut SourceConf<A>)) -> Stream<A>
     where
         I: Into<Vec<A>>,
         A: ArconType,
-        E: Fn(&A) -> Option<u64> + StreamFnBounds,
     {
         let collection = i.into();
-        let source = CollectionSource::new(collection, e);
-        self.source(source)
+        let mut conf = SourceConf::default();
+        f(&mut conf);
+        let time = conf.time;
+        let source = CollectionSource::new(collection, conf);
+        self.source(source, time)
     }
 
     // Creates a PoolInfo struct to be used by a ChannelStrategy

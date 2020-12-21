@@ -19,6 +19,7 @@ use crate::{
         },
         operator::Operator,
         source::Source,
+        time::ArconTime,
     },
 };
 use arcon_state::Backend;
@@ -81,6 +82,7 @@ pub type SourceManagerConstructor =
 pub(crate) fn source_manager_cons<B: Backend>(
     backend: Arc<B>,
     watermark_interval: u64,
+    time: ArconTime,
 ) -> SourceManagerConstructor {
     Box::new(
         move |state_id: StateID, source_comps, pipeline: &mut Pipeline| {
@@ -88,6 +90,7 @@ pub(crate) fn source_manager_cons<B: Backend>(
 
             let manager = SourceManager::new(
                 state_id,
+                time,
                 watermark_interval,
                 source_comps,
                 epoch_manager_ref,
