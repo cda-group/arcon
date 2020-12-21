@@ -2,9 +2,8 @@ use arcon::prelude::*;
 
 fn main() {
     let mut pipeline = Pipeline::default()
-        .collection((0..100).collect::<Vec<u64>>(), |_| None)
-        .filter(|x| *x > 50)
-        .map(|x| x + 10)
+        .file("file_source_data", |x| Some(*x))
+        .flatmap(|x: u64| (0..x))
         .to_console()
         .build();
 

@@ -3,7 +3,7 @@
 
 use crate::{
     data::{Epoch, StateID},
-    stream::source::SourceEvent,
+    stream::node::source::SourceEvent,
 };
 use kompact::prelude::*;
 use std::collections::HashSet;

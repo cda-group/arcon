@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use super::Pipeline;
-use crate::{data::StateID, manager::snapshot::Snapshot, stream::source::SourceEvent};
+use crate::{data::StateID, manager::snapshot::Snapshot, stream::node::source::SourceEvent};
 use arcon_state::index::ArconState;
 use kompact::{component::AbstractComponent, prelude::ActorRefFactory};
 use std::sync::{
@@ -100,7 +100,7 @@ impl AssembledPipeline {
 
     /// Add component `c` to receive state snapshots from `state_id`
     ///
-    /// Note that it is up to the target component to convert the [`SnapshotRef`]
+    /// Note that it is up to the target component to convert the [`Snapshot`]
     /// into some meaningful state.
     pub fn watch_with(
         &mut self,

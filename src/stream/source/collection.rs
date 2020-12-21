@@ -2,32 +2,54 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use super::{Source, SourceContext};
-use crate::data::ArconType;
+use crate::{data::ArconType, util::SafelySendableFn};
 use kompact::prelude::*;
+use std::cell::RefCell;
 
 const RESCHEDULE_EVERY: usize = 10000;
 
-pub struct CollectionSource<A: ArconType> {
-    data: Vec<A>,
+pub struct CollectionSource<A, F>
+where
+    A: ArconType,
+    F: SafelySendableFn(&A) -> Option<u64> + 'static,
+{
+    data: RefCell<Vec<A>>,
+    extractor: F,
 }
 
-impl<A: ArconType> CollectionSource<A> {
-    pub fn new(data: Vec<A>) -> Self {
-        Self { data }
+impl<A, F> CollectionSource<A, F>
+where
+    A: ArconType,
+    F: SafelySendableFn(&A) -> Option<u64> + 'static,
+{
+    pub fn new(data: Vec<A>, extractor: F) -> Self {
+        Self {
+            data: RefCell::new(data),
+            extractor,
+        }
     }
 }
 
-impl<A: ArconType> Source for CollectionSource<A> {
+impl<A, F> Source for CollectionSource<A, F>
+where
+    A: ArconType,
+    F: SafelySendableFn(&A) -> Option<u64> + 'static,
+{
     type Data = A;
 
-    fn process_batch(&mut self, mut ctx: SourceContext<Self, impl ComponentDefinition>) {
-        let drain_to = RESCHEDULE_EVERY.min(self.data.len());
-        for record in self.data.drain(..drain_to) {
-            ctx.output(record);
+    fn process_batch(&self, mut ctx: SourceContext<Self, impl ComponentDefinition>) {
+        let drain_to = RESCHEDULE_EVERY.min(self.data.borrow().len());
+        for record in self.data.borrow_mut().drain(..drain_to) {
+            let timestamp = self.extract_timestamp(&record);
+            ctx.output(record, timestamp);
         }
-        if self.data.is_empty() {
+        if self.data.borrow().is_empty() {
             ctx.signal_end();
         }
+    }
+
+    fn extract_timestamp(&self, data: &Self::Data) -> Option<u64> {
+        (self.extractor)(data)
     }
 }
 

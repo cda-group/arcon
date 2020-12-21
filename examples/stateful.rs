@@ -32,7 +32,7 @@ fn main() {
     };
 
     let mut pipeline = Pipeline::with_conf(conf)
-        .collection((0..10000000).collect::<Vec<u64>>())
+        .collection((0..10000000).collect::<Vec<u64>>(), |_| None)
         .filter(|x| *x > 50)
         .map_with_state(
             |x, state: &mut MyState<Sled>| {

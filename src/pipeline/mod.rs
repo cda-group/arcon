@@ -7,14 +7,17 @@ use crate::{
     dataflow::{
         constructor::{source_cons, source_manager_cons},
         dfg::*,
-        stream::{Context, DefaultBackend},
+        stream::{Context, DefaultBackend, StreamFnBounds},
     },
     manager::{
         epoch::{EpochEvent, EpochManager},
         snapshot::SnapshotManager,
     },
     prelude::*,
-    stream::source::{local_file::LocalFileSource, Source, SourceEvent},
+    stream::{
+        node::source::SourceEvent,
+        source::{local_file::LocalFileSource, Source},
+    },
 };
 use arcon_allocator::Allocator;
 use kompact::{component::AbstractComponent, prelude::KompactSystem};
@@ -132,12 +135,18 @@ impl Pipeline {
         (ctrl_system, data_system, snapshot_manager, epoch_manager)
     }
 
-    pub fn source<S: Source>(self, source: S) -> Stream<S::Data> {
+    /// Create a non-parallel data source
+    ///
+    /// Returns a [`Stream`] object that users may execute transformations on.
+    pub fn source<S>(self, source: S) -> Stream<S::Data>
+    where
+        S: Source,
+    {
         let cons = source_cons(source, self.get_pool_info());
         let mut state_dir = self.arcon_conf().state_dir.clone();
         state_dir.push("source_manager");
         let backend = Arc::new(DefaultBackend::create(&state_dir).unwrap());
-        let manager_cons = source_manager_cons(backend);
+        let manager_cons = source_manager_cons(backend, self.arcon_conf().watermark_interval);
 
         let mut ctx = Context::new(self);
         let kind = DFGNodeKind::Source(SourceKind::Single(cons), Default::default(), manager_cons);
@@ -146,23 +155,34 @@ impl Pipeline {
         Stream::new(ctx)
     }
 
-    /// Creates a bounded data source using a local file
-    pub fn file<I, A>(self, i: I) -> Stream<A>
+    /// Creates a bounded data Stream using a local file
+    ///
+    /// Returns a [`Stream`] object that users may execute transformations on.
+    ///
+    /// Example
+    /// ```no_run
+    /// use arcon::prelude::*;
+    /// let stream: Stream<u64> = Pipeline::default()
+    ///     .file("/tmp/source_file", |_| None);
+    /// ```
+    pub fn file<I, A, E>(self, i: I, e: E) -> Stream<A>
     where
         I: Into<String>,
         A: ArconType + std::str::FromStr,
+        E: Fn(&A) -> Option<u64> + StreamFnBounds,
     {
         let path = i.into();
         assert_eq!(
             std::path::Path::new(&path).exists(),
             true,
-            "File does not exist"
+            "File {} does not exist",
+            path
         );
-        let source = LocalFileSource::new(path);
+        let source = LocalFileSource::new(path, e);
         self.source(source)
     }
 
-    /// Creates a bounded data source using a Vector of [`ArconType`]
+    /// Creates a bounded data Stream using a Collection
     ///
     /// Returns a [`Stream`] object that users may execute transformations on.
     ///
@@ -170,19 +190,20 @@ impl Pipeline {
     /// ```
     /// use arcon::prelude::*;
     /// let stream: Stream<u64> = Pipeline::default()
-    ///     .collection((0..100).collect::<Vec<u64>>());
+    ///     .collection((0..100).collect::<Vec<u64>>(), |x| Some(*x));
     /// ```
-    pub fn collection<I, A>(self, i: I) -> Stream<A>
+    pub fn collection<I, A, E>(self, i: I, e: E) -> Stream<A>
     where
         I: Into<Vec<A>>,
         A: ArconType,
+        E: Fn(&A) -> Option<u64> + StreamFnBounds,
     {
         let collection = i.into();
-        let source = CollectionSource::new(collection);
+        let source = CollectionSource::new(collection, e);
         self.source(source)
     }
 
-    /// Creates a PoolInfo struct to be used by a ChannelStrategy
+    // Creates a PoolInfo struct to be used by a ChannelStrategy
     pub fn get_pool_info(&self) -> PoolInfo {
         PoolInfo::new(
             self.conf.channel_batch_size,
@@ -192,7 +213,7 @@ impl Pipeline {
         )
     }
 
-    /// Shuts the pipeline down and consumes the struct
+    // TODO: Remove
     pub fn shutdown(self) {
         let _ = self.data_system.shutdown();
         let _ = self.ctrl_system.shutdown();
@@ -216,19 +237,6 @@ impl Pipeline {
         &self.conf
     }
 
-    // Internal helper method to connect a SnapshotManagerPort between the
-    // SnapshotManager and NodeManager.
-    pub(crate) fn connect_snapshot_port(
-        &mut self,
-        nm: &Arc<dyn AbstractComponent<Message = Never>>,
-    ) {
-        self.snapshot_manager.on_definition(|scd| {
-            nm.on_dyn_definition(|cd| match cd.get_required_port() {
-                Some(p) => biconnect_ports(&mut scd.manager_port, p),
-                None => panic!("Failed to connect NodeManager port to SnapshotManager"),
-            });
-        });
-    }
     pub(crate) fn epoch_manager(&self) -> ActorRefStrong<EpochEvent> {
         if let Some(epoch_manager) = &self.epoch_manager {
             epoch_manager

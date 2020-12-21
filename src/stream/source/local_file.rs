@@ -3,14 +3,12 @@
 
 use crate::{
     data::ArconType,
-    prelude::state,
-    stream::{
-        operator::Operator,
-        source::{Source, SourceContext},
-    },
+    stream::source::{Source, SourceContext},
+    util::SafelySendableFn,
 };
 use kompact::prelude::*;
 use std::{
+    cell::RefCell,
     fs::File,
     io::{BufRead, BufReader},
     marker::PhantomData,
@@ -19,16 +17,22 @@ use std::{
 
 const RESCHEDULE_EVERY: usize = 10000;
 
-pub struct LocalFileSource<A: ArconType + FromStr> {
-    lines: Vec<String>,
+pub struct LocalFileSource<A, F>
+where
+    A: ArconType + FromStr,
+    F: SafelySendableFn(&A) -> Option<u64> + 'static,
+{
+    lines: RefCell<Vec<String>>,
+    extractor: F,
     _marker: PhantomData<A>,
 }
 
-impl<A> LocalFileSource<A>
+impl<A, F> LocalFileSource<A, F>
 where
     A: ArconType + FromStr,
+    F: SafelySendableFn(&A) -> Option<u64> + 'static,
 {
-    pub fn new(file_path: String) -> Self {
+    pub fn new(file_path: String, extractor: F) -> Self {
         let f = File::open(file_path).expect("failed to open file");
         let reader = BufReader::new(f);
         let lines = reader
@@ -36,30 +40,39 @@ where
             .collect::<std::io::Result<Vec<String>>>()
             .expect("");
         LocalFileSource {
-            lines,
+            lines: RefCell::new(lines),
+            extractor,
             _marker: PhantomData,
         }
     }
 }
 
-impl<A> Source for LocalFileSource<A>
+impl<A, F> Source for LocalFileSource<A, F>
 where
     A: ArconType + FromStr,
+    F: SafelySendableFn(&A) -> Option<u64> + 'static,
 {
     type Data = A;
 
-    fn process_batch(&mut self, mut ctx: SourceContext<Self, impl ComponentDefinition>) {
-        let drain_to = RESCHEDULE_EVERY.min(self.lines.len());
-        for line in self.lines.drain(..drain_to) {
+    fn process_batch(&self, mut ctx: SourceContext<Self, impl ComponentDefinition>) {
+        let drain_to = RESCHEDULE_EVERY.min(self.lines.borrow().len());
+        for line in self.lines.borrow_mut().drain(..drain_to) {
             match line.parse::<A>() {
-                Ok(data) => ctx.output(data),
+                Ok(data) => {
+                    let timestamp = self.extract_timestamp(&data);
+                    ctx.output(data, timestamp);
+                }
                 Err(_) => (), // TODO: log parsing error
             }
         }
 
-        if self.lines.is_empty() {
+        if self.lines.borrow().is_empty() {
             ctx.signal_end();
         }
+    }
+
+    fn extract_timestamp(&self, data: &Self::Data) -> Option<u64> {
+        (self.extractor)(data)
     }
 }
 

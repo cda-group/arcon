@@ -1,13 +1,23 @@
+// Copyright (c) 2020, KTH Royal Institute of Technology.
+// SPDX-License-Identifier: AGPL-3.0-only
+
 use crate::{
-    data::ArconEvent,
+    data::{ArconEvent, Epoch, Watermark},
     stream::{
         channel::strategy::ChannelStrategy,
-        source::{Source, SourceContext, SourceEvent},
+        source::{NodeContext, Source, SourceContext},
     },
-    util::SafelySendableFn,
 };
 use kompact::prelude::*;
 use std::cell::RefCell;
+
+/// A message type that Source components in Arcon must implement
+#[derive(Debug, PartialEq, Clone)]
+pub enum SourceEvent {
+    Epoch(Epoch),
+    Watermark,
+    Start,
+}
 
 #[derive(Debug, Clone, Copy)]
 struct ProcessSource;
@@ -17,6 +27,7 @@ impl Port for LoopbackPort {
     type Request = ProcessSource;
 }
 
+/// A [kompact] component to drive the execution of Arcon sources
 #[derive(ComponentDefinition)]
 pub struct SourceNode<S>
 where
@@ -24,15 +35,10 @@ where
 {
     /// Component context
     ctx: ComponentContext<Self>,
+    node_context: RefCell<NodeContext<S>>,
     loopback_send: RequiredPort<LoopbackPort>,
     loopback_receive: ProvidedPort<LoopbackPort>,
     source: RefCell<S>,
-    /// Strategy for outputting events
-    channel_strategy: RefCell<ChannelStrategy<S::Data>>,
-    /// Timestamp extractor function
-    ///
-    /// If set to None, timestamps of ArconElement's will also be None.
-    ts_extractor: Option<&'static dyn SafelySendableFn(&S::Data) -> u64>,
 }
 
 impl<S> SourceNode<S>
@@ -40,43 +46,32 @@ where
     S: Source,
 {
     pub fn new(source: S, channel_strategy: ChannelStrategy<S::Data>) -> Self {
-        Self::setup(source, channel_strategy, None)
-    }
-
-    pub fn with_extractor(
-        source: S,
-        channel_strategy: ChannelStrategy<S::Data>,
-        extractor: Option<&'static dyn SafelySendableFn(&S::Data) -> u64>,
-    ) -> Self {
-        Self::setup(source, channel_strategy, extractor)
-    }
-
-    fn setup(
-        source: S,
-        channel_strategy: ChannelStrategy<S::Data>,
-        ts_extractor: Option<&'static dyn SafelySendableFn(&S::Data) -> u64>,
-    ) -> Self {
         Self {
             ctx: ComponentContext::uninitialised(),
+            node_context: RefCell::new(NodeContext {
+                channel_strategy,
+                watermark: 0,
+            }),
             loopback_send: RequiredPort::uninitialised(),
             loopback_receive: ProvidedPort::uninitialised(),
             source: RefCell::new(source),
-            channel_strategy: RefCell::new(channel_strategy),
-            ts_extractor,
         }
     }
 
     pub fn handle_source_event(&mut self, event: SourceEvent) {
         match event {
             SourceEvent::Epoch(epoch) => {
-                self.channel_strategy
+                self.node_context
                     .borrow_mut()
+                    .channel_strategy
                     .add(ArconEvent::Epoch(epoch), self);
             }
-            SourceEvent::Watermark(watermark) => {
-                self.channel_strategy
+            SourceEvent::Watermark => {
+                let wm = Watermark::new(self.node_context.borrow().watermark);
+                self.node_context
                     .borrow_mut()
-                    .add(ArconEvent::Watermark(watermark), self);
+                    .channel_strategy
+                    .add(ArconEvent::Watermark(wm), self);
             }
             SourceEvent::Start => {
                 self.loopback_send.trigger(ProcessSource);
@@ -103,7 +98,7 @@ where
     fn handle(&mut self, _event: ProcessSource) -> Handled {
         self.source.borrow_mut().process_batch(SourceContext::new(
             self,
-            &mut self.channel_strategy.borrow_mut(),
+            &mut self.node_context.borrow_mut(),
         ));
         self.loopback_send.trigger(ProcessSource);
         Handled::Ok

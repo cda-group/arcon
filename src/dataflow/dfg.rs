@@ -1,11 +1,5 @@
 use super::constructor::*;
-use crate::{
-    data::{NodeID, StateID},
-    pipeline::Pipeline,
-    stream::source::SourceEvent,
-};
-use kompact::{component::AbstractComponent, prelude::KompactSystem, Never};
-use std::{any::Any, sync::Arc};
+use crate::data::StateID;
 
 /// A logical dataflow-graph.
 #[allow(dead_code)]
@@ -26,18 +20,9 @@ impl DFG {
     }
 
     /// Returns a reference to the [`DFGNode`] associated to a [`DFGNodeID`].
+    #[allow(dead_code)]
     pub fn get(&self, id: &DFGNodeID) -> &DFGNode {
         self.graph.get(id.0).unwrap()
-    }
-
-    /// Returns a mutable reference to the [`DFGNode`] associated to a [`DFGNodeID`].
-    pub fn get_mut(&mut self, id: &DFGNodeID) -> &mut DFGNode {
-        self.graph.get_mut(id.0).unwrap()
-    }
-
-    /// Returns the length of the graph
-    pub fn len(&self) -> usize {
-        self.graph.len()
     }
 }
 
@@ -88,12 +73,6 @@ impl DFGNode {
             channel_kind: Default::default(),
         }
     }
-    pub fn is_source(&self) -> bool {
-        match self.kind {
-            DFGNodeKind::Source(_, _, _) => true,
-            _ => false,
-        }
-    }
 }
 
 pub enum DFGNodeKind {
@@ -101,6 +80,7 @@ pub enum DFGNodeKind {
     Node(NodeConstructor, NodeManagerConstructor),
 }
 
+#[allow(dead_code)]
 pub enum SourceKind {
     Single(SourceConstructor),
     Parallel,

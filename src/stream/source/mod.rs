@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
-    data::{ArconElement, ArconEvent, ArconType, Epoch, Watermark},
+    data::{ArconElement, ArconEvent, ArconType},
     stream::channel::strategy::ChannelStrategy,
-    util::SafelySendableFn,
+    util::get_system_time,
 };
 use kompact::prelude::ComponentDefinition;
 
@@ -15,14 +15,7 @@ pub mod local_file;
 //#[cfg(feature = "socket")]
 //pub mod socket;
 
-/// Source Event
-#[derive(Debug, Clone)]
-pub enum SourceEvent {
-    Watermark(Watermark),
-    Epoch(Epoch),
-    Start,
-}
-
+/// Defines an Arcon Source and the methods it must implement
 pub trait Source: Send + Sized + 'static {
     /// The type of data produced by the Source
     type Data: ArconType;
@@ -30,162 +23,67 @@ pub trait Source: Send + Sized + 'static {
     /// Process a batch of source data
     ///
     /// Safety: This method must be non-blocking
-    fn process_batch(&mut self, ctx: SourceContext<Self, impl ComponentDefinition>);
+    fn process_batch(&self, ctx: SourceContext<Self, impl ComponentDefinition>);
+
+    /// Define how the source should extract timestamps
+    fn extract_timestamp(&self, data: &Self::Data) -> Option<u64>;
 }
 
-pub struct SourceContext<'a, 'b, 'c, S, CD>
+pub struct NodeContext<S>
+where
+    S: Source,
+{
+    pub(crate) channel_strategy: ChannelStrategy<S::Data>,
+    pub(crate) watermark: u64,
+}
+
+/// All Source implementations have access to a Context object
+pub struct SourceContext<'a, 'c, S, CD>
 where
     S: Source,
     CD: ComponentDefinition + Sized + 'static,
 {
-    ts_extractor: &'b Option<&'static dyn SafelySendableFn(&S::Data) -> u64>,
-    /// Channel Strategy that is used to pass on events
-    channel_strategy: &'c mut ChannelStrategy<S::Data>,
+    node_context: &'c mut NodeContext<S>,
     /// A reference to the backing ComponentDefinition
     source: &'a CD,
 }
 
-impl<'a, 'b, 'c, S, CD> SourceContext<'a, 'b, 'c, S, CD>
+impl<'a, 'c, S, CD> SourceContext<'a, 'c, S, CD>
 where
     S: Source,
     CD: ComponentDefinition + Sized + 'static,
 {
     #[inline]
-    pub(crate) fn new(source: &'a CD, channel_strategy: &'c mut ChannelStrategy<S::Data>) -> Self {
+    pub(crate) fn new(source: &'a CD, node_context: &'c mut NodeContext<S>) -> Self {
         Self {
-            ts_extractor: &None,
-            channel_strategy,
+            node_context,
             source,
         }
     }
-    pub fn output(&mut self, data: S::Data) {
-        let elem = match &self.ts_extractor {
-            Some(ts_fn) => {
-                let ts = (ts_fn)(&data);
-                ArconElement::with_timestamp(data, ts)
-            }
-            None => ArconElement::new(data),
+
+    #[inline]
+    pub fn output(&mut self, data: S::Data, timestamp: Option<u64>) {
+        let ts = match timestamp {
+            Some(ts) => ts,
+            None => get_system_time(),
         };
 
-        self.channel_strategy
+        self.update_watermark(ts);
+
+        let elem = ArconElement::with_timestamp(data, ts);
+
+        self.node_context
+            .channel_strategy
             .add(ArconEvent::Element(elem), self.source);
     }
-    pub fn signal_end(&mut self) {}
-}
 
-/*
-/// Common Context for all Source implementations
-pub struct SourceContext<OP: Operator + 'static, B: state::Backend> {
-    /// Timestamp extractor function
-    ///
-    /// If set to None, timestamps of ArconElement's will also be None.
-    ts_extractor: Option<&'static dyn SafelySendableFn(&OP::IN) -> u64>,
-    /// Current Watermark
-    current_watermark: u64,
-    /// Watermark interval
-    ///
-    /// Controls how often the source generates watermarks. For finite
-    /// sources, `watermark_interval` may be an element counter. Whereas
-    /// in an unbounded source type, it may be the timer timeout period.
-    pub watermark_interval: u64,
-    /// An Operator to enable fusion of computation within the source
-    operator: OP,
-    /// Strategy for outputting events
-    channel_strategy: ChannelStrategy<OP::OUT>,
-    /// Durable State Backend
-    _backend: Arc<B>,
-}
-
-impl<OP, B> SourceContext<OP, B>
-where
-    OP: Operator + 'static,
-    B: state::Backend,
-{
-    pub fn new(
-        watermark_interval: u64,
-        ts_extractor: Option<&'static dyn SafelySendableFn(&OP::IN) -> u64>,
-        channel_strategy: ChannelStrategy<OP::OUT>,
-        operator: OP,
-        backend: Arc<B>,
-    ) -> Self {
-        SourceContext {
-            ts_extractor,
-            current_watermark: 0,
-            watermark_interval,
-            operator,
-            channel_strategy,
-            _backend: backend,
+    #[inline(always)]
+    fn update_watermark(&mut self, ts: u64) {
+        if ts > self.node_context.watermark {
+            self.node_context.watermark = ts;
         }
     }
-
-    /// Generates a Watermark event and sends it downstream
-    #[inline]
-    pub fn generate_watermark(&mut self, source: &impl ComponentDefinition) {
-        let wm_event: ArconEvent<OP::OUT> = {
-            if self.has_timestamp_extractor() {
-                ArconEvent::Watermark(Watermark::new(self.current_watermark))
-            } else {
-                let system_time = crate::util::get_system_time();
-                self.watermark_update(system_time);
-                ArconEvent::Watermark(Watermark::new(self.current_watermark))
-            }
-        };
-
-        self.channel_strategy.add(wm_event, source);
-    }
-
-    /// Inject epoch marker into the dataflow
-    #[inline]
-    pub fn inject_epoch(&mut self, epoch: Epoch, source: &impl ComponentDefinition) {
-        self.channel_strategy.add(ArconEvent::Epoch(epoch), source);
-    }
-
-    /// Generates a Death event and sends it downstream
-    #[inline]
-    pub fn generate_death(&mut self, msg: String, source: &impl ComponentDefinition) {
-        self.channel_strategy.add(ArconEvent::Death(msg), source);
-    }
-
-    /// Helper to know whether to use SystemTime or EventTime
-    #[inline]
-    fn has_timestamp_extractor(&self) -> bool {
-        self.ts_extractor.is_some()
-    }
-
-    /// Update Watermark if `ts` is of a higher value than the current Watermark
-    #[inline]
-    pub fn watermark_update(&mut self, ts: u64) {
-        if ts > self.current_watermark {
-            self.current_watermark = ts;
-        }
-    }
-
-    /// Calls a transformation function on the source data to generate outgoing events
-    #[inline]
-    pub fn process(
-        &mut self,
-        data: ArconElement<OP::IN>,
-        source: &impl ComponentDefinition,
-    ) -> OperatorResult<()> {
-        self.operator.handle_element(
-            data,
-            OperatorContext::<_, B, _>::new(source, &mut None, &mut self.channel_strategy),
-        )
-    }
-
-    /// Build ArconElement
-    ///
-    /// Extracts timestamp if extractor is available
-    #[inline]
-    pub fn extract_element(&mut self, data: OP::IN) -> ArconElement<OP::IN> {
-        match &self.ts_extractor {
-            Some(ts_fn) => {
-                let ts = (ts_fn)(&data);
-                self.watermark_update(ts);
-                ArconElement::with_timestamp(data, ts)
-            }
-            None => ArconElement::new(data),
-        }
+    pub fn signal_end(&mut self) {
+        unimplemented!();
     }
 }
-*/

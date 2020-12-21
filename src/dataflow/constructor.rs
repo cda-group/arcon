@@ -13,9 +13,12 @@ use crate::{
             strategy::{forward::Forward, *},
             Channel,
         },
-        node::{source::SourceNode, Node, NodeState},
+        node::{
+            source::{SourceEvent, SourceNode},
+            Node, NodeState,
+        },
         operator::Operator,
-        source::{Source, SourceEvent},
+        source::Source,
     },
 };
 use arcon_state::Backend;
@@ -33,7 +36,10 @@ pub type SourceConstructor = Box<
     ) -> Arc<dyn AbstractComponent<Message = SourceEvent>>,
 >;
 
-pub(crate) fn source_cons<S: Source>(source: S, pool_info: PoolInfo) -> SourceConstructor {
+pub(crate) fn source_cons<S>(source: S, pool_info: PoolInfo) -> SourceConstructor
+where
+    S: Source,
+{
     Box::new(
         move |mut components: Vec<Box<dyn std::any::Any>>,
               channel_kind: ChannelKind,
@@ -59,7 +65,8 @@ pub(crate) fn source_cons<S: Source>(source: S, pool_info: PoolInfo) -> SourceCo
                 .start_notify(&comp)
                 .wait_timeout(std::time::Duration::from_millis(2000))
                 .expect("");
-            return comp;
+
+            comp
         },
     )
 }
@@ -71,26 +78,26 @@ pub type ErasedNodeManager = Arc<dyn AbstractComponent<Message = Never>>;
 pub type SourceManagerConstructor =
     Box<dyn FnOnce(StateID, Vec<SourceComponent>, &mut Pipeline) -> ErasedSourceManager>;
 
-pub(crate) fn source_manager_cons<B: Backend>(backend: Arc<B>) -> SourceManagerConstructor {
+pub(crate) fn source_manager_cons<B: Backend>(
+    backend: Arc<B>,
+    watermark_interval: u64,
+) -> SourceManagerConstructor {
     Box::new(
         move |state_id: StateID, source_comps, pipeline: &mut Pipeline| {
             let epoch_manager_ref = pipeline.epoch_manager();
 
-            let manager =
-                SourceManager::new(state_id, source_comps, epoch_manager_ref, backend.clone());
+            let manager = SourceManager::new(
+                state_id,
+                watermark_interval,
+                source_comps,
+                epoch_manager_ref,
+                backend.clone(),
+            );
             let comp = pipeline.ctrl_system().create_erased(Box::new(manager));
 
             let source_ref: ActorRefStrong<SourceEvent> = comp.actor_ref().hold().expect("fail");
 
-            pipeline.snapshot_manager.on_definition(|scd| {
-                comp.on_dyn_definition(|cd| match cd.get_required_port() {
-                    Some(p) => biconnect_ports(&mut scd.manager_port, p),
-                    None => {
-                        panic!("Failed to connect SourceManager port to SnapshotManager")
-                    }
-                });
-            });
-
+            // Set source reference at the EpochManager
             if let Some(epoch_manager) = &pipeline.epoch_manager {
                 epoch_manager.on_definition(|cd| {
                     cd.source_manager = Some(source_ref);
@@ -103,7 +110,6 @@ pub(crate) fn source_manager_cons<B: Backend>(backend: Arc<B>) -> SourceManagerC
                 .wait_timeout(std::time::Duration::from_millis(2000))
                 .expect("Failed to start SourceManager");
 
-            pipeline.source_manager = Some(comp.clone());
             comp
         },
     )
@@ -196,7 +202,15 @@ pub(crate) fn node_manager_cons<B: Backend>(backend: Arc<B>) -> NodeManagerConst
             let manager = NodeManager::new(descriptor, epoch_manager_ref, in_channels, backend);
             let comp = pipeline.ctrl_system().create_erased(Box::new(manager));
 
-            pipeline.connect_snapshot_port(&comp);
+            // connect NodeManager to the pipelines SnapshotManager
+            pipeline.snapshot_manager.on_definition(|scd| {
+                comp.on_dyn_definition(|cd| match cd.get_required_port() {
+                    Some(p) => biconnect_ports(&mut scd.manager_port, p),
+                    None => {
+                        panic!("Failed to connect NodeManager port to SnapshotManager")
+                    }
+                });
+            });
 
             pipeline
                 .ctrl_system()

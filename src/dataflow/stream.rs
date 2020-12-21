@@ -229,6 +229,8 @@ impl<IN: ArconType> Stream<IN> {
                                 vec![comp],
                                 &mut self.ctx.pipeline,
                             );
+
+                            self.ctx.pipeline.source_manager = Some(source_manager);
                         }
                         SourceKind::Parallel => {}
                     }

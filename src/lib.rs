@@ -9,7 +9,7 @@
 //! use arcon::prelude::*;
 //!
 //! let mut pipeline = Pipeline::default()
-//!     .collection((0..100).collect::<Vec<u64>>())
+//!     .collection((0..100).collect::<Vec<u64>>(), |x| Some(*x))
 //!     .filter(|x| *x > 50)
 //!     .map(|x| x + 10)
 //!     .to_console()
@@ -102,7 +102,7 @@ pub mod prelude {
         conf::ArconConf,
         data::{StateID, VersionId},
         manager::snapshot::Snapshot,
-        pipeline::{Pipeline, Stream},
+        pipeline::{AssembledPipeline, Pipeline, Stream},
         stream::{
             channel::{
                 strategy::{
