@@ -103,6 +103,7 @@ pub mod prelude {
         buffer::event::{BufferPool, BufferReader, BufferWriter, PoolInfo},
         conf::ArconConf,
         data::{StateID, VersionId},
+        dataflow::conf::{OperatorConf, SourceConf},
         manager::snapshot::Snapshot,
         pipeline::{AssembledPipeline, Pipeline, Stream},
         stream::{

@@ -4,32 +4,62 @@
 use super::stream::DefaultBackend;
 use crate::{
     data::{ArconType, StateID},
-    stream::time::ArconTime,
+    stream::{operator::Operator, time::ArconTime},
 };
-use arcon_state::index::ArconState;
-use std::{marker::PhantomData, sync::Arc};
+use std::sync::Arc;
 
-pub struct OperatorConf<A, State, Backend = DefaultBackend>
+// TODO:
+#[allow(dead_code)]
+pub struct OperatorConf<OP, Backend = DefaultBackend>
 where
-    A: ArconType,
-    State: ArconState,
+    OP: Operator + 'static,
     Backend: arcon_state::Backend,
 {
-    _marker: PhantomData<A>,
-    state_cons: Option<Arc<dyn Fn(Arc<Backend>) -> State + Send + Sync + 'static>>,
+    state_cons: Arc<dyn Fn(Arc<Backend>) -> OP::OperatorState + Send + Sync + 'static>,
+    operator_cons: Arc<dyn Fn(Arc<Backend>) -> OP + Send + Sync + 'static>,
+    state_id: StateID,
 }
 
-impl<A, State, Backend> OperatorConf<A, State, Backend>
+/*
+impl<OP> Default for OperatorConf<OP, DefaultBackend>
+where
+    OP: Operator + 'static,
+{
+    fn default() -> Self {
+        Self {
+            /*
+            state_cons: Some(Arc::new(|_| ())),
+            operator_cons: None,
+            state_id: format!("op_{}", uuid::Uuid::new_v4().to_string()),
+            _marker: PhantomData,
+            */
+        }
+    }
+}
+*/
+/*
+
+impl<A, OP, State, Backend> OperatorConf<A, OP, State, Backend>
 where
     A: ArconType,
+    OP: Operator + 'static,
     State: ArconState,
     Backend: arcon_state::Backend,
 {
     pub fn new() -> Self {
         Self {
             state_cons: None,
+            operator_cons: None,
+            state_id: format!("op_{}", uuid::Uuid::new_v4().to_string()),
             _marker: PhantomData,
         }
+    }
+
+    pub fn set_operator_constructor(
+        &mut self,
+        f: impl Fn(Arc<Backend>) -> OP + Send + Sync + 'static,
+    ) {
+        self.operator_cons = Some(Arc::new(f));
     }
     pub fn set_state_constructor(
         &mut self,
@@ -37,20 +67,13 @@ where
     ) {
         self.state_cons = Some(Arc::new(f));
     }
-    pub fn set_state_id(&mut self, state_id: impl Into<StateID>) {}
-}
 
-impl<A> Default for OperatorConf<A, (), DefaultBackend>
-where
-    A: ArconType,
-{
-    fn default() -> Self {
-        Self {
-            state_cons: Some(Arc::new(|_| ())),
-            _marker: PhantomData,
-        }
+    pub fn set_state_id(&mut self, state_id: impl Into<StateID>) {
+        self.state_id = state_id.into();
     }
 }
+
+*/
 
 pub type TimestampExtractor<A> = Arc<dyn Fn(&A) -> u64 + Send + Sync>;
 

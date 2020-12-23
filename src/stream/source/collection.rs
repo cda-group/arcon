@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use super::{Source, SourceContext};
-use crate::{data::ArconType, dataflow::source::SourceConf, stream::time::ArconTime};
+use crate::{data::ArconType, dataflow::conf::SourceConf, stream::time::ArconTime};
 use kompact::prelude::*;
 use std::cell::RefCell;
 

@@ -3,7 +3,7 @@
 
 use crate::{
     data::ArconType,
-    dataflow::source::SourceConf,
+    dataflow::conf::SourceConf,
     stream::{
         source::{Source, SourceContext},
         time::ArconTime,
