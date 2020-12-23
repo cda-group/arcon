@@ -264,7 +264,7 @@ impl<IN: ArconType> Stream<IN> {
                         vec![NodeID::new(0)],   // Fix
                         components,
                         channel_kind,
-                        self.ctx.pipeline.system(),
+                        self.ctx.pipeline.data_system(),
                         manager,
                     );
 

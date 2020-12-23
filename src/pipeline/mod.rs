@@ -232,11 +232,6 @@ impl Pipeline {
         let _ = self.ctrl_system.shutdown();
     }
 
-    /// Give out a mutable reference to the KompactSystem of the pipeline
-    pub(crate) fn system(&mut self) -> &mut KompactSystem {
-        &mut self.data_system
-    }
-
     pub(crate) fn data_system(&mut self) -> &mut KompactSystem {
         &mut self.data_system
     }

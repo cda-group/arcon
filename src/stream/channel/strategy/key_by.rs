@@ -181,7 +181,7 @@ mod tests {
     fn keyby_test() {
         let mut pipeline = Pipeline::default();
         let pool_info = pipeline.get_pool_info();
-        let system = pipeline.system();
+        let system = pipeline.data_system();
 
         let parallelism: u32 = 8;
         let total_msgs = 1000;

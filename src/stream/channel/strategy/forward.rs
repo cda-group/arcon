@@ -108,7 +108,7 @@ mod tests {
     fn forward_test() {
         let mut pipeline = Pipeline::default();
         let pool_info = pipeline.get_pool_info();
-        let system = pipeline.system();
+        let system = pipeline.data_system();
 
         let total_msgs = 10;
         let comp = system.create(DebugNode::<Input>::new);

@@ -530,7 +530,7 @@ mod tests {
         let mut pipeline = Pipeline::default();
         let pool_info = pipeline.get_pool_info();
         let epoch_manager_ref = pipeline.epoch_manager();
-        let system = &pipeline.system();
+        let system = &pipeline.data_system();
 
         let sink = system.create(DebugNode::<i32>::new);
 

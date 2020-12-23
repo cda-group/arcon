@@ -139,7 +139,7 @@ mod tests {
     fn broadcast_local_test() {
         let mut pipeline = Pipeline::default();
         let pool_info = pipeline.get_pool_info();
-        let system = pipeline.system();
+        let system = pipeline.data_system();
 
         let components: u32 = 8;
         let total_msgs: u64 = 10;
