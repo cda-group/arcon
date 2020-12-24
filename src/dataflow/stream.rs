@@ -55,6 +55,12 @@ pub struct Stream<IN: ArconType> {
 }
 
 impl<IN: ArconType> Stream<IN> {
+    pub fn keyed(mut self) -> Stream<IN> {
+        let node = self.ctx.dfg.get_mut(&self.prev_dfg_id);
+        node.channel_kind = ChannelKind::KeyBy;
+        self
+    }
+
     /// Adds a Map transformation to the dataflow graph
     pub fn map<OUT, F>(self, f: F) -> Stream<OUT>
     where
@@ -211,7 +217,7 @@ impl<IN: ArconType> Stream<IN> {
     /// Note that this method only builds the pipeline. In order
     /// to start it, see the following [method](AssembledPipeline::start).
     pub fn build(mut self) -> AssembledPipeline {
-        let mut target_nodes: Option<Vec<Box<dyn std::any::Any>>> = None;
+        let mut target_nodes: Option<Vec<Arc<dyn std::any::Any + Send + Sync>>> = None;
 
         for dfg_node in self.ctx.dfg.graph.into_iter().rev() {
             match dfg_node.kind {
@@ -258,7 +264,7 @@ impl<IN: ArconType> Stream<IN> {
                         &mut self.ctx.pipeline,
                     );
 
-                    let node: Box<dyn std::any::Any> = node_cons(
+                    let nodes: Vec<Arc<dyn std::any::Any + Send + Sync>> = node_cons(
                         String::from("node_1"), // Fix
                         NodeID::new(0),         // Fix
                         vec![NodeID::new(0)],   // Fix
@@ -268,7 +274,7 @@ impl<IN: ArconType> Stream<IN> {
                         manager,
                     );
 
-                    target_nodes = Some(vec![node]);
+                    target_nodes = Some(nodes);
                 }
             }
         }

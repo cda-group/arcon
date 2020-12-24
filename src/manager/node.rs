@@ -2,12 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
-    data::{Epoch, StateID, Watermark},
+    data::{Epoch, NodeID, StateID, Watermark},
     manager::{
         epoch::EpochEvent,
         snapshot::{Snapshot, SnapshotEvent, SnapshotManagerPort},
     },
-    prelude::{state, NodeID},
 };
 use arcon_error::*;
 use arcon_state::{ArconState, Backend, Handle, Map, Value};
@@ -103,7 +102,7 @@ pub struct NodeManagerState<B: Backend> {
 #[derive(ComponentDefinition)]
 pub struct NodeManager<B>
 where
-    B: state::Backend,
+    B: Backend,
 {
     /// Component Context
     ctx: ComponentContext<Self>,
@@ -135,7 +134,7 @@ where
 
 impl<B> NodeManager<B>
 where
-    B: state::Backend,
+    B: Backend,
 {
     pub fn new(
         state_id: String,
@@ -240,7 +239,7 @@ where
 
 impl<B> ComponentLifecycle for NodeManager<B>
 where
-    B: state::Backend,
+    B: Backend,
 {
     fn on_start(&mut self) -> Handled {
         info!(self.ctx.log(), "Started NodeManager for {}", self.state_id,);
@@ -275,7 +274,7 @@ where
 
 impl<B> Provide<NodeManagerPort> for NodeManager<B>
 where
-    B: state::Backend,
+    B: Backend,
 {
     fn handle(&mut self, event: NodeEvent) -> Handled {
         if let Err(err) = self.handle_node_event(event) {
@@ -288,7 +287,7 @@ where
 
 impl<B> Require<NodeManagerPort> for NodeManager<B>
 where
-    B: state::Backend,
+    B: Backend,
 {
     fn handle(&mut self, _: Never) -> Handled {
         unreachable!(crate::data::ArconNever::IS_UNREACHABLE);
@@ -297,7 +296,7 @@ where
 
 impl<B> Actor for NodeManager<B>
 where
-    B: state::Backend,
+    B: Backend,
 {
     type Message = Never;
     fn receive_local(&mut self, _: Self::Message) -> Handled {

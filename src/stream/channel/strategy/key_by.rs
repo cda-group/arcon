@@ -3,9 +3,8 @@
 
 use crate::{
     buffer::event::{BufferPool, BufferWriter, PoolInfo},
-    data::{ArconEvent, ArconType},
-    prelude::*,
-    stream::channel::strategy::send,
+    data::{ArconEvent, ArconEventWrapper, ArconMessage, ArconType, NodeID},
+    stream::channel::{strategy::send, Channel},
 };
 use fxhash::FxHashMap;
 use kompact::prelude::{ComponentDefinition, SerError};
@@ -172,7 +171,14 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{data::ArconEvent, pipeline::Pipeline, stream::channel::strategy::tests::*};
+    use crate::{
+        data::{ArconElement, ArconEvent, NodeID},
+        pipeline::Pipeline,
+        stream::{
+            channel::strategy::{tests::*, ChannelStrategy},
+            node::debug::DebugNode,
+        },
+    };
     use kompact::prelude::*;
     use rand::Rng;
     use std::sync::Arc;

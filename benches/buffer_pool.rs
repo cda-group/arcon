@@ -1,7 +1,7 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use arcon::prelude::{BufferPool, BufferReader};
+use arcon::bench_utils::{BufferPool, BufferReader};
 use arcon_allocator::Allocator;
 use criterion::{black_box, criterion_group, criterion_main, Bencher, Criterion};
 use std::sync::{

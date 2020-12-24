@@ -3,7 +3,7 @@
 
 use crate::{
     buffer::event::{BufferPool, BufferWriter, PoolInfo},
-    prelude::*,
+    data::{ArconEvent, ArconEventWrapper, ArconMessage, ArconType, NodeID},
     stream::channel::{strategy::send, Channel},
 };
 use kompact::prelude::{ComponentDefinition, SerError};
@@ -101,7 +101,14 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::stream::channel::strategy::{tests::*, ChannelStrategy};
+    use crate::{
+        data::{ArconElement, ArconEvent},
+        pipeline::Pipeline,
+        stream::{
+            channel::strategy::{forward::Forward, tests::*, ChannelStrategy},
+            node::debug::DebugNode,
+        },
+    };
     use kompact::prelude::*;
 
     #[test]

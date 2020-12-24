@@ -104,12 +104,6 @@ impl<A: ArconType> ArconEventWrapper<A> {
             .as_ref()
             .expect("ArconEventWrapper.inner is None. Prost deserialization error?")
     }
-
-    pub fn unwrap_mut(&mut self) -> &mut ArconEvent<A> {
-        self.inner
-            .as_mut()
-            .expect("ArconEventWrapper.inner is None. Prost deserialization error?")
-    }
 }
 
 impl<A: ArconType> From<ArconEvent<A>> for ArconEventWrapper<A> {

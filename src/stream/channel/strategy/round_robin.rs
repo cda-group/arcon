@@ -125,8 +125,10 @@ mod tests {
     use crate::{
         data::ArconElement,
         pipeline::Pipeline,
-        prelude::{ChannelStrategy, DebugNode},
-        stream::channel::strategy::tests::*,
+        stream::{
+            channel::strategy::{tests::*, ChannelStrategy},
+            node::debug::DebugNode,
+        },
     };
     use kompact::prelude::*;
     use std::sync::Arc;

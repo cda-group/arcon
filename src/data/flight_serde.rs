@@ -126,7 +126,17 @@ pub mod unsafe_remote {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::prelude::*;
+    use crate::{
+        data::{ArconElement, ArconEvent, ArconType},
+        pipeline::Pipeline,
+        stream::{
+            channel::{
+                strategy::{forward::Forward, ChannelStrategy},
+                Channel,
+            },
+            node::debug::DebugNode,
+        },
+    };
     use kompact::prelude::*;
     use once_cell::sync::Lazy;
     use std::time::Duration;
