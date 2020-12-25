@@ -1,10 +1,16 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::prelude::*;
+use crate::{
+    data::{ArconElement, ArconNever, ArconType},
+    stream::operator::{Operator, OperatorContext},
+};
 use ::serde::Serialize;
+use arcon_error::OperatorResult;
+use arcon_state::Backend;
 use bytes::Bytes;
 use futures::{channel, executor::block_on, SinkExt, StreamExt};
+use kompact::prelude::*;
 use std::{
     marker::PhantomData,
     net::SocketAddr,
@@ -37,13 +43,13 @@ where
         let th = Builder::new()
             .name(String::from("UdpSinkThread"))
             .spawn(move || {
-                let mut runtime = Runtime::new().expect("Could not create Tokio Runtime!");
+                let runtime = Runtime::new().expect("Could not create Tokio Runtime!");
                 let runtime_handle = runtime.handle().clone();
 
                 runtime.block_on(async move {
                     // Let OS handle port alloc
                     let self_addr: SocketAddr = "0.0.0.0:0".parse().unwrap();
-                    let mut socket = UdpSocket::bind(self_addr).await.expect("Failed to bind");
+                    let socket = UdpSocket::bind(self_addr).await.expect("Failed to bind");
 
                     tx_exec
                         .send(runtime_handle)
@@ -84,7 +90,7 @@ where
         &mut self,
         element: ArconElement<Self::IN>,
         _ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> ArconResult<()> {
+    ) -> OperatorResult<()> {
         let mut tx = self.tx_channel.clone();
         let fmt_data = {
             if let Ok(mut json) = serde_json::to_string(&element.data) {
@@ -111,7 +117,13 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::prelude::{ChannelStrategy, NodeState};
+    use crate::{
+        data::{ArconMessage, NodeID},
+        stream::{
+            channel::strategy::ChannelStrategy,
+            node::{Node, NodeState},
+        },
+    };
     use std::sync::Arc;
 
     #[test]
@@ -124,7 +136,7 @@ mod tests {
             .expect("couln't create tokio runtime")
             .block_on(async {
                 let addr = "127.0.0.1:9999".parse().unwrap();
-                let mut socket = UdpSocket::bind(&addr).await.unwrap();
+                let socket = UdpSocket::bind(&addr).await.unwrap();
 
                 let backend = Arc::new(crate::util::temp_backend());
                 let node_id = NodeID::new(1);
@@ -142,7 +154,7 @@ mod tests {
                     .expect("started");
 
                 let target: ActorRef<ArconMessage<i64>> = socket_sink.actor_ref();
-                target.tell(ArconMessage::element(10 as i64, None, 1.into()));
+                target.tell(ArconMessage::element(10_i64, None, 1.into()));
 
                 let (len, _) = socket.recv_from(&mut buf).await.expect("did not receive");
                 len

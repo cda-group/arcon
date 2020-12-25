@@ -193,23 +193,18 @@ pub(crate) fn vec_merge(
     );
 
     // reserve space for the length
-    fixed_bytes::serialize_into(&mut result, &0usize)
-        .or_else(|e| {
-            // TODO: proper logging
-            eprintln!("length serialization error: {}", e);
-            Err(())
-        })
-        .ok()?;
+    if let Err(e) = fixed_bytes::serialize_into(&mut result, &0usize) {
+        eprintln!("length serialization error: {}", e);
+        return None;
+    }
     let mut len = 0usize;
 
     // Utility to consume the first few bytes from the slice and interpret that as length. The
     // passed slice will get shifted so it points right after the length bytes.
     fn get_len(slice_ref: &mut &[u8]) -> Option<usize> {
         fixed_bytes::deserialize_from(slice_ref)
-            .or_else(|e| {
-                // TODO: proper logging
+            .map_err(|e| {
                 eprintln!("length deserialization error: {}", e);
-                Err(())
             })
             .ok()
     }
@@ -222,13 +217,10 @@ pub(crate) fn vec_merge(
     // The second argument may seem weird, but look at the impl of BufMut for &mut [u8].
     // Just passing the result would actually _extend_ the vec, whereas we want to overwrite it
     // (the space was reserved at the beginning)
-    fixed_bytes::serialize_into(&mut result.as_mut_slice(), &len)
-        .or_else(|e| {
-            // TODO: proper logging
-            eprintln!("length serialization error: {}", e);
-            Err(())
-        })
-        .ok()?;
+    if let Err(e) = fixed_bytes::serialize_into(&mut result.as_mut_slice(), &len) {
+        eprintln!("length serialization error: {}", e);
+        return None;
+    }
 
     Some(result)
 }

@@ -13,6 +13,7 @@ edition = "2018"
 
 [features]
 arcon_serde = []
+unsafe_flight = []
 
 [dependencies]
 syn = "1.0"

@@ -4,14 +4,22 @@
 /// Debug version of [Node]
 pub mod debug;
 
+pub mod source;
+
+#[cfg(feature = "unsafe_flight")]
+use crate::data::flight_serde::unsafe_remote::UnsafeSerde;
 use crate::{
-    data::RawArconMessage,
+    data::{flight_serde::reliable_remote::ReliableSerde, RawArconMessage, *},
     manager::node::{NodeEvent::Checkpoint, *},
-    prelude::*,
-    stream::operator::{Operator, OperatorContext},
+    stream::{
+        channel::strategy::ChannelStrategy,
+        operator::{Operator, OperatorContext},
+    },
 };
-use arcon_state::{index::IndexOps, Appender, ArconState, Backend, TimerIndex};
+use arcon_error::{arcon_err, arcon_err_kind, ArconResult};
+use arcon_state::{index::IndexOps, Appender, ArconState, Backend, Handle, TimerIndex};
 use fxhash::*;
+use kompact::prelude::*;
 use std::{cell::UnsafeCell, sync::Arc};
 
 #[cfg(feature = "metrics")]
@@ -74,7 +82,7 @@ pub struct NodeState<OP: Operator + 'static, B: Backend> {
     watermarks: FxHashMap<NodeID, Watermark>,
     /// Map of blocked senders
     #[ephemeral]
-    blocked_channels: FxHashMap<NodeID, ()>,
+    blocked_channels: FxHashSet<NodeID>,
     /// Current Watermark value for the Node
     #[ephemeral]
     current_watermark: Watermark,
@@ -107,7 +115,7 @@ impl<OP: Operator + 'static, B: Backend> NodeState<OP, B> {
         Self {
             message_buffer,
             watermarks,
-            blocked_channels: FxHashMap::default(),
+            blocked_channels: FxHashSet::default(),
             current_watermark: Watermark::new(0),
             current_epoch: Epoch::new(0),
             in_channels,
@@ -263,7 +271,7 @@ where
 
     #[inline(always)]
     fn sender_blocked(&mut self, sender: &NodeID) -> bool {
-        self.node_state.blocked_channels().contains_key(sender)
+        self.node_state.blocked_channels().contains(sender)
     }
 
     #[cfg(feature = "metrics")]
@@ -350,7 +358,7 @@ where
                     }
 
                     // Add the sender to the blocked set.
-                    self.node_state.blocked_channels().insert(sender, ());
+                    self.node_state.blocked_channels().insert(sender);
 
                     // If all senders blocked we can transition to new Epoch
                     if self.node_state.blocked_channels().len() == self.node_state.in_channels.len()
@@ -483,22 +491,19 @@ where
         Handled::Ok
     }
     fn receive_network(&mut self, msg: NetMessage) -> Handled {
-        let unsafe_id = OP::IN::UNSAFE_SER_ID;
-        let reliable_id = OP::IN::RELIABLE_SER_ID;
-        let ser_id = *msg.ser_id();
-
-        let arcon_msg = {
-            if ser_id == reliable_id {
-                msg.try_deserialise::<RawArconMessage<OP::IN>, ReliableSerde<OP::IN>>()
-                    .map_err(|e| {
-                        arcon_err_kind!("Failed to unpack reliable ArconMessage with err {:?}", e)
-                    })
-            } else if ser_id == unsafe_id {
-                msg.try_deserialise::<RawArconMessage<OP::IN>, UnsafeSerde<OP::IN>>()
-                    .map_err(|e| {
-                        arcon_err_kind!("Failed to unpack unreliable ArconMessage with err {:?}", e)
-                    })
-            } else {
+        let arcon_msg = match *msg.ser_id() {
+            id if id == OP::IN::RELIABLE_SER_ID => msg
+                .try_deserialise::<RawArconMessage<OP::IN>, ReliableSerde<OP::IN>>()
+                .map_err(|e| {
+                    arcon_err_kind!("Failed to unpack reliable ArconMessage with err {:?}", e)
+                }),
+            #[cfg(feature = "unsafe_flight")]
+            id if id == OP::IN::UNSAFE_SER_ID => msg
+                .try_deserialise::<RawArconMessage<OP::IN>, UnsafeSerde<OP::IN>>()
+                .map_err(|e| {
+                    arcon_err_kind!("Failed to unpack unreliable ArconMessage with err {:?}", e)
+                }),
+            _ => {
                 panic!("Unexpected deserialiser")
             }
         };
@@ -519,15 +524,23 @@ where
 mod tests {
     // Tests the message logic of Node.
     use super::*;
-    use crate::{pipeline::*, stream::operator::function::Filter};
+    use crate::{
+        pipeline::*,
+        stream::{
+            channel::{strategy::forward::Forward, Channel},
+            node::debug::DebugNode,
+            operator::function::Filter,
+        },
+    };
     use std::{sync::Arc, thread, time};
 
     fn node_test_setup() -> (ActorRef<ArconMessage<i32>>, Arc<Component<DebugNode<i32>>>) {
         // Returns a filter Node with input channels: sender1..sender3
         // And a debug sink receiving its results
-        let mut pipeline = Pipeline::new();
+        let mut pipeline = Pipeline::default();
         let pool_info = pipeline.get_pool_info();
-        let system = &pipeline.system();
+        let epoch_manager_ref = pipeline.epoch_manager();
+        let system = &pipeline.data_system();
 
         let sink = system.create(DebugNode::<i32>::new);
 
@@ -548,7 +561,12 @@ mod tests {
         let descriptor = String::from("node_");
         let in_channels = vec![1.into(), 2.into(), 3.into()];
 
-        let nm = NodeManager::new(descriptor.clone(), in_channels.clone(), backend.clone());
+        let nm = NodeManager::new(
+            descriptor.clone(),
+            epoch_manager_ref,
+            in_channels.clone(),
+            backend.clone(),
+        );
         let node_manager_comp = system.create(|| nm);
 
         system

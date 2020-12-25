@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
-    data::{Epoch, Watermark},
-    manager::state::*,
-    prelude::{state, NodeID},
+    data::{Epoch, NodeID, StateID, Watermark},
+    manager::{
+        epoch::EpochEvent,
+        snapshot::{Snapshot, SnapshotEvent, SnapshotManagerPort},
+    },
 };
 use arcon_error::*;
 use arcon_state::{ArconState, Backend, Handle, Map, Value};
@@ -53,6 +55,7 @@ impl CheckpointRequest {
 
 /// Enum containing possible local node events
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum NodeEvent {
     #[cfg(feature = "metrics")]
     Metrics(NodeID, NodeMetrics),
@@ -100,7 +103,7 @@ pub struct NodeManagerState<B: Backend> {
 #[derive(ComponentDefinition)]
 pub struct NodeManager<B>
 where
-    B: state::Backend,
+    B: Backend,
 {
     /// Component Context
     ctx: ComponentContext<Self>,
@@ -110,8 +113,10 @@ where
     state_id: StateID,
     /// Port for incoming local events from nodes this manager controls
     manager_port: ProvidedPort<NodeManagerPort>,
-    /// Port for the StateManager component
-    state_manager_port: RequiredPort<StateManagerPort>,
+    /// Port for the SnapshotManager component
+    snapshot_manager_port: RequiredPort<SnapshotManagerPort>,
+    /// Actor Reference to the EpochManager
+    epoch_manager: ActorRefStrong<EpochEvent>,
     /// Current Node parallelism
     node_parallelism: usize,
     /// Max Node parallelism
@@ -130,9 +135,14 @@ where
 
 impl<B> NodeManager<B>
 where
-    B: state::Backend,
+    B: Backend,
 {
-    pub fn new(state_id: String, in_channels: Vec<NodeID>, backend: Arc<B>) -> Self {
+    pub fn new(
+        state_id: String,
+        epoch_manager: ActorRefStrong<EpochEvent>,
+        in_channels: Vec<NodeID>,
+        backend: Arc<B>,
+    ) -> Self {
         // initialise internal state
         let mut wm_handle = Handle::map("_watermarks");
         let mut epoch_handle = Handle::map("_epochs");
@@ -155,7 +165,8 @@ where
             ctx: ComponentContext::uninitialised(),
             state_id,
             manager_port: ProvidedPort::uninitialised(),
-            state_manager_port: RequiredPort::uninitialised(),
+            snapshot_manager_port: RequiredPort::uninitialised(),
+            epoch_manager,
             node_parallelism: num_cpus::get(),
             max_node_parallelism: (num_cpus::get() * 2) as usize,
             node_index: 0,
@@ -179,10 +190,16 @@ where
 
             self.backend.checkpoint(checkpoint_dir.as_ref())?;
 
-            // Checkpoint complete, send update to the StateManager
-            self.state_manager_port.trigger(StateEvent::Snapshot(
+            // Send snapshot to SnapshotManager
+            self.snapshot_manager_port.trigger(SnapshotEvent::Snapshot(
                 self.state_id.clone(),
                 Snapshot::new(curr_epoch, checkpoint_dir.clone()),
+            ));
+
+            // Send Ack to EpochManager
+            self.epoch_manager.tell(EpochEvent::Ack(
+                self.state_id.clone(),
+                Epoch::new(curr_epoch),
             ));
 
             // bump epoch
@@ -223,28 +240,22 @@ where
 
 impl<B> ComponentLifecycle for NodeManager<B>
 where
-    B: state::Backend,
+    B: Backend,
 {
     fn on_start(&mut self) -> Handled {
         info!(self.ctx.log(), "Started NodeManager for {}", self.state_id,);
 
         // Register state id
-        self.state_manager_port
-            .trigger(StateEvent::Register(self.state_id.clone()));
+        self.snapshot_manager_port
+            .trigger(SnapshotEvent::Register(self.state_id.clone()));
 
-        /*
-        let manager_port = &mut self.manager_port;
-        // For each node, connect its NodeManagerPort
-        for (node_id, node) in &self.nodes {
-            &node.on_definition(|cd| {
-                biconnect_ports(manager_port, &mut cd.node_manager_port);
-            });
-        }
-        */
+        self.epoch_manager
+            .tell(EpochEvent::Register(self.state_id.clone()));
+
         Handled::Ok
     }
 }
-impl<B> Require<StateManagerPort> for NodeManager<B>
+impl<B> Require<SnapshotManagerPort> for NodeManager<B>
 where
     B: Backend,
 {
@@ -253,18 +264,18 @@ where
     }
 }
 
-impl<B> Provide<StateManagerPort> for NodeManager<B>
+impl<B> Provide<SnapshotManagerPort> for NodeManager<B>
 where
     B: Backend,
 {
-    fn handle(&mut self, _: StateEvent) -> Handled {
+    fn handle(&mut self, _: SnapshotEvent) -> Handled {
         Handled::Ok
     }
 }
 
 impl<B> Provide<NodeManagerPort> for NodeManager<B>
 where
-    B: state::Backend,
+    B: Backend,
 {
     fn handle(&mut self, event: NodeEvent) -> Handled {
         if let Err(err) = self.handle_node_event(event) {
@@ -277,7 +288,7 @@ where
 
 impl<B> Require<NodeManagerPort> for NodeManager<B>
 where
-    B: state::Backend,
+    B: Backend,
 {
     fn handle(&mut self, _: Never) -> Handled {
         unreachable!(crate::data::ArconNever::IS_UNREACHABLE);
@@ -286,7 +297,7 @@ where
 
 impl<B> Actor for NodeManager<B>
 where
-    B: state::Backend,
+    B: Backend,
 {
     type Message = Never;
     fn receive_local(&mut self, _: Self::Message) -> Handled {

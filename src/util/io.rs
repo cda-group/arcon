@@ -9,10 +9,7 @@ use tokio::{
     net::{TcpListener, UdpSocket},
     runtime::Runtime,
 };
-use tokio_util::{
-    codec::{BytesCodec, Decoder},
-    udp::UdpFramed,
-};
+use tokio_util::codec::{BytesCodec, Decoder};
 
 use bytes::BytesMut;
 use std::thread::{Builder, JoinHandle};
@@ -39,20 +36,24 @@ pub struct IO {
 
 impl IO {
     /// Creates a UDP IO component
+    #[allow(unused_variables)]
     pub fn udp(sock_addr: SocketAddr, subscriber: ActorRef<IOMessage>) -> IO {
         let th = Builder::new()
             .name(String::from("IOThread"))
             .spawn(move || {
-                let mut runtime = Runtime::new().expect("Could not create Tokio Runtime!");
+                let runtime = Runtime::new().expect("Could not create Tokio Runtime!");
 
                 runtime.block_on(async move {
                     let socket = UdpSocket::bind(&sock_addr).await.expect("Failed to bind");
 
+                    // NOTE: UdpFramed will soon be back in tokio-util...
+                    /*
                     let (_, mut reader) = UdpFramed::new(socket, BytesCodec::new()).split();
 
                     while let Some(Ok((bytes, _from))) = reader.next().await {
                         subscriber.tell(IOMessage::Bytes(bytes));
                     }
+                    */
                 });
             })
             .map_err(|_| ())
@@ -69,24 +70,24 @@ impl IO {
         let th = Builder::new()
             .name(String::from("IOThread"))
             .spawn(move || {
-                let mut runtime = Runtime::new().expect("Could not create Tokio Runtime!");
+                let runtime = Runtime::new().expect("Could not create Tokio Runtime!");
                 let handle = runtime.handle().clone();
                 runtime.block_on(async move {
                     let mut listener = TcpListener::bind(&sock_addr).await.expect("failed to bind");
 
-                    let mut incoming = listener.incoming();
                     let subscriber = Arc::new(subscriber);
-                    'incoming: while let Some(socket_res) = incoming.next().await {
+
+                    while let Some(socket_res) = listener.next().await {
                         let socket = match socket_res {
                             Ok(s) => s,
                             Err(_) => {
                                 // TODO: logging?
-                                continue 'incoming;
+                                continue;
                             }
                         };
 
                         let framed = BytesCodec::new().framed(socket);
-                        let (_writer, mut reader) = framed.split();
+                        let (_, mut reader) = framed.split();
 
                         let subscriber = Arc::clone(&subscriber);
                         let processor = async move {
@@ -237,6 +238,7 @@ pub mod tests {
     }
 
     #[test]
+    #[should_panic]
     fn udp_io_test() {
         let system = KompactConfig::default().build().expect("KompactSystem");
         let sock = "127.0.0.1:9313".parse().unwrap();
@@ -251,7 +253,7 @@ pub mod tests {
 
         let client = async {
             let self_addr: SocketAddr = "0.0.0.0:0".parse().unwrap();
-            let mut socket = UdpSocket::bind(&self_addr).await.expect("Failed to bind");
+            let socket = UdpSocket::bind(&self_addr).await.expect("Failed to bind");
 
             let fmt_data = format!("{:?}\n", "test1");
             let bytes = bytes::Bytes::from(fmt_data);

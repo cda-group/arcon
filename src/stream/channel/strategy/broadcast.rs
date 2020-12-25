@@ -129,17 +129,19 @@ mod tests {
     use crate::{
         data::ArconElement,
         pipeline::Pipeline,
-        prelude::DebugNode,
-        stream::channel::strategy::{tests::*, ChannelStrategy},
+        stream::{
+            channel::strategy::{tests::*, ChannelStrategy},
+            node::debug::DebugNode,
+        },
     };
     use kompact::prelude::*;
     use std::sync::Arc;
 
     #[test]
     fn broadcast_local_test() {
-        let mut pipeline = Pipeline::new();
+        let mut pipeline = Pipeline::default();
         let pool_info = pipeline.get_pool_info();
-        let system = pipeline.system();
+        let system = pipeline.data_system();
 
         let components: u32 = 8;
         let total_msgs: u64 = 10;

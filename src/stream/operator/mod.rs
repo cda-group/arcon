@@ -36,17 +36,17 @@ pub trait Operator: Send + Sized {
         &mut self,
         element: ArconElement<Self::IN>,
         ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> ArconResult<()>;
+    ) -> OperatorResult<()>;
 
     /// Determines how the `Operator` handles timeouts it registered earlier when they are triggered
     fn handle_timeout(
         &mut self,
         timeout: Self::TimerState,
         ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> ArconResult<()>;
+    ) -> OperatorResult<()>;
 
     /// Determines how the `Operator` persists its state
-    fn persist(&mut self) -> Result<(), arcon_state::error::ArconStateError>;
+    fn persist(&mut self) -> OperatorResult<()>;
 }
 
 /// Helper macro to implement an empty ´handle_timeout` function
@@ -57,7 +57,7 @@ macro_rules! ignore_timeout {
             &mut self,
             _timeout: Self::TimerState,
             _ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-        ) -> ArconResult<()> {
+        ) -> OperatorResult<()> {
             Ok(())
         }
     };
@@ -67,7 +67,7 @@ macro_rules! ignore_timeout {
 #[macro_export]
 macro_rules! ignore_persist {
     () => {
-        fn persist(&mut self) -> Result<(), arcon_state::error::ArconStateError> {
+        fn persist(&mut self) -> OperatorResult<()> {
             Ok(())
         }
     };

@@ -444,7 +444,7 @@ mod tests {
             }
 
             // reached buffer limit, we should get the value back.
-            assert_eq!(writer.push(10 as u64), Some(10));
+            assert_eq!(writer.push(10_u64), Some(10));
 
             let reader = writer.reader();
 
