@@ -6,11 +6,10 @@ pub mod debug;
 
 pub mod source;
 
+#[cfg(feature = "unsafe_flight")]
+use crate::data::flight_serde::unsafe_remote::UnsafeSerde;
 use crate::{
-    data::{
-        flight_serde::{reliable_remote::ReliableSerde, unsafe_remote::UnsafeSerde},
-        RawArconMessage, *,
-    },
+    data::{flight_serde::reliable_remote::ReliableSerde, RawArconMessage, *},
     manager::node::{NodeEvent::Checkpoint, *},
     stream::{
         channel::strategy::ChannelStrategy,
@@ -492,22 +491,19 @@ where
         Handled::Ok
     }
     fn receive_network(&mut self, msg: NetMessage) -> Handled {
-        let unsafe_id = OP::IN::UNSAFE_SER_ID;
-        let reliable_id = OP::IN::RELIABLE_SER_ID;
-        let ser_id = *msg.ser_id();
-
-        let arcon_msg = {
-            if ser_id == reliable_id {
-                msg.try_deserialise::<RawArconMessage<OP::IN>, ReliableSerde<OP::IN>>()
-                    .map_err(|e| {
-                        arcon_err_kind!("Failed to unpack reliable ArconMessage with err {:?}", e)
-                    })
-            } else if ser_id == unsafe_id {
-                msg.try_deserialise::<RawArconMessage<OP::IN>, UnsafeSerde<OP::IN>>()
-                    .map_err(|e| {
-                        arcon_err_kind!("Failed to unpack unreliable ArconMessage with err {:?}", e)
-                    })
-            } else {
+        let arcon_msg = match *msg.ser_id() {
+            id if id == OP::IN::RELIABLE_SER_ID => msg
+                .try_deserialise::<RawArconMessage<OP::IN>, ReliableSerde<OP::IN>>()
+                .map_err(|e| {
+                    arcon_err_kind!("Failed to unpack reliable ArconMessage with err {:?}", e)
+                }),
+            #[cfg(feature = "unsafe_flight")]
+            id if id == OP::IN::UNSAFE_SER_ID => msg
+                .try_deserialise::<RawArconMessage<OP::IN>, UnsafeSerde<OP::IN>>()
+                .map_err(|e| {
+                    arcon_err_kind!("Failed to unpack unreliable ArconMessage with err {:?}", e)
+                }),
+            _ => {
                 panic!("Unexpected deserialiser")
             }
         };

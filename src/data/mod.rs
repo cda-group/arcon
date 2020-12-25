@@ -7,7 +7,9 @@ pub mod flight_serde;
 mod ser_id;
 
 use crate::buffer::event::BufferReader;
+#[cfg(feature = "unsafe_flight")]
 use abomonation::Abomonation;
+#[cfg(feature = "unsafe_flight")]
 use abomonation_derive::*;
 use kompact::prelude::*;
 use prost::{Message as PMessage, Oneof as POneof};
@@ -19,14 +21,26 @@ use std::{
     ops::Deref,
 };
 
-pub trait ArconTypeBoundsNoSerde:
-    Clone + fmt::Debug + Sync + Send + PMessage + Default + Abomonation + 'static
-{
-}
-
-impl<T> ArconTypeBoundsNoSerde for T where
-    T: Clone + fmt::Debug + Sync + Send + PMessage + Default + Abomonation + 'static
-{
+cfg_if::cfg_if! {
+    if #[cfg(feature = "unsafe_flight")] {
+        pub trait ArconTypeBoundsNoSerde:
+            Clone + fmt::Debug + Sync + Send + PMessage + Abomonation + Default + 'static
+        {
+        }
+        impl<T> ArconTypeBoundsNoSerde for T where
+            T: Clone + fmt::Debug + Sync + Send + PMessage + Abomonation + Default + 'static
+        {
+        }
+    } else {
+        pub trait ArconTypeBoundsNoSerde:
+            Clone + fmt::Debug + Sync + Send + PMessage + Default + 'static
+        {
+        }
+        impl<T> ArconTypeBoundsNoSerde for T where
+            T: Clone + fmt::Debug + Sync + Send + PMessage + Default + 'static
+        {
+        }
+    }
 }
 
 cfg_if::cfg_if! {
@@ -50,6 +64,7 @@ pub trait ArconType: ArconTypeBounds
 where
     Self: std::marker::Sized,
 {
+    #[cfg(feature = "unsafe_flight")]
     /// Serialisation ID for Arcon's Unsafe In-flight serde
     const UNSAFE_SER_ID: SerId;
     /// Serialisation ID for Arcon's Reliable In-flight serde
@@ -63,7 +78,8 @@ where
 
 /// An Enum containing all possible stream events that may occur in an execution
 #[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
-#[derive(POneof, Clone, Abomonation)]
+#[cfg_attr(feature = "unsafe_flight", derive(Abomonation))]
+#[derive(POneof, Clone)]
 #[cfg_attr(feature = "arcon_serde", serde(bound = "A: ArconType"))]
 pub enum ArconEvent<A: ArconType> {
     /// A stream element containing some data of type [ArconType] and an optional timestamp [u64]
@@ -86,7 +102,8 @@ pub enum ArconEvent<A: ArconType> {
 // value has to be optional. In practice we expect it to always be Some.
 
 #[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
-#[derive(PMessage, Clone, Abomonation)]
+#[cfg_attr(feature = "unsafe_flight", derive(Abomonation))]
+#[derive(PMessage, Clone)]
 #[cfg_attr(feature = "arcon_serde", serde(bound = "A: ArconType"))]
 pub struct ArconEventWrapper<A: ArconType> {
     #[prost(oneof = "ArconEvent::<A>", tags = "1, 2, 3, 4")]
@@ -114,7 +131,8 @@ impl<A: ArconType> From<ArconEvent<A>> for ArconEventWrapper<A> {
 
 /// A Stream element containing some data and timestamp
 #[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
-#[derive(PMessage, Clone, Abomonation)]
+#[cfg_attr(feature = "unsafe_flight", derive(Abomonation))]
+#[derive(PMessage, Clone)]
 #[cfg_attr(feature = "arcon_serde", serde(bound = "A: ArconType"))]
 pub struct ArconElement<A: ArconType> {
     #[prost(message, required, tag = "1")]
@@ -143,7 +161,8 @@ impl<A: ArconType> ArconElement<A> {
 
 /// Watermark message containing a [u64] timestamp
 #[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
-#[derive(PMessage, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Abomonation)]
+#[cfg_attr(feature = "unsafe_flight", derive(Abomonation))]
+#[derive(PMessage, Clone, Copy, Ord, PartialOrd, Eq, PartialEq)]
 pub struct Watermark {
     #[prost(uint64, tag = "1")]
     pub timestamp: u64,
@@ -157,7 +176,8 @@ impl Watermark {
 
 /// Epoch marker message
 #[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
-#[derive(PMessage, Clone, Hash, Copy, Ord, PartialOrd, Eq, PartialEq, Abomonation)]
+#[cfg_attr(feature = "unsafe_flight", derive(Abomonation))]
+#[derive(PMessage, Clone, Hash, Copy, Ord, PartialOrd, Eq, PartialEq)]
 pub struct Epoch {
     #[prost(uint64, tag = "1")]
     pub epoch: u64,
@@ -167,10 +187,6 @@ impl Epoch {
     /// Creates a new Epoch
     pub fn new(epoch: u64) -> Self {
         Epoch { epoch }
-    }
-    /// Helper method for bumping the epoch number
-    pub fn bump(&mut self) {
-        self.epoch += 1;
     }
 }
 
@@ -185,7 +201,8 @@ pub struct ArconMessage<A: ArconType> {
 
 /// A raw ArconMessage for serialisation
 #[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
-#[derive(PMessage, Clone, Abomonation)]
+#[cfg_attr(feature = "unsafe_flight", derive(Abomonation))]
+#[derive(PMessage, Clone)]
 #[cfg_attr(feature = "arcon_serde", serde(bound = "A: ArconType"))]
 pub struct RawArconMessage<A: ArconType> {
     /// Batch of ArconEvents
@@ -248,7 +265,8 @@ impl<A: ArconType> ArconMessage<A> {
 
 /// A NodeID is used to identify a message sender
 #[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
-#[derive(PMessage, PartialEq, Eq, PartialOrd, Ord, Hash, Copy, Clone, Abomonation)]
+#[cfg_attr(feature = "unsafe_flight", derive(Abomonation))]
+#[derive(PMessage, PartialEq, Eq, PartialOrd, Ord, Hash, Copy, Clone)]
 pub struct NodeID {
     #[prost(uint32, tag = "1")]
     pub id: u32,
@@ -277,6 +295,7 @@ impl Into<u32> for NodeID {
 // an ArconType is always a struct or enum.
 
 impl ArconType for u32 {
+    #[cfg(feature = "unsafe_flight")]
     const UNSAFE_SER_ID: SerId = ser_id::UNSAFE_U32_ID;
     const RELIABLE_SER_ID: SerId = ser_id::RELIABLE_U32_ID;
     const VERSION_ID: VersionId = 1;
@@ -285,6 +304,7 @@ impl ArconType for u32 {
     }
 }
 impl ArconType for u64 {
+    #[cfg(feature = "unsafe_flight")]
     const UNSAFE_SER_ID: SerId = ser_id::UNSAFE_U64_ID;
     const RELIABLE_SER_ID: SerId = ser_id::RELIABLE_U64_ID;
     const VERSION_ID: VersionId = 1;
@@ -293,6 +313,7 @@ impl ArconType for u64 {
     }
 }
 impl ArconType for i32 {
+    #[cfg(feature = "unsafe_flight")]
     const UNSAFE_SER_ID: SerId = ser_id::UNSAFE_I32_ID;
     const RELIABLE_SER_ID: SerId = ser_id::RELIABLE_I32_ID;
     const VERSION_ID: VersionId = 1;
@@ -301,6 +322,7 @@ impl ArconType for i32 {
     }
 }
 impl ArconType for i64 {
+    #[cfg(feature = "unsafe_flight")]
     const UNSAFE_SER_ID: SerId = ser_id::UNSAFE_I64_ID;
     const RELIABLE_SER_ID: SerId = ser_id::RELIABLE_I64_ID;
     const VERSION_ID: VersionId = 1;
@@ -309,6 +331,7 @@ impl ArconType for i64 {
     }
 }
 impl ArconType for ArconF32 {
+    #[cfg(feature = "unsafe_flight")]
     const UNSAFE_SER_ID: SerId = ser_id::UNSAFE_F32_ID;
     const RELIABLE_SER_ID: SerId = ser_id::RELIABLE_F32_ID;
     const VERSION_ID: VersionId = 1;
@@ -317,6 +340,7 @@ impl ArconType for ArconF32 {
     }
 }
 impl ArconType for ArconF64 {
+    #[cfg(feature = "unsafe_flight")]
     const UNSAFE_SER_ID: SerId = ser_id::UNSAFE_F64_ID;
     const RELIABLE_SER_ID: SerId = ser_id::RELIABLE_F64_ID;
     const VERSION_ID: VersionId = 1;
@@ -325,6 +349,7 @@ impl ArconType for ArconF64 {
     }
 }
 impl ArconType for bool {
+    #[cfg(feature = "unsafe_flight")]
     const UNSAFE_SER_ID: SerId = ser_id::UNSAFE_BOOLEAN_ID;
     const RELIABLE_SER_ID: SerId = ser_id::RELIABLE_BOOLEAN_ID;
     const VERSION_ID: VersionId = 1;
@@ -333,6 +358,7 @@ impl ArconType for bool {
     }
 }
 impl ArconType for String {
+    #[cfg(feature = "unsafe_flight")]
     const UNSAFE_SER_ID: SerId = ser_id::UNSAFE_STRING_ID;
     const RELIABLE_SER_ID: SerId = ser_id::RELIABLE_STRING_ID;
     const VERSION_ID: VersionId = 1;
@@ -353,7 +379,8 @@ fn calc_hash<T: std::hash::Hash>(t: &T) -> u64 {
 ///
 /// The `Hash` impl rounds the floats down to an integer and then hashes it.
 #[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
-#[derive(Clone, PMessage, Abomonation)]
+#[cfg_attr(feature = "unsafe_flight", derive(Abomonation))]
+#[derive(Clone, PMessage)]
 #[repr(transparent)]
 pub struct ArconF32 {
     #[prost(float, tag = "1")]
@@ -404,7 +431,8 @@ impl PartialEq for ArconF32 {
 ///
 /// The `Hash` impl rounds the floats down to an integer and then hashes it.
 #[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
-#[derive(Clone, PMessage, Abomonation)]
+#[cfg_attr(feature = "unsafe_flight", derive(Abomonation))]
+#[derive(Clone, PMessage)]
 #[repr(transparent)]
 pub struct ArconF64 {
     #[prost(double, tag = "1")]
@@ -459,6 +487,7 @@ impl ArconNever {
     pub const IS_UNREACHABLE: &'static str = "The ArconNever type cannot be instantiated!";
 }
 impl ArconType for ArconNever {
+    #[cfg(feature = "unsafe_flight")]
     const UNSAFE_SER_ID: SerId = ser_id::NEVER_ID;
     const RELIABLE_SER_ID: SerId = ser_id::NEVER_ID;
     const VERSION_ID: VersionId = 1;
@@ -499,6 +528,8 @@ impl prost::Message for ArconNever {
         unreachable!(ArconNever::IS_UNREACHABLE);
     }
 }
+
+#[cfg(feature = "unsafe_flight")]
 impl Abomonation for ArconNever {}
 
 impl Default for ArconNever {
@@ -507,24 +538,27 @@ impl Default for ArconNever {
     }
 }
 
-/// Variant of [Writer](bytes::buf::Writer) for trait objects
-pub struct BufMutWriter<'a> {
-    buf: &'a mut dyn BufMut,
-}
-impl<'a> BufMutWriter<'a> {
-    pub fn new(buf: &'a mut dyn BufMut) -> Self {
-        BufMutWriter { buf }
-    }
-}
-impl<'a> std::io::Write for BufMutWriter<'a> {
-    fn write(&mut self, src: &[u8]) -> std::io::Result<usize> {
-        let n = std::cmp::min(self.buf.remaining_mut(), src.len());
+cfg_if::cfg_if! {
+    if #[cfg(feature = "unsafe_flight")] {
+        pub struct BufMutWriter<'a> {
+            buf: &'a mut dyn BufMut,
+        }
+        impl<'a> BufMutWriter<'a> {
+            pub fn new(buf: &'a mut dyn BufMut) -> Self {
+                BufMutWriter { buf }
+            }
+        }
+        impl<'a> std::io::Write for BufMutWriter<'a> {
+            fn write(&mut self, src: &[u8]) -> std::io::Result<usize> {
+                let n = std::cmp::min(self.buf.remaining_mut(), src.len());
 
-        self.buf.put_slice(&src[..n]);
-        Ok(n)
-    }
+                self.buf.put_slice(&src[..n]);
+                Ok(n)
+            }
 
-    fn flush(&mut self) -> std::io::Result<()> {
-        Ok(())
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
     }
 }

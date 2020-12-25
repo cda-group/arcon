@@ -7,7 +7,6 @@ fn main() {
             conf.set_timestamp_extractor(|x: &u64| *x);
         })
         .filter(|x| *x > 50)
-        .keyed()
         .map(|x| x + 10)
         .to_console()
         .build();

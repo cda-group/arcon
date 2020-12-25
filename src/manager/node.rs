@@ -55,6 +55,7 @@ impl CheckpointRequest {
 
 /// Enum containing possible local node events
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum NodeEvent {
     #[cfg(feature = "metrics")]
     Metrics(NodeID, NodeMetrics),

@@ -143,7 +143,7 @@ where
         move |descriptor: String,
               node_id: NodeID,
               in_channels: Vec<NodeID>,
-              mut components: Vec<Arc<dyn std::any::Any + Send + Sync>>,
+              components: Vec<Arc<dyn std::any::Any + Send + Sync>>,
               channel_kind: ChannelKind,
               system: &mut KompactSystem,
               manager: ErasedNodeManager| {

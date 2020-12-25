@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
-    data::{ArconElement, ArconNever, ArconType, NodeID},
+    data::{ArconElement, ArconNever, ArconType},
     stream::operator::{Operator, OperatorContext},
 };
 use ::serde::Serialize;
