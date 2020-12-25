@@ -1,9 +1,21 @@
 use arcon::prelude::*;
 use std::{path::Path, sync::Arc};
 
+#[cfg_attr(feature = "arcon_serde", derive(serde::Deserialize, serde::Serialize))]
+#[cfg_attr(feature = "unsafe_flight", derive(abomonation_derive::Abomonation))]
+// ANCHOR: data
+#[derive(Arcon, prost::Message, Copy, Clone)]
+#[arcon(unsafe_ser_id = 12, reliable_ser_id = 13, version = 1)]
+pub struct Event {
+    #[prost(uint64, tag = "1")]
+    pub id: u64,
+}
+// ANCHOR_END: data
+
+// ANCHOR: state
 #[derive(ArconState)]
 pub struct MyState<B: Backend> {
-    events: Appender<u64, B>,
+    events: Appender<Event, B>,
 }
 
 impl<B: Backend> MyState<B> {
@@ -16,6 +28,8 @@ impl<B: Backend> MyState<B> {
         }
     }
 }
+
+// ANCHOR_END: state
 
 impl<B: Backend> From<Snapshot> for MyState<B> {
     fn from(snapshot: Snapshot) -> Self {
@@ -32,10 +46,15 @@ fn main() {
     };
 
     let mut pipeline = Pipeline::with_conf(conf)
-        .collection((0..10000000).collect::<Vec<u64>>(), |conf| {
-            conf.set_timestamp_extractor(|x: &u64| *x);
-        })
-        .filter(|x| *x > 50)
+        .collection(
+            (0..10000000)
+                .map(|x| Event { id: x })
+                .collect::<Vec<Event>>(),
+            |conf| {
+                conf.set_timestamp_extractor(|x: &Event| x.id);
+            },
+        )
+        .filter(|event| event.id > 50)
         .map_with_state(
             |x, state: &mut MyState<Sled>| {
                 state.events().append(x)?;

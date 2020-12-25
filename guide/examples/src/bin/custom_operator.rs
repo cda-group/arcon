@@ -1,6 +1,7 @@
 use arcon::{ignore_persist, ignore_timeout, prelude::*};
 use std::sync::Arc;
 
+// ANCHOR: operator
 pub struct MyOperator;
 
 impl Operator for MyOperator {
@@ -24,6 +25,7 @@ impl Operator for MyOperator {
     ignore_timeout!();
     ignore_persist!();
 }
+// ANCHOR_END: operator
 
 fn main() {
     let mut pipeline = Pipeline::default()

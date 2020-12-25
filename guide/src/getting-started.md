@@ -25,3 +25,10 @@ To do so add the following to your Cargo.toml instead:
 [dependencies]
 arcon = { git = "https://github.com/cda-group/arcon" }
 ```
+
+
+## Basic Example
+
+```rust,edition2018,no_run,noplaypen
+{{#rustdoc_include ../examples/src/bin/collection.rs}}
+```

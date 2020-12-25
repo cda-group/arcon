@@ -1,0 +1,21 @@
+[package]
+name = "examples"
+version = "0.1.0"
+authors = ["Max Meldrum <mmeldrum@kth.se>"]
+edition = "2018"
+publish = false
+
+[features]
+unsafe_flight = ["arcon/unsafe_flight", "arcon_build/unsafe_flight"]
+arcon_serde = ["arcon/arcon_serde", "arcon_build/arcon_serde"]
+default = []
+
+[dependencies]
+arcon = { path = "../../"}
+prost = { git = "https://github.com/danburkert/prost.git" }
+serde = { version = "1.0.104", features = ["derive"] }
+abomonation = "0.7.3"
+abomonation_derive = "0.5.0"
+
+[build-dependencies]
+arcon_build = { path = "../../arcon_build"}

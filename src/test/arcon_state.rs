@@ -1,4 +1,4 @@
-// Modifications Copyright (c) 2020, KTH Royal Institute of Technology.
+// Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use arcon_state::{
@@ -18,8 +18,7 @@ pub struct StreamingState<B: Backend> {
 
 #[test]
 fn streaming_state_test() {
-    let b = Sled::create(&std::path::Path::new("/tmp/state_test")).unwrap();
-    let backend = std::sync::Arc::new(b);
+    let backend = std::sync::Arc::new(crate::util::temp_backend());
     let mut watermark_handle = Handle::value("_watermark");
     let mut epoch_handle = Handle::value("_epoch");
     let mut counters_handle = Handle::map("_counters");

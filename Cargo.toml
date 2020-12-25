@@ -15,6 +15,7 @@ Streaming-first Analytics Engine
 members = [
   "arcon_build",
   "arcon_tests",
+  "guide/examples"
 ]
 
 # TODO fix these later again

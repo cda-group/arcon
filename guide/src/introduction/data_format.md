@@ -16,26 +16,64 @@ Serialised size of two different Rust structs ([Reference](https://github.com/cd
 | Serde::Bincode   | 20 bytes | 228 bytes
 
 
-Arcon uses the [prost]() crate to be able to define its data types directly in Rust or through a .proto file.
+Arcon uses the [prost](https://github.com/danburkert/prost) crate to be able to define its data types directly in Rust or through a .proto file.
 
-```rust,edition2018,no_run,noplaypen
-#[cfg_attr(feature = "arcon_serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Arcon, prost::Message, Clone, abomonation_derive::Abomonation)]
-#[arcon(unsafe_ser_id = 12, reliable_ser_id = 13, version = 1)]
-pub struct Input {
-  #[prost(uint32, tag = "1")]
-  pub id: u32,
-}
+## ArconType
+
+Data that is passed through the runtime must implement `ArconType`. There are a few mandatory attributes
+that must be added:
+
+*   `version` An integer representing the version
+*   `reliable_ser_id` An integer representing the version used for in-flight serialisation
+*   `keys` fields that should be used to hash the key
+    *   If not specified, it will pick all hashable fields.
+    *   The Arcon derive macro will estimate the amount of bytes for the selected fields
+        and pick a suitable hasher.
+*   `unsafe_ser_id` An integer representing the unsafe in-flight serde if the **unsafe_flight** feature is enabled.
+
+
+
+## Declaring Data directly in Rust
+
+First make sure that you have also added prost as a dependency.
+
+```toml
+[dependencies]
+arcon = "LATEST_VERSION"
+prost = "ARCON_PROST_VERSION"
 ```
 
+Then you can directly declare ArconTypes by using the `Arcon` derive macro together with the `Prost` macro:
 
-## In-flight data
+```rust,edition2018,no_run,noplaypen
+{{#rustdoc_include ../../examples/src/bin/stateful.rs:data}}
+```
+## Generating from .proto files
 
-Arcon provides two in-flight serde modes, Unsafe and Reliable. The former uses the very unsafe and fast [Abomonation](https://github.com/TimelyDataflow/abomonation) crate to serialise data, while the latter depends on a more reliable but also slower option, Protobuf.
+Down below is an example of the same `Event` struct as defined above. Note that
+the mandatory attributes are gathered through regular `//` comments.
 
-NOTE: Currently on local deployment is supported for Arcon.
+```proto
+{{#rustdoc_include ../../examples/src/event.proto}}
+```
 
-## Serde Support
+We then need to use the `arcon_build` crate for generating the .proto files into Arcon supported data.
 
+```toml
+[build-dependencies]
+arcon_build = "ARCON_VERSION"
+```
+
+Add a `build.rs` file and change the paths if necessary.
+
+```rust
+{{#rustdoc_include ../../examples/build.rs}}
+```
+
+The build script will then generate the .rs files and you can
+include the generated data into an Arcon application by doing the following:
+```rust,edition2018,no_run,noplaypen
+{{#rustdoc_include ../../examples/src/bin/arcon_build.rs}}
+```
 
 

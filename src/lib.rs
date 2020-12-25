@@ -39,7 +39,9 @@ extern crate self as arcon;
 #[doc(hidden)]
 pub use arcon_macros::*;
 #[doc(hidden)]
-pub use arcon_state as state;
+pub use arcon_state::*;
+
+pub use arcon_state::{error::ArconStateError, index::ArconState, IndexOps};
 
 // Imports below are exposed for #[derive(Arcon)]
 #[doc(hidden)]
@@ -115,6 +117,7 @@ pub mod prelude {
             source::collection::CollectionSource,
             time::ArconTime,
         },
+        Arcon,
     };
 
     #[cfg(feature = "kafka")]
