@@ -8,6 +8,6 @@ multilingual = false
 src = "src"
 
 [output.html]
-default-theme = "navy"
+default-theme = "ayu"
 curly-quotes = true
 git-repository-url = "https://github.com/cda-group/arcon"

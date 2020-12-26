@@ -4,6 +4,7 @@
 [Getting Started](getting-started.md)
 
 - [Introduction](introduction/index.md)
+	- [Runtime](introduction/runtime.md)
 	- [Data Format](introduction/data_format.md)
 	- [State Management](introduction/state.md)
 	- [Operators](introduction/operators.md)

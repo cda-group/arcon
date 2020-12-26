@@ -3,7 +3,6 @@
 A streaming operator takes data and executes some form of transformation before
 sending it downstream to other operators as part of a larger dataflow graph.
 
-
 Arcon provides a set of pre-defined operators such as map, filter, and flatmap. However, it is also
 possible to implement your own Operator.
 
@@ -22,7 +21,7 @@ and 3 required methods to implement:
 
 
 If you do not care about dealing with timers or handling state, you may simply ignore these
-methods by using the `ignore_timeout!()` and `ignore_persist()` macros that add an empty implementation.
+methods by using the `ignore_timeout!()` and `ignore_persist()` macros that add empty implementations.
 
 Down below is an example of a custom `Operator` that is stateless and performs a basic addition operation
 on the incoming u64 data.

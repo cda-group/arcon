@@ -15,8 +15,7 @@ Serialised size of two different Rust structs ([Reference](https://github.com/cd
 | Protobuf  | 14 bytes   |   106 bytes
 | Serde::Bincode   | 20 bytes | 228 bytes
 
-
-Arcon uses the [prost](https://github.com/danburkert/prost) crate to be able to define its data types directly in Rust or through a .proto file.
+Arcon uses the [prost](https://github.com/danburkert/prost) crate to define its data types directly in Rust or through .proto files.
 
 ## ArconType
 
