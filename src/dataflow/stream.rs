@@ -184,7 +184,7 @@ impl<IN: ArconType> Stream<IN> {
         let mut conf = OperatorConfig::default();
         c(&mut conf);
 
-        // Yeah, fix this..
+        // used for the channels buffer pools
         let pool_info = self.ctx.pipeline.get_pool_info();
 
         // Set up directory for the operator and create Backend
