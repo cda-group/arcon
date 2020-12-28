@@ -10,4 +10,7 @@
 	- [Operators](introduction/operators.md)
 - [Pipeline](pipeline/index.md)
 	- [Configuration](pipeline/configuration.md)
+	- [Sources](pipeline/source.md)
+	- [Stream API](pipeline/stream.md)
+	- [State Access](pipeline/state.md)
 - [Project Info](project_info.md)

@@ -1,7 +1,7 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Arcon is a Streaming Analytics Engine.
+//! A runtime for writing streaming applications in the Rust programming language.
 //!
 //! # Example
 //!

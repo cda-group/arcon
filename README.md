@@ -1,6 +1,6 @@
 # Arcon
 
-A streaming runtime written in the Rust programming language.
+A runtime for writing streaming applications with the Rust programming language.
 
 ![ci](https://github.com/cda-group/arcon/workflows/ci/badge.svg)
 [![Cargo](https://img.shields.io/badge/crates.io-v0.1.3-orange)](https://crates.io/crates/arcon)

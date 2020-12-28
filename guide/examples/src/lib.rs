@@ -1,2 +1,3 @@
-// Copyright (c) 2020, KTH Royal Institute of Technology.
-// SPDX-License-Identifier: AGPL-3.0-only
+pub mod snapshot_component;
+
+pub use snapshot_component::SnapshotComponent;

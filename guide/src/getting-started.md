@@ -16,16 +16,14 @@ arcon = "LATEST_VERSION"
 ```
 The latest version can be found on [crates.io](https://crates.io/crates/arcon).
 
-### Github master
+### Github Dependency
 
-You can also point cargo to the latest [Github](https://github.com/cda-group/arcon) master version, instead of a release.
-To do so add the following to your Cargo.toml instead:
+You may also add Arcon as a git dependency through Cargo. The following will use the latest master version
 
 ```toml
 [dependencies]
 arcon = { git = "https://github.com/cda-group/arcon" }
 ```
-
 
 ## Basic Example
 

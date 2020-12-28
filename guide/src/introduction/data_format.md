@@ -56,7 +56,7 @@ the mandatory attributes are gathered through regular `//` comments.
 {{#rustdoc_include ../../examples/src/event.proto}}
 ```
 
-We then need to use the `arcon_build` crate for generating the .proto files into Arcon supported data.
+We then need to use the `arcon_build` crate to generate the Protobuf messages into Arcon supported data.
 
 ```toml
 [build-dependencies]

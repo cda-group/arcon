@@ -1,4 +1,5 @@
 use arcon::prelude::*;
+use examples::SnapshotComponent;
 use std::{path::Path, sync::Arc};
 
 #[cfg_attr(feature = "arcon_serde", derive(serde::Deserialize, serde::Serialize))]
@@ -31,6 +32,7 @@ impl<B: Backend> MyState<B> {
 
 // ANCHOR_END: state
 
+// ANCHOR: snapshot
 impl<B: Backend> From<Snapshot> for MyState<B> {
     fn from(snapshot: Snapshot) -> Self {
         let snapshot_dir = Path::new(&snapshot.snapshot_path);
@@ -38,6 +40,7 @@ impl<B: Backend> From<Snapshot> for MyState<B> {
         MyState::new(backend)
     }
 }
+// ANCHOR_END: snapshot
 
 fn main() {
     let conf = ArconConf {
@@ -67,10 +70,25 @@ fn main() {
         )
         .build();
 
+    // ANCHOR: watch_thread
     pipeline.watch("map_state_one", |epoch, mut s: MyState<Sled>| {
         let events_len = s.events().len();
         println!("Events Length {:?} for Epoch {}", events_len, epoch);
     });
+    // ANCHOR_END: watch_thread
+
+    // ANCHOR: watch_component
+    let kompact_system = KompactConfig::default().build().expect("KompactSystem");
+    // Create Kompact component to receive snapshots
+    let snapshot_comp = kompact_system.create(SnapshotComponent::new);
+
+    kompact_system
+        .start_notify(&snapshot_comp)
+        .wait_timeout(std::time::Duration::from_millis(200))
+        .expect("Failed to start component");
+
+    pipeline.watch_with("map_state_one", snapshot_comp);
+    // ANCHOR_END: watch_component
 
     pipeline.start();
     pipeline.await_termination();
