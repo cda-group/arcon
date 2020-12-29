@@ -13,7 +13,7 @@ use crate::{
     stream::channel::strategy::ChannelStrategy,
 };
 use arcon_error::*;
-use arcon_state::{index::ArconState, Backend, TimerIndex};
+use arcon_state::{index::ArconState, Backend, Timer};
 use kompact::prelude::ComponentDefinition;
 use prost::Message;
 
@@ -82,8 +82,8 @@ where
 {
     /// Channel Strategy that is used to pass on events
     channel_strategy: &'c mut ChannelStrategy<OP::OUT>,
-    /// A TimerIndex that can be used to schedule event timers
-    timer: &'b mut Option<TimerIndex<u64, OP::TimerState, B>>,
+    /// A Timer that can be used to schedule event timers
+    timer: &'b mut Option<Timer<u64, OP::TimerState, B>>,
     /// A reference to the backing ComponentDefinition
     source: &'a CD,
 }
@@ -97,7 +97,7 @@ where
     #[inline]
     pub(crate) fn new(
         source: &'a CD,
-        timer: &'b mut Option<TimerIndex<u64, OP::TimerState, B>>,
+        timer: &'b mut Option<Timer<u64, OP::TimerState, B>>,
         channel_strategy: &'c mut ChannelStrategy<OP::OUT>,
     ) -> Self {
         OperatorContext {

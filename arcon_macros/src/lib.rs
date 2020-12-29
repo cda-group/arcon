@@ -43,6 +43,7 @@ pub fn arcon(input: TokenStream) -> TokenStream {
     let input: DeriveInput = syn::parse(input).unwrap();
     let name = &input.ident;
 
+    #[allow(unused)]
     let (unsafe_ser_id, reliable_ser_id, version, keys) = {
         let arcon_attr = input.attrs.iter().find_map(|attr| match attr.parse_meta() {
             Ok(m) => {

@@ -21,7 +21,7 @@ use crate::{
         time::ArconTime,
     },
 };
-use arcon_state::Backend;
+use arcon_state::{Backend, Handle, MapState, Timer, TimerEvent};
 use kompact::{
     component::AbstractComponent,
     prelude::{biconnect_ports, ActorRefFactory, ActorRefStrong, KompactSystem, Never},
@@ -189,11 +189,25 @@ where
 
             let mut nodes = Vec::new();
 
-            let node = Node::new(
+            // TODO: should be distinct for each node..
+            let mut timeouts_handle =
+                Handle::<MapState<u64, TimerEvent<OP::TimerState>>>::map("_timeouts");
+            let mut time_handle = Handle::value("_time");
+
+            backend.register_map_handle(&mut timeouts_handle);
+            backend.register_value_handle(&mut time_handle);
+
+            let active_timeouts_handle = timeouts_handle.activate(backend.clone());
+            let active_time_handle = time_handle.activate(backend.clone());
+
+            let timer = Timer::new(active_timeouts_handle, active_time_handle);
+
+            let node = Node::with_timer(
                 descriptor,
                 channel_strategy(components, node_id, pool_info, channel_kind),
                 operator(backend.clone()),
                 NodeState::new(node_id, in_channels, backend.clone()),
+                timer,
             );
 
             let node_comp = system.create_erased(Box::new(node));

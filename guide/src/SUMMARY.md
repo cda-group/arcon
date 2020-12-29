@@ -4,7 +4,7 @@
 [Getting Started](getting-started.md)
 
 - [Introduction](introduction/index.md)
-	- [Runtime](introduction/runtime.md)
+	- [Architecture](introduction/architecture.md)
 	- [Data Format](introduction/data_format.md)
 	- [State Management](introduction/state.md)
 	- [Operators](introduction/operators.md)
@@ -12,5 +12,7 @@
 	- [Configuration](pipeline/configuration.md)
 	- [Sources](pipeline/source.md)
 	- [Stream API](pipeline/stream.md)
+	- [State Backends](pipeline/backends.md)
+	- [State Indexes](pipeline/indexes.md)
 	- [State Access](pipeline/state.md)
 - [Project Info](project_info.md)

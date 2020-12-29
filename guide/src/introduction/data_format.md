@@ -17,6 +17,12 @@ Serialised size of two different Rust structs ([Reference](https://github.com/cd
 
 Arcon uses the [prost](https://github.com/danburkert/prost) crate to define its data types directly in Rust or through .proto files.
 
+The section is divided into the following sub-sections:
+
+- [ArconType](#arcontype)
+- [Declaring ArconType directly in Rust](#declaring-arcontype-directly-in-rust)
+- [Generating ArconType from proto files](#generating-arcontype-from-proto-files)
+
 ## ArconType
 
 Data that is passed through the runtime must implement `ArconType`. There are a few mandatory attributes
@@ -32,7 +38,7 @@ that must be added:
 
 
 
-## Declaring Data directly in Rust
+## Declaring ArconType directly in Rust
 
 First make sure that you have also added prost as a dependency.
 
@@ -47,7 +53,7 @@ Then you can directly declare ArconTypes by using the `Arcon` derive macro toget
 ```rust,edition2018,no_run,noplaypen
 {{#rustdoc_include ../../examples/src/bin/stateful.rs:data}}
 ```
-## Generating from .proto files
+## Generating ArconType from .proto files
 
 Down below is an example of the same `Event` struct as defined above. Note that
 the mandatory attributes are gathered through regular `//` comments.

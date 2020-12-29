@@ -925,6 +925,7 @@ dependencies = [
  "arcon_build",
  "prost 0.6.1 (git+https://github.com/danburkert/prost.git)",
  "serde",
+ "tempfile",
 ]
 
 [[package]]

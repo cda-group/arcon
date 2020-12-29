@@ -17,7 +17,8 @@ use crate::{
     },
 };
 use arcon_error::{arcon_err, arcon_err_kind, ArconResult};
-use arcon_state::{index::IndexOps, Appender, ArconState, Backend, Handle, TimerIndex};
+use arcon_state::Timer as ArconTimer; // conflicts with Kompact Timer trait
+use arcon_state::{index::IndexOps, Appender, ArconState, Backend, Handle};
 use fxhash::*;
 use kompact::prelude::*;
 use std::{cell::UnsafeCell, sync::Arc};
@@ -158,7 +159,7 @@ where
     /// Internal Node State
     node_state: NodeState<OP, B>,
     /// Event time scheduler
-    timer: UnsafeCell<Option<TimerIndex<u64, OP::TimerState, B>>>,
+    timer: UnsafeCell<Option<ArconTimer<u64, OP::TimerState, B>>>,
 
     checkpoint_request: Option<Arc<CheckpointRequest>>,
 }
@@ -184,7 +185,7 @@ where
         channel_strategy: ChannelStrategy<OP::OUT>,
         operator: OP,
         node_state: NodeState<OP, B>,
-        timer: TimerIndex<u64, OP::TimerState, B>,
+        timer: ArconTimer<u64, OP::TimerState, B>,
     ) -> Self {
         Self::setup(
             descriptor,
@@ -200,7 +201,7 @@ where
         channel_strategy: ChannelStrategy<OP::OUT>,
         operator: OP,
         node_state: NodeState<OP, B>,
-        timer: Option<TimerIndex<u64, OP::TimerState, B>>,
+        timer: Option<ArconTimer<u64, OP::TimerState, B>>,
     ) -> Self {
         Node {
             ctx: ComponentContext::uninitialised(),

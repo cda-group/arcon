@@ -47,3 +47,4 @@ above the field.
 {{#rustdoc_include ../../examples/src/bin/stateful.rs:state}}
 ```
 
+Examples of more state indexes can be found [here](../pipeline/indexes.md).

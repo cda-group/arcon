@@ -19,13 +19,41 @@ and 3 required methods to implement:
 *   `handle_timeout` This method handles custom triggered timers that have been scheduled through the `OperatorContext`
 *   `handle_persist` This method defines how custom defined OperatorState shall be persisted.
 
-
 If you do not care about dealing with timers or handling state, you may simply ignore these
-methods by using the `ignore_timeout!()` and `ignore_persist()` macros that add empty implementations.
+methods by using the `ignore_timeout!()` and `ignore_persist!()` macros that add empty implementations.
 
-Down below is an example of a custom `Operator` that is stateless and performs a basic addition operation
-on the incoming u64 data.
+Both `handle_element` and `handle_timeout` has access to an `OperatorContext`. From this context, you may
+output events, schedule timers, and also perform some logging.
+
+## Creating an Operator
+
+To showcase the Operator interface, we will now create two custom Operators. One that is very basic and
+another that uses the timer facilities.
+
+Down below we have created an Operator called `MyOperator`, it receives u64s and outputs a CustomEvent.
 
 ```rust,edition2018,no_run,noplaypen
 {{#rustdoc_include ../../examples/src/bin/custom_operator.rs:operator}}
+```
+
+For context, this is how the CustomEvent struct looks like.
+
+```rust,edition2018,no_run,noplaypen
+{{#rustdoc_include ../../examples/src/bin/custom_operator.rs:data}}
+```
+
+We then create another Operator called `TimerOperator` that receives CustomEvent's and
+schedules a timer event of u64 in the future when the event time reaches `current_time + 1000`.
+The timer event is scheduled based on the key of the ArconType. Only one timer event can exist 
+per key.
+
+```rust,edition2018,no_run,noplaypen
+{{#rustdoc_include ../../examples/src/bin/custom_operator.rs:timer_operator}}
+```
+
+Finally, we create a simple Pipeline to that uses our custom operators.
+
+
+```rust,edition2018,no_run,noplaypen
+{{#rustdoc_include ../../examples/src/bin/custom_operator.rs:pipeline}}
 ```

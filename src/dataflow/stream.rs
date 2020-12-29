@@ -8,8 +8,10 @@ use crate::{
         dfg::{ChannelKind, DFGNode, DFGNodeID, DFGNodeKind, OperatorConfig, SourceKind, DFG},
     },
     pipeline::{AssembledPipeline, Pipeline},
-    prelude::{Filter, FlatMap, Map, MapInPlace},
-    stream::operator::Operator,
+    stream::operator::{
+        function::{Filter, FlatMap, Map, MapInPlace},
+        Operator,
+    },
 };
 use arcon_error::OperatorResult;
 use arcon_state::{index::ArconState, Backend};

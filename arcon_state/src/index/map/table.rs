@@ -1181,7 +1181,7 @@ impl<T> Iterator for RawIter<T> {
             // We don't check against items == 0 here to allow the
             // compiler to optimize away the item count entirely if the
             // iterator length is never queried.
-            debug_assert_eq!(self.items, 0);
+            //debug_assert_eq!(self.items, 0);
             None
         }
     }
