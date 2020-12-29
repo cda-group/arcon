@@ -127,6 +127,7 @@ pub mod prelude {
         prelude::{Channel as KompactChannel, *},
     };
 
+
     #[cfg(feature = "thread_pinning")]
     pub use kompact::{get_core_ids, CoreId};
 
