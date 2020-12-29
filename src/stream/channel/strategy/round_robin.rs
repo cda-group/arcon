@@ -121,12 +121,14 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{Channel, *};
     use crate::{
         data::ArconElement,
         pipeline::Pipeline,
-        prelude::{ChannelStrategy, DebugNode},
-        stream::channel::strategy::tests::*,
+        stream::{
+            channel::strategy::{tests::*, ChannelStrategy},
+            node::debug::DebugNode,
+        },
     };
     use kompact::prelude::*;
     use std::sync::Arc;
@@ -135,7 +137,7 @@ mod tests {
     fn round_robin_local_test() {
         let mut pipeline = Pipeline::default();
         let pool_info = pipeline.get_pool_info();
-        let system = pipeline.system();
+        let system = pipeline.data_system();
 
         let components: u64 = 8;
         let total_msgs: u64 = components * 4;

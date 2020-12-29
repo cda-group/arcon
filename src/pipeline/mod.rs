@@ -5,9 +5,9 @@ use crate::{
     buffer::event::PoolInfo,
     conf::{ArconConf, ExecutionMode},
     dataflow::{
+        conf::SourceConf,
         constructor::{source_cons, source_manager_cons},
         dfg::*,
-        source::SourceConf,
         stream::{Context, DefaultBackend},
     },
     manager::{
@@ -139,15 +139,21 @@ impl Pipeline {
     /// Create a non-parallel data source
     ///
     /// Returns a [`Stream`] object that users may execute transformations on.
-    pub fn source<S>(self, source: S, time: ArconTime) -> Stream<S::Data>
+    pub fn source<S>(self, source: S, conf: SourceConf<S::Data>) -> Stream<S::Data>
     where
         S: Source,
     {
+        assert_ne!(
+            conf.time == ArconTime::Event,
+            conf.extractor.is_none(),
+            "Cannot use ArconTime::Event without specifying a timestamp extractor"
+        );
         let cons = source_cons(source, self.get_pool_info());
         let mut state_dir = self.arcon_conf().state_dir.clone();
         state_dir.push("source_manager");
         let backend = Arc::new(DefaultBackend::create(&state_dir).unwrap());
-        let manager_cons = source_manager_cons(backend, self.arcon_conf().watermark_interval, time);
+        let manager_cons =
+            source_manager_cons(backend, self.arcon_conf().watermark_interval, conf.time);
 
         let mut ctx = Context::new(self);
         let kind = DFGNodeKind::Source(SourceKind::Single(cons), Default::default(), manager_cons);
@@ -182,9 +188,8 @@ impl Pipeline {
         );
         let mut conf = SourceConf::default();
         f(&mut conf);
-        let time = conf.time;
-        let source = LocalFileSource::new(path, conf);
-        self.source(source, time)
+        let source = LocalFileSource::new(path, conf.clone());
+        self.source(source, conf)
     }
 
     /// Creates a bounded data Stream using a Collection
@@ -207,9 +212,8 @@ impl Pipeline {
         let collection = i.into();
         let mut conf = SourceConf::default();
         f(&mut conf);
-        let time = conf.time;
-        let source = CollectionSource::new(collection, conf);
-        self.source(source, time)
+        let source = CollectionSource::new(collection, conf.clone());
+        self.source(source, conf)
     }
 
     // Creates a PoolInfo struct to be used by a ChannelStrategy
@@ -226,11 +230,6 @@ impl Pipeline {
     pub fn shutdown(self) {
         let _ = self.data_system.shutdown();
         let _ = self.ctrl_system.shutdown();
-    }
-
-    /// Give out a mutable reference to the KompactSystem of the pipeline
-    pub(crate) fn system(&mut self) -> &mut KompactSystem {
-        &mut self.data_system
     }
 
     pub(crate) fn data_system(&mut self) -> &mut KompactSystem {

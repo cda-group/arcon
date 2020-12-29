@@ -24,6 +24,12 @@ impl DFG {
     pub fn get(&self, id: &DFGNodeID) -> &DFGNode {
         self.graph.get(id.0).unwrap()
     }
+
+    /// Returns a mutable reference to the [`DFGNode`] associated to a [`DFGNodeID`].
+    #[allow(dead_code)]
+    pub fn get_mut(&mut self, id: &DFGNodeID) -> &mut DFGNode {
+        self.graph.get_mut(id.0).unwrap()
+    }
 }
 
 /// The ID of a [`DFGNode`] in the dataflow graph.

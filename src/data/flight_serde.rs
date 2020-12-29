@@ -4,16 +4,17 @@
 /// An Enum holding possible serialisation/deserialisation options for in-flight data
 #[derive(Clone)]
 pub enum FlightSerde {
+    /// A rather slower option using Protobuf to serialise and deserialise.
+    ///
+    /// Reliable is the default serde option.
+    Reliable,
+    #[cfg(feature = "unsafe_flight")]
     /// Unsafe, but highly performant option
     ///
     /// For Unsafe to be a feasible choice, the remote machine
     /// must have the same underlying architecture and data layout. An example of such an execution
     /// is where two processes on the same machine transfer serialised data over loopback.
     Unsafe,
-    /// A rather slower option using Protobuf to serialise and deserialise.
-    ///
-    /// Reliable is the default serde option.
-    Reliable,
 }
 
 impl Default for FlightSerde {
@@ -59,6 +60,7 @@ pub mod reliable_remote {
     }
 }
 
+#[cfg(feature = "unsafe_flight")]
 /// Module containing the [kompact] serialiser/deserialiser implementation for [FlightSerde::Unsafe]
 pub mod unsafe_remote {
     use crate::data::{ArconType, BufMutWriter, RawArconMessage, VersionId};
@@ -126,7 +128,19 @@ pub mod unsafe_remote {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::prelude::*;
+    use crate::{
+        data::{ArconElement, ArconEvent, ArconType},
+        pipeline::Pipeline,
+        stream::{
+            channel::{
+                strategy::{forward::Forward, ChannelStrategy},
+                Channel,
+            },
+            node::debug::DebugNode,
+        },
+    };
+    #[cfg(feature = "unsafe_flight")]
+    use abomonation_derive::*;
     use kompact::prelude::*;
     use once_cell::sync::Lazy;
     use std::time::Duration;
@@ -137,7 +151,8 @@ mod test {
 
     // The flight_serde pipeline will always send data of ArconDataTest
     #[cfg_attr(feature = "arcon_serde", derive(serde::Serialize, serde::Deserialize))]
-    #[derive(Arcon, prost::Message, Clone, abomonation_derive::Abomonation)]
+    #[cfg_attr(feature = "unsafe_flight", derive(Abomonation))]
+    #[derive(Arcon, prost::Message, Clone)]
     #[arcon(unsafe_ser_id = 104, reliable_ser_id = 105, version = 1)]
     pub struct ArconDataTest {
         #[prost(uint32, tag = "1")]
@@ -151,7 +166,8 @@ mod test {
     // Down below are different structs the unit tests may attempt to deserialise into
 
     #[cfg_attr(feature = "arcon_serde", derive(serde::Serialize, serde::Deserialize))]
-    #[derive(Arcon, prost::Message, Clone, abomonation_derive::Abomonation)]
+    #[cfg_attr(feature = "unsafe_flight", derive(Abomonation))]
+    #[derive(Arcon, prost::Message, Clone)]
     #[arcon(unsafe_ser_id = 104, reliable_ser_id = 105, version = 2)]
     pub struct UpdatedVer {
         #[prost(uint32, tag = "1")]
@@ -163,7 +179,8 @@ mod test {
     }
 
     #[cfg_attr(feature = "arcon_serde", derive(serde::Serialize, serde::Deserialize))]
-    #[derive(Arcon, prost::Message, Clone, abomonation_derive::Abomonation)]
+    #[cfg_attr(feature = "unsafe_flight", derive(Abomonation))]
+    #[derive(Arcon, prost::Message, Clone)]
     #[arcon(unsafe_ser_id = 204, reliable_ser_id = 205, version = 2)]
     pub struct UpdatedSerId {
         #[prost(uint32, tag = "1")]
@@ -175,7 +192,8 @@ mod test {
     }
 
     #[cfg_attr(feature = "arcon_serde", derive(serde::Serialize, serde::Deserialize))]
-    #[derive(Arcon, prost::Message, Clone, abomonation_derive::Abomonation)]
+    #[cfg_attr(feature = "unsafe_flight", derive(Abomonation))]
+    #[derive(Arcon, prost::Message, Clone)]
     #[arcon(unsafe_ser_id = 104, reliable_ser_id = 105, version = 1)]
     pub struct RemovedField {
         #[prost(uint32, tag = "1")]
@@ -185,7 +203,8 @@ mod test {
     }
 
     #[cfg_attr(feature = "arcon_serde", derive(serde::Serialize, serde::Deserialize))]
-    #[derive(Arcon, prost::Message, Clone, abomonation_derive::Abomonation)]
+    #[cfg_attr(feature = "unsafe_flight", derive(Abomonation))]
+    #[derive(Arcon, prost::Message, Clone)]
     #[arcon(unsafe_ser_id = 104, reliable_ser_id = 105, version = 1)]
     pub struct AddedField {
         #[prost(uint32, tag = "1")]
@@ -199,7 +218,8 @@ mod test {
     }
 
     #[cfg_attr(feature = "arcon_serde", derive(serde::Serialize, serde::Deserialize))]
-    #[derive(Arcon, prost::Message, Clone, abomonation_derive::Abomonation)]
+    #[cfg_attr(feature = "unsafe_flight", derive(Abomonation))]
+    #[derive(Arcon, prost::Message, Clone)]
     #[arcon(unsafe_ser_id = 104, reliable_ser_id = 105, version = 1)]
     pub struct RearrangedFieldOrder {
         #[prost(bytes, tag = "1")]
@@ -231,6 +251,7 @@ mod test {
         }
     }
 
+    #[cfg(feature = "unsafe_flight")]
     #[test]
     fn unsafe_serde_test() {
         let data = flight_test::<ArconDataTest>(FlightSerde::Unsafe);
@@ -241,6 +262,7 @@ mod test {
         }
     }
 
+    #[cfg(feature = "unsafe_flight")]
     #[test]
     #[should_panic]
     fn unsafe_version_mismatch_test() {
@@ -249,6 +271,7 @@ mod test {
         let _ = flight_test::<UpdatedVer>(FlightSerde::Unsafe);
     }
 
+    #[cfg(feature = "unsafe_flight")]
     #[test]
     #[should_panic]
     fn serde_id_mismatch_test() {

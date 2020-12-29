@@ -20,3 +20,6 @@ build/
 # Sublime Text
 *.sublime-project
 *.sublime-workspace
+
+#mdbook output
+book

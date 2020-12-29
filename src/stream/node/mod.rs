@@ -6,14 +6,20 @@ pub mod debug;
 
 pub mod source;
 
+#[cfg(feature = "unsafe_flight")]
+use crate::data::flight_serde::unsafe_remote::UnsafeSerde;
 use crate::{
-    data::RawArconMessage,
+    data::{flight_serde::reliable_remote::ReliableSerde, RawArconMessage, *},
     manager::node::{NodeEvent::Checkpoint, *},
-    prelude::*,
-    stream::operator::{Operator, OperatorContext},
+    stream::{
+        channel::strategy::ChannelStrategy,
+        operator::{Operator, OperatorContext},
+    },
 };
-use arcon_state::{index::IndexOps, Appender, ArconState, Backend, TimerIndex};
+use arcon_error::{arcon_err, arcon_err_kind, ArconResult};
+use arcon_state::{index::IndexOps, Appender, ArconState, Backend, Handle, Timer as ArconTimer}; // conflicts with Kompact Timer trait
 use fxhash::*;
+use kompact::prelude::*;
 use std::{cell::UnsafeCell, sync::Arc};
 
 #[cfg(feature = "metrics")]
@@ -152,7 +158,7 @@ where
     /// Internal Node State
     node_state: NodeState<OP, B>,
     /// Event time scheduler
-    timer: UnsafeCell<Option<TimerIndex<u64, OP::TimerState, B>>>,
+    timer: UnsafeCell<Option<ArconTimer<u64, OP::TimerState, B>>>,
 
     checkpoint_request: Option<Arc<CheckpointRequest>>,
 }
@@ -178,7 +184,7 @@ where
         channel_strategy: ChannelStrategy<OP::OUT>,
         operator: OP,
         node_state: NodeState<OP, B>,
-        timer: TimerIndex<u64, OP::TimerState, B>,
+        timer: ArconTimer<u64, OP::TimerState, B>,
     ) -> Self {
         Self::setup(
             descriptor,
@@ -194,7 +200,7 @@ where
         channel_strategy: ChannelStrategy<OP::OUT>,
         operator: OP,
         node_state: NodeState<OP, B>,
-        timer: Option<TimerIndex<u64, OP::TimerState, B>>,
+        timer: Option<ArconTimer<u64, OP::TimerState, B>>,
     ) -> Self {
         Node {
             ctx: ComponentContext::uninitialised(),
@@ -485,22 +491,19 @@ where
         Handled::Ok
     }
     fn receive_network(&mut self, msg: NetMessage) -> Handled {
-        let unsafe_id = OP::IN::UNSAFE_SER_ID;
-        let reliable_id = OP::IN::RELIABLE_SER_ID;
-        let ser_id = *msg.ser_id();
-
-        let arcon_msg = {
-            if ser_id == reliable_id {
-                msg.try_deserialise::<RawArconMessage<OP::IN>, ReliableSerde<OP::IN>>()
-                    .map_err(|e| {
-                        arcon_err_kind!("Failed to unpack reliable ArconMessage with err {:?}", e)
-                    })
-            } else if ser_id == unsafe_id {
-                msg.try_deserialise::<RawArconMessage<OP::IN>, UnsafeSerde<OP::IN>>()
-                    .map_err(|e| {
-                        arcon_err_kind!("Failed to unpack unreliable ArconMessage with err {:?}", e)
-                    })
-            } else {
+        let arcon_msg = match *msg.ser_id() {
+            id if id == OP::IN::RELIABLE_SER_ID => msg
+                .try_deserialise::<RawArconMessage<OP::IN>, ReliableSerde<OP::IN>>()
+                .map_err(|e| {
+                    arcon_err_kind!("Failed to unpack reliable ArconMessage with err {:?}", e)
+                }),
+            #[cfg(feature = "unsafe_flight")]
+            id if id == OP::IN::UNSAFE_SER_ID => msg
+                .try_deserialise::<RawArconMessage<OP::IN>, UnsafeSerde<OP::IN>>()
+                .map_err(|e| {
+                    arcon_err_kind!("Failed to unpack unreliable ArconMessage with err {:?}", e)
+                }),
+            _ => {
                 panic!("Unexpected deserialiser")
             }
         };
@@ -521,7 +524,14 @@ where
 mod tests {
     // Tests the message logic of Node.
     use super::*;
-    use crate::{pipeline::*, stream::operator::function::Filter};
+    use crate::{
+        pipeline::*,
+        stream::{
+            channel::{strategy::forward::Forward, Channel},
+            node::debug::DebugNode,
+            operator::function::Filter,
+        },
+    };
     use std::{sync::Arc, thread, time};
 
     fn node_test_setup() -> (ActorRef<ArconMessage<i32>>, Arc<Component<DebugNode<i32>>>) {
@@ -530,7 +540,7 @@ mod tests {
         let mut pipeline = Pipeline::default();
         let pool_info = pipeline.get_pool_info();
         let epoch_manager_ref = pipeline.epoch_manager();
-        let system = &pipeline.system();
+        let system = &pipeline.data_system();
 
         let sink = system.create(DebugNode::<i32>::new);
 

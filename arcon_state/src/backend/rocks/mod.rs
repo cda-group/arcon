@@ -102,7 +102,7 @@ impl Rocks {
             .expect("unreachable, the empty case is covered a few lines above") += 1;
 
         let mut wb = WriteBatch::default();
-        wb.delete_range_cf(cf, start, &end)?;
+        wb.delete_range_cf(cf, start, &end);
 
         self.db().write_opt(wb, &default_write_opts())?;
 
@@ -150,10 +150,6 @@ impl Backend for Rocks {
         if !path.exists() {
             fs::create_dir_all(&path)?;
         }
-        let path = path
-            .canonicalize()
-            .ok()
-            .with_context(|| InvalidPath { path: path.clone() })?;
 
         let column_families: HashSet<String> = match DB::list_cf(&opts, &path) {
             Ok(cfs) => cfs.into_iter().filter(|n| n != "default").collect(),
@@ -172,7 +168,7 @@ impl Backend for Rocks {
         };
 
         Ok(Rocks {
-            inner: UnsafeCell::new(DB::open_cf_descriptors_borrowed(&opts, &path, &cfds)?),
+            inner: UnsafeCell::new(DB::open_cf_descriptors(&opts, &path, cfds)?),
             path,
             restored: false,
         })

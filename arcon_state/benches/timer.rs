@@ -1,7 +1,7 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use arcon_state::{index::timer::TimerIndex, Backend, *};
+use arcon_state::{Backend, Timer, *};
 use criterion::{criterion_group, criterion_main, Bencher, Criterion, Throughput};
 use once_cell::sync::Lazy;
 use rand::Rng;
@@ -54,7 +54,7 @@ fn timer_inserts(backend: BackendType, b: &mut Bencher) {
         backend.register_value_handle(&mut time_handle);
         let time_handle = time_handle.activate(backend);
 
-        let mut index: TimerIndex<u64, u64, B> = TimerIndex::new(timeouts_handle, time_handle);
+        let mut index: Timer<u64, u64, B> = Timer::new(timeouts_handle, time_handle);
         b.iter(|| {
             for id in RANDOM_KEYS.iter() {
                 assert_eq!(index.schedule_at(*id, 10, 1000).is_ok(), true);

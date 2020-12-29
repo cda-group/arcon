@@ -104,27 +104,25 @@ impl AssembledPipeline {
     /// into some meaningful state.
     pub fn watch_with(
         &mut self,
-        state_ids: Vec<impl Into<StateID>>,
+        state_id: impl Into<StateID>,
         c: Arc<dyn AbstractComponent<Message = Snapshot>>,
     ) {
         self.pipeline.snapshot_manager.on_definition(|cd| {
-            for id in state_ids.into_iter() {
-                let state_id = id.into();
+            let state_id = state_id.into();
 
-                if !cd.registered_state_ids.contains(&state_id) {
-                    panic!(
-                        "State id {} has not been registered at the StateManager",
-                        state_id
-                    );
-                }
-
-                let actor_ref = c.actor_ref().hold().expect("fail");
-
-                cd.subscribers
-                    .entry(state_id)
-                    .or_insert_with(Vec::new)
-                    .push(actor_ref);
+            if !cd.registered_state_ids.contains(&state_id) {
+                panic!(
+                    "State id {} has not been registered at the StateManager",
+                    state_id
+                );
             }
+
+            let actor_ref = c.actor_ref().hold().expect("fail");
+
+            cd.subscribers
+                .entry(state_id)
+                .or_insert_with(Vec::new)
+                .push(actor_ref);
         });
     }
 }

@@ -1,9 +1,11 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
+#[cfg(feature = "unsafe_flight")]
+use crate::data::flight_serde::unsafe_remote::UnsafeSerde;
 use crate::{
     data::{
-        flight_serde::{reliable_remote::ReliableSerde, unsafe_remote::UnsafeSerde, FlightSerde},
+        flight_serde::{reliable_remote::ReliableSerde, FlightSerde},
         ArconEvent, ArconMessage, ArconType,
     },
     stream::channel::Channel,
@@ -94,6 +96,7 @@ fn send<A: ArconType>(
             actor_ref.tell(message);
             Ok(())
         }
+        #[cfg(feature = "unsafe_flight")]
         Channel::Remote(actor_path, FlightSerde::Unsafe) => {
             let unsafe_msg = UnsafeSerde(message.into());
             actor_path.tell_serialised(unsafe_msg, source)
@@ -107,8 +110,12 @@ fn send<A: ArconType>(
 
 #[cfg(test)]
 pub mod tests {
+    #[cfg(feature = "unsafe_flight")]
+    use abomonation_derive::*;
+
     #[cfg_attr(feature = "arcon_serde", derive(serde::Serialize, serde::Deserialize))]
-    #[derive(Arcon, prost::Message, Clone, abomonation_derive::Abomonation)]
+    #[cfg_attr(feature = "unsafe_flight", derive(Abomonation))]
+    #[derive(Arcon, prost::Message, Clone)]
     #[arcon(unsafe_ser_id = 12, reliable_ser_id = 13, version = 1)]
     pub struct Input {
         #[prost(uint32, tag = "1")]

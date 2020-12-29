@@ -3,9 +3,8 @@
 
 use crate::{
     buffer::event::{BufferPool, BufferWriter, PoolInfo},
-    data::{ArconEvent, ArconType},
-    prelude::*,
-    stream::channel::strategy::send,
+    data::{ArconEvent, ArconEventWrapper, ArconMessage, ArconType, NodeID},
+    stream::channel::{strategy::send, Channel},
 };
 use fxhash::FxHashMap;
 use kompact::prelude::{ComponentDefinition, SerError};
@@ -171,8 +170,15 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::{data::ArconEvent, pipeline::Pipeline, stream::channel::strategy::tests::*};
+    use super::{Channel, *};
+    use crate::{
+        data::{ArconElement, ArconEvent, NodeID},
+        pipeline::Pipeline,
+        stream::{
+            channel::strategy::{tests::*, ChannelStrategy},
+            node::debug::DebugNode,
+        },
+    };
     use kompact::prelude::*;
     use rand::Rng;
     use std::sync::Arc;
@@ -181,7 +187,7 @@ mod tests {
     fn keyby_test() {
         let mut pipeline = Pipeline::default();
         let pool_info = pipeline.get_pool_info();
-        let system = pipeline.system();
+        let system = pipeline.data_system();
 
         let parallelism: u32 = 8;
         let total_msgs = 1000;

@@ -1,16 +1,15 @@
 use crate::{
     buffer::event::PoolInfo,
-    data::{NodeID, StateID},
+    data::{ArconMessage, ArconType, NodeID, StateID},
     dataflow::dfg::ChannelKind,
     manager::{
         node::{NodeManager, NodeManagerPort},
         source::SourceManager,
     },
     pipeline::Pipeline,
-    prelude::ArconMessage,
     stream::{
         channel::{
-            strategy::{forward::Forward, *},
+            strategy::{forward::Forward, key_by::KeyBy, *},
             Channel,
         },
         node::{
@@ -22,7 +21,7 @@ use crate::{
         time::ArconTime,
     },
 };
-use arcon_state::Backend;
+use arcon_state::{Backend, Handle, MapState, Timer, TimerEvent};
 use kompact::{
     component::AbstractComponent,
     prelude::{biconnect_ports, ActorRefFactory, ActorRefStrong, KompactSystem, Never},
@@ -31,7 +30,7 @@ use std::{any::Any, sync::Arc};
 
 pub type SourceConstructor = Box<
     dyn FnOnce(
-        Vec<Box<dyn Any>>,
+        Vec<Arc<dyn Any + Send + Sync>>,
         ChannelKind,
         &mut KompactSystem,
     ) -> Arc<dyn AbstractComponent<Message = SourceEvent>>,
@@ -42,7 +41,7 @@ where
     S: Source,
 {
     Box::new(
-        move |mut components: Vec<Box<dyn std::any::Any>>,
+        move |mut components: Vec<Arc<dyn std::any::Any + Send + Sync>>,
               channel_kind: ChannelKind,
               system: &mut KompactSystem| {
             let channel_strategy = match channel_kind {
@@ -123,11 +122,11 @@ pub type NodeConstructor = Box<
         String,
         NodeID,
         Vec<NodeID>,
-        Vec<Box<dyn Any>>,
+        Vec<Arc<dyn Any + Send + Sync>>,
         ChannelKind,
         &mut KompactSystem,
         ErasedNodeManager,
-    ) -> Box<dyn Any>,
+    ) -> Vec<Arc<dyn std::any::Any + Send + Sync>>,
 >;
 
 pub(crate) fn node_cons<OP, B, F>(
@@ -144,34 +143,71 @@ where
         move |descriptor: String,
               node_id: NodeID,
               in_channels: Vec<NodeID>,
-              mut components: Vec<Box<dyn std::any::Any>>,
+              components: Vec<Arc<dyn std::any::Any + Send + Sync>>,
               channel_kind: ChannelKind,
               system: &mut KompactSystem,
               manager: ErasedNodeManager| {
-            let channel_strategy = match channel_kind {
-                ChannelKind::Forward => {
-                    assert_eq!(components.len(), 1, "Expected a single component target");
-                    let component = components.remove(0);
-                    let target_node = component
-                        .downcast::<Arc<dyn AbstractComponent<Message = ArconMessage<OP::OUT>>>>()
+            fn channel_strategy<OUT: ArconType>(
+                mut components: Vec<Arc<dyn std::any::Any + Send + Sync>>,
+                node_id: NodeID,
+                pool_info: PoolInfo,
+                channel_kind: ChannelKind,
+            ) -> ChannelStrategy<OUT> {
+                match channel_kind {
+                    ChannelKind::Forward => {
+                        assert_eq!(components.len(), 1, "Expected a single component target");
+                        let target_node = components
+                            .remove(0)
+                            .downcast::<Arc<dyn AbstractComponent<Message = ArconMessage<OUT>>>>()
+                            .unwrap();
+                        let actor_ref = target_node.actor_ref().hold().expect("failed to fetch");
+                        ChannelStrategy::Forward(Forward::new(
+                            Channel::Local(actor_ref),
+                            node_id,
+                            pool_info,
+                        ))
+                    }
+                    ChannelKind::KeyBy => {
+                        let max_key = 256; // fix
+                        let mut channels = Vec::new();
+                        for component in components {
+                            let target_node = component
+                        .downcast::<Arc<dyn AbstractComponent<Message = ArconMessage<OUT>>>>()
                         .unwrap();
-                    let actor_ref = target_node.actor_ref().hold().expect("failed to fetch");
-                    ChannelStrategy::Forward(Forward::new(
-                        Channel::Local(actor_ref),
-                        node_id,
-                        pool_info,
-                    ))
+                            let actor_ref =
+                                target_node.actor_ref().hold().expect("failed to fetch");
+                            let channel = Channel::Local(actor_ref);
+                            channels.push(channel);
+                        }
+                        ChannelStrategy::KeyBy(KeyBy::new(max_key, channels, node_id, pool_info))
+                    }
+                    ChannelKind::Console => ChannelStrategy::Console,
+                    ChannelKind::Mute => ChannelStrategy::Mute,
+                    _ => unimplemented!(),
                 }
-                ChannelKind::Console => ChannelStrategy::Console,
-                ChannelKind::Mute => ChannelStrategy::Mute,
-                _ => unimplemented!(),
-            };
+            }
 
-            let node = Node::new(
+            let mut nodes = Vec::new();
+
+            // TODO: should be distinct for each node..
+            let mut timeouts_handle =
+                Handle::<MapState<u64, TimerEvent<OP::TimerState>>>::map("_timeouts");
+            let mut time_handle = Handle::value("_time");
+
+            backend.register_map_handle(&mut timeouts_handle);
+            backend.register_value_handle(&mut time_handle);
+
+            let active_timeouts_handle = timeouts_handle.activate(backend.clone());
+            let active_time_handle = time_handle.activate(backend.clone());
+
+            let timer = Timer::new(active_timeouts_handle, active_time_handle);
+
+            let node = Node::with_timer(
                 descriptor,
-                channel_strategy,
+                channel_strategy(components, node_id, pool_info, channel_kind),
                 operator(backend.clone()),
                 NodeState::new(node_id, in_channels, backend.clone()),
+                timer,
             );
 
             let node_comp = system.create_erased(Box::new(node));
@@ -190,7 +226,9 @@ where
                 .wait_timeout(std::time::Duration::from_millis(2000))
                 .expect("");
 
-            Box::new(node_comp) as Box<dyn std::any::Any>
+            nodes.push(Arc::new(node_comp) as Arc<dyn Any + Send + Sync>);
+
+            nodes
         },
     )
 }

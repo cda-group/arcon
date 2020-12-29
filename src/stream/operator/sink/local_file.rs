@@ -1,8 +1,13 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::{prelude::*, stream::operator::OperatorContext};
+use crate::{
+    data::{ArconElement, ArconNever, ArconType},
+    stream::operator::{Operator, OperatorContext},
+};
 use arcon_error::OperatorResult;
+use arcon_state::Backend;
+use kompact::prelude::*;
 use std::{
     cell::RefCell,
     fs::{File, OpenOptions},
@@ -66,7 +71,14 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::prelude::{ChannelStrategy, NodeState};
+    use crate::{
+        data::{ArconMessage, NodeID},
+        stream::{
+            channel::strategy::ChannelStrategy,
+            node::{Node, NodeState},
+        },
+    };
+    use kompact::prelude::ActorRefFactory;
     use std::{
         io::{BufRead, BufReader},
         sync::Arc,

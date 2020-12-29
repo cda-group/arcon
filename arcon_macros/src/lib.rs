@@ -43,6 +43,7 @@ pub fn arcon(input: TokenStream) -> TokenStream {
     let input: DeriveInput = syn::parse(input).unwrap();
     let name = &input.ident;
 
+    #[allow(unused)]
     let (unsafe_ser_id, reliable_ser_id, version, keys) = {
         let arcon_attr = input.attrs.iter().find_map(|attr| match attr.parse_meta() {
             Ok(m) => {
@@ -76,10 +77,12 @@ pub fn arcon(input: TokenStream) -> TokenStream {
         }
     };
 
-    let unsafe_ser_id = unsafe_ser_id.expect("missing unsafe_ser_id attr");
     let reliable_ser_id = reliable_ser_id.expect("missing reliable_ser_id attr");
     let version = version.expect("missing version attr");
+    #[cfg(feature = "unsafe_flight")]
+    let unsafe_ser_id = unsafe_ser_id.expect("missing unsafe_ser_id attr");
 
+    #[cfg(feature = "unsafe_flight")]
     // Id check
     assert_ne!(
         unsafe_ser_id, reliable_ser_id,
@@ -88,8 +91,9 @@ pub fn arcon(input: TokenStream) -> TokenStream {
 
     let mut ids: Vec<proc_macro2::TokenStream> = Vec::with_capacity(3);
     ids.push(quote! { const RELIABLE_SER_ID: ::arcon::SerId  = #reliable_ser_id; });
-    ids.push(quote! { const UNSAFE_SER_ID: ::arcon::SerId = #unsafe_ser_id; });
     ids.push(quote! { const VERSION_ID: ::arcon::VersionId = #version; });
+    #[cfg(feature = "unsafe_flight")]
+    ids.push(quote! { const UNSAFE_SER_ID: ::arcon::SerId = #unsafe_ser_id; });
 
     let generics = &input.generics;
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
@@ -355,7 +359,9 @@ fn arcon_doc_attr(
             if str_parts.len() == 3 && str_parts[1] == "=" {
                 if str_parts[0] == "unsafe_ser_id" {
                     unsafe_ser_id = Some(str_parts[2].parse::<u64>().unwrap());
-                } else if str_parts[0] == "reliable_ser_id" {
+                }
+
+                if str_parts[0] == "reliable_ser_id" {
                     reliable_ser_id = Some(str_parts[2].parse::<u64>().unwrap());
                 } else if str_parts[0] == "version" {
                     version = Some(str_parts[2].parse::<u32>().unwrap());

@@ -1,7 +1,7 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Arcon is a Streaming Analytics Engine.
+//! A runtime for writing streaming applications in the Rust programming language.
 //!
 //! # Example
 //!
@@ -39,7 +39,9 @@ extern crate self as arcon;
 #[doc(hidden)]
 pub use arcon_macros::*;
 #[doc(hidden)]
-pub use arcon_state as state;
+pub use arcon_state::*;
+
+pub use arcon_state::{error::ArconStateError, index::ArconState, IndexOps};
 
 // Imports below are exposed for #[derive(Arcon)]
 #[doc(hidden)]
@@ -51,17 +53,15 @@ pub use kompact::prelude::SerId;
 #[doc(hidden)]
 pub use twox_hash::XxHash64;
 
-// Public Interface
-
-/// Arcon Configuration
-pub mod conf;
-/// Utilities for creating an Arcon pipeline
-pub mod pipeline;
-
-// Internal modules
+// exposed for benching
+pub mod bench_utils {
+    pub use crate::buffer::event::{BufferPool, BufferReader};
+}
 
 /// Arcon buffer implementations
 mod buffer;
+/// Arcon Configuration
+mod conf;
 /// Arcon data types, serialisers/deserialisers
 mod data;
 /// Dataflow API
@@ -69,8 +69,11 @@ mod dataflow;
 /// Module containing different runtime managers
 mod manager;
 #[cfg(feature = "metrics")]
+#[allow(dead_code)]
 /// Arcon metrics
 mod metrics;
+/// Utilities for creating an Arcon pipeline
+mod pipeline;
 /// Contains the core stream logic
 mod stream;
 /// Test module containing some more complex unit tests
@@ -100,41 +103,30 @@ pub mod prelude {
     };
     */
     pub use crate::{
-        buffer::event::{BufferPool, BufferReader, BufferWriter, PoolInfo},
         conf::ArconConf,
-        data::{StateID, VersionId},
+        data::{ArconElement, ArconNever, ArconType, StateID, VersionId},
+        dataflow::conf::{OperatorConf, SourceConf},
         manager::snapshot::Snapshot,
         pipeline::{AssembledPipeline, Pipeline, Stream},
         stream::{
-            channel::{
-                strategy::{
-                    broadcast::Broadcast, forward::Forward, key_by::KeyBy, round_robin::RoundRobin,
-                    ChannelStrategy,
-                },
-                Channel,
-            },
-            node::{debug::DebugNode, Node, NodeDescriptor, NodeState},
-            operator::{
-                function::{Filter, FlatMap, Map, MapInPlace},
-                sink::local_file::LocalFileSink,
-                Operator, OperatorContext,
-            },
+            operator::{sink::local_file::LocalFileSink, Operator, OperatorContext},
             source::collection::CollectionSource,
             time::ArconTime,
         },
+        Arcon,
     };
 
     #[cfg(feature = "kafka")]
     pub use crate::stream::operator::sink::kafka::KafkaSink;
 
-    pub use crate::data::{
-        flight_serde::{reliable_remote::ReliableSerde, unsafe_remote::UnsafeSerde, FlightSerde},
-        *,
-    };
     pub use arcon_error::{arcon_err, arcon_err_kind, ArconResult, OperatorResult};
 
     #[doc(hidden)]
-    pub use kompact::{default_components::*, prelude::*};
+    pub use kompact::{
+        default_components::*,
+        prelude::{Channel as KompactChannel, *},
+    };
+
     #[cfg(feature = "thread_pinning")]
     pub use kompact::{get_core_ids, CoreId};
 
@@ -142,7 +134,7 @@ pub mod prelude {
 
     pub use arcon_state::{
         AggregatorState, Appender, ArconState, Backend, BackendNever, BackendType, EagerAppender,
-        Handle, MapState, ReducerState, Sled, Value, ValueState, VecState,
+        EagerMap, Handle, Map, MapState, ReducerState, Sled, Value, ValueState, VecState,
     };
 
     #[cfg(feature = "rayon")]
