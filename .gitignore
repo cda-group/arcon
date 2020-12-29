@@ -12,9 +12,14 @@ spec.json
 run-pass/
 shell.nix
 
+op_*
+
 # Compile workspace
 build/
 
 # Sublime Text
 *.sublime-project
 *.sublime-workspace
+
+#mdbook output
+book

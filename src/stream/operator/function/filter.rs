@@ -69,7 +69,7 @@ where
         &mut self,
         element: ArconElement<IN>,
         mut ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> ArconResult<()> {
+    ) -> OperatorResult<()> {
         if (self.udf)(&element.data, &mut self.state) {
             ctx.output(element);
         }

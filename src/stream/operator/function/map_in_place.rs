@@ -14,23 +14,26 @@ use std::marker::PhantomData;
 pub struct MapInPlace<IN, F, S>
 where
     IN: ArconType,
-    F: SafelySendableFn(&mut IN, &mut S) -> ArconResult<()>,
+    F: SafelySendableFn(&mut IN, &mut S) -> OperatorResult<()>,
     S: ArconState,
 {
     state: S,
     udf: F,
-    _marker: PhantomData<fn(&mut IN) -> ArconResult<()>>,
+    _marker: PhantomData<fn(&mut IN) -> OperatorResult<()>>,
 }
 
-impl<IN> MapInPlace<IN, fn(&mut IN, &mut ()) -> ArconResult<()>, ()>
+impl<IN> MapInPlace<IN, fn(&mut IN, &mut ()) -> OperatorResult<()>, ()>
 where
     IN: ArconType,
 {
     #[allow(clippy::new_ret_no_self)]
     pub fn new(
-        udf: impl SafelySendableFn(&mut IN) -> ArconResult<()>,
-    ) -> MapInPlace<IN, impl SafelySendableFn(&mut IN, &mut ()) -> ArconResult<()>, ()> {
-        let udf = move |input: &mut IN, _: &mut ()| udf(input);
+        udf: impl SafelySendableFn(&mut IN),
+    ) -> MapInPlace<IN, impl SafelySendableFn(&mut IN, &mut ()) -> OperatorResult<()>, ()> {
+        let udf = move |input: &mut IN, _: &mut ()| {
+            udf(input);
+            Ok(())
+        };
         MapInPlace {
             state: (),
             udf,
@@ -42,7 +45,7 @@ where
 impl<IN, F, S> MapInPlace<IN, F, S>
 where
     IN: ArconType,
-    F: SafelySendableFn(&mut IN, &mut S) -> ArconResult<()>,
+    F: SafelySendableFn(&mut IN, &mut S) -> OperatorResult<()>,
     S: ArconState,
 {
     pub fn stateful(state: S, udf: F) -> Self {
@@ -57,7 +60,7 @@ where
 impl<IN, F, S> Operator for MapInPlace<IN, F, S>
 where
     IN: ArconType,
-    F: SafelySendableFn(&mut IN, &mut S) -> ArconResult<()>,
+    F: SafelySendableFn(&mut IN, &mut S) -> OperatorResult<()>,
     S: ArconState,
 {
     type IN = IN;
@@ -69,7 +72,7 @@ where
         &mut self,
         element: ArconElement<IN>,
         mut ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> ArconResult<()> {
+    ) -> OperatorResult<()> {
         let mut elem = element;
         (self.udf)(&mut elem.data, &mut self.state)?;
         ctx.output(elem);

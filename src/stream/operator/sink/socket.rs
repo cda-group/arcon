@@ -1,10 +1,16 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::prelude::*;
+use crate::{
+    data::{ArconElement, ArconNever, ArconType},
+    stream::operator::{Operator, OperatorContext},
+};
 use ::serde::Serialize;
+use arcon_error::OperatorResult;
+use arcon_state::Backend;
 use bytes::Bytes;
 use futures::{channel, executor::block_on, SinkExt, StreamExt};
+use kompact::prelude::*;
 use std::{
     marker::PhantomData,
     net::SocketAddr,
@@ -84,7 +90,7 @@ where
         &mut self,
         element: ArconElement<Self::IN>,
         _ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> ArconResult<()> {
+    ) -> OperatorResult<()> {
         let mut tx = self.tx_channel.clone();
         let fmt_data = {
             if let Ok(mut json) = serde_json::to_string(&element.data) {
@@ -111,7 +117,13 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::prelude::{ChannelStrategy, NodeState};
+    use crate::{
+        data::{ArconMessage, NodeID},
+        stream::{
+            channel::strategy::ChannelStrategy,
+            node::{Node, NodeState},
+        },
+    };
     use std::sync::Arc;
 
     #[test]

@@ -56,8 +56,10 @@ where
 
     config.type_attribute(
         ".",
-        "#[derive(arcon::Arcon, abomonation_derive::Abomonation)]",
+        "#[cfg_attr(feature = \"unsafe_flight\", derive(abomonation_derive::Abomonation))]",
     );
+
+    config.type_attribute(".", "#[derive(arcon::Arcon)]");
 
     config.compile_protos(protos, includes)
 }

@@ -1,3 +1,6 @@
+// Copyright (c) 2020, KTH Royal Institute of Technology.
+// SPDX-License-Identifier: AGPL-3.0-only
+
 use crate::{
     backend::{
         handles::{ActiveHandle, BoxedIteratorOfResult},
@@ -39,8 +42,8 @@ where
     }
 
     #[inline(always)]
-    pub fn remove(&self, k: &K) -> Result<()> {
-        self.handle.fast_remove(k)
+    pub fn remove(&self, k: &K) -> Result<Option<V>> {
+        self.handle.remove(k)
     }
     #[inline(always)]
     pub fn contains(&self, k: &K) -> Result<bool> {

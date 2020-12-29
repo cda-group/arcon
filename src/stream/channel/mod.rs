@@ -13,5 +13,6 @@ pub enum Channel<A: ArconType> {
     /// A typed local queue
     Local(ActorRefStrong<ArconMessage<A>>),
     /// Remote based queue containing a remote ActorPath identifier and an Arcon Serialiser
+    #[allow(dead_code)]
     Remote(ActorPath, FlightSerde),
 }

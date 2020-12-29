@@ -4,5 +4,9 @@ version = "0.1.0"
 authors = ["Max Meldrum <mmeldrum@kth.se>"]
 edition = "2018"
 
+[features]
+arcon_serde = []
+unsafe_flight = []
+
 [dependencies]
 prost-build = "0.6"

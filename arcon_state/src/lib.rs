@@ -24,7 +24,9 @@ pub mod index;
 
 #[doc(hidden)]
 pub use crate::backend::*;
-pub use crate::index::{Appender, EagerAppender, EagerMap, IndexOps, Map, TimerIndex, Value};
+pub use crate::index::{
+    Appender, EagerAppender, EagerMap, IndexOps, Map, Timer, TimerEvent, Value,
+};
 
 #[cfg(feature = "arcon_state_derive")]
 extern crate arcon_state_derive;

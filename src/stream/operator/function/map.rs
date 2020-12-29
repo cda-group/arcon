@@ -15,24 +15,28 @@ pub struct Map<IN, OUT, F, S>
 where
     IN: ArconType,
     OUT: ArconType,
-    F: SafelySendableFn(IN, &mut S) -> ArconResult<OUT>,
+    F: SafelySendableFn(IN, &mut S) -> OperatorResult<OUT>,
     S: ArconState,
 {
     state: S,
     udf: F,
-    _marker: PhantomData<fn(IN) -> ArconResult<OUT>>,
+    _marker: PhantomData<fn(IN) -> OperatorResult<OUT>>,
 }
 
-impl<IN, OUT> Map<IN, OUT, fn(IN, &mut ()) -> ArconResult<OUT>, ()>
+impl<IN, OUT> Map<IN, OUT, fn(IN, &mut ()) -> OperatorResult<OUT>, ()>
 where
     IN: ArconType,
     OUT: ArconType,
 {
     #[allow(clippy::new_ret_no_self)]
     pub fn new(
-        udf: impl SafelySendableFn(IN) -> ArconResult<OUT>,
-    ) -> Map<IN, OUT, impl SafelySendableFn(IN, &mut ()) -> ArconResult<OUT>, ()> {
-        let udf = move |input: IN, _: &mut ()| udf(input);
+        udf: impl SafelySendableFn(IN) -> OUT,
+    ) -> Map<IN, OUT, impl SafelySendableFn(IN, &mut ()) -> OperatorResult<OUT>, ()> {
+        let udf = move |input: IN, _: &mut ()| {
+            let output = udf(input);
+            Ok(output)
+        };
+
         Map {
             state: (),
             udf,
@@ -45,7 +49,7 @@ impl<IN, OUT, F, S> Map<IN, OUT, F, S>
 where
     IN: ArconType,
     OUT: ArconType,
-    F: SafelySendableFn(IN, &mut S) -> ArconResult<OUT>,
+    F: SafelySendableFn(IN, &mut S) -> OperatorResult<OUT>,
     S: ArconState,
 {
     pub fn stateful(state: S, udf: F) -> Self {
@@ -61,7 +65,7 @@ impl<IN, OUT, F, S> Operator for Map<IN, OUT, F, S>
 where
     IN: ArconType,
     OUT: ArconType,
-    F: SafelySendableFn(IN, &mut S) -> ArconResult<OUT>,
+    F: SafelySendableFn(IN, &mut S) -> OperatorResult<OUT>,
     S: ArconState,
 {
     type IN = IN;
@@ -73,7 +77,7 @@ where
         &mut self,
         element: ArconElement<IN>,
         mut ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> ArconResult<()> {
+    ) -> OperatorResult<()> {
         ctx.output(ArconElement {
             data: (self.udf)(element.data, &mut self.state)?,
             timestamp: element.timestamp,

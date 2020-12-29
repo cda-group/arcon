@@ -1,7 +1,11 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::prelude::*;
+#[cfg(feature = "unsafe_flight")]
+use crate::data::flight_serde::unsafe_remote::UnsafeSerde;
+use crate::data::{flight_serde::reliable_remote::ReliableSerde, *};
+use arcon_error::arcon_err_kind;
+use kompact::prelude::*;
 
 /// A DebugNode is a debug version of [Node]
 ///
@@ -86,22 +90,19 @@ where
         Handled::Ok
     }
     fn receive_network(&mut self, msg: NetMessage) -> Handled {
-        let unsafe_id = IN::UNSAFE_SER_ID;
-        let reliable_id = IN::RELIABLE_SER_ID;
-        let ser_id = *msg.ser_id();
-
-        let arcon_msg = {
-            if ser_id == reliable_id {
-                msg.try_deserialise::<RawArconMessage<IN>, ReliableSerde<IN>>()
-                    .map_err(|e| {
-                        arcon_err_kind!("Failed to unpack reliable ArconMessage with err {:?}", e)
-                    })
-            } else if ser_id == unsafe_id {
-                msg.try_deserialise::<RawArconMessage<IN>, UnsafeSerde<IN>>()
-                    .map_err(|e| {
-                        arcon_err_kind!("Failed to unpack unreliable ArconMessage with err {:?}", e)
-                    })
-            } else {
+        let arcon_msg = match *msg.ser_id() {
+            id if id == IN::RELIABLE_SER_ID => msg
+                .try_deserialise::<RawArconMessage<IN>, ReliableSerde<IN>>()
+                .map_err(|e| {
+                    arcon_err_kind!("Failed to unpack reliable ArconMessage with err {:?}", e)
+                }),
+            #[cfg(feature = "unsafe_flight")]
+            id if id == IN::UNSAFE_SER_ID => msg
+                .try_deserialise::<RawArconMessage<IN>, UnsafeSerde<IN>>()
+                .map_err(|e| {
+                    arcon_err_kind!("Failed to unpack unreliable ArconMessage with err {:?}", e)
+                }),
+            _ => {
                 panic!("Unexpected deserialiser")
             }
         };

@@ -1,4 +1,7 @@
-use super::{map::Map, value::Value, IndexOps};
+// Copyright (c) 2020, KTH Royal Institute of Technology.
+// SPDX-License-Identifier: AGPL-3.0-only
+
+use super::{map::eager::EagerMap, value::Value, IndexOps};
 use crate::{
     backend::{handles::ActiveHandle, Backend, MapState, ValueState},
     data::Key,
@@ -13,7 +16,7 @@ use core::time::Duration;
 use std::{cmp::Eq, hash::Hash};
 
 #[derive(prost::Message, PartialEq, Clone)]
-pub struct EventTimerEvent<E: crate::data::Value> {
+pub struct TimerEvent<E: crate::data::Value> {
     #[prost(uint64, tag = "1")]
     time_when_scheduled: u64,
     #[prost(uint64, tag = "2")]
@@ -22,9 +25,9 @@ pub struct EventTimerEvent<E: crate::data::Value> {
     payload: E,
 }
 
-impl<E: crate::data::Value> EventTimerEvent<E> {
+impl<E: crate::data::Value> TimerEvent<E> {
     fn new(time_when_scheduled: u64, timeout_millis: u64, payload: E) -> Self {
-        EventTimerEvent {
+        TimerEvent {
             time_when_scheduled,
             timeout_millis,
             payload,
@@ -37,44 +40,45 @@ impl<E: crate::data::Value> EventTimerEvent<E> {
 /// The Index utilises the [QuadWheelWithOverflow] data structure
 /// in order to manage the timers. The remaining state is kept in
 /// other indexes such as Map/Value.
-pub struct TimerIndex<K, V, B>
+pub struct Timer<K, V, B>
 where
     K: Key + Eq + Hash,
     V: crate::data::Value,
     B: Backend,
 {
     timer: QuadWheelWithOverflow<K>,
-    timeouts: Map<K, EventTimerEvent<V>, B>,
+    timeouts: EagerMap<K, TimerEvent<V>, B>,
     current_time: Value<u64, B>,
 }
 
-impl<K, V, B> TimerIndex<K, V, B>
+impl<K, V, B> Timer<K, V, B>
 where
     K: Key + Eq + Hash,
     V: crate::data::Value,
     B: Backend,
 {
     pub fn new(
-        timeouts_handle: ActiveHandle<B, MapState<K, EventTimerEvent<V>>>,
+        timeouts_handle: ActiveHandle<B, MapState<K, TimerEvent<V>>>,
         time_handle: ActiveHandle<B, ValueState<u64>>,
     ) -> Self {
-        Self {
+        let mut timer = Self {
             timer: QuadWheelWithOverflow::default(),
-            timeouts: Map::new(timeouts_handle),
+            timeouts: EagerMap::new(timeouts_handle),
             current_time: Value::new(time_handle),
-        }
+        };
+
+        // replay and insert back if any exists
+        timer.replay_events();
+
+        timer
     }
 
-    fn _replay_events(&mut self) {
-        //let time = self.current_time.get().unwrap_or(&0);
+    fn replay_events(&mut self) {
+        let time = self.current_time.get().unwrap_or(&0);
 
-        // TODO: support full iter at HashIndex
-        /*
-        for res in self
-            .timeouts
-            .iter()
-            .expect("could not get timeouts")
-        {
+        // TODO: Once Map supports full iter, perhaps move away
+        // from EagerMap?
+        for res in self.timeouts.iter().expect("could not get timeouts") {
             let (id, entry) = res.expect("could not get timeout entry");
             let delay = entry.time_when_scheduled + entry.timeout_millis - time;
             if let Err(f) = self
@@ -84,7 +88,6 @@ where
                 panic!("A timeout has expired during replay: {:?}", f);
             }
         }
-        */
     }
 
     #[inline(always)]
@@ -157,7 +160,7 @@ where
         {
             Ok(_) => {
                 // TODO: fix map_err
-                let event = EventTimerEvent::new(self.current_time(), delay, entry);
+                let event = TimerEvent::new(self.current_time(), delay, entry);
                 let _ = self.timeouts.put(id, event);
                 Ok(())
             }
@@ -198,7 +201,7 @@ where
     }
 }
 
-impl<K, V, B> IndexOps for TimerIndex<K, V, B>
+impl<K, V, B> IndexOps for Timer<K, V, B>
 where
     K: Key + Eq + Hash,
     V: crate::data::Value,
@@ -211,25 +214,37 @@ where
     }
 }
 
-/*
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::sled::Sled;
+    use crate::{backend::sled::Sled, Handle};
+    use std::sync::Arc;
 
     #[test]
     fn timer_index_test() {
-        let backend = Sled::create(&std::path::Path::new("/tmp/")).unwrap();
-        let capacity = 128;
-        let mut index: TimerIndex<u64, u64, Sled> =
-            TimerIndex::new(capacity, std::sync::Arc::new(backend));
+        let test_dir = tempfile::tempdir().unwrap();
+        let path = test_dir.path();
+        let backend = Arc::new(Sled::create(path).unwrap());
+
+        let mut timeouts_handle = Handle::<MapState<u64, TimerEvent<u64>>>::map("_timeouts");
+        let mut time_handle = Handle::value("_time");
+
+        backend.register_map_handle(&mut timeouts_handle);
+        backend.register_value_handle(&mut time_handle);
+
+        let active_timeouts_handle = timeouts_handle.activate(backend.clone());
+        let active_time_handle = time_handle.activate(backend);
+
+        let mut timer: Timer<u64, u64, Sled> =
+            Timer::new(active_timeouts_handle, active_time_handle);
+
         // Timer per key...
-        index.schedule_at(1, 1000, 10).unwrap();
-        index.schedule_at(2, 1600, 10).unwrap();
-        let evs = index.advance_to(1500);
+        timer.schedule_at(1, 1000, 10).unwrap();
+        timer.schedule_at(2, 1600, 10).unwrap();
+        let evs = timer.advance_to(1500);
         assert_eq!(evs.len(), 1);
-        let evs = index.advance_to(2000);
+        let evs = timer.advance_to(2000);
         assert_eq!(evs.len(), 1);
     }
+    // TODO: more elaborate tests
 }
-*/

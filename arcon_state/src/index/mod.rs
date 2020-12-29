@@ -4,7 +4,6 @@
 pub mod appender;
 pub mod map;
 pub mod timer;
-/// ValueIndex suitable for single object operations
 pub mod value;
 
 use crate::error::Result;
@@ -12,7 +11,7 @@ use crate::error::Result;
 pub use self::{
     appender::{eager::EagerAppender, Appender},
     map::{eager::EagerMap, Map},
-    timer::TimerIndex,
+    timer::{Timer, TimerEvent},
     value::Value,
 };
 

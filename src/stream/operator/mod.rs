@@ -13,7 +13,7 @@ use crate::{
     stream::channel::strategy::ChannelStrategy,
 };
 use arcon_error::*;
-use arcon_state::{index::ArconState, Backend, TimerIndex};
+use arcon_state::{index::ArconState, Backend, Timer};
 use kompact::prelude::ComponentDefinition;
 use prost::Message;
 
@@ -36,17 +36,17 @@ pub trait Operator: Send + Sized {
         &mut self,
         element: ArconElement<Self::IN>,
         ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> ArconResult<()>;
+    ) -> OperatorResult<()>;
 
     /// Determines how the `Operator` handles timeouts it registered earlier when they are triggered
     fn handle_timeout(
         &mut self,
         timeout: Self::TimerState,
         ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> ArconResult<()>;
+    ) -> OperatorResult<()>;
 
     /// Determines how the `Operator` persists its state
-    fn persist(&mut self) -> Result<(), arcon_state::error::ArconStateError>;
+    fn persist(&mut self) -> OperatorResult<()>;
 }
 
 /// Helper macro to implement an empty ´handle_timeout` function
@@ -57,7 +57,7 @@ macro_rules! ignore_timeout {
             &mut self,
             _timeout: Self::TimerState,
             _ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-        ) -> ArconResult<()> {
+        ) -> OperatorResult<()> {
             Ok(())
         }
     };
@@ -67,7 +67,7 @@ macro_rules! ignore_timeout {
 #[macro_export]
 macro_rules! ignore_persist {
     () => {
-        fn persist(&mut self) -> Result<(), arcon_state::error::ArconStateError> {
+        fn persist(&mut self) -> OperatorResult<()> {
             Ok(())
         }
     };
@@ -82,8 +82,8 @@ where
 {
     /// Channel Strategy that is used to pass on events
     channel_strategy: &'c mut ChannelStrategy<OP::OUT>,
-    /// A TimerIndex that can be used to schedule event timers
-    timer: &'b mut Option<TimerIndex<u64, OP::TimerState, B>>,
+    /// A Timer that can be used to schedule event timers
+    timer: &'b mut Option<Timer<u64, OP::TimerState, B>>,
     /// A reference to the backing ComponentDefinition
     source: &'a CD,
 }
@@ -97,7 +97,7 @@ where
     #[inline]
     pub(crate) fn new(
         source: &'a CD,
-        timer: &'b mut Option<TimerIndex<u64, OP::TimerState, B>>,
+        timer: &'b mut Option<Timer<u64, OP::TimerState, B>>,
         channel_strategy: &'c mut ChannelStrategy<OP::OUT>,
     ) -> Self {
         OperatorContext {
