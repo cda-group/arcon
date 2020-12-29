@@ -164,6 +164,7 @@ impl<IN: ArconType> Stream<IN> {
     }
 
     /// Will make sure the most downstream Node will print its result to the console
+    #[allow(clippy::wrong_self_convention)]
     pub fn to_console(mut self) -> Stream<IN> {
         self.ctx.console_output = true;
 

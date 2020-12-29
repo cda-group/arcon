@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 #[cfg(feature = "socket")]
+#[allow(dead_code)]
 pub mod io;
 
 pub mod prost_helpers;

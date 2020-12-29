@@ -93,7 +93,7 @@ pub(crate) fn source_manager_cons<B: Backend>(
                 watermark_interval,
                 source_comps,
                 epoch_manager_ref,
-                backend.clone(),
+                backend,
             );
             let comp = pipeline.ctrl_system().create_erased(Box::new(manager));
 
@@ -206,7 +206,7 @@ where
                 descriptor,
                 channel_strategy(components, node_id, pool_info, channel_kind),
                 operator(backend.clone()),
-                NodeState::new(node_id, in_channels, backend.clone()),
+                NodeState::new(node_id, in_channels, backend),
                 timer,
             );
 

@@ -30,7 +30,10 @@ where
     pub fn new(
         udf: impl SafelySendableFn(&mut IN),
     ) -> MapInPlace<IN, impl SafelySendableFn(&mut IN, &mut ()) -> OperatorResult<()>, ()> {
-        let udf = move |input: &mut IN, _: &mut ()| Ok(udf(input));
+        let udf = move |input: &mut IN, _: &mut ()| {
+            udf(input);
+            Ok(())
+        };
         MapInPlace {
             state: (),
             udf,

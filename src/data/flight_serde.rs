@@ -9,6 +9,7 @@ pub enum FlightSerde {
     /// Reliable is the default serde option.
     Reliable,
     #[cfg(feature = "unsafe_flight")]
+    #[allow(dead_code)]
     /// Unsafe, but highly performant option
     ///
     /// For Unsafe to be a feasible choice, the remote machine

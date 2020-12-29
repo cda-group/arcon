@@ -12,9 +12,11 @@ use crate::{
 };
 use kompact::prelude::{ComponentDefinition, SerError};
 
+#[allow(dead_code)]
 pub mod broadcast;
 pub mod forward;
 pub mod key_by;
+#[allow(dead_code)]
 pub mod round_robin;
 
 /// A `ChannelStrategy` defines a strategy of how messages are sent downstream
@@ -27,10 +29,12 @@ where
     /// Send messages to a single Component
     Forward(forward::Forward<A>),
     /// Broadcasts the message to a Vec of `Channels`
+    #[allow(dead_code)]
     Broadcast(broadcast::Broadcast<A>),
     /// Partition data to a set of `Channels` based on keyed hash
     KeyBy(key_by::KeyBy<A>),
     /// Send messages to a Vec of `Channels` in a Round Robin fashion
+    #[allow(dead_code)]
     RoundRobin(round_robin::RoundRobin<A>),
     /// A strategy that prints to the console
     Console,
@@ -58,7 +62,8 @@ where
     }
     /// Flush batch of events out
     #[inline]
-    pub fn flush(&mut self, source: &impl ComponentDefinition) {
+    #[cfg(test)]
+    pub(crate) fn flush(&mut self, source: &impl ComponentDefinition) {
         match self {
             ChannelStrategy::Forward(s) => s.flush(source),
             ChannelStrategy::Broadcast(s) => s.flush(source),
@@ -70,6 +75,7 @@ where
     }
     /// Returns number of outgoing channels
     #[inline]
+    #[allow(dead_code)]
     pub fn num_channels(&self) -> usize {
         match self {
             ChannelStrategy::Forward(_) => 1,

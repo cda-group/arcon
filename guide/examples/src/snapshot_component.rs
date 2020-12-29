@@ -1,5 +1,11 @@
 use arcon::prelude::*;
 
+impl Default for SnapshotComponent {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[derive(ComponentDefinition)]
 pub struct SnapshotComponent {
     ctx: ComponentContext<Self>,

@@ -32,7 +32,11 @@ where
     pub fn new(
         udf: impl SafelySendableFn(IN) -> OUT,
     ) -> Map<IN, OUT, impl SafelySendableFn(IN, &mut ()) -> OperatorResult<OUT>, ()> {
-        let udf = move |input: IN, _: &mut ()| Ok(udf(input));
+        let udf = move |input: IN, _: &mut ()| {
+            let output = udf(input);
+            Ok(output)
+        };
+
         Map {
             state: (),
             udf,

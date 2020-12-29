@@ -169,7 +169,8 @@ where
     B: Backend,
 {
     /// Creates a new Node
-    pub fn new(
+    #[cfg(test)]
+    pub(crate) fn new(
         descriptor: NodeDescriptor,
         channel_strategy: ChannelStrategy<OP::OUT>,
         operator: OP,

@@ -233,7 +233,7 @@ mod tests {
         backend.register_value_handle(&mut time_handle);
 
         let active_timeouts_handle = timeouts_handle.activate(backend.clone());
-        let active_time_handle = time_handle.activate(backend.clone());
+        let active_time_handle = time_handle.activate(backend);
 
         let mut timer: Timer<u64, u64, Sled> =
             Timer::new(active_timeouts_handle, active_time_handle);

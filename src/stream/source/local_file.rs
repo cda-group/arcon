@@ -54,8 +54,8 @@ where
     fn process_batch(&self, mut ctx: SourceContext<Self, impl ComponentDefinition>) {
         let drain_to = RESCHEDULE_EVERY.min(self.lines.borrow().len());
         for line in self.lines.borrow_mut().drain(..drain_to) {
-            match line.parse::<A>() {
-                Ok(record) => match &self.conf.time {
+            if let Ok(record) = line.parse::<A>() {
+                match &self.conf.time {
                     ArconTime::Event => match &self.conf.extractor {
                         Some(extractor) => {
                             let timestamp = extractor(&record);
@@ -66,9 +66,9 @@ where
                         }
                     },
                     ArconTime::Process => ctx.output(record),
-                },
-                Err(_) => (), // TODO: log parsing error
+                }
             }
+            // TODO: log error
         }
 
         if self.lines.borrow().is_empty() {

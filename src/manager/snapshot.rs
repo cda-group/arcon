@@ -119,7 +119,7 @@ impl Provide<SnapshotManagerPort> for SnapshotManager {
                 let snapshot_map = self
                     .uncommitted_catalog
                     .entry(epoch)
-                    .or_insert(FxHashMap::default());
+                    .or_insert_with(FxHashMap::default);
 
                 snapshot_map.insert(id, snapshot);
             }
