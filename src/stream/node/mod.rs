@@ -17,8 +17,7 @@ use crate::{
     },
 };
 use arcon_error::{arcon_err, arcon_err_kind, ArconResult};
-use arcon_state::Timer as ArconTimer; // conflicts with Kompact Timer trait
-use arcon_state::{index::IndexOps, Appender, ArconState, Backend, Handle};
+use arcon_state::{index::IndexOps, Appender, ArconState, Backend, Handle, Timer as ArconTimer}; // conflicts with Kompact Timer trait
 use fxhash::*;
 use kompact::prelude::*;
 use std::{cell::UnsafeCell, sync::Arc};

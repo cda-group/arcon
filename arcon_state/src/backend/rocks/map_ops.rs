@@ -91,7 +91,7 @@ impl MapOps for Rocks {
         for (user_key, value) in key_value_pairs {
             let key = handle.serialize_metakeys_and_key(&user_key)?;
             let serialized = protobuf::serialize(&value)?;
-            wb.put_cf(cf, key, serialized)?;
+            wb.put_cf(cf, key, serialized);
         }
 
         Ok(self.db().write_opt(wb, &default_write_opts())?)
@@ -107,7 +107,7 @@ impl MapOps for Rocks {
         for (user_key, value) in key_value_pairs {
             let key = handle.serialize_metakeys_and_key(user_key)?;
             let serialized = protobuf::serialize(value)?;
-            wb.put_cf(cf, key, serialized)?;
+            wb.put_cf(cf, key, serialized);
         }
 
         Ok(self.db().write_opt(wb, &default_write_opts())?)
@@ -161,7 +161,7 @@ impl MapOps for Rocks {
         //   option set. We do that in Rocks::register_*_state
         let iter =
             self.db()
-                .prefix_iterator_cf(cf, prefix)?
+                .prefix_iterator_cf(cf, prefix)
                 .map(move |(db_key, serialized_value)| {
                     let mut key_cursor = &db_key[..];
                     let _item_key: IK = fixed_bytes::deserialize_from(&mut key_cursor)?;
@@ -184,7 +184,7 @@ impl MapOps for Rocks {
 
         let iter = self
             .db()
-            .prefix_iterator_cf(cf, prefix)?
+            .prefix_iterator_cf(cf, prefix)
             .map(move |(db_key, _)| {
                 let mut key_cursor = &db_key[..];
                 let _item_key: IK = fixed_bytes::deserialize_from(&mut key_cursor)?;
@@ -206,7 +206,7 @@ impl MapOps for Rocks {
 
         let iter = self
             .db()
-            .prefix_iterator_cf(cf, prefix)?
+            .prefix_iterator_cf(cf, prefix)
             .map(move |(_, serialized_value)| {
                 let value: V = protobuf::deserialize(&serialized_value)?;
                 Ok(value)
@@ -222,7 +222,7 @@ impl MapOps for Rocks {
         let prefix = handle.serialize_metakeys()?;
         let cf = self.get_cf_handle(handle.id)?;
 
-        let count = self.db().prefix_iterator_cf(cf, prefix)?.count();
+        let count = self.db().prefix_iterator_cf(cf, prefix).count();
 
         Ok(count)
     }
@@ -233,6 +233,6 @@ impl MapOps for Rocks {
     ) -> Result<bool> {
         let prefix = handle.serialize_metakeys()?;
         let cf = self.get_cf_handle(handle.id)?;
-        Ok(self.db().prefix_iterator_cf(cf, prefix)?.next().is_none())
+        Ok(self.db().prefix_iterator_cf(cf, prefix).next().is_none())
     }
 }

@@ -122,7 +122,11 @@ pub mod prelude {
     pub use arcon_error::{arcon_err, arcon_err_kind, ArconResult, OperatorResult};
 
     #[doc(hidden)]
-    pub use kompact::{default_components::*, prelude::*};
+    pub use kompact::{
+        default_components::*,
+        prelude::{Channel as KompactChannel, *},
+    };
+
     #[cfg(feature = "thread_pinning")]
     pub use kompact::{get_core_ids, CoreId};
 
