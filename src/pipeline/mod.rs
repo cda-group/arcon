@@ -115,7 +115,7 @@ impl Pipeline {
         let data_system = arcon_conf.kompact_conf().build().expect("KompactSystem");
         let ctrl_system = arcon_conf.kompact_conf().build().expect("KompactSystem");
 
-        let snapshot_manager = ctrl_system.create_dedicated(SnapshotManager::new);
+        let snapshot_manager = ctrl_system.create(SnapshotManager::new);
 
         let epoch_manager = match arcon_conf.execution_mode {
             ExecutionMode::Local => {
