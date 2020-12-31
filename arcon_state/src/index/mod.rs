@@ -29,7 +29,7 @@ pub trait ArconState: IndexOps + Send + 'static {
 }
 
 /// Identifier for empty ArconState ()
-pub const EMPTY_STATE_ID: &'static str = "!";
+pub const EMPTY_STATE_ID: &str = "!";
 
 impl ArconState for () {
     const STATE_ID: &'static str = EMPTY_STATE_ID;
@@ -38,12 +38,4 @@ impl IndexOps for () {
     fn persist(&mut self) -> Result<(), crate::error::ArconStateError> {
         Ok(())
     }
-}
-
-#[cfg(test)]
-pub(crate) fn temp_backend() -> crate::Sled {
-    use crate::backend::Backend;
-    let test_dir = tempfile::tempdir().unwrap();
-    let path = test_dir.path();
-    crate::backend::Sled::create(path).unwrap()
 }
