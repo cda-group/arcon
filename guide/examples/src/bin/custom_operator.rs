@@ -89,15 +89,10 @@ fn main() {
         .operator(
             |_: Arc<Sled>| MyOperator,
             |conf| {
-                conf.set_state_id("MyOperator");
+                conf.instances = 1;
             },
         )
-        .operator(
-            |_: Arc<Sled>| TimerOperator,
-            |conf| {
-                conf.set_state_id("TimerOperator");
-            },
-        )
+        .operator(|_: Arc<Sled>| TimerOperator, |_| {})
         .build();
     // ANCHOR_END: pipeline
 

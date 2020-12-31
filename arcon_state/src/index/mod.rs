@@ -24,9 +24,16 @@ pub trait IndexOps {
 }
 
 /// Active Arcon State
-pub trait ArconState: IndexOps + Send + 'static {}
+pub trait ArconState: IndexOps + Send + 'static {
+    const STATE_ID: &'static str;
+}
 
-impl ArconState for () {}
+/// Identifier for empty ArconState ()
+pub const EMPTY_STATE_ID: &'static str = "!";
+
+impl ArconState for () {
+    const STATE_ID: &'static str = EMPTY_STATE_ID;
+}
 impl IndexOps for () {
     fn persist(&mut self) -> Result<(), crate::error::ArconStateError> {
         Ok(())

@@ -99,7 +99,12 @@ impl EpochManager {
                 }
             }
             EpochEvent::Register(state_id) => {
-                self.known_state_ids.insert(state_id);
+                if self.known_state_ids.contains(&state_id) {
+                    // TODO: make whole system shutdown?
+                    panic!("State ID {} cannot be registered multiple times", state_id);
+                } else {
+                    self.known_state_ids.insert(state_id);
+                }
             }
         }
     }

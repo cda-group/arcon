@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use super::Pipeline;
-use crate::{data::StateID, manager::snapshot::Snapshot, stream::node::source::SourceEvent};
+use crate::{manager::snapshot::Snapshot, stream::node::source::SourceEvent};
 use arcon_state::index::ArconState;
 use kompact::{component::AbstractComponent, prelude::ActorRefFactory};
 use std::sync::{
@@ -73,7 +73,7 @@ impl AssembledPipeline {
     }
 
     /// Spawns a new thread to run the function `F` on the ArconState `S` per epoch.
-    pub fn watch<S, F>(&mut self, state_id: impl Into<StateID>, f: F)
+    pub fn watch<S, F>(&mut self, f: F)
     where
         S: ArconState + std::convert::From<Snapshot>,
         F: Fn(u64, S) + Send + Sync + 'static,
@@ -87,7 +87,7 @@ impl AssembledPipeline {
         });
 
         self.pipeline.snapshot_manager.on_definition(|cd| {
-            let state_id = state_id.into();
+            let state_id = S::STATE_ID.to_owned();
             if !cd.registered_state_ids.contains(&state_id) {
                 panic!(
                     "State id {} has not been registered at the StateManager",
@@ -102,13 +102,9 @@ impl AssembledPipeline {
     ///
     /// Note that it is up to the target component to convert the [`Snapshot`]
     /// into some meaningful state.
-    pub fn watch_with(
-        &mut self,
-        state_id: impl Into<StateID>,
-        c: Arc<dyn AbstractComponent<Message = Snapshot>>,
-    ) {
+    pub fn watch_with<S: ArconState>(&mut self, c: Arc<dyn AbstractComponent<Message = Snapshot>>) {
         self.pipeline.snapshot_manager.on_definition(|cd| {
-            let state_id = state_id.into();
+            let state_id = S::STATE_ID.to_owned();
 
             if !cd.registered_state_ids.contains(&state_id) {
                 panic!(

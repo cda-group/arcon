@@ -1,79 +1,37 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use super::stream::DefaultBackend;
 use crate::{
     data::{ArconType, StateID},
-    stream::{operator::Operator, time::ArconTime},
+    stream::time::ArconTime,
 };
+use arcon_state::index::EMPTY_STATE_ID;
 use std::sync::Arc;
 
-// TODO:
-#[allow(dead_code)]
-pub struct OperatorConf<OP, Backend = DefaultBackend>
-where
-    OP: Operator + 'static,
-    Backend: arcon_state::Backend,
-{
-    state_cons: Arc<dyn Fn(Arc<Backend>) -> OP::OperatorState + Send + Sync + 'static>,
-    operator_cons: Arc<dyn Fn(Arc<Backend>) -> OP + Send + Sync + 'static>,
-    state_id: StateID,
+// TODO: Add state/operator constructors?
+// state_cons: Arc<dyn Fn(Arc<Backend>) -> OP::OperatorState + Send + Sync + 'static>,
+// operator_cons: Arc<dyn Fn(Arc<Backend>) -> OP + Send + Sync + 'static>,
+#[derive(Debug, Clone)]
+pub struct OperatorConf {
+    /// State ID for this DFG node
+    pub(crate) state_id: StateID,
+    /// Amount of instances to be created
+    pub instances: usize,
 }
 
-/*
-impl<OP> Default for OperatorConf<OP, DefaultBackend>
-where
-    OP: Operator + 'static,
-{
-    fn default() -> Self {
+impl OperatorConf {
+    pub(crate) fn new(mut state_id: StateID) -> Self {
+        if state_id == EMPTY_STATE_ID {
+            // create unique identifier so there is no clash between empty states
+            let unique_id = uuid::Uuid::new_v4().to_string();
+            state_id = format!("{}_{}", state_id, unique_id);
+        }
         Self {
-            /*
-            state_cons: Some(Arc::new(|_| ())),
-            operator_cons: None,
-            state_id: format!("op_{}", uuid::Uuid::new_v4().to_string()),
-            _marker: PhantomData,
-            */
+            state_id,
+            instances: 1,
         }
     }
 }
-*/
-/*
-
-impl<A, OP, State, Backend> OperatorConf<A, OP, State, Backend>
-where
-    A: ArconType,
-    OP: Operator + 'static,
-    State: ArconState,
-    Backend: arcon_state::Backend,
-{
-    pub fn new() -> Self {
-        Self {
-            state_cons: None,
-            operator_cons: None,
-            state_id: format!("op_{}", uuid::Uuid::new_v4().to_string()),
-            _marker: PhantomData,
-        }
-    }
-
-    pub fn set_operator_constructor(
-        &mut self,
-        f: impl Fn(Arc<Backend>) -> OP + Send + Sync + 'static,
-    ) {
-        self.operator_cons = Some(Arc::new(f));
-    }
-    pub fn set_state_constructor(
-        &mut self,
-        f: impl Fn(Arc<Backend>) -> State + Send + Sync + 'static,
-    ) {
-        self.state_cons = Some(Arc::new(f));
-    }
-
-    pub fn set_state_id(&mut self, state_id: impl Into<StateID>) {
-        self.state_id = state_id.into();
-    }
-}
-
-*/
 
 pub type TimestampExtractor<A> = Arc<dyn Fn(&A) -> u64 + Send + Sync>;
 

@@ -4,8 +4,9 @@
 use crate::{
     data::{ArconType, NodeID},
     dataflow::{
+        conf::OperatorConf,
         constructor::*,
-        dfg::{ChannelKind, DFGNode, DFGNodeID, DFGNodeKind, OperatorConfig, SourceKind, DFG},
+        dfg::{ChannelKind, DFGNode, DFGNodeID, DFGNodeKind, SourceKind, DFG},
     },
     pipeline::{AssembledPipeline, Pipeline},
     stream::operator::{
@@ -80,7 +81,7 @@ impl<IN: ArconType> Stream<IN> {
         B: Backend,
         SC: Fn(Arc<B>) -> S + 'static,
         F: Fn(IN, &mut S) -> OperatorResult<OUT> + StreamFnBounds,
-        C: FnOnce(&mut OperatorConfig),
+        C: FnOnce(&mut OperatorConf),
     {
         self.operator(move |b: Arc<B>| Map::stateful(sc(b), f.clone()), conf)
     }
@@ -103,7 +104,7 @@ impl<IN: ArconType> Stream<IN> {
         B: Backend,
         SC: Fn(Arc<B>) -> S + 'static,
         F: Fn(&mut IN, &mut S) -> OperatorResult<()> + StreamFnBounds,
-        C: FnOnce(&mut OperatorConfig),
+        C: FnOnce(&mut OperatorConf),
     {
         self.operator(
             move |b: Arc<B>| MapInPlace::stateful(sc(b), f.clone()),
@@ -126,7 +127,7 @@ impl<IN: ArconType> Stream<IN> {
         B: Backend,
         SC: Fn(Arc<B>) -> S + 'static,
         F: Fn(&IN, &mut S) -> bool + StreamFnBounds,
-        C: FnOnce(&mut OperatorConfig),
+        C: FnOnce(&mut OperatorConf),
     {
         self.operator(move |b: Arc<B>| Filter::stateful(sc(b), f.clone()), conf)
     }
@@ -158,7 +159,7 @@ impl<IN: ArconType> Stream<IN> {
         B: Backend,
         SC: Fn(Arc<B>) -> S + 'static,
         F: Fn(IN, &mut S) -> OperatorResult<OUTS> + StreamFnBounds,
-        C: FnOnce(&mut OperatorConfig),
+        C: FnOnce(&mut OperatorConf),
     {
         self.operator(move |b: Arc<B>| FlatMap::stateful(sc(b), f.clone()), conf)
     }
@@ -181,10 +182,11 @@ impl<IN: ArconType> Stream<IN> {
         OP: Operator + 'static,
         B: Backend,
         F: Fn(Arc<B>) -> OP + 'static,
-        C: FnOnce(&mut OperatorConfig),
+        C: FnOnce(&mut OperatorConf),
     {
         // Set up config and run the conf closure on it.
-        let mut conf = OperatorConfig::default();
+        let mut conf = OperatorConf::new(OP::OperatorState::STATE_ID.to_owned());
+
         c(&mut conf);
 
         // used for the channels buffer pools

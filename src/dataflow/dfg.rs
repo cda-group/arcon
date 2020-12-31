@@ -1,5 +1,4 @@
-use super::constructor::*;
-use crate::data::StateID;
+use super::{conf::OperatorConf, constructor::*};
 
 /// A logical dataflow-graph.
 #[allow(dead_code)]
@@ -36,29 +35,6 @@ impl DFG {
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct DFGNodeID(pub usize);
 
-#[derive(Debug, Clone)]
-pub struct OperatorConfig {
-    /// State ID for this DFG node
-    ///
-    /// Default ID is a random generated one
-    pub(crate) state_id: StateID,
-}
-
-impl OperatorConfig {
-    /// Modifies the [`StateID`] of this logical DFGNode
-    pub fn set_state_id<I: Into<StateID>>(&mut self, i: I) {
-        self.state_id = i.into();
-    }
-}
-
-impl Default for OperatorConfig {
-    fn default() -> Self {
-        Self {
-            state_id: format!("op_{}", uuid::Uuid::new_v4().to_string()),
-        }
-    }
-}
-
 /// A logical node in the dataflow graph.
 #[allow(dead_code)]
 pub struct DFGNode {
@@ -66,12 +42,12 @@ pub struct DFGNode {
     /// Ingoing edges to a node.
     ingoing: Vec<DFGNodeID>,
     /// Operator Configuration for this node
-    pub(crate) config: OperatorConfig,
+    pub(crate) config: OperatorConf,
     pub(crate) channel_kind: ChannelKind,
 }
 
 impl DFGNode {
-    pub fn new(kind: DFGNodeKind, config: OperatorConfig, ingoing: Vec<DFGNodeID>) -> Self {
+    pub fn new(kind: DFGNodeKind, config: OperatorConf, ingoing: Vec<DFGNodeID>) -> Self {
         Self {
             kind,
             ingoing,

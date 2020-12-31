@@ -3,7 +3,7 @@
 This section covers different approaches to accessing state of a live Arcon application.
 
 Arcon State is identified through a `StateID` which is an type alias
-for a String. The state id is set through the Operator configuration that was discussed in the [Stream API](stream.md) section.
+for a String. The state id of an `ArconState` object is its struct name.
 
 - [Snapshot](#snapshot)
 - [Watching from a thread](#watching-from-a-thread)
@@ -30,8 +30,7 @@ With the `watch` command, we can get access to some `ArconState` from our applic
 ```rust,edition2018,no_run,noplaypen
 {{#rustdoc_include ../../examples/src/bin/stateful.rs:watch_thread}}
 ```
-The above call assumes that MyState has been registered with the state id `map_state_one`.
-And do note that for the watch call to work, MyState needs to implement `From<Snapshot>` as seen below.
+For the call to work, MyState needs to implement `From<Snapshot>` as seen below.
 
 ```rust,edition2018,no_run,noplaypen
 {{#rustdoc_include ../../examples/src/bin/stateful.rs:snapshot}}

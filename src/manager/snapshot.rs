@@ -124,7 +124,12 @@ impl Provide<SnapshotManagerPort> for SnapshotManager {
                 snapshot_map.insert(id, snapshot);
             }
             SnapshotEvent::Register(id) => {
-                self.registered_state_ids.insert(id);
+                if self.registered_state_ids.contains(&id) {
+                    // TODO: make whole system shutdown?
+                    panic!("State ID {} cannot be registered multiple times", id);
+                } else {
+                    self.registered_state_ids.insert(id);
+                }
             }
         }
 
