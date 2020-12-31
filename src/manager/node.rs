@@ -9,7 +9,7 @@ use crate::{
     },
 };
 use arcon_error::*;
-use arcon_state::{ArconState, Backend, Handle, Map, Value};
+use arcon_state::{index::EMPTY_STATE_ID, ArconState, Backend, Handle, Map, Value};
 use kompact::prelude::*;
 use std::sync::Arc;
 
@@ -191,10 +191,12 @@ where
             self.backend.checkpoint(checkpoint_dir.as_ref())?;
 
             // Send snapshot to SnapshotManager
-            self.snapshot_manager_port.trigger(SnapshotEvent::Snapshot(
-                self.state_id.clone(),
-                Snapshot::new(curr_epoch, checkpoint_dir.clone()),
-            ));
+            if self.has_snapshot_state() {
+                self.snapshot_manager_port.trigger(SnapshotEvent::Snapshot(
+                    self.state_id.clone(),
+                    Snapshot::new(curr_epoch, checkpoint_dir.clone()),
+                ));
+            }
 
             // Send Ack to EpochManager
             self.epoch_manager.tell(EpochEvent::Ack(
@@ -216,6 +218,15 @@ where
         }
 
         Ok(())
+    }
+
+    /// Helper method to check if the NodeManager is responsible for any state
+    /// that should go to the SnapshotManager.
+    ///
+    /// Empty ArconState () starts its STATE_ID with !
+    #[inline]
+    fn has_snapshot_state(&self) -> bool {
+        self.state_id != EMPTY_STATE_ID
     }
 
     fn handle_node_event(&mut self, event: NodeEvent) -> ArconResult<()> {
@@ -246,8 +257,10 @@ where
         info!(self.ctx.log(), "Started NodeManager for {}", self.state_id,);
 
         // Register state id
-        self.snapshot_manager_port
-            .trigger(SnapshotEvent::Register(self.state_id.clone()));
+        if self.has_snapshot_state() {
+            self.snapshot_manager_port
+                .trigger(SnapshotEvent::Register(self.state_id.clone()));
+        }
 
         self.epoch_manager
             .tell(EpochEvent::Register(self.state_id.clone()));

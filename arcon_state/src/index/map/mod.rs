@@ -349,10 +349,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        backend::{sled::Sled, Handle},
-        index::temp_backend,
-    };
+    use crate::backend::{sled::Sled, temp_backend, Handle};
     use std::sync::Arc;
 
     #[test]

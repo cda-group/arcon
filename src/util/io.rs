@@ -229,7 +229,7 @@ pub mod tests {
         };
 
         Runtime::new().unwrap().block_on(client);
-        std::thread::sleep(std::time::Duration::from_millis(50));
+        std::thread::sleep(std::time::Duration::from_millis(500));
 
         // Our IOSource should have received 1 msg, that is, "hello"
         io_source.on_definition(|cd| {

@@ -5,7 +5,7 @@ use crate::{
     buffer::event::PoolInfo,
     conf::{ArconConf, ExecutionMode},
     dataflow::{
-        conf::SourceConf,
+        conf::{OperatorConf, SourceConf},
         constructor::{source_cons, source_manager_cons},
         dfg::*,
         stream::{Context, DefaultBackend},
@@ -21,6 +21,7 @@ use crate::{
     },
 };
 use arcon_allocator::Allocator;
+use arcon_state::index::EMPTY_STATE_ID;
 use kompact::{component::AbstractComponent, prelude::KompactSystem};
 use std::sync::{Arc, Mutex};
 
@@ -114,7 +115,7 @@ impl Pipeline {
         let data_system = arcon_conf.kompact_conf().build().expect("KompactSystem");
         let ctrl_system = arcon_conf.kompact_conf().build().expect("KompactSystem");
 
-        let snapshot_manager = ctrl_system.create_dedicated(SnapshotManager::new);
+        let snapshot_manager = ctrl_system.create(SnapshotManager::new);
 
         let epoch_manager = match arcon_conf.execution_mode {
             ExecutionMode::Local => {
@@ -157,7 +158,7 @@ impl Pipeline {
 
         let mut ctx = Context::new(self);
         let kind = DFGNodeKind::Source(SourceKind::Single(cons), Default::default(), manager_cons);
-        let dfg_node = DFGNode::new(kind, Default::default(), vec![]);
+        let dfg_node = DFGNode::new(kind, OperatorConf::new(EMPTY_STATE_ID.to_owned()), vec![]);
         ctx.dfg.insert(dfg_node);
         Stream::new(ctx)
     }

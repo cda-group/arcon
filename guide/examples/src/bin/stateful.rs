@@ -65,13 +65,13 @@ fn main() {
             },
             MyState::new,
             |conf| {
-                conf.set_state_id("map_state_one");
+                conf.instances = 1;
             },
         )
         .build();
 
     // ANCHOR: watch_thread
-    pipeline.watch("map_state_one", |epoch, mut s: MyState<Sled>| {
+    pipeline.watch(|epoch, mut s: MyState<Sled>| {
         let events_len = s.events().len();
         println!("Events Length {:?} for Epoch {}", events_len, epoch);
     });
@@ -87,7 +87,7 @@ fn main() {
         .wait_timeout(std::time::Duration::from_millis(200))
         .expect("Failed to start component");
 
-    pipeline.watch_with("map_state_one", snapshot_comp);
+    pipeline.watch_with::<MyState<Sled>>(snapshot_comp);
     // ANCHOR_END: watch_component
 
     pipeline.start();
