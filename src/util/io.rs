@@ -9,7 +9,10 @@ use tokio::{
     net::{TcpListener, UdpSocket},
     runtime::Runtime,
 };
-use tokio_util::codec::{BytesCodec, Decoder};
+use tokio_util::{
+    codec::{BytesCodec, Decoder},
+    udp::UdpFramed,
+};
 
 use bytes::BytesMut;
 use std::thread::{Builder, JoinHandle};
@@ -45,15 +48,11 @@ impl IO {
 
                 runtime.block_on(async move {
                     let socket = UdpSocket::bind(&sock_addr).await.expect("Failed to bind");
+                    let mut socket = UdpFramed::new(socket, BytesCodec::new());
 
-                    // NOTE: UdpFramed will soon be back in tokio-util...
-                    /*
-                    let (_, mut reader) = UdpFramed::new(socket, BytesCodec::new()).split();
-
-                    while let Some(Ok((bytes, _from))) = reader.next().await {
+                    while let Some(Ok((bytes, addr))) = socket.next().await {
                         subscriber.tell(IOMessage::Bytes(bytes));
                     }
-                    */
                 });
             })
             .map_err(|_| ())
@@ -73,19 +72,11 @@ impl IO {
                 let runtime = Runtime::new().expect("Could not create Tokio Runtime!");
                 let handle = runtime.handle().clone();
                 runtime.block_on(async move {
-                    let mut listener = TcpListener::bind(&sock_addr).await.expect("failed to bind");
+                    let listener = TcpListener::bind(&sock_addr).await.expect("failed to bind");
 
                     let subscriber = Arc::new(subscriber);
 
-                    while let Some(socket_res) = listener.next().await {
-                        let socket = match socket_res {
-                            Ok(s) => s,
-                            Err(_) => {
-                                // TODO: logging?
-                                continue;
-                            }
-                        };
-
+                    while let Ok((socket, _)) = listener.accept().await {
                         let framed = BytesCodec::new().framed(socket);
                         let (_, mut reader) = framed.split();
 
@@ -238,7 +229,6 @@ pub mod tests {
     }
 
     #[test]
-    #[should_panic]
     fn udp_io_test() {
         let system = KompactConfig::default().build().expect("KompactSystem");
         let sock = "127.0.0.1:9313".parse().unwrap();
