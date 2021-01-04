@@ -37,7 +37,7 @@ pub mod reliable_remote {
         const SER_ID: SerId = A::RELIABLE_SER_ID;
 
         fn deserialise(buf: &mut dyn Buf) -> Result<RawArconMessage<A>, SerError> {
-            RawArconMessage::decode(buf.bytes()).map_err(|e| SerError::InvalidData(e.to_string()))
+            RawArconMessage::decode(buf.chunk()).map_err(|e| SerError::InvalidData(e.to_string()))
         }
     }
 
@@ -86,7 +86,7 @@ pub mod unsafe_remote {
 
             // TODO: improve
             // But might need a BufMut rather than a Buf...
-            let bytes = buf.bytes();
+            let bytes = buf.chunk();
             let mut tmp_buf: Vec<u8> = Vec::with_capacity(bytes.len());
             tmp_buf.put_slice(&bytes);
             if let Some((msg, _)) =
