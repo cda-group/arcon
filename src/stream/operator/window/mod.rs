@@ -1,29 +1,38 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-pub mod event_time;
+pub mod assigner;
 
-pub use event_time::EventTimeWindowAssigner;
+pub use assigner::WindowAssigner;
 
 use crate::{
     prelude::*,
     util::{prost_helpers::ProstOption, SafelySendableFn},
 };
-use arcon_state::{AggregatorState, VecState};
+use arcon_error::OperatorResult;
+use arcon_state::{backend::handles::ActiveHandle, Aggregator, AggregatorState, Backend, VecState};
+use fxhash::FxHasher;
+use std::hash::{Hash, Hasher};
 
-pub struct WindowContext<'s, 'b, B: state::Backend> {
-    state_session: &'s mut state::Session<'b, B>,
+#[derive(prost::Message, Hash, Copy, Clone)]
+pub struct WindowContext {
+    #[prost(uint64)]
     key: u64,
+    #[prost(uint64)]
     index: u64,
 }
 
-impl<'s, 'b, B: state::Backend> WindowContext<'s, 'b, B> {
-    pub fn new(state_session: &'s mut state::Session<'b, B>, key: u64, index: u64) -> Self {
-        WindowContext {
-            state_session,
-            key,
-            index,
-        }
+impl WindowContext {
+    pub fn new(key: u64, index: u64) -> Self {
+        WindowContext { key, index }
+    }
+}
+
+impl Into<u64> for WindowContext {
+    fn into(self) -> u64 {
+        let mut s = FxHasher::default();
+        self.hash(&mut s);
+        s.finish()
     }
 }
 
@@ -36,89 +45,79 @@ where
     IN: ArconType,
     OUT: ArconType,
 {
-    fn register_states(
-        &mut self,
-        registration_token: &mut state::RegistrationToken<impl state::Backend>,
-    );
-
     /// The `on_element` function is called per received window element
-    fn on_element(&self, element: IN, ctx: WindowContext<impl state::Backend>) -> ArconResult<()>;
+    fn on_element(&mut self, element: IN, ctx: WindowContext) -> OperatorResult<()>;
     /// The `result` function is called at the end of a window's lifetime
-    fn result(&self, ctx: WindowContext<impl state::Backend>) -> ArconResult<OUT>;
+    fn result(&mut self, ctx: WindowContext) -> OperatorResult<OUT>;
     /// Clears the window state for the passed context
-    fn clear(&self, ctx: WindowContext<impl state::Backend>) -> ArconResult<()>;
+    fn clear(&mut self, ctx: WindowContext) -> OperatorResult<()>;
 }
 
-pub struct AppenderWindow<IN, OUT>
+pub struct AppenderWindow<IN, OUT, B>
 where
     IN: ArconType,
     OUT: ArconType,
+    B: Backend,
 {
-    buffer: state::Handle<VecState<IN>, u64, u64>,
+    handle: ActiveHandle<B, VecState<IN>, u64, u64>,
     materializer: &'static dyn SafelySendableFn(&[IN]) -> OUT,
 }
 
-impl<IN, OUT> AppenderWindow<IN, OUT>
+impl<IN, OUT, B> AppenderWindow<IN, OUT, B>
 where
     IN: ArconType,
     OUT: ArconType,
+    B: Backend,
 {
     pub fn new(
+        handle: ActiveHandle<B, VecState<IN>, u64, u64>,
         materializer: &'static dyn SafelySendableFn(&[IN]) -> OUT,
-    ) -> AppenderWindow<IN, OUT> {
+    ) -> AppenderWindow<IN, OUT, B> {
         AppenderWindow {
-            buffer: state::Handle::vec("appender_window_buffer")
-                .with_item_key(0)
-                .with_namespace(0),
+            handle,
             materializer,
         }
     }
 }
 
-impl<IN, OUT> Window<IN, OUT> for AppenderWindow<IN, OUT>
+impl<IN, OUT, B> Window<IN, OUT> for AppenderWindow<IN, OUT, B>
 where
     IN: ArconType,
     OUT: ArconType,
+    B: Backend,
 {
-    fn register_states(
-        &mut self,
-        registration_token: &mut state::RegistrationToken<impl state::Backend>,
-    ) {
-        self.buffer.register(registration_token)
-    }
+    fn on_element(&mut self, element: IN, ctx: WindowContext) -> OperatorResult<()> {
+        self.handle.set_item_key(ctx.key);
+        self.handle.set_namespace(ctx.index);
 
-    fn on_element(&self, element: IN, ctx: WindowContext<impl state::Backend>) -> ArconResult<()> {
-        self.buffer.set_item_key(ctx.key);
-        self.buffer.set_namespace(ctx.index);
-
-        self.buffer.activate(ctx.state_session).append(element)?;
+        self.handle.append(element)?;
         Ok(())
     }
 
-    fn result(&self, ctx: WindowContext<impl state::Backend>) -> ArconResult<OUT> {
-        self.buffer.set_item_key(ctx.key);
-        self.buffer.set_namespace(ctx.index);
+    fn result(&mut self, ctx: WindowContext) -> OperatorResult<OUT> {
+        self.handle.set_item_key(ctx.key);
+        self.handle.set_namespace(ctx.index);
 
-        let buf = self.buffer.activate(ctx.state_session).get()?;
+        let buf = self.handle.get()?;
         Ok((self.materializer)(&buf))
     }
 
-    fn clear(&self, ctx: WindowContext<impl state::Backend>) -> ArconResult<()> {
-        self.buffer.set_item_key(ctx.key);
-        self.buffer.set_namespace(ctx.index);
+    fn clear(&mut self, ctx: WindowContext) -> OperatorResult<()> {
+        self.handle.set_item_key(ctx.key);
+        self.handle.set_namespace(ctx.index);
 
-        self.buffer.activate(ctx.state_session).clear()?;
+        self.handle.clear()?;
         Ok(())
     }
 }
 
 #[derive(Clone)]
-struct IncrementalWindowAggregator<IN: ArconType, OUT: ArconType>(
+pub struct IncrementalWindowAggregator<IN: ArconType, OUT: ArconType>(
     &'static dyn SafelySendableFn(IN) -> OUT,
     &'static dyn SafelySendableFn(IN, &OUT) -> OUT,
 );
 
-impl<IN: ArconType, OUT: ArconType> state::Aggregator for IncrementalWindowAggregator<IN, OUT> {
+impl<IN: ArconType, OUT: ArconType> Aggregator for IncrementalWindowAggregator<IN, OUT> {
     type Input = IN;
     type Accumulator = ProstOption<OUT>; // this should be an option, but prost
     type Result = OUT;
@@ -150,104 +149,101 @@ impl<IN: ArconType, OUT: ArconType> state::Aggregator for IncrementalWindowAggre
     }
 }
 
-pub struct IncrementalWindow<IN, OUT>
+pub struct IncrementalWindow<IN, OUT, B>
 where
     IN: ArconType,
     OUT: ArconType,
+    B: Backend,
 {
-    aggregator: state::Handle<AggregatorState<IncrementalWindowAggregator<IN, OUT>>, u64, u64>,
+    aggregator: ActiveHandle<B, AggregatorState<IncrementalWindowAggregator<IN, OUT>>, u64, u64>,
 }
 
-impl<IN, OUT> IncrementalWindow<IN, OUT>
+impl<IN, OUT, B> IncrementalWindow<IN, OUT, B>
 where
     IN: ArconType,
     OUT: ArconType,
+    B: Backend,
 {
     pub fn new(
-        init: &'static dyn SafelySendableFn(IN) -> OUT,
-        agg: &'static dyn SafelySendableFn(IN, &OUT) -> OUT,
-    ) -> IncrementalWindow<IN, OUT> {
-        let aggregator = state::Handle::aggregator(
-            "incremental_window_aggregating_state",
-            IncrementalWindowAggregator(init, agg),
-        )
-        .with_item_key(0)
-        .with_namespace(0);
-
+        aggregator: ActiveHandle<
+            B,
+            AggregatorState<IncrementalWindowAggregator<IN, OUT>>,
+            u64,
+            u64,
+        >,
+    ) -> IncrementalWindow<IN, OUT, B> {
         IncrementalWindow { aggregator }
     }
 }
 
-impl<IN, OUT> Window<IN, OUT> for IncrementalWindow<IN, OUT>
+impl<IN, OUT, B> Window<IN, OUT> for IncrementalWindow<IN, OUT, B>
 where
     IN: ArconType,
     OUT: ArconType,
+    B: Backend,
 {
-    fn register_states(
-        &mut self,
-        registration_token: &mut state::RegistrationToken<impl state::Backend>,
-    ) {
-        self.aggregator.register(registration_token)
-    }
-
-    fn on_element(&self, element: IN, ctx: WindowContext<impl state::Backend>) -> ArconResult<()> {
+    fn on_element(&mut self, element: IN, ctx: WindowContext) -> OperatorResult<()> {
         self.aggregator.set_item_key(ctx.key);
         self.aggregator.set_namespace(ctx.index);
 
-        self.aggregator
-            .activate(ctx.state_session)
-            .aggregate(element)?;
+        self.aggregator.aggregate(element)?;
 
         Ok(())
     }
 
-    fn result(&self, ctx: WindowContext<impl state::Backend>) -> ArconResult<OUT> {
+    fn result(&mut self, ctx: WindowContext) -> OperatorResult<OUT> {
         self.aggregator.set_item_key(ctx.key);
         self.aggregator.set_namespace(ctx.index);
 
-        Ok(self.aggregator.activate(ctx.state_session).get()?)
+        Ok(self.aggregator.get()?)
     }
 
-    fn clear(&self, ctx: WindowContext<impl state::Backend>) -> ArconResult<()> {
+    fn clear(&mut self, ctx: WindowContext) -> OperatorResult<()> {
         self.aggregator.set_item_key(ctx.key);
         self.aggregator.set_namespace(ctx.index);
 
-        Ok(self.aggregator.activate(ctx.state_session).clear()?)
+        Ok(self.aggregator.clear()?)
     }
 }
 
-/*
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state::InMemory;
+    use crate::util::temp_backend;
+    use arcon_state::{Handle, Sled, VecState};
+    use std::sync::Arc;
 
     #[test]
     fn sum_appender_window_test() {
-        let state_backend = InMemory::create("test".as_ref()).unwrap();
-        let mut session = state_backend.session();
+        let backend = Arc::new(temp_backend());
 
         fn materializer(buffer: &[i32]) -> i32 {
             buffer.iter().sum()
         }
-        let mut window: AppenderWindow<i32, i32> = AppenderWindow::new(&materializer);
-        window.register_states(&mut unsafe { state::RegistrationToken::new(&mut session) });
+
+        let mut handle = Handle::vec("window_handle")
+            .with_item_key(0)
+            .with_namespace(0);
+
+        backend.register_vec_handle(&mut handle);
+
+        let active_handle: ActiveHandle<Sled, VecState<i32>, u64, u64> = handle.activate(backend);
+
+        let mut window = AppenderWindow::new(active_handle, &materializer);
 
         for i in 0..10 {
-            let _ = window.on_element(i, WindowContext::new(&mut session, 0, 0));
+            let _ = window.on_element(i, WindowContext::new(0, 0));
         }
 
-        let sum = window
-            .result(WindowContext::new(&mut session, 0, 0))
-            .unwrap();
+        let sum = window.result(WindowContext::new(0, 0)).unwrap();
+
         let expected: i32 = 45;
         assert_eq!(sum, expected);
     }
 
     #[test]
     fn sum_incremental_window_test() {
-        let state_backend = InMemory::create("test".as_ref()).unwrap();
-        let mut session = state_backend.session();
+        let backend = Arc::new(temp_backend());
 
         fn init(i: i32) -> u64 {
             i as u64
@@ -256,18 +252,30 @@ mod tests {
             agg + i as u64
         }
 
-        let mut window: IncrementalWindow<i32, u64> = IncrementalWindow::new(&init, &aggregation);
-        window.register_states(&mut unsafe { state::RegistrationToken::new(&mut session) });
+        let mut aggregator = Handle::aggregator(
+            "incremental_window_aggregating_state",
+            IncrementalWindowAggregator(&init, &aggregation),
+        )
+        .with_item_key(0)
+        .with_namespace(0);
+
+        backend.register_aggregator_handle(&mut aggregator);
+
+        let active_handle = aggregator.activate(backend);
+
+        let mut window = IncrementalWindow::new(active_handle);
 
         for i in 0..10 {
-            let _ = window.on_element(i, WindowContext::new(&mut session, 0, 0));
+            let _ = window.on_element(i, WindowContext::new(0, 0));
         }
 
-        let sum = window
-            .result(WindowContext::new(&mut session, 0, 0))
-            .unwrap();
-        let expected: u64 = 45;
-        assert_eq!(sum, expected);
+        for i in 0..20 {
+            let _ = window.on_element(i, WindowContext::new(1, 1));
+        }
+
+        let sum_one = window.result(WindowContext::new(0, 0)).unwrap();
+        assert_eq!(sum_one, 45);
+        let sum_two = window.result(WindowContext::new(1, 1)).unwrap();
+        assert_eq!(sum_two, 190);
     }
 }
-*/

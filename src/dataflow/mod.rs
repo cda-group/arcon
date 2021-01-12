@@ -9,3 +9,5 @@ pub mod constructor;
 pub mod dfg;
 /// High-level Stream type that users may perform a series of transformations on
 pub mod stream;
+
+pub mod window;

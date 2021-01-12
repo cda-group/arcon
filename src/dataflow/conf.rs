@@ -3,33 +3,54 @@
 
 use crate::{
     data::{ArconType, StateID},
-    stream::time::ArconTime,
+    stream::{operator::Operator, time::ArconTime},
 };
-use arcon_state::index::EMPTY_STATE_ID;
+use arcon_state::index::{ArconState, EMPTY_STATE_ID};
 use std::sync::Arc;
 
-// TODO: Add state/operator constructors?
-// state_cons: Arc<dyn Fn(Arc<Backend>) -> OP::OperatorState + Send + Sync + 'static>,
-// operator_cons: Arc<dyn Fn(Arc<Backend>) -> OP + Send + Sync + 'static>,
-#[derive(Debug, Clone)]
+// Defines a Default State Backend for high-level operators that do not use any
+// custom-defined state but still need a backend defined for internal runtime state.
+cfg_if::cfg_if! {
+    if #[cfg(feature = "rocksdb")]  {
+        pub type DefaultBackend = arcon_state::Rocks;
+    } else {
+        pub type DefaultBackend = arcon_state::Sled;
+    }
+}
+
+#[derive(Clone)]
 pub struct OperatorConf {
-    /// State ID for this DFG node
-    pub(crate) state_id: StateID,
     /// Amount of instances to be created
     pub instances: usize,
 }
 
-impl OperatorConf {
-    pub(crate) fn new(mut state_id: StateID) -> Self {
+impl Default for OperatorConf {
+    fn default() -> OperatorConf {
+        Self { instances: 1 }
+    }
+}
+
+#[derive(Clone)]
+pub struct OperatorBuilder<OP: Operator, Backend = DefaultBackend> {
+    /// Operator Constructor
+    pub constructor: Arc<dyn Fn(Arc<Backend>) -> OP + Send + Sync + 'static>,
+    /// Operator Config
+    pub conf: OperatorConf,
+}
+
+impl<OP: Operator, Backend: arcon_state::Backend> OperatorBuilder<OP, Backend> {
+    pub(crate) fn create_backend(&self, state_dir: std::path::PathBuf) -> Arc<Backend> {
+        Arc::new(Backend::create(&state_dir).unwrap())
+    }
+
+    pub(crate) fn state_id(&self) -> StateID {
+        let mut state_id = OP::OperatorState::STATE_ID.to_owned();
         if state_id == EMPTY_STATE_ID {
             // create unique identifier so there is no clash between empty states
             let unique_id = uuid::Uuid::new_v4().to_string();
             state_id = format!("{}_{}", state_id, unique_id);
         }
-        Self {
-            state_id,
-            instances: 1,
-        }
+        state_id
     }
 }
 

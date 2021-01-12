@@ -86,13 +86,14 @@ fn main() {
         .collection((0..10000000).collect::<Vec<u64>>(), |conf| {
             conf.set_timestamp_extractor(|x: &u64| *x);
         })
-        .operator(
-            |_: Arc<Sled>| MyOperator,
-            |conf| {
-                conf.instances = 1;
-            },
-        )
-        .operator(|_: Arc<Sled>| TimerOperator, |_| {})
+        .operator(OperatorBuilder {
+            constructor: Arc::new(|_| MyOperator),
+            conf: Default::default(),
+        })
+        .operator(OperatorBuilder {
+            constructor: Arc::new(|_| TimerOperator),
+            conf: Default::default(),
+        })
         .build();
     // ANCHOR_END: pipeline
 

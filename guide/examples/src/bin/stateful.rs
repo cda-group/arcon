@@ -57,17 +57,15 @@ fn main() {
                 conf.set_timestamp_extractor(|x: &Event| x.id);
             },
         )
-        .filter(|event| event.id > 50)
-        .map_with_state(
-            |x, state: &mut MyState<Sled>| {
-                state.events().append(x)?;
-                Ok(x)
-            },
-            MyState::new,
-            |conf| {
-                conf.instances = 1;
-            },
-        )
+        .operator(OperatorBuilder {
+            constructor: Arc::new(|backend| {
+                MapOperator::stateful(MyState::new(backend), |x, state| {
+                    state.events().append(x)?;
+                    Ok(x)
+                })
+            }),
+            conf: Default::default(),
+        })
         .build();
 
     // ANCHOR: watch_thread

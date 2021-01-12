@@ -12,8 +12,10 @@
 //!     .collection((0..100).collect::<Vec<u64>>(), |conf| {
 //!         conf.set_arcon_time(ArconTime::Process);
 //!     })
-//!     .filter(|x| *x > 50)
-//!     .map(|x| x + 10)
+//!     .operator(OperatorBuilder {
+//!         constructor: Arc::new(|_| Filter::new(|x| *x > 50)),
+//!         conf: Default::default(),
+//!      })
 //!     .to_console()
 //!     .build();
 //!
@@ -105,11 +107,19 @@ pub mod prelude {
     pub use crate::{
         conf::ArconConf,
         data::{ArconElement, ArconNever, ArconType, StateID, VersionId},
-        dataflow::conf::{OperatorConf, SourceConf},
+        dataflow::{
+            conf::{OperatorBuilder, OperatorConf, SourceConf},
+            window::WindowFunction,
+        },
         manager::snapshot::Snapshot,
         pipeline::{AssembledPipeline, Pipeline, Stream},
         stream::{
-            operator::{sink::local_file::LocalFileSink, Operator, OperatorContext},
+            operator::{
+                function::{Filter, FlatMap, Map as MapOperator, MapInPlace},
+                sink::local_file::LocalFileSink,
+                window::{AppenderWindow, IncrementalWindow, WindowAssigner},
+                Operator, OperatorContext,
+            },
             source::collection::CollectionSource,
             time::ArconTime,
         },
@@ -139,4 +149,6 @@ pub mod prelude {
 
     #[cfg(feature = "rayon")]
     pub use rayon::prelude::*;
+
+    pub use std::sync::Arc;
 }

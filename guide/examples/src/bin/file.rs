@@ -5,7 +5,10 @@ fn main() {
         .file("file_source_data", |cfg| {
             cfg.set_arcon_time(ArconTime::Process);
         })
-        .flatmap(|x: u64| (0..x))
+        .operator(OperatorBuilder {
+            constructor: Arc::new(|_| FlatMap::new(|x| (0..x))),
+            conf: Default::default(),
+        })
         .to_console()
         .build();
 

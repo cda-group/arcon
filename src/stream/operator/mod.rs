@@ -6,7 +6,7 @@ pub mod function;
 /// Available sink operators
 pub mod sink;
 // Available window operators
-//pub mod window;
+pub mod window;
 
 use crate::{
     data::{ArconElement, ArconEvent, ArconType},

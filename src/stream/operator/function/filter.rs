@@ -4,7 +4,7 @@
 use crate::{
     data::{ArconElement, ArconNever, ArconType},
     stream::operator::{Operator, OperatorContext},
-    util::SafelySendableFn,
+    util::ArconFnBounds,
 };
 use arcon_error::*;
 use arcon_state::{index::ArconState, Backend};
@@ -14,7 +14,7 @@ use std::marker::PhantomData;
 pub struct Filter<IN, F, S>
 where
     IN: ArconType,
-    F: SafelySendableFn(&IN, &mut S) -> bool,
+    F: Fn(&IN, &mut S) -> bool + ArconFnBounds,
     S: ArconState,
 {
     state: S,
@@ -28,8 +28,8 @@ where
 {
     #[allow(clippy::new_ret_no_self)]
     pub fn new(
-        udf: impl SafelySendableFn(&IN) -> bool,
-    ) -> Filter<IN, impl SafelySendableFn(&IN, &mut ()) -> bool, ()> {
+        udf: impl Fn(&IN) -> bool + ArconFnBounds,
+    ) -> Filter<IN, impl Fn(&IN, &mut ()) -> bool + ArconFnBounds, ()> {
         let udf = move |input: &IN, _: &mut ()| udf(input);
         Filter {
             state: (),
@@ -42,7 +42,7 @@ where
 impl<IN, F, S> Filter<IN, F, S>
 where
     IN: ArconType,
-    F: SafelySendableFn(&IN, &mut S) -> bool,
+    F: Fn(&IN, &mut S) -> bool + ArconFnBounds,
     S: ArconState,
 {
     pub fn stateful(state: S, udf: F) -> Self {
@@ -57,7 +57,7 @@ where
 impl<IN, F, S> Operator for Filter<IN, F, S>
 where
     IN: ArconType,
-    F: SafelySendableFn(&IN, &mut S) -> bool,
+    F: Fn(&IN, &mut S) -> bool + ArconFnBounds,
     S: ArconState,
 {
     type IN = IN;

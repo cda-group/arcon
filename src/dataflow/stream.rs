@@ -4,33 +4,14 @@
 use crate::{
     data::{ArconType, NodeID},
     dataflow::{
-        conf::OperatorConf,
+        conf::OperatorBuilder,
         constructor::*,
         dfg::{ChannelKind, DFGNode, DFGNodeID, DFGNodeKind, SourceKind, DFG},
     },
     pipeline::{AssembledPipeline, Pipeline},
-    stream::operator::{
-        function::{Filter, FlatMap, Map, MapInPlace},
-        Operator,
-    },
+    stream::operator::Operator,
 };
-use arcon_error::OperatorResult;
-use arcon_state::{index::ArconState, Backend};
 use std::{marker::PhantomData, sync::Arc};
-
-// Defines a Default State Backend for high-level operators that do not use any
-// custom-defined state but still need a backend defined for internal runtime state.
-cfg_if::cfg_if! {
-    if #[cfg(feature = "rocksdb")]  {
-        pub type DefaultBackend = arcon_state::Rocks;
-    } else {
-        pub type DefaultBackend = arcon_state::Sled;
-    }
-}
-
-// Helper trait to reduce code in the high-level operator methods
-pub trait StreamFnBounds: Send + Sync + Clone + 'static {}
-impl<T> StreamFnBounds for T where T: Send + Sync + Clone + 'static {}
 
 #[derive(Default)]
 pub struct Context {
@@ -63,112 +44,28 @@ impl<IN: ArconType> Stream<IN> {
         node.channel_kind = ChannelKind::KeyBy;
         self
     }
-
-    /// Adds a Map transformation to the dataflow graph
-    pub fn map<OUT, F>(self, f: F) -> Stream<OUT>
+    /// Add an [`Operator`] to the dataflow graph
+    pub fn operator<OP>(mut self, builder: OperatorBuilder<OP>) -> Stream<OP::OUT>
     where
-        OUT: ArconType,
-        F: Fn(IN) -> OUT + StreamFnBounds,
+        OP: Operator<IN = IN> + 'static,
     {
-        self.operator(move |_: Arc<DefaultBackend>| Map::new(f.clone()), |_| ())
-    }
+        // Set up directory for the operator and create Backend
+        let mut state_dir = self.ctx.pipeline.arcon_conf().state_dir.clone();
+        let state_id = builder.state_id();
+        state_dir.push(state_id.clone());
+        let backend = builder.create_backend(state_dir);
 
-    /// Adds a stateful Map transformation to the dataflow graph
-    pub fn map_with_state<OUT, S, B, SC, F, C>(self, f: F, sc: SC, conf: C) -> Stream<OUT>
-    where
-        OUT: ArconType,
-        S: ArconState,
-        B: Backend,
-        SC: Fn(Arc<B>) -> S + 'static,
-        F: Fn(IN, &mut S) -> OperatorResult<OUT> + StreamFnBounds,
-        C: FnOnce(&mut OperatorConf),
-    {
-        self.operator(move |b: Arc<B>| Map::stateful(sc(b), f.clone()), conf)
-    }
+        let pool_info = self.ctx.pipeline.get_pool_info();
+        let node_constructor = node_cons(builder.constructor, backend.clone(), pool_info);
+        let manager_constructor = node_manager_cons(state_id, backend);
 
-    /// Adds an in-place Map transformation to the dataflow graph
-    pub fn map_in_place<F>(self, f: F) -> Stream<IN>
-    where
-        F: Fn(&mut IN) + StreamFnBounds,
-    {
-        self.operator(
-            move |_: Arc<DefaultBackend>| MapInPlace::new(f.clone()),
-            |_| (),
-        )
-    }
+        let next_dfg_id = self.ctx.dfg.insert(DFGNode::new(
+            DFGNodeKind::Node(node_constructor, manager_constructor),
+            builder.conf,
+            vec![self.prev_dfg_id],
+        ));
 
-    /// Adds a stateful in-place Map transformation to the dataflow graph
-    pub fn map_in_place_with_state<S, SC, B, F, C>(self, f: F, sc: SC, conf: C) -> Stream<IN>
-    where
-        S: ArconState,
-        B: Backend,
-        SC: Fn(Arc<B>) -> S + 'static,
-        F: Fn(&mut IN, &mut S) -> OperatorResult<()> + StreamFnBounds,
-        C: FnOnce(&mut OperatorConf),
-    {
-        self.operator(
-            move |b: Arc<B>| MapInPlace::stateful(sc(b), f.clone()),
-            conf,
-        )
-    }
-
-    /// Adds a Filter transformation to the dataflow graph
-    pub fn filter<F>(self, f: F) -> Stream<IN>
-    where
-        F: Fn(&IN) -> bool + StreamFnBounds,
-    {
-        self.operator(move |_: Arc<DefaultBackend>| Filter::new(f.clone()), |_| ())
-    }
-
-    /// Adds a stateful Filter transformation to the dataflow graph
-    pub fn filter_with_state<S, SC, B, F, C>(self, f: F, sc: SC, conf: C) -> Stream<IN>
-    where
-        S: ArconState,
-        B: Backend,
-        SC: Fn(Arc<B>) -> S + 'static,
-        F: Fn(&IN, &mut S) -> bool + StreamFnBounds,
-        C: FnOnce(&mut OperatorConf),
-    {
-        self.operator(move |b: Arc<B>| Filter::stateful(sc(b), f.clone()), conf)
-    }
-
-    /// Adds a FlatMap transformation to the dataflow graph
-    pub fn flatmap<OUTS, F>(self, f: F) -> Stream<OUTS::Item>
-    where
-        OUTS: IntoIterator + 'static,
-        OUTS::Item: ArconType,
-        F: Fn(IN) -> OUTS + StreamFnBounds,
-    {
-        self.operator(
-            move |_: Arc<DefaultBackend>| FlatMap::new(f.clone()),
-            |_| {},
-        )
-    }
-
-    /// Adds a stateful FlatMap transformation to the dataflow graph
-    pub fn flatmap_with_state<OUTS, S, B, SC, F, C>(
-        self,
-        f: F,
-        sc: SC,
-        conf: C,
-    ) -> Stream<OUTS::Item>
-    where
-        OUTS: IntoIterator + 'static,
-        OUTS::Item: ArconType,
-        S: ArconState,
-        B: Backend,
-        SC: Fn(Arc<B>) -> S + 'static,
-        F: Fn(IN, &mut S) -> OperatorResult<OUTS> + StreamFnBounds,
-        C: FnOnce(&mut OperatorConf),
-    {
-        self.operator(move |b: Arc<B>| FlatMap::stateful(sc(b), f.clone()), conf)
-    }
-
-    /// Will make sure the most downstream Node will print its result to the console
-    #[allow(clippy::wrong_self_convention)]
-    pub fn to_console(mut self) -> Stream<IN> {
-        self.ctx.console_output = true;
-
+        self.prev_dfg_id = next_dfg_id;
         Stream {
             _marker: PhantomData,
             prev_dfg_id: self.prev_dfg_id,
@@ -176,37 +73,11 @@ impl<IN: ArconType> Stream<IN> {
         }
     }
 
-    /// This method may be used to add a custom defined [`Operator`] to the dataflow graph
-    pub fn operator<OP, B, F, C>(mut self, operator: F, c: C) -> Stream<OP::OUT>
-    where
-        OP: Operator + 'static,
-        B: Backend,
-        F: Fn(Arc<B>) -> OP + 'static,
-        C: FnOnce(&mut OperatorConf),
-    {
-        // Set up config and run the conf closure on it.
-        let mut conf = OperatorConf::new(OP::OperatorState::STATE_ID.to_owned());
+    /// Will make sure the most downstream Node will print its result to the console
+    #[allow(clippy::wrong_self_convention)]
+    pub fn to_console(mut self) -> Stream<IN> {
+        self.ctx.console_output = true;
 
-        c(&mut conf);
-
-        // used for the channels buffer pools
-        let pool_info = self.ctx.pipeline.get_pool_info();
-
-        // Set up directory for the operator and create Backend
-        let mut state_dir = self.ctx.pipeline.arcon_conf().state_dir.clone();
-        state_dir.push(conf.state_id.clone());
-        let backend = Arc::new(B::create(&state_dir).unwrap());
-
-        let node_constructor = node_cons(operator, backend.clone(), pool_info);
-        let manager_constructor = node_manager_cons(backend);
-
-        let next_dfg_id = self.ctx.dfg.insert(DFGNode::new(
-            DFGNodeKind::Node(node_constructor, manager_constructor),
-            conf,
-            vec![self.prev_dfg_id],
-        ));
-
-        self.prev_dfg_id = next_dfg_id;
         Stream {
             _marker: PhantomData,
             prev_dfg_id: self.prev_dfg_id,
@@ -235,11 +106,8 @@ impl<IN: ArconType> Stream<IN> {
                                 &mut self.ctx.pipeline.data_system(),
                             );
 
-                            let source_manager = source_manager_cons(
-                                dfg_node.config.state_id,
-                                vec![comp],
-                                &mut self.ctx.pipeline,
-                            );
+                            let source_manager =
+                                source_manager_cons(vec![comp], &mut self.ctx.pipeline);
 
                             self.ctx.pipeline.source_manager = Some(source_manager);
                         }
@@ -263,11 +131,7 @@ impl<IN: ArconType> Stream<IN> {
 
                     // Establish NodeManager for this Operator
 
-                    let manager = manager_cons(
-                        dfg_node.config.state_id.clone(),
-                        vec![NodeID::new(0)],
-                        &mut self.ctx.pipeline,
-                    );
+                    let manager = manager_cons(vec![NodeID::new(0)], &mut self.ctx.pipeline);
 
                     let nodes: Vec<Arc<dyn std::any::Any + Send + Sync>> = node_cons(
                         String::from("node_1"), // Fix
