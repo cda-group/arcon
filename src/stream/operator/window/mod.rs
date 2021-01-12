@@ -70,9 +70,17 @@ where
     B: Backend,
 {
     pub fn new(
-        handle: ActiveHandle<B, VecState<IN>, u64, u64>,
+        backend: Arc<B>,
         materializer: &'static dyn SafelySendableFn(&[IN]) -> OUT,
     ) -> AppenderWindow<IN, OUT, B> {
+        let mut handle = Handle::vec("window_handle")
+            .with_item_key(0)
+            .with_namespace(0);
+
+        backend.register_vec_handle(&mut handle);
+
+        let handle = handle.activate(backend);
+
         AppenderWindow {
             handle,
             materializer,
@@ -165,13 +173,21 @@ where
     B: Backend,
 {
     pub fn new(
-        aggregator: ActiveHandle<
-            B,
-            AggregatorState<IncrementalWindowAggregator<IN, OUT>>,
-            u64,
-            u64,
-        >,
+        backend: Arc<B>,
+        init: &'static dyn SafelySendableFn(IN) -> OUT,
+        agg: &'static dyn SafelySendableFn(IN, &OUT) -> OUT,
     ) -> IncrementalWindow<IN, OUT, B> {
+        let mut aggregator = Handle::aggregator(
+            "incremental_window_aggregating_state",
+            IncrementalWindowAggregator(init, agg),
+        )
+        .with_item_key(0)
+        .with_namespace(0);
+
+        backend.register_aggregator_handle(&mut aggregator);
+
+        let aggregator = aggregator.activate(backend);
+
         IncrementalWindow { aggregator }
     }
 }
@@ -210,7 +226,6 @@ where
 mod tests {
     use super::*;
     use crate::util::temp_backend;
-    use arcon_state::{Handle, Sled, VecState};
     use std::sync::Arc;
 
     #[test]
@@ -221,15 +236,7 @@ mod tests {
             buffer.iter().sum()
         }
 
-        let mut handle = Handle::vec("window_handle")
-            .with_item_key(0)
-            .with_namespace(0);
-
-        backend.register_vec_handle(&mut handle);
-
-        let active_handle: ActiveHandle<Sled, VecState<i32>, u64, u64> = handle.activate(backend);
-
-        let mut window = AppenderWindow::new(active_handle, &materializer);
+        let mut window = AppenderWindow::new(backend, &materializer);
 
         for i in 0..10 {
             let _ = window.on_element(i, WindowContext::new(0, 0));
@@ -252,18 +259,7 @@ mod tests {
             agg + i as u64
         }
 
-        let mut aggregator = Handle::aggregator(
-            "incremental_window_aggregating_state",
-            IncrementalWindowAggregator(&init, &aggregation),
-        )
-        .with_item_key(0)
-        .with_namespace(0);
-
-        backend.register_aggregator_handle(&mut aggregator);
-
-        let active_handle = aggregator.activate(backend);
-
-        let mut window = IncrementalWindow::new(active_handle);
+        let mut window = IncrementalWindow::new(backend, &init, &aggregation);
 
         for i in 0..10 {
             let _ = window.on_element(i, WindowContext::new(0, 0));

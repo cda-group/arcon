@@ -6,7 +6,7 @@ use crate::{
     data::{ArconElement, ArconType},
     stream::operator::{Operator, OperatorContext},
 };
-use arcon_error::OperatorResult;
+use arcon_error::*;
 use arcon_state::{index::IndexOps, ArconState, Backend, EagerMap, Handle};
 use kompact::prelude::ComponentDefinition;
 use prost::Message;
@@ -90,14 +90,32 @@ where
     W: Window<IN, OUT>,
     B: Backend,
 {
-    pub fn new(
+    /// Create a WindowAssigner for tumbling windows
+    pub fn tumbling(
+        window: W,
+        backend: Arc<B>,
+        length: u64,
+        late_arrival_time: u64,
+        keyed: bool,
+    ) -> Self {
+        let slide = length; // slide = length means that we operate on tumbling windows
+        Self::setup(window, backend, length, slide, late_arrival_time, keyed)
+    }
+
+    /// Create a WindowAssigner for sliding windows
+    pub fn sliding(
         window: W,
         backend: Arc<B>,
         length: u64,
         slide: u64,
-        late: u64,
+        late_arrival_time: u64,
         keyed: bool,
     ) -> Self {
+        Self::setup(window, backend, length, slide, late_arrival_time, keyed)
+    }
+
+    // Setup method for both sliding and tumbling windows
+    fn setup(window: W, backend: Arc<B>, length: u64, slide: u64, late: u64, keyed: bool) -> Self {
         // Sanity check on slide and length
         if length < slide {
             panic!("Window Length lower than slide!");
@@ -120,14 +138,19 @@ where
         }
     }
 
+    #[inline]
     fn new_window_trigger(
         &mut self,
         window_ctx: WindowContext,
         ctx: &mut OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> Result<(), WindowEvent> {
-        let window_start = match self.state.window_start().get(&window_ctx.key) {
-            Ok(Some(start)) => start,
-            _ => panic!("fix me"),
+    ) -> ArconResult<()> {
+        let window_start = match self.state.window_start().get(&window_ctx.key)? {
+            Some(start) => start,
+            None => {
+                return arcon_err!(
+                    "Unexpected failure, could not find window start for existing key"
+                )
+            }
         };
 
         let ts = window_start + (window_ctx.index * self.window_slide) + self.window_length;
@@ -137,6 +160,7 @@ where
             ts + self.late_arrival_time,
             WindowEvent::new(window_ctx.key, window_ctx.index, ts),
         )
+        .map_err(|_| arcon_err_kind!("Attempted to schedule an expired timer"))
     }
 
     #[inline]
@@ -158,7 +182,7 @@ where
     type IN = IN;
     type OUT = OUT;
     type TimerState = WindowEvent;
-    type OperatorState = AssignerState<B>;
+    type OperatorState = ();
 
     fn handle_element(
         &mut self,
@@ -259,7 +283,7 @@ mod tests {
             operator::window::AppenderWindow,
         },
     };
-    use arcon_state::{handles::ActiveHandle, Sled, Timer, VecState};
+    use arcon_state::Timer;
     use kompact::prelude::{biconnect_components, ActorRefFactory, ActorRefStrong, Component};
     use std::{sync::Arc, thread, time, time::UNIX_EPOCH};
 
@@ -316,18 +340,10 @@ mod tests {
             .wait_timeout(std::time::Duration::from_millis(100))
             .expect("started");
 
-        let mut handle = Handle::vec("window_handle")
-            .with_item_key(0)
-            .with_namespace(0);
-
-        backend.register_vec_handle(&mut handle);
-
-        let active_handle: ActiveHandle<Sled, VecState<u64>, u64, u64> =
-            handle.activate(backend.clone());
-        let window = AppenderWindow::new(active_handle, &appender_fn);
+        let window = AppenderWindow::new(backend.clone(), &appender_fn);
 
         let window_assigner =
-            WindowAssigner::new(window, backend.clone(), length, slide, late, true);
+            WindowAssigner::sliding(window, backend.clone(), length, slide, late, true);
 
         let mut timeouts_handle = Handle::map("_timeouts");
         let mut time_handle = Handle::value("_time");
