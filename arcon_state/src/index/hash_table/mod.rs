@@ -10,12 +10,16 @@ use std::{
 };
 
 use crate::{
-    backend::{handles::ActiveHandle, MapState},
+    backend::{
+        handles::{ActiveHandle, Handle},
+        MapState,
+    },
     data::{Key, Value},
     error::*,
     index::IndexOps,
 };
 use core::intrinsics::likely;
+use std::sync::Arc;
 
 cfg_if::cfg_if! {
     // Use the SSE2 implementation if possible: it allows us to scan 16 buckets
@@ -44,10 +48,10 @@ mod bitmask;
 pub mod eager;
 mod table;
 
-use self::table::RawTable;
 #[cfg(test)]
-use crate::index::map::table::TableModIterator;
-use crate::{backend::Backend, index::map::table::ProbeModIterator};
+use self::table::TableModIterator;
+use self::table::{ProbeModIterator, RawTable};
+use crate::backend::Backend;
 use std::cell::UnsafeCell;
 
 const DEFAULT_READ_LANE_SIZE: usize = 8192;
@@ -56,10 +60,10 @@ const DEFAULT_MOD_LANE_SIZE: usize = 1024;
 // Set FxHash to default as most keys tend to be small
 pub type DefaultHashBuilder = fxhash::FxBuildHasher;
 
-/// A Map suitable for point lookups and in-place
+/// A HashTable suitable for point lookups and in-place
 /// updates of hot values. It holds a handle to a MapState
 /// type where it may persist or fetch data from.
-pub struct Map<K, V, B>
+pub struct HashTable<K, V, B>
 where
     K: Key + Hash,
     V: Value,
@@ -69,7 +73,7 @@ where
     hash_builder: fxhash::FxBuildHasher,
     /// In-memory RawTable
     raw_table: UnsafeCell<RawTable<K, V>>,
-    /// Map Handle
+    /// HashTable Handle
     handle: ActiveHandle<B, MapState<K, V>>,
 }
 
@@ -80,15 +84,19 @@ pub(crate) fn make_hash<K: Hash + ?Sized>(hash_builder: &impl BuildHasher, val: 
     state.finish()
 }
 
-impl<K, V, B> Map<K, V, B>
+impl<K, V, B> HashTable<K, V, B>
 where
     K: Key + Eq + Hash,
     V: Value,
     B: Backend,
 {
-    /// Creates a Map with default settings
-    pub fn new(handle: ActiveHandle<B, MapState<K, V>>) -> Self {
-        Map {
+    /// Creates a HashTable with default settings
+    pub fn new(id: impl Into<String>, backend: Arc<B>) -> Self {
+        let mut handle = Handle::map(id.into());
+        backend.register_map_handle(&mut handle);
+        let handle = handle.activate(backend);
+
+        HashTable {
             hash_builder: DefaultHashBuilder::default(),
             raw_table: UnsafeCell::new(RawTable::with_capacity(
                 DEFAULT_MOD_LANE_SIZE,
@@ -98,16 +106,21 @@ where
         }
     }
 
-    /// Creates a Map with specified capacities
+    /// Creates a HashTable with specified capacities
     pub fn with_capacity(
-        handle: ActiveHandle<B, MapState<K, V>>,
+        id: impl Into<String>,
+        backend: Arc<B>,
         mod_capacity: usize,
         read_capacity: usize,
     ) -> Self {
         assert!(mod_capacity.is_power_of_two());
         assert!(read_capacity.is_power_of_two());
 
-        Map {
+        let mut handle = Handle::map(id.into());
+        backend.register_map_handle(&mut handle);
+        let handle = handle.activate(backend);
+
+        HashTable {
             hash_builder: DefaultHashBuilder::default(),
             raw_table: UnsafeCell::new(RawTable::with_capacity(mod_capacity, read_capacity)),
             handle,
@@ -274,7 +287,7 @@ where
     /// Otherwise, there will be an attempt to find the value in the Backend.
     ///
     /// The `P` function defines how a default value is created if there is
-    /// no entry in the Map.
+    /// no entry in the HashTable.
     #[inline(always)]
     pub fn rmw<F: Sized, P>(&mut self, key: &K, p: P, mut f: F) -> Result<()>
     where
@@ -331,7 +344,7 @@ where
     }
 }
 
-impl<K, V, B> IndexOps for Map<K, V, B>
+impl<K, V, B> IndexOps for HashTable<K, V, B>
 where
     K: Key + Eq + Hash,
     V: Value,
@@ -349,20 +362,17 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::{sled::Sled, temp_backend, Handle};
+    use crate::backend::{sled::Sled, temp_backend};
     use std::sync::Arc;
 
     #[test]
     fn basic_test() {
         let backend = Arc::new(temp_backend());
-        let mut handle = Handle::map("_map");
-        backend.register_map_handle(&mut handle);
-        let active = handle.activate(backend);
 
         let mod_capacity = 1024;
         let read_capacity = 1024;
-        let mut hash_index: Map<u64, u64, Sled> =
-            Map::with_capacity(active, mod_capacity, read_capacity);
+        let mut hash_index: HashTable<u64, u64, Sled> =
+            HashTable::with_capacity("table", backend, mod_capacity, read_capacity);
 
         for i in 0..1024 {
             let key: u64 = i as u64;
@@ -378,12 +388,10 @@ mod tests {
     #[test]
     fn modified_test() {
         let backend = Arc::new(temp_backend());
-        let mut handle = Handle::map("_map");
-        backend.register_map_handle(&mut handle);
-        let active = handle.activate(backend);
         let capacity = 64;
 
-        let mut hash_index: Map<u64, u64, Sled> = Map::with_capacity(active, capacity, capacity);
+        let mut hash_index: HashTable<u64, u64, Sled> =
+            HashTable::with_capacity("table", backend, capacity, capacity);
         for i in 0..10 {
             hash_index.put(i as u64, i as u64).unwrap();
         }

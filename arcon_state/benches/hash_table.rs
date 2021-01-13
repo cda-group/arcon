@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use arcon_state::{
-    index::{map::Map, IndexOps},
+    index::{hash_table::HashTable, IndexOps},
     serialization::protobuf::serialize,
-    EagerMap, *,
+    EagerHashTable, *,
 };
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use once_cell::sync::Lazy;
@@ -886,7 +886,7 @@ fn map(c: &mut Criterion) {
         );
     }
 
-    // Finished with the Map benches
+    // Finished with the HashTable benches
     // Now onto pure backend stuff..
 
     let unused_param = 0;
@@ -1002,11 +1002,8 @@ macro_rules! read {
         let dir = tempdir().unwrap();
         with_backend_type!($backend, |B| {
             let backend = Arc::new(B::create(dir.as_ref()).unwrap());
-            let mut map_handle: Handle<MapState<u64, $type_value>> = Handle::map("mapindex");
-            backend.register_map_handle(&mut map_handle);
-            let state = map_handle.activate(backend.clone());
-            let mut map: Map<u64, $type_value, B> =
-                Map::with_capacity(state, $mod_capacity, $read_capacity);
+            let mut map: HashTable<u64, $type_value, B> =
+                HashTable::with_capacity("_table", backend, $mod_capacity, $read_capacity);
 
             for i in 0..TOTAL_KEYS {
                 let _ = map.put(i, $type_value::new()).unwrap();
@@ -1027,11 +1024,8 @@ macro_rules! insert {
         let dir = tempdir().unwrap();
         with_backend_type!($backend, |B| {
             let backend = Arc::new(B::create(dir.as_ref()).unwrap());
-            let mut map_handle: Handle<MapState<u64, $type_value>> = Handle::map("mapindex");
-            backend.register_map_handle(&mut map_handle);
-            let state = map_handle.activate(backend.clone());
-            let mut map: Map<u64, $type_value, B> =
-                Map::with_capacity(state, $mod_capacity, $read_capacity);
+            let mut map: HashTable<u64, $type_value, B> =
+                HashTable::with_capacity("_table", backend, $mod_capacity, $read_capacity);
 
             if $full_eviction {
                 $bencher.iter(|| {
@@ -1057,12 +1051,9 @@ macro_rules! rmw {
         let dir = tempdir().unwrap();
         with_backend_type!($backend, |B| {
             let backend = Arc::new(B::create(dir.as_ref()).unwrap());
-            let mut map_handle: Handle<MapState<u64, $type_value>> = Handle::map("mapindex");
-            backend.register_map_handle(&mut map_handle);
-            let state = map_handle.activate(backend.clone());
 
-            let mut map: Map<u64, $type_value, B> =
-                Map::with_capacity(state, $mod_capacity, $read_capacity);
+            let mut map: HashTable<u64, $type_value, B> =
+                HashTable::with_capacity("_table", backend, $mod_capacity, $read_capacity);
 
             for i in 0..TOTAL_KEYS {
                 let _ = map.put(i, $type_value::new()).unwrap();
@@ -1099,10 +1090,7 @@ macro_rules! rmw_eager {
         let dir = tempdir().unwrap();
         with_backend_type!($backend, |B| {
             let backend = Arc::new(B::create(dir.as_ref()).unwrap());
-            let mut map_handle: Handle<MapState<u64, $type_value>> = Handle::map("mapindex");
-            backend.register_map_handle(&mut map_handle);
-            let state = map_handle.activate(backend.clone());
-            let mut eager_map = EagerMap::new(state);
+            let mut eager_map = EagerHashTable::new("_eager_table", backend);
 
             // Fill in some keys
             for i in 0..TOTAL_KEYS {
@@ -1126,10 +1114,7 @@ macro_rules! read_eager {
         let dir = tempdir().unwrap();
         with_backend_type!($backend, |B| {
             let backend = Arc::new(B::create(dir.as_ref()).unwrap());
-            let mut map_handle: Handle<MapState<u64, $type_value>> = Handle::map("mapindex");
-            backend.register_map_handle(&mut map_handle);
-            let state = map_handle.activate(backend.clone());
-            let mut eager_map = EagerMap::new(state);
+            let mut eager_map = EagerHashTable::new("_eager", backend);
 
             // Fill in some keys
             for i in 0..TOTAL_KEYS {

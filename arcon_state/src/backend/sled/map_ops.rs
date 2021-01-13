@@ -16,7 +16,7 @@ impl MapOps for Sled {
         handle: &Handle<MapState<K, V>, IK, N>,
     ) -> Result<()> {
         let prefix = handle.serialize_metakeys()?;
-        self.remove_prefix(handle.id, prefix)
+        self.remove_prefix(&handle.id, prefix)
     }
 
     fn map_get<K: Key, V: Value, IK: Metakey, N: Metakey>(
@@ -25,7 +25,7 @@ impl MapOps for Sled {
         key: &K,
     ) -> Result<Option<V>> {
         let key = handle.serialize_metakeys_and_key(key)?;
-        if let Some(serialized) = self.get(handle.id, &key)? {
+        if let Some(serialized) = self.get(&handle.id, &key)? {
             let value = protobuf::deserialize(&serialized)?;
             Ok(Some(value))
         } else {
@@ -41,7 +41,7 @@ impl MapOps for Sled {
     ) -> Result<()> {
         let key = handle.serialize_metakeys_and_key(&key)?;
         let serialized = protobuf::serialize(&value)?;
-        self.put(handle.id, &key, &serialized)?;
+        self.put(&handle.id, &key, &serialized)?;
 
         Ok(())
     }
@@ -54,7 +54,7 @@ impl MapOps for Sled {
     ) -> Result<()> {
         let key = handle.serialize_metakeys_and_key(key)?;
         let serialized = protobuf::serialize(value)?;
-        self.put(handle.id, &key, &serialized)?;
+        self.put(&handle.id, &key, &serialized)?;
 
         Ok(())
     }
@@ -68,7 +68,7 @@ impl MapOps for Sled {
         let key = handle.serialize_metakeys_and_key(&key)?;
 
         let serialized = protobuf::serialize(&value)?;
-        let old = match self.put(handle.id, &key, &serialized)? {
+        let old = match self.put(&handle.id, &key, &serialized)? {
             Some(x) => Some(protobuf::deserialize(&x)?),
             None => None,
         };
@@ -82,7 +82,7 @@ impl MapOps for Sled {
         key_value_pairs: impl IntoIterator<Item = (K, V)>,
     ) -> Result<()> {
         let mut batch = Batch::default();
-        let tree = self.tree(handle.id)?;
+        let tree = self.tree(&handle.id)?;
 
         for (user_key, value) in key_value_pairs {
             let key = handle.serialize_metakeys_and_key(&user_key)?;
@@ -99,7 +99,7 @@ impl MapOps for Sled {
         key_value_pairs: impl IntoIterator<Item = (&'a K, &'a V)>,
     ) -> Result<()> {
         let mut batch = Batch::default();
-        let tree = self.tree(handle.id)?;
+        let tree = self.tree(&handle.id)?;
 
         for (user_key, value) in key_value_pairs {
             let key = handle.serialize_metakeys_and_key(user_key)?;
@@ -116,7 +116,7 @@ impl MapOps for Sled {
         key: &K,
     ) -> Result<Option<V>> {
         let key = handle.serialize_metakeys_and_key(key)?;
-        let old = match self.remove(handle.id, &key)? {
+        let old = match self.remove(&handle.id, &key)? {
             Some(bytes) => Some(protobuf::deserialize(bytes.as_ref())?),
             None => None,
         };
@@ -130,7 +130,7 @@ impl MapOps for Sled {
         key: &K,
     ) -> Result<()> {
         let key = handle.serialize_metakeys_and_key(key)?;
-        self.remove(handle.id, &key)?;
+        self.remove(&handle.id, &key)?;
 
         Ok(())
     }
@@ -141,7 +141,7 @@ impl MapOps for Sled {
         key: &K,
     ) -> Result<bool> {
         let key = handle.serialize_metakeys_and_key(key)?;
-        self.contains(handle.id, &key)
+        self.contains(&handle.id, &key)
     }
 
     fn map_iter<K: Key, V: Value, IK: Metakey, N: Metakey>(
@@ -149,7 +149,7 @@ impl MapOps for Sled {
         handle: &Handle<MapState<K, V>, IK, N>,
     ) -> Result<BoxedIteratorOfResult<'_, (K, V)>> {
         let prefix = handle.serialize_metakeys()?;
-        let tree = self.tree(handle.id)?;
+        let tree = self.tree(&handle.id)?;
 
         let iter = tree.scan_prefix(prefix).map(move |entry| {
             let (db_key, serialized_value) = entry?;
@@ -170,7 +170,7 @@ impl MapOps for Sled {
         handle: &Handle<MapState<K, V>, IK, N>,
     ) -> Result<BoxedIteratorOfResult<'_, K>> {
         let prefix = handle.serialize_metakeys()?;
-        let tree = self.tree(handle.id)?;
+        let tree = self.tree(&handle.id)?;
 
         let iter = tree.scan_prefix(prefix).map(move |entry| {
             let (db_key, _) = entry?;
@@ -190,7 +190,7 @@ impl MapOps for Sled {
         handle: &Handle<MapState<K, V>, IK, N>,
     ) -> Result<BoxedIteratorOfResult<'_, V>> {
         let prefix = handle.serialize_metakeys()?;
-        let tree = self.tree(handle.id)?;
+        let tree = self.tree(&handle.id)?;
 
         let iter = tree.scan_prefix(prefix).map(move |entry| {
             let (_, serialized_value) = entry?;
@@ -207,7 +207,7 @@ impl MapOps for Sled {
         handle: &Handle<MapState<K, V>, IK, N>,
     ) -> Result<usize> {
         let prefix = handle.serialize_metakeys()?;
-        let tree = self.tree(handle.id)?;
+        let tree = self.tree(&handle.id)?;
         let count = tree.scan_prefix(prefix).count();
 
         Ok(count)
@@ -218,7 +218,7 @@ impl MapOps for Sled {
         handle: &Handle<MapState<K, V>, IK, N>,
     ) -> Result<bool> {
         let prefix = handle.serialize_metakeys()?;
-        let tree = self.tree(handle.id)?;
+        let tree = self.tree(&handle.id)?;
         Ok(tree.scan_prefix(prefix).next().is_none())
     }
 }

@@ -21,11 +21,8 @@ pub struct MyState<B: Backend> {
 
 impl<B: Backend> MyState<B> {
     pub fn new(backend: Arc<B>) -> Self {
-        let mut events_handle = Handle::vec("_events");
-        backend.register_vec_handle(&mut events_handle);
-
         MyState {
-            events: Appender::new(events_handle.activate(backend)),
+            events: Appender::new("_events", backend),
         }
     }
 }
@@ -59,7 +56,7 @@ fn main() {
         )
         .operator(OperatorBuilder {
             constructor: Arc::new(|backend| {
-                MapOperator::stateful(MyState::new(backend), |x, state| {
+                Map::stateful(MyState::new(backend), |x, state| {
                     state.events().append(x)?;
                     Ok(x)
                 })

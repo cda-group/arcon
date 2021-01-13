@@ -17,7 +17,7 @@ impl VecOps for Rocks {
         handle: &Handle<VecState<T>, IK, N>,
     ) -> Result<()> {
         let key = handle.serialize_metakeys()?;
-        self.remove(handle.id, &key)?;
+        self.remove(&handle.id, &key)?;
         Ok(())
     }
 
@@ -34,7 +34,7 @@ impl VecOps for Rocks {
         fixed_bytes::serialize_into(&mut serialized, &1usize)?;
         protobuf::serialize_into(&mut serialized, &value)?;
 
-        let cf = self.get_cf_handle(handle.id)?;
+        let cf = self.get_cf_handle(&handle.id)?;
         // See the vec_merge function in this module. It is set as the merge operator for every
         // vec state.
         Ok(self
@@ -47,7 +47,7 @@ impl VecOps for Rocks {
         handle: &Handle<VecState<T>, IK, N>,
     ) -> Result<Vec<T>> {
         let key = handle.serialize_metakeys()?;
-        if let Some(serialized) = self.get(handle.id, &key)? {
+        if let Some(serialized) = self.get(&handle.id, &key)? {
             // reader is updated to point at the yet unconsumed part of the serialized data
             let mut reader = &serialized[..];
             let len: usize = fixed_bytes::deserialize_from(&mut reader)?;
@@ -70,7 +70,7 @@ impl VecOps for Rocks {
         handle: &Handle<VecState<T>, IK, N>,
     ) -> Result<BoxedIteratorOfResult<'_, T>> {
         let key = handle.serialize_metakeys()?;
-        if let Some(serialized) = self.get(handle.id, &key)? {
+        if let Some(serialized) = self.get(&handle.id, &key)? {
             // TODO: this would be nicer with generators :(
             let mut reader = &serialized[..];
             let origin = reader.as_ptr() as usize;
@@ -119,7 +119,7 @@ impl VecOps for Rocks {
             protobuf::serialize_into(&mut storage, &elem)?;
         }
 
-        self.put(handle.id, key, storage)
+        self.put(&handle.id, key, storage)
     }
 
     fn vec_add_all<T: Value, IK: Metakey, N: Metakey>(
@@ -147,7 +147,7 @@ impl VecOps for Rocks {
         // impl for Vec starts at the end and extends it, so we want the first one
         fixed_bytes::serialize_into(&mut serialized.as_mut_slice(), &len)?;
 
-        let cf = self.get_cf_handle(handle.id)?;
+        let cf = self.get_cf_handle(&handle.id)?;
         self.db()
             .merge_cf_opt(cf, key, serialized, &default_write_opts())?;
 
@@ -159,7 +159,7 @@ impl VecOps for Rocks {
         handle: &Handle<VecState<T>, IK, N>,
     ) -> Result<usize> {
         let key = handle.serialize_metakeys()?;
-        if let Some(storage) = self.get(handle.id, key)? {
+        if let Some(storage) = self.get(&handle.id, key)? {
             if storage.is_empty() {
                 return Ok(0);
             }

@@ -17,12 +17,12 @@ A value index holds a single ArconType `T` and provides a set of operations to h
 There is no `Eager` version of Value provided as it does not make much sense while 
 dealing with a single object.
 
-## Map
+## HashTable
 
 An index for managing an unordered hash index. 
 
 ```rust,edition2018,no_run,noplaypen
-{{#rustdoc_include ../../examples/src/bin/index.rs:map}}
+{{#rustdoc_include ../../examples/src/bin/index.rs:hash_table}}
 ```
 
 An index for appending data which then later can be consumed.

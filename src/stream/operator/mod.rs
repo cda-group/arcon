@@ -83,7 +83,7 @@ where
     /// Channel Strategy that is used to pass on events
     channel_strategy: &'c mut ChannelStrategy<OP::OUT>,
     /// A Timer that can be used to schedule event timers
-    timer: &'b mut Option<Timer<u64, OP::TimerState, B>>,
+    timer: &'b mut Timer<u64, OP::TimerState, B>,
     /// A reference to the backing ComponentDefinition
     source: &'a CD,
 }
@@ -97,7 +97,7 @@ where
     #[inline]
     pub(crate) fn new(
         source: &'a CD,
-        timer: &'b mut Option<Timer<u64, OP::TimerState, B>>,
+        timer: &'b mut Timer<u64, OP::TimerState, B>,
         channel_strategy: &'c mut ChannelStrategy<OP::OUT>,
     ) -> Self {
         OperatorContext {
@@ -125,11 +125,7 @@ where
     /// Get current event time
     #[inline]
     pub fn current_time(&mut self) -> u64 {
-        if let Some(timer) = self.timer {
-            timer.current_time()
-        } else {
-            panic!("Can not fetch current time with uninitialised timer");
-        }
+        self.timer.current_time()
     }
 
     /// Schedule at a specific time in the future
@@ -143,10 +139,6 @@ where
         time: u64,
         entry: OP::TimerState,
     ) -> Result<(), OP::TimerState> {
-        if let Some(timer) = self.timer {
-            timer.schedule_at(key.into(), time, entry)
-        } else {
-            panic!("Can not schedule timers with an uninitialised timer");
-        }
+        self.timer.schedule_at(key.into(), time, entry)
     }
 }

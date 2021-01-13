@@ -15,7 +15,7 @@ impl AggregatorOps for Rocks {
         handle: &Handle<AggregatorState<A>, IK, N>,
     ) -> Result<()> {
         let key = handle.serialize_metakeys()?;
-        self.remove(handle.id, &key)?;
+        self.remove(&handle.id, &key)?;
         Ok(())
     }
 
@@ -25,7 +25,7 @@ impl AggregatorOps for Rocks {
     ) -> Result<<A as Aggregator>::Result> {
         let key = handle.serialize_metakeys()?;
 
-        if let Some(serialized) = self.get(handle.id, &key)? {
+        if let Some(serialized) = self.get(&handle.id, &key)? {
             assert_eq!(serialized[0], ACCUMULATOR_MARKER);
             let serialized = &serialized[1..];
 
@@ -50,7 +50,7 @@ impl AggregatorOps for Rocks {
         serialized.push(VALUE_MARKER);
         protobuf::serialize_into(&mut serialized, &value)?;
 
-        let cf = self.get_cf_handle(handle.id)?;
+        let cf = self.get_cf_handle(&handle.id)?;
         // See the make_aggregating_merge function in this module. Its result is set as the
         // merging operator for this state.
         Ok(self

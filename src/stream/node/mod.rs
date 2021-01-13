@@ -17,7 +17,7 @@ use crate::{
     },
 };
 use arcon_error::{arcon_err, arcon_err_kind, ArconResult};
-use arcon_state::{index::IndexOps, Appender, ArconState, Backend, Handle, Timer as ArconTimer}; // conflicts with Kompact Timer trait
+use arcon_state::{index::IndexOps, Appender, ArconState, Backend, Timer as ArconTimer}; // conflicts with Kompact Timer trait
 use fxhash::*;
 use kompact::prelude::*;
 use std::{cell::UnsafeCell, sync::Arc};
@@ -101,10 +101,8 @@ pub struct NodeState<OP: Operator + 'static, B: Backend> {
 
 impl<OP: Operator + 'static, B: Backend> NodeState<OP, B> {
     pub fn new(id: NodeID, in_channels: Vec<NodeID>, backend: Arc<B>) -> Self {
-        let mut handle = Handle::vec("_messagebuffer");
-        backend.register_vec_handle(&mut handle);
-        let active_handle = handle.activate(backend);
-        let message_buffer = Appender::with_capacity(MESSAGE_BUFFER_SIZE, active_handle);
+        let message_buffer =
+            Appender::with_capacity("_messagebuffer", MESSAGE_BUFFER_SIZE, backend);
 
         // initialise watermarks
         let mut watermarks: FxHashMap<NodeID, Watermark> = FxHashMap::default();
@@ -158,7 +156,7 @@ where
     /// Internal Node State
     node_state: NodeState<OP, B>,
     /// Event time scheduler
-    timer: UnsafeCell<Option<ArconTimer<u64, OP::TimerState, B>>>,
+    timer: UnsafeCell<ArconTimer<u64, OP::TimerState, B>>,
 
     checkpoint_request: Option<Arc<CheckpointRequest>>,
 }
@@ -169,40 +167,16 @@ where
     B: Backend,
 {
     /// Creates a new Node
-    #[cfg(test)]
     pub(crate) fn new(
         descriptor: NodeDescriptor,
         channel_strategy: ChannelStrategy<OP::OUT>,
         operator: OP,
         node_state: NodeState<OP, B>,
+        backend: Arc<B>,
     ) -> Self {
-        Self::setup(descriptor, channel_strategy, operator, node_state, None)
-    }
+        let timer_id = format!("_{}_timer", descriptor);
+        let timer = ArconTimer::new(timer_id, backend);
 
-    /// Creates a new Node with timer
-    pub fn with_timer(
-        descriptor: NodeDescriptor,
-        channel_strategy: ChannelStrategy<OP::OUT>,
-        operator: OP,
-        node_state: NodeState<OP, B>,
-        timer: ArconTimer<u64, OP::TimerState, B>,
-    ) -> Self {
-        Self::setup(
-            descriptor,
-            channel_strategy,
-            operator,
-            node_state,
-            Some(timer),
-        )
-    }
-
-    fn setup(
-        descriptor: NodeDescriptor,
-        channel_strategy: ChannelStrategy<OP::OUT>,
-        operator: OP,
-        node_state: NodeState<OP, B>,
-        timer: Option<ArconTimer<u64, OP::TimerState, B>>,
-    ) -> Self {
         Node {
             ctx: ComponentContext::uninitialised(),
             node_manager_port: RequiredPort::uninitialised(),
@@ -331,11 +305,10 @@ where
                         self.node_state.current_watermark = new_watermark;
 
                         unsafe {
-                            if let Some(timer) = &mut (*self.timer.get()) {
-                                for timeout in timer.advance_to(new_watermark.timestamp) {
-                                    (*self.operator.get())
-                                        .handle_timeout(timeout, make_context!(self))?;
-                                }
+                            let timer = &mut (*self.timer.get());
+                            for timeout in timer.advance_to(new_watermark.timestamp) {
+                                (*self.operator.get())
+                                    .handle_timeout(timeout, make_context!(self))?;
                             }
                         };
 
@@ -368,10 +341,10 @@ where
                         self.node_state.persist()?;
 
                         unsafe {
-                            // persist timer if enabled
-                            if let Some(timer) = &mut (*self.timer.get()) {
-                                timer.persist()?;
-                            }
+                            // persist timer
+                            let timer = &mut (*self.timer.get());
+                            timer.persist()?;
+
                             // persist possible operator state..
                             (*self.operator.get()).persist()?;
                         };
@@ -583,7 +556,8 @@ mod tests {
             descriptor,
             channel_strategy,
             Filter::new(&filter_fn),
-            NodeState::new(NodeID::new(0), in_channels, backend),
+            NodeState::new(NodeID::new(0), in_channels, backend.clone()),
+            backend,
         );
 
         let filter_comp = system.create(|| node);

@@ -112,7 +112,7 @@ pub mod prelude {
         pipeline::{AssembledPipeline, Pipeline, Stream},
         stream::{
             operator::{
-                function::{Filter, FlatMap, Map as MapOperator, MapInPlace},
+                function::{Filter, FlatMap, Map, MapInPlace},
                 sink::local_file::LocalFileSink,
                 window::{AppenderWindow, IncrementalWindow, WindowAssigner},
                 Operator, OperatorContext,
@@ -141,7 +141,8 @@ pub mod prelude {
 
     pub use arcon_state::{
         AggregatorState, Appender, ArconState, Backend, BackendNever, BackendType, EagerAppender,
-        EagerMap, Handle, Map, MapState, ReducerState, Sled, Value, ValueState, VecState,
+        EagerHashTable, Handle, HashTable, MapState, ReducerState, Sled, Value, ValueState,
+        VecState,
     };
 
     #[cfg(feature = "rayon")]

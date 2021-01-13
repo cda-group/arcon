@@ -9,7 +9,7 @@ use crate::{
     },
 };
 use arcon_error::*;
-use arcon_state::{index::EMPTY_STATE_ID, ArconState, Backend, Handle, Map, Value};
+use arcon_state::{index::EMPTY_STATE_ID, ArconState, Backend, HashTable, Value};
 use kompact::prelude::*;
 use std::sync::Arc;
 
@@ -79,8 +79,8 @@ impl Port for NodeManagerPort {
 
 #[derive(ArconState)]
 pub struct NodeManagerState<B: Backend> {
-    watermarks: Map<NodeID, Watermark, B>,
-    epochs: Map<NodeID, Epoch, B>,
+    watermarks: HashTable<NodeID, Watermark, B>,
+    epochs: HashTable<NodeID, Epoch, B>,
     current_watermark: Value<Watermark, B>,
     current_epoch: Value<Epoch, B>,
 }
@@ -144,21 +144,11 @@ where
         backend: Arc<B>,
     ) -> Self {
         // initialise internal state
-        let mut wm_handle = Handle::map("_watermarks");
-        let mut epoch_handle = Handle::map("_epochs");
-        let mut curr_wm_handle = Handle::value("_curr_watermark");
-        let mut curr_epoch_handle = Handle::value("_epoch");
-
-        backend.register_map_handle(&mut wm_handle);
-        backend.register_map_handle(&mut epoch_handle);
-        backend.register_value_handle(&mut curr_wm_handle);
-        backend.register_value_handle(&mut curr_epoch_handle);
-
         let manager_state = NodeManagerState {
-            watermarks: Map::with_capacity(wm_handle.activate(backend.clone()), 64, 64),
-            epochs: Map::with_capacity(epoch_handle.activate(backend.clone()), 64, 64),
-            current_watermark: Value::new(curr_wm_handle.activate(backend.clone())),
-            current_epoch: Value::new(curr_epoch_handle.activate(backend.clone())),
+            watermarks: HashTable::with_capacity("_watermarks", backend.clone(), 64, 64),
+            epochs: HashTable::with_capacity("_epochs", backend.clone(), 64, 64),
+            current_watermark: Value::new("_curr_watermark", backend.clone()),
+            current_epoch: Value::new("_curr_epoch", backend.clone()),
         };
 
         NodeManager {

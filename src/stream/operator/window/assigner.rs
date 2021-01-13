@@ -7,7 +7,7 @@ use crate::{
     stream::operator::{Operator, OperatorContext},
 };
 use arcon_error::*;
-use arcon_state::{index::IndexOps, ArconState, Backend, EagerMap, Handle};
+use arcon_state::{index::IndexOps, ArconState, Backend, EagerHashTable};
 use kompact::prelude::ComponentDefinition;
 use prost::Message;
 use std::{marker::PhantomData, sync::Arc};
@@ -39,21 +39,15 @@ impl WindowEvent {
 
 #[derive(ArconState)]
 pub struct AssignerState<B: Backend> {
-    window_start: EagerMap<Key, Timestamp, B>,
-    active_windows: EagerMap<WindowContext, (), B>,
+    window_start: EagerHashTable<Key, Timestamp, B>,
+    active_windows: EagerHashTable<WindowContext, (), B>,
 }
 
 impl<B: Backend> AssignerState<B> {
     pub(crate) fn new(backend: Arc<B>) -> Self {
-        let mut window_start_handle = Handle::map("_window_start");
-        backend.register_map_handle(&mut window_start_handle);
-
-        let mut active_windows_handle = Handle::map("_active_windows");
-        backend.register_map_handle(&mut active_windows_handle);
-
         Self {
-            window_start: EagerMap::new(window_start_handle.activate(backend.clone())),
-            active_windows: EagerMap::new(active_windows_handle.activate(backend)),
+            window_start: EagerHashTable::new("_window_start", backend.clone()),
+            active_windows: EagerHashTable::new("_active_windows", backend),
         }
     }
 }
@@ -283,7 +277,6 @@ mod tests {
             operator::window::AppenderWindow,
         },
     };
-    use arcon_state::Timer;
     use kompact::prelude::{biconnect_components, ActorRefFactory, ActorRefStrong, Component};
     use std::{sync::Arc, thread, time, time::UNIX_EPOCH};
 
@@ -345,23 +338,12 @@ mod tests {
         let window_assigner =
             WindowAssigner::sliding(window, backend.clone(), length, slide, late, true);
 
-        let mut timeouts_handle = Handle::map("_timeouts");
-        let mut time_handle = Handle::value("_time");
-
-        backend.register_map_handle(&mut timeouts_handle);
-        backend.register_value_handle(&mut time_handle);
-
-        let active_timeouts_handle = timeouts_handle.activate(backend.clone());
-        let active_time_handle = time_handle.activate(backend.clone());
-
-        let timer = Timer::new(active_timeouts_handle, active_time_handle);
-
-        let node = Node::with_timer(
+        let node = Node::new(
             descriptor,
             channel_strategy,
             window_assigner,
-            NodeState::new(NodeID::new(0), in_channels, backend),
-            timer,
+            NodeState::new(NodeID::new(0), in_channels, backend.clone()),
+            backend,
         );
 
         let window_comp = system.create(|| node);
