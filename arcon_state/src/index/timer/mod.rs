@@ -1,16 +1,13 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use super::{map::eager::EagerMap, value::Value, IndexOps};
-use crate::{
-    backend::{handles::ActiveHandle, Backend, MapState, ValueState},
-    data::Key,
-    error::Result,
-};
+use super::{hash_table::eager::EagerHashTable, value::Value, IndexOps};
+use crate::{backend::Backend, data::Key, error::Result};
 use hierarchical_hash_wheel_timer::{
     wheels::{quad_wheel::*, *},
     *,
 };
+use std::sync::Arc;
 
 use core::time::Duration;
 use std::{cmp::Eq, hash::Hash};
@@ -47,7 +44,7 @@ where
     B: Backend,
 {
     timer: QuadWheelWithOverflow<K>,
-    timeouts: EagerMap<K, TimerEvent<V>, B>,
+    timeouts: EagerHashTable<K, TimerEvent<V>, B>,
     current_time: Value<u64, B>,
 }
 
@@ -57,14 +54,15 @@ where
     V: crate::data::Value,
     B: Backend,
 {
-    pub fn new(
-        timeouts_handle: ActiveHandle<B, MapState<K, TimerEvent<V>>>,
-        time_handle: ActiveHandle<B, ValueState<u64>>,
-    ) -> Self {
+    pub fn new(id: impl Into<String>, backend: Arc<B>) -> Self {
+        let id = id.into();
+        let timeouts_id = format!("_{}_timeouts", id);
+        let time_id = format!("_{}_time", id);
+
         let mut timer = Self {
             timer: QuadWheelWithOverflow::default(),
-            timeouts: EagerMap::new(timeouts_handle),
-            current_time: Value::new(time_handle),
+            timeouts: EagerHashTable::new(timeouts_id, backend.clone()),
+            current_time: Value::new(time_id, backend),
         };
 
         // replay and insert back if any exists
@@ -76,8 +74,6 @@ where
     fn replay_events(&mut self) {
         let time = self.current_time.get().unwrap_or(&0);
 
-        // TODO: Once Map supports full iter, perhaps move away
-        // from EagerMap?
         for res in self.timeouts.iter().expect("could not get timeouts") {
             let (id, entry) = res.expect("could not get timeout entry");
             let delay = entry.time_when_scheduled + entry.timeout_millis - time;
@@ -217,26 +213,12 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{backend::sled::Sled, Handle};
     use std::sync::Arc;
 
     #[test]
     fn timer_index_test() {
-        let test_dir = tempfile::tempdir().unwrap();
-        let path = test_dir.path();
-        let backend = Arc::new(Sled::create(path).unwrap());
-
-        let mut timeouts_handle = Handle::<MapState<u64, TimerEvent<u64>>>::map("_timeouts");
-        let mut time_handle = Handle::value("_time");
-
-        backend.register_map_handle(&mut timeouts_handle);
-        backend.register_value_handle(&mut time_handle);
-
-        let active_timeouts_handle = timeouts_handle.activate(backend.clone());
-        let active_time_handle = time_handle.activate(backend);
-
-        let mut timer: Timer<u64, u64, Sled> =
-            Timer::new(active_timeouts_handle, active_time_handle);
+        let backend = Arc::new(crate::backend::temp_backend());
+        let mut timer = Timer::new("mytimer", backend);
 
         // Timer per key...
         timer.schedule_at(1, 1000, 10).unwrap();

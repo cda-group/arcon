@@ -3,15 +3,16 @@
 
 use crate::{
     backend::{
-        handles::{ActiveHandle, BoxedIteratorOfResult},
+        handles::{ActiveHandle, BoxedIteratorOfResult, Handle},
         Backend, MapState,
     },
     data::{Key, Value},
     error::*,
     index::IndexOps,
 };
+use std::sync::Arc;
 
-pub struct EagerMap<K, V, B>
+pub struct EagerHashTable<K, V, B>
 where
     K: Key,
     V: Value,
@@ -21,13 +22,16 @@ where
     handle: ActiveHandle<B, MapState<K, V>>,
 }
 
-impl<K, V, B> EagerMap<K, V, B>
+impl<K, V, B> EagerHashTable<K, V, B>
 where
     K: Key,
     V: Value,
     B: Backend,
 {
-    pub fn new(handle: ActiveHandle<B, MapState<K, V>>) -> Self {
+    pub fn new(id: impl Into<String>, backend: Arc<B>) -> Self {
+        let mut handle = Handle::map(id.into());
+        backend.register_map_handle(&mut handle);
+        let handle = handle.activate(backend);
         Self { handle }
     }
     /// Insert a key-value record
@@ -55,7 +59,7 @@ where
     }
 }
 
-impl<K, V, B> IndexOps for EagerMap<K, V, B>
+impl<K, V, B> IndexOps for EagerHashTable<K, V, B>
 where
     K: Key,
     V: Value,

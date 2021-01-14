@@ -16,7 +16,7 @@ impl AggregatorOps for Sled {
         handle: &Handle<AggregatorState<A>, IK, N>,
     ) -> Result<()> {
         let key = handle.serialize_metakeys()?;
-        self.remove(handle.id, &key)?;
+        self.remove(&handle.id, &key)?;
         Ok(())
     }
 
@@ -26,7 +26,7 @@ impl AggregatorOps for Sled {
     ) -> Result<<A as Aggregator>::Result> {
         let key = handle.serialize_metakeys()?;
 
-        if let Some(serialized) = self.get(handle.id, &key)? {
+        if let Some(serialized) = self.get(&handle.id, &key)? {
             assert_eq!(serialized[0], ACCUMULATOR_MARKER);
             let serialized = &serialized[1..];
 
@@ -51,7 +51,7 @@ impl AggregatorOps for Sled {
         protobuf::serialize_into(&mut serialized, &value)?;
 
         // See the make_aggregator_merge function in this module. Its result is set as the merging operator for this state.
-        self.tree(handle.id)?.merge(key, serialized)?;
+        self.tree(&handle.id)?.merge(key, serialized)?;
 
         Ok(())
     }

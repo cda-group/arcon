@@ -16,7 +16,7 @@ impl MapOps for Rocks {
         handle: &Handle<MapState<K, V>, IK, N>,
     ) -> Result<()> {
         let prefix = handle.serialize_metakeys()?;
-        self.remove_prefix(handle.id, prefix)
+        self.remove_prefix(&handle.id, prefix)
     }
 
     fn map_get<K: Key, V: Value, IK: Metakey, N: Metakey>(
@@ -25,7 +25,7 @@ impl MapOps for Rocks {
         key: &K,
     ) -> Result<Option<V>> {
         let key = handle.serialize_metakeys_and_key(key)?;
-        if let Some(serialized) = self.get(handle.id, &key)? {
+        if let Some(serialized) = self.get(&handle.id, &key)? {
             let value = protobuf::deserialize(&serialized)?;
             Ok(Some(value))
         } else {
@@ -41,7 +41,7 @@ impl MapOps for Rocks {
     ) -> Result<()> {
         let key = handle.serialize_metakeys_and_key(&key)?;
         let serialized = protobuf::serialize(&value)?;
-        self.put(handle.id, key, serialized)?;
+        self.put(&handle.id, key, serialized)?;
 
         Ok(())
     }
@@ -54,7 +54,7 @@ impl MapOps for Rocks {
     ) -> Result<()> {
         let key = handle.serialize_metakeys_and_key(key)?;
         let serialized = protobuf::serialize(value)?;
-        self.put(handle.id, key, serialized)?;
+        self.put(&handle.id, key, serialized)?;
 
         Ok(())
     }
@@ -68,14 +68,14 @@ impl MapOps for Rocks {
         let key = handle.serialize_metakeys_and_key(&key)?;
 
         // couldn't find a `put` that would return the previous value from rocks
-        let old = if let Some(slice) = self.get(handle.id, &key)? {
+        let old = if let Some(slice) = self.get(&handle.id, &key)? {
             Some(protobuf::deserialize(&slice[..])?)
         } else {
             None
         };
 
         let serialized = protobuf::serialize(&value)?;
-        self.put(handle.id, key, serialized)?;
+        self.put(&handle.id, key, serialized)?;
 
         Ok(old)
     }
@@ -86,7 +86,7 @@ impl MapOps for Rocks {
         key_value_pairs: impl IntoIterator<Item = (K, V)>,
     ) -> Result<()> {
         let mut wb = WriteBatch::default();
-        let cf = self.get_cf_handle(handle.id)?;
+        let cf = self.get_cf_handle(&handle.id)?;
 
         for (user_key, value) in key_value_pairs {
             let key = handle.serialize_metakeys_and_key(&user_key)?;
@@ -102,7 +102,7 @@ impl MapOps for Rocks {
         key_value_pairs: impl IntoIterator<Item = (&'a K, &'a V)>,
     ) -> Result<()> {
         let mut wb = WriteBatch::default();
-        let cf = self.get_cf_handle(handle.id)?;
+        let cf = self.get_cf_handle(&handle.id)?;
 
         for (user_key, value) in key_value_pairs {
             let key = handle.serialize_metakeys_and_key(user_key)?;
@@ -120,13 +120,13 @@ impl MapOps for Rocks {
     ) -> Result<Option<V>> {
         let key = handle.serialize_metakeys_and_key(key)?;
 
-        let old = if let Some(slice) = self.get(handle.id, &key)? {
+        let old = if let Some(slice) = self.get(&handle.id, &key)? {
             Some(protobuf::deserialize(&slice[..])?)
         } else {
             None
         };
 
-        self.remove(handle.id, &key)?;
+        self.remove(&handle.id, &key)?;
 
         Ok(old)
     }
@@ -137,7 +137,7 @@ impl MapOps for Rocks {
         key: &K,
     ) -> Result<()> {
         let key = handle.serialize_metakeys_and_key(key)?;
-        self.remove(handle.id, &key)?;
+        self.remove(&handle.id, &key)?;
 
         Ok(())
     }
@@ -148,7 +148,7 @@ impl MapOps for Rocks {
         key: &K,
     ) -> Result<bool> {
         let key = handle.serialize_metakeys_and_key(key)?;
-        self.contains(handle.id, &key)
+        self.contains(&handle.id, &key)
     }
 
     fn map_iter<K: Key, V: Value, IK: Metakey, N: Metakey>(
@@ -156,7 +156,7 @@ impl MapOps for Rocks {
         handle: &Handle<MapState<K, V>, IK, N>,
     ) -> Result<BoxedIteratorOfResult<'_, (K, V)>> {
         let prefix = handle.serialize_metakeys()?;
-        let cf = self.get_cf_handle(handle.id)?;
+        let cf = self.get_cf_handle(&handle.id)?;
         // NOTE: prefix_iterator only works as expected when the cf has proper prefix_extractor
         //   option set. We do that in Rocks::register_*_state
         let iter =
@@ -180,7 +180,7 @@ impl MapOps for Rocks {
         handle: &Handle<MapState<K, V>, IK, N>,
     ) -> Result<BoxedIteratorOfResult<'_, K>> {
         let prefix = handle.serialize_metakeys()?;
-        let cf = self.get_cf_handle(handle.id)?;
+        let cf = self.get_cf_handle(&handle.id)?;
 
         let iter = self
             .db()
@@ -202,7 +202,7 @@ impl MapOps for Rocks {
         handle: &Handle<MapState<K, V>, IK, N>,
     ) -> Result<BoxedIteratorOfResult<'_, V>> {
         let prefix = handle.serialize_metakeys()?;
-        let cf = self.get_cf_handle(handle.id)?;
+        let cf = self.get_cf_handle(&handle.id)?;
 
         let iter = self
             .db()
@@ -220,7 +220,7 @@ impl MapOps for Rocks {
         handle: &Handle<MapState<K, V>, IK, N>,
     ) -> Result<usize> {
         let prefix = handle.serialize_metakeys()?;
-        let cf = self.get_cf_handle(handle.id)?;
+        let cf = self.get_cf_handle(&handle.id)?;
 
         let count = self.db().prefix_iterator_cf(cf, prefix).count();
 
@@ -232,7 +232,7 @@ impl MapOps for Rocks {
         handle: &Handle<MapState<K, V>, IK, N>,
     ) -> Result<bool> {
         let prefix = handle.serialize_metakeys()?;
-        let cf = self.get_cf_handle(handle.id)?;
+        let cf = self.get_cf_handle(&handle.id)?;
         Ok(self.db().prefix_iterator_cf(cf, prefix).next().is_none())
     }
 }

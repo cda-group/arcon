@@ -2,11 +2,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
-    backend::{handles::ActiveHandle, Backend, VecState},
+    backend::{
+        handles::{ActiveHandle, Handle},
+        Backend, VecState,
+    },
     data::Value,
     error::*,
     index::IndexOps,
 };
+use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct EagerAppender<V, B>
@@ -24,7 +28,10 @@ where
     B: Backend,
 {
     /// Creates an EagerAppender
-    pub fn new(handle: ActiveHandle<B, VecState<V>>) -> Self {
+    pub fn new(id: impl Into<String>, backend: Arc<B>) -> Self {
+        let mut handle = Handle::vec(id.into());
+        backend.register_vec_handle(&mut handle);
+        let handle = handle.activate(backend);
         EagerAppender { handle }
     }
 

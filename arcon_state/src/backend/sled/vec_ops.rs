@@ -16,7 +16,7 @@ impl VecOps for Sled {
         handle: &Handle<VecState<T>, IK, N>,
     ) -> Result<()> {
         let key = handle.serialize_metakeys()?;
-        self.remove(handle.id, &key)?;
+        self.remove(&handle.id, &key)?;
         Ok(())
     }
 
@@ -33,7 +33,7 @@ impl VecOps for Sled {
         fixed_bytes::serialize_into(&mut serialized, &1usize)?;
         protobuf::serialize_into(&mut serialized, &value)?;
 
-        let tree = self.tree(handle.id)?;
+        let tree = self.tree(&handle.id)?;
         // See the vec_merge function in this module. It is set as the merge operator for every vec state.
         tree.merge(key, serialized)?;
 
@@ -45,7 +45,7 @@ impl VecOps for Sled {
         handle: &Handle<VecState<T>, IK, N>,
     ) -> Result<Vec<T>> {
         let key = handle.serialize_metakeys()?;
-        if let Some(serialized) = self.get(handle.id, &key)? {
+        if let Some(serialized) = self.get(&handle.id, &key)? {
             // reader is updated to point at the yet unconsumed part of the serialized data
             let mut reader = &serialized[..];
             let len: usize = fixed_bytes::deserialize_from(&mut reader)?;
@@ -68,7 +68,7 @@ impl VecOps for Sled {
         handle: &Handle<VecState<T>, IK, N>,
     ) -> Result<BoxedIteratorOfResult<'_, T>> {
         let key = handle.serialize_metakeys()?;
-        if let Some(serialized) = self.get(handle.id, &key)? {
+        if let Some(serialized) = self.get(&handle.id, &key)? {
             // TODO: this would be nicer with generators :(
             let mut reader = &serialized[..];
             let origin = reader.as_ptr() as usize;
@@ -121,7 +121,7 @@ impl VecOps for Sled {
             protobuf::serialize_into(&mut storage, &elem)?;
         }
 
-        self.put(handle.id, &key, &storage)?;
+        self.put(&handle.id, &key, &storage)?;
 
         Ok(())
     }
@@ -151,7 +151,7 @@ impl VecOps for Sled {
         // impl for Vec starts at the end and extends it, so we want the first one
         fixed_bytes::serialize_into(&mut serialized.as_mut_slice(), &len)?;
 
-        self.tree(handle.id)?.merge(key, serialized)?;
+        self.tree(&handle.id)?.merge(key, serialized)?;
 
         Ok(())
     }
@@ -161,7 +161,7 @@ impl VecOps for Sled {
         handle: &Handle<VecState<T>, IK, N>,
     ) -> Result<usize> {
         let key = handle.serialize_metakeys()?;
-        if let Some(storage) = self.get(handle.id, &key)? {
+        if let Some(storage) = self.get(&handle.id, &key)? {
             if storage.is_empty() {
                 return Ok(0);
             }

@@ -31,6 +31,9 @@ pub fn get_system_time_nano() -> u64 {
     since_the_epoch.as_nanos() as u64
 }
 
+pub trait ArconFnBounds: Send + Sync + Clone + 'static {}
+impl<T> ArconFnBounds for T where T: Send + Sync + Clone + 'static {}
+
 pub trait SafelySendableFn<Args>: Fn<Args> + Send + Sync {}
 impl<Args, F> SafelySendableFn<Args> for F where F: Fn<Args> + Send + Sync {}
 

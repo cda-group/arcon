@@ -44,10 +44,7 @@ fn index_rolling_counter(backend: BackendType, b: &mut Bencher) {
     let dir = tempdir().unwrap();
     with_backend_type!(backend, |B| {
         let backend = Arc::new(B::create(dir.as_ref()).unwrap());
-        let mut value_handle = Handle::value("_value");
-        backend.register_value_handle(&mut value_handle);
-        let active_handle = value_handle.activate(backend);
-        let mut value_index: Value<u64, B> = Value::new(active_handle);
+        let mut value_index: Value<u64, B> = Value::new("_value", backend);
         b.iter(|| {
             let curr_value = *value_index.get().unwrap();
             for _i in 0..OPS_PER_EPOCH {

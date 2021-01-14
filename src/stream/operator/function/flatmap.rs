@@ -4,7 +4,7 @@
 use crate::{
     data::{ArconElement, ArconNever, ArconType},
     stream::operator::{Operator, OperatorContext},
-    util::SafelySendableFn,
+    util::ArconFnBounds,
 };
 use arcon_error::*;
 use arcon_state::{index::ArconState, Backend};
@@ -16,7 +16,7 @@ where
     IN: ArconType,
     OUTS: IntoIterator,
     OUTS::Item: ArconType,
-    F: SafelySendableFn(IN, &mut S) -> OperatorResult<OUTS>,
+    F: Fn(IN, &mut S) -> OperatorResult<OUTS> + ArconFnBounds,
     S: ArconState,
 {
     state: S,
@@ -27,13 +27,13 @@ where
 impl<IN, OUTS> FlatMap<IN, OUTS, fn(IN, &mut ()) -> OperatorResult<OUTS>, ()>
 where
     IN: ArconType,
-    OUTS: IntoIterator,
+    OUTS: IntoIterator + 'static,
     OUTS::Item: ArconType,
 {
     #[allow(clippy::new_ret_no_self)]
     pub fn new(
-        udf: impl SafelySendableFn(IN) -> OUTS,
-    ) -> FlatMap<IN, OUTS, impl SafelySendableFn(IN, &mut ()) -> OperatorResult<OUTS>, ()> {
+        udf: impl Fn(IN) -> OUTS + ArconFnBounds,
+    ) -> FlatMap<IN, OUTS, impl Fn(IN, &mut ()) -> OperatorResult<OUTS> + ArconFnBounds, ()> {
         let udf = move |input: IN, _: &mut ()| Ok(udf(input));
         FlatMap {
             state: (),
@@ -48,7 +48,7 @@ where
     IN: ArconType,
     OUTS: IntoIterator,
     OUTS::Item: ArconType,
-    F: SafelySendableFn(IN, &mut S) -> OperatorResult<OUTS>,
+    F: Fn(IN, &mut S) -> OperatorResult<OUTS> + ArconFnBounds,
     S: ArconState,
 {
     pub fn stateful(state: S, udf: F) -> Self {
@@ -65,7 +65,7 @@ where
     IN: ArconType,
     OUTS: IntoIterator,
     OUTS::Item: ArconType,
-    F: SafelySendableFn(IN, &mut S) -> OperatorResult<OUTS>,
+    F: Fn(IN, &mut S) -> OperatorResult<OUTS> + ArconFnBounds,
     S: ArconState,
 {
     type IN = IN;

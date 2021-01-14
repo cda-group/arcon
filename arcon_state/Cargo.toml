@@ -55,7 +55,7 @@ name = "value"
 harness = false
 
 [[bench]]
-name = "map"
+name = "hash_table"
 harness = false
 
 [[bench]]

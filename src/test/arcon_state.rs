@@ -2,8 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use arcon_state::{
-    backend::{Backend, Handle, Sled},
-    index::{IndexOps, Map, Value},
+    index::{IndexOps, HashTable, Value},
     ArconState,
 };
 
@@ -11,7 +10,7 @@ use arcon_state::{
 pub struct StreamingState<B: Backend> {
     watermark: Value<u64, B>,
     epoch: Value<u64, B>,
-    counters: Map<u64, u64, B>,
+    counters: HashTable<u64, u64, B>,
     #[ephemeral]
     emph: u64,
 }
@@ -19,22 +18,11 @@ pub struct StreamingState<B: Backend> {
 #[test]
 fn streaming_state_test() {
     let backend = std::sync::Arc::new(crate::util::temp_backend());
-    let mut watermark_handle = Handle::value("_watermark");
-    let mut epoch_handle = Handle::value("_epoch");
-    let mut counters_handle = Handle::map("_counters");
-
-    backend.register_value_handle(&mut watermark_handle);
-    backend.register_value_handle(&mut epoch_handle);
-    backend.register_map_handle(&mut counters_handle);
-
-    let active_watermark_handle = watermark_handle.activate(backend.clone());
-    let active_epoch_handle = epoch_handle.activate(backend.clone());
-    let active_counters_handle = counters_handle.activate(backend);
 
     let mut state = StreamingState {
-        watermark: Value::new(active_watermark_handle),
-        epoch: Value::new(active_epoch_handle),
-        counters: Map::new(active_counters_handle),
+        watermark: Value::new("_watermark", backend.clone()),
+        epoch: Value::new("_epoch", backend.clone()),
+        counters: HashTable::new("_counters", backend),
         emph: 0,
     };
 

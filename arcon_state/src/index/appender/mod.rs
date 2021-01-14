@@ -2,11 +2,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
-    backend::{handles::ActiveHandle, Backend, VecState},
+    backend::{
+        handles::{ActiveHandle, Handle},
+        Backend, VecState,
+    },
     data::Value,
     error::*,
     index::IndexOps,
 };
+use std::sync::Arc;
 
 const DEFAULT_APPENDER_SIZE: usize = 1024;
 
@@ -34,7 +38,11 @@ where
     B: Backend,
 {
     /// Creates an Appender using the default appender size
-    pub fn new(handle: ActiveHandle<B, VecState<V>>) -> Self {
+    pub fn new(id: impl Into<String>, backend: Arc<B>) -> Self {
+        let mut handle = Handle::vec(id.into());
+        backend.register_vec_handle(&mut handle);
+        let handle = handle.activate(backend);
+
         Appender {
             elements: Vec::with_capacity(DEFAULT_APPENDER_SIZE),
             handle,
@@ -42,7 +50,11 @@ where
     }
 
     /// Creates an Appender with specified capacity
-    pub fn with_capacity(capacity: usize, handle: ActiveHandle<B, VecState<V>>) -> Self {
+    pub fn with_capacity(id: impl Into<String>, capacity: usize, backend: Arc<B>) -> Self {
+        let mut handle = Handle::vec(id.into());
+        backend.register_vec_handle(&mut handle);
+        let handle = handle.activate(backend);
+
         Appender {
             elements: Vec::with_capacity(capacity),
             handle,
@@ -109,17 +121,12 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::{sled::Sled, Handle};
     use std::sync::Arc;
 
     #[test]
     fn appender_test() {
-        let backend = Sled::create(&std::path::Path::new("/tmp/appender")).unwrap();
-        let backend = Arc::new(backend);
-        let mut vec_handle = Handle::vec("_appender");
-        backend.register_vec_handle(&mut vec_handle);
-        let active_handle = vec_handle.activate(backend);
-        let mut index: Appender<u64, Sled> = Appender::new(active_handle);
+        let backend = Arc::new(crate::backend::temp_backend());
+        let mut index = Appender::new("appender", backend);
 
         for i in 0..1024 {
             index.append(i as u64).unwrap();

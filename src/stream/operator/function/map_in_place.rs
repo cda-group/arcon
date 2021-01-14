@@ -4,7 +4,7 @@
 use crate::{
     data::{ArconElement, ArconNever, ArconType},
     stream::operator::{Operator, OperatorContext},
-    util::SafelySendableFn,
+    util::ArconFnBounds,
 };
 use arcon_error::*;
 use arcon_state::{index::ArconState, Backend};
@@ -14,7 +14,7 @@ use std::marker::PhantomData;
 pub struct MapInPlace<IN, F, S>
 where
     IN: ArconType,
-    F: SafelySendableFn(&mut IN, &mut S) -> OperatorResult<()>,
+    F: Fn(&mut IN, &mut S) -> OperatorResult<()> + ArconFnBounds,
     S: ArconState,
 {
     state: S,
@@ -28,8 +28,8 @@ where
 {
     #[allow(clippy::new_ret_no_self)]
     pub fn new(
-        udf: impl SafelySendableFn(&mut IN),
-    ) -> MapInPlace<IN, impl SafelySendableFn(&mut IN, &mut ()) -> OperatorResult<()>, ()> {
+        udf: impl Fn(&mut IN) + ArconFnBounds,
+    ) -> MapInPlace<IN, impl Fn(&mut IN, &mut ()) -> OperatorResult<()> + ArconFnBounds, ()> {
         let udf = move |input: &mut IN, _: &mut ()| {
             udf(input);
             Ok(())
@@ -45,7 +45,7 @@ where
 impl<IN, F, S> MapInPlace<IN, F, S>
 where
     IN: ArconType,
-    F: SafelySendableFn(&mut IN, &mut S) -> OperatorResult<()>,
+    F: Fn(&mut IN, &mut S) -> OperatorResult<()> + ArconFnBounds,
     S: ArconState,
 {
     pub fn stateful(state: S, udf: F) -> Self {
@@ -60,7 +60,7 @@ where
 impl<IN, F, S> Operator for MapInPlace<IN, F, S>
 where
     IN: ArconType,
-    F: SafelySendableFn(&mut IN, &mut S) -> OperatorResult<()>,
+    F: Fn(&mut IN, &mut S) -> OperatorResult<()> + ArconFnBounds,
     S: ArconState,
 {
     type IN = IN;

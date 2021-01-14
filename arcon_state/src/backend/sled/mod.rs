@@ -179,7 +179,7 @@ impl Backend for Sled {
         handle: &mut Handle<VecState<T>, IK, N>,
     ) {
         let tree = self
-            .tree(handle.id)
+            .tree(&handle.id)
             .expect("Could not get the tree when registering a vec");
         tree.set_merge_operator(vec_ops::vec_merge);
         handle.registered = true;
@@ -190,7 +190,7 @@ impl Backend for Sled {
         handle: &mut Handle<ReducerState<T, F>, IK, N>,
     ) {
         let tree = self
-            .tree(handle.id)
+            .tree(&handle.id)
             .expect("Could not get the tree when registering a reducer");
         tree.set_merge_operator(reducer_ops::make_reducer_merge(handle.extra_data.clone()));
         handle.registered = true;
@@ -201,7 +201,7 @@ impl Backend for Sled {
         handle: &mut Handle<AggregatorState<A>, IK, N>,
     ) {
         let tree = self
-            .tree(handle.id)
+            .tree(&handle.id)
             .expect("Could not get the tree when registering an aggregator");
         tree.set_merge_operator(aggregator_ops::make_aggregator_merge(
             handle.extra_data.clone(),

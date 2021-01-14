@@ -15,7 +15,7 @@ impl ValueOps for Sled {
         handle: &Handle<ValueState<T>, IK, N>,
     ) -> Result<()> {
         let key = handle.serialize_metakeys()?;
-        self.remove(handle.id, &key)?;
+        self.remove(&handle.id, &key)?;
         Ok(())
     }
 
@@ -24,7 +24,7 @@ impl ValueOps for Sled {
         handle: &Handle<ValueState<T>, IK, N>,
     ) -> Result<Option<T>> {
         let key = handle.serialize_metakeys()?;
-        if let Some(serialized) = self.get(handle.id, &key)? {
+        if let Some(serialized) = self.get(&handle.id, &key)? {
             let value = protobuf::deserialize(&serialized)?;
             Ok(Some(value))
         } else {
@@ -39,7 +39,7 @@ impl ValueOps for Sled {
     ) -> Result<Option<T>> {
         let key = handle.serialize_metakeys()?;
         let serialized = protobuf::serialize(&value)?;
-        let old = match self.put(handle.id, &key, &serialized)? {
+        let old = match self.put(&handle.id, &key, &serialized)? {
             Some(bytes) => Some(protobuf::deserialize(bytes.as_ref())?),
             None => None,
         };
@@ -53,7 +53,7 @@ impl ValueOps for Sled {
     ) -> Result<()> {
         let key = handle.serialize_metakeys()?;
         let serialized = protobuf::serialize(&value)?;
-        self.put(handle.id, &key, &serialized)?;
+        self.put(&handle.id, &key, &serialized)?;
         Ok(())
     }
 
@@ -64,7 +64,7 @@ impl ValueOps for Sled {
     ) -> Result<()> {
         let key = handle.serialize_metakeys()?;
         let serialized = protobuf::serialize(value)?;
-        self.put(handle.id, &key, &serialized)?;
+        self.put(&handle.id, &key, &serialized)?;
         Ok(())
     }
 }

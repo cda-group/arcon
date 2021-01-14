@@ -13,7 +13,10 @@ fn main() {
                 conf.set_timestamp_extractor(|x: &Event| x.id);
             },
         )
-        .filter(|event| event.id > 50)
+        .operator(OperatorBuilder {
+            constructor: Arc::new(|_| Filter::new(|event: &Event| event.id > 50)),
+            conf: Default::default(),
+        })
         .build();
 
     pipeline.start();

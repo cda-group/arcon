@@ -66,10 +66,8 @@ fn appender_mean_index(backend: BackendType, window_size: usize, capacity: usize
     let dir = tempdir().unwrap();
     with_backend_type!(backend, |B| {
         let backend = Arc::new(B::create(dir.as_ref()).unwrap());
-        let mut vec_handle = Handle::vec("agger");
-        backend.register_vec_handle(&mut vec_handle);
-        let state = vec_handle.activate(backend);
-        let mut appender_index: Appender<u64, B> = Appender::with_capacity(capacity, state);
+        let mut appender_index: Appender<u64, B> =
+            Appender::with_capacity("_appender", capacity, backend);
         b.iter(|| {
             for i in 0..window_size {
                 let _ = appender_index.append(i as u64).unwrap();
@@ -84,10 +82,7 @@ fn appender_mean_eager(backend: BackendType, window_size: usize, b: &mut Bencher
     let dir = tempdir().unwrap();
     with_backend_type!(backend, |B| {
         let backend = Arc::new(B::create(dir.as_ref()).unwrap());
-        let mut vec_handle: Handle<VecState<u64>> = Handle::vec("agger");
-        backend.register_vec_handle(&mut vec_handle);
-        let state = vec_handle.activate(backend);
-        let mut eager_appender = EagerAppender::new(state);
+        let mut eager_appender = EagerAppender::new("_appender", backend);
 
         b.iter(|| {
             for i in 0..window_size {

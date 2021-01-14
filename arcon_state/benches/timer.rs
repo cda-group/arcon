@@ -46,15 +46,7 @@ fn timer_inserts(backend: BackendType, b: &mut Bencher) {
     let dir = tempdir().unwrap();
     with_backend_type!(backend, |B| {
         let backend = Arc::new(B::create(dir.as_ref()).unwrap());
-        let mut timeouts_handle = Handle::map("_timeouts");
-        backend.register_map_handle(&mut timeouts_handle);
-        let timeouts_handle = timeouts_handle.activate(backend.clone());
-
-        let mut time_handle = Handle::value("_time");
-        backend.register_value_handle(&mut time_handle);
-        let time_handle = time_handle.activate(backend);
-
-        let mut index: Timer<u64, u64, B> = Timer::new(timeouts_handle, time_handle);
+        let mut index: Timer<u64, u64, B> = Timer::new("_timer", backend);
         b.iter(|| {
             for id in RANDOM_KEYS.iter() {
                 assert_eq!(index.schedule_at(*id, 10, 1000).is_ok(), true);

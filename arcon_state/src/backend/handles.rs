@@ -11,7 +11,7 @@ where
     IK: Metakey,
     N: Metakey,
 {
-    pub id: &'static str,
+    pub id: String,
     pub item_key: Cell<IK>,
     pub namespace: Cell<N>,
     pub extra_data: S::ExtraData,
@@ -61,7 +61,7 @@ where
 // region handle builders
 impl<S: StateType<ExtraData = ()>> Handle<S, (), ()> {
     #[inline(always)]
-    fn no_extra(id: &'static str) -> Handle<S> {
+    fn no_extra(id: String) -> Handle<S> {
         Handle {
             id,
             item_key: Cell::new(()),
@@ -74,24 +74,24 @@ impl<S: StateType<ExtraData = ()>> Handle<S, (), ()> {
 }
 
 impl<T: Value> Handle<ValueState<T>> {
-    pub fn value(id: &'static str) -> Self {
-        Handle::no_extra(id)
+    pub fn value(id: impl Into<String>) -> Self {
+        Handle::no_extra(id.into())
     }
 }
 impl<K: Key, V: Value> Handle<MapState<K, V>> {
-    pub fn map(id: &'static str) -> Self {
-        Handle::no_extra(id)
+    pub fn map(id: impl Into<String>) -> Self {
+        Handle::no_extra(id.into())
     }
 }
 impl<T: Value> Handle<VecState<T>> {
-    pub fn vec(id: &'static str) -> Self {
-        Handle::no_extra(id)
+    pub fn vec(id: impl Into<String>) -> Self {
+        Handle::no_extra(id.into())
     }
 }
 impl<T: Value, F: Reducer<T>> Handle<ReducerState<T, F>> {
-    pub fn reducer(id: &'static str, reducer: F) -> Self {
+    pub fn reducer(id: impl Into<String>, reducer: F) -> Self {
         Handle {
-            id,
+            id: id.into(),
             item_key: Cell::new(()),
             namespace: Cell::new(()),
             extra_data: reducer,
@@ -101,9 +101,9 @@ impl<T: Value, F: Reducer<T>> Handle<ReducerState<T, F>> {
     }
 }
 impl<A: Aggregator> Handle<AggregatorState<A>> {
-    pub fn aggregator(id: &'static str, aggregator: A) -> Self {
+    pub fn aggregator(id: impl Into<String>, aggregator: A) -> Self {
         Handle {
-            id,
+            id: id.into(),
             item_key: Cell::new(()),
             namespace: Cell::new(()),
             extra_data: aggregator,

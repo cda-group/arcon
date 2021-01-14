@@ -17,7 +17,7 @@ impl ReducerOps for Sled {
         handle: &Handle<ReducerState<T, F>, IK, N>,
     ) -> Result<()> {
         let key = handle.serialize_metakeys()?;
-        self.remove(handle.id, &key)?;
+        self.remove(&handle.id, &key)?;
         Ok(())
     }
 
@@ -26,7 +26,7 @@ impl ReducerOps for Sled {
         handle: &Handle<ReducerState<T, F>, IK, N>,
     ) -> Result<Option<T>> {
         let key = handle.serialize_metakeys()?;
-        if let Some(storage) = self.get(handle.id, &key)? {
+        if let Some(storage) = self.get(&handle.id, &key)? {
             let value = protobuf::deserialize(&*storage)?;
             Ok(Some(value))
         } else {
@@ -44,7 +44,7 @@ impl ReducerOps for Sled {
 
         // See the make_reducer_merge function in this module. Its result is set as the merging
         // operator for this state.
-        self.tree(handle.id)?.merge(key, serialized)?;
+        self.tree(&handle.id)?.merge(key, serialized)?;
 
         Ok(())
     }

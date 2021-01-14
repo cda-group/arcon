@@ -145,7 +145,8 @@ mod tests {
                         String::from("socket_sink"),
                         ChannelStrategy::Mute,
                         SocketSink::udp(addr),
-                        NodeState::new(NodeID::new(0), vec![node_id], backend),
+                        NodeState::new(NodeID::new(0), vec![node_id], backend.clone()),
+                        backend,
                     )
                 });
                 system

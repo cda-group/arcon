@@ -17,7 +17,7 @@ use std::alloc::{alloc, dealloc, handle_alloc_error};
 
 use crate::{
     data::{Key, Value},
-    index::map::{
+    index::hash_table::{
         bitmask::{BitMask, BitMaskIter},
         imp::Group,
     },

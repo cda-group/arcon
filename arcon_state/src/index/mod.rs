@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 pub mod appender;
-pub mod map;
+pub mod hash_table;
 pub mod timer;
 pub mod value;
 
@@ -10,7 +10,7 @@ use crate::error::Result;
 
 pub use self::{
     appender::{eager::EagerAppender, Appender},
-    map::{eager::EagerMap, Map},
+    hash_table::{eager::EagerHashTable, HashTable},
     timer::{Timer, TimerEvent},
     value::Value,
 };

@@ -5,24 +5,16 @@ use std::sync::Arc;
 #[derive(ArconState)]
 pub struct StreamState<B: Backend> {
     counter: Value<u64, B>,
-    counters_map: Map<u64, String, B>,
+    counters_map: HashTable<u64, String, B>,
     counters: Appender<u64, B>,
 }
 
 impl<B: Backend> StreamState<B> {
     pub fn new(backend: Arc<B>) -> Self {
-        let mut counter_handle = Handle::value("_counter");
-        let mut counters_map_handle = Handle::map("_counters_map");
-        let mut counters_handle = Handle::vec("_counters");
-
-        backend.register_value_handle(&mut counter_handle);
-        backend.register_map_handle(&mut counters_map_handle);
-        backend.register_vec_handle(&mut counters_handle);
-
         Self {
-            counter: Value::new(counter_handle.activate(backend.clone())),
-            counters_map: Map::new(counters_map_handle.activate(backend.clone())),
-            counters: Appender::new(counters_handle.activate(backend)),
+            counter: Value::new("_counter", backend.clone()),
+            counters_map: HashTable::new("_counters_map", backend.clone()),
+            counters: Appender::new("_counters", backend),
         }
     }
 }
@@ -48,7 +40,7 @@ fn main() {
 
     // ANCHOR_END: value
 
-    // ANCHOR: map
+    // ANCHOR: hash_table
     // PUT, GET, RMW, and REMOVE
 
     state
@@ -73,7 +65,7 @@ fn main() {
         Some(String::from("hello world"))
     );
 
-    // ANCHOR_END: map
+    // ANCHOR_END: hash_table
 
     // ANCHOR: appender
     // APPEND, CONSUME

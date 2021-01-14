@@ -5,10 +5,10 @@ use crate::{
     buffer::event::PoolInfo,
     conf::{ArconConf, ExecutionMode},
     dataflow::{
-        conf::{OperatorConf, SourceConf},
+        conf::{DefaultBackend, OperatorConf, SourceConf},
         constructor::{source_cons, source_manager_cons},
         dfg::*,
-        stream::{Context, DefaultBackend},
+        stream::Context,
     },
     manager::{
         epoch::{EpochEvent, EpochManager},
@@ -21,7 +21,6 @@ use crate::{
     },
 };
 use arcon_allocator::Allocator;
-use arcon_state::index::EMPTY_STATE_ID;
 use kompact::{component::AbstractComponent, prelude::KompactSystem};
 use std::sync::{Arc, Mutex};
 
@@ -153,12 +152,16 @@ impl Pipeline {
         let mut state_dir = self.arcon_conf().state_dir.clone();
         state_dir.push("source_manager");
         let backend = Arc::new(DefaultBackend::create(&state_dir).unwrap());
-        let manager_cons =
-            source_manager_cons(backend, self.arcon_conf().watermark_interval, conf.time);
+        let manager_cons = source_manager_cons(
+            String::from("source_manager"),
+            backend,
+            self.arcon_conf().watermark_interval,
+            conf.time,
+        );
 
         let mut ctx = Context::new(self);
         let kind = DFGNodeKind::Source(SourceKind::Single(cons), Default::default(), manager_cons);
-        let dfg_node = DFGNode::new(kind, OperatorConf::new(EMPTY_STATE_ID.to_owned()), vec![]);
+        let dfg_node = DFGNode::new(kind, OperatorConf::default(), vec![]);
         ctx.dfg.insert(dfg_node);
         Stream::new(ctx)
     }
