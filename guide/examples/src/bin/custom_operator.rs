@@ -13,7 +13,8 @@ pub struct CustomEvent {
 // ANCHOR_END: data
 
 // ANCHOR: operator
-pub struct MyOperator;
+#[derive(Default)]
+pub struct MyOperator(EmptyState);
 
 impl Operator for MyOperator {
     type IN = u64;
@@ -37,11 +38,14 @@ impl Operator for MyOperator {
     }
     ignore_timeout!();
     ignore_persist!();
+
+    fn state(&mut self) -> &mut Self::OperatorState {
+        &mut self.0
+    }
 }
 // ANCHOR_END: operator
-
-// ANCHOR: timer_operator
-pub struct TimerOperator;
+#[derive(Default)]
+pub struct TimerOperator(EmptyState);
 
 impl Operator for TimerOperator {
     type IN = CustomEvent;
@@ -54,7 +58,7 @@ impl Operator for TimerOperator {
         element: ArconElement<Self::IN>,
         mut ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
     ) -> OperatorResult<()> {
-        let current_time = ctx.current_time();
+        let current_time = ctx.current_time()?;
         let key = element.data.get_key();
         let time = current_time + 1000;
 
@@ -77,6 +81,10 @@ impl Operator for TimerOperator {
     }
 
     ignore_persist!();
+
+    fn state(&mut self) -> &mut Self::OperatorState {
+        &mut self.0
+    }
 }
 // ANCHOR_END: timer_operator
 
@@ -87,11 +95,11 @@ fn main() {
             conf.set_timestamp_extractor(|x: &u64| *x);
         })
         .operator(OperatorBuilder {
-            constructor: Arc::new(|_| MyOperator),
+            constructor: Arc::new(|_| MyOperator::default()),
             conf: Default::default(),
         })
         .operator(OperatorBuilder {
-            constructor: Arc::new(|_| TimerOperator),
+            constructor: Arc::new(|_| TimerOperator::default()),
             conf: Default::default(),
         })
         .build();

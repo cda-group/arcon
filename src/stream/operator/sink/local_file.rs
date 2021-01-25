@@ -21,6 +21,7 @@ where
     IN: ArconType,
 {
     file: RefCell<File>,
+    op_state: (),
     _marker: PhantomData<IN>,
 }
 
@@ -40,6 +41,7 @@ where
 
         LocalFileSink {
             file,
+            op_state: (),
             _marker: PhantomData,
         }
     }
@@ -66,6 +68,10 @@ where
     }
     crate::ignore_timeout!();
     crate::ignore_persist!();
+
+    fn state(&mut self) -> &mut Self::OperatorState {
+        &mut self.op_state
+    }
 }
 
 #[cfg(test)]

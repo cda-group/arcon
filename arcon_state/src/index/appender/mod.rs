@@ -8,28 +8,59 @@ use crate::{
     },
     data::Value,
     error::*,
-    index::IndexOps,
+    index::{HashTable, IndexOps},
 };
-use std::sync::Arc;
+use prost::*;
+use std::{
+    ops::{Deref, DerefMut},
+    sync::Arc,
+};
 
 const DEFAULT_APPENDER_SIZE: usize = 1024;
 
 pub mod eager;
 
+#[derive(Clone, Message)]
+pub struct ProstVec<V: Value> {
+    #[prost(message, repeated, tag = "1")]
+    data: Vec<V>,
+}
+
+impl<V> Deref for ProstVec<V>
+where
+    V: Value,
+{
+    type Target = Vec<V>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.data
+    }
+}
+
+impl<V> DerefMut for ProstVec<V>
+where
+    V: Value,
+{
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.data
+    }
+}
+
 /// An Index suitable for Non-associative Windows
 ///
 /// A backing [VecState] acts as an overflow vector when
 /// the data no longer fits in the specified in-memory capacity.
-#[derive(Debug)]
 pub struct Appender<V, B>
 where
     V: Value,
     B: Backend,
 {
+    current_key: u64,
     /// In-memory Vector of elements
     elements: Vec<V>,
     /// A handle to the VecState
     handle: ActiveHandle<B, VecState<V>>,
+    hash_table: HashTable<u64, ProstVec<V>, B>,
 }
 
 impl<V, B> Appender<V, B>
@@ -39,18 +70,24 @@ where
 {
     /// Creates an Appender using the default appender size
     pub fn new(id: impl Into<String>, backend: Arc<B>) -> Self {
+        let a = String::from("hej");
+        let hash_table = HashTable::new(a, backend.clone());
         let mut handle = Handle::vec(id.into());
         backend.register_vec_handle(&mut handle);
         let handle = handle.activate(backend);
 
         Appender {
+            current_key: 0,
             elements: Vec::with_capacity(DEFAULT_APPENDER_SIZE),
             handle,
+            hash_table,
         }
     }
 
     /// Creates an Appender with specified capacity
     pub fn with_capacity(id: impl Into<String>, capacity: usize, backend: Arc<B>) -> Self {
+        let a = String::from("hej");
+        let hash_table = HashTable::new(a, backend.clone());
         let mut handle = Handle::vec(id.into());
         backend.register_vec_handle(&mut handle);
         let handle = handle.activate(backend);
@@ -58,6 +95,7 @@ where
         Appender {
             elements: Vec::with_capacity(capacity),
             handle,
+            hash_table,
         }
     }
 
@@ -115,6 +153,9 @@ where
 {
     fn persist(&mut self) -> Result<()> {
         self.handle.add_all(self.elements.drain(..))
+    }
+    fn set_key(&mut self, key: u64) {
+        self.current_key = key;
     }
 }
 

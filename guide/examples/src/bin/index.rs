@@ -1,3 +1,4 @@
+/*
 use arcon::prelude::*;
 use std::sync::Arc;
 
@@ -78,3 +79,5 @@ fn main() {
 
     // ANCHOR_END: appender
 }
+*/
+fn main() {}

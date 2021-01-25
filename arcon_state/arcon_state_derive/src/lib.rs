@@ -38,6 +38,7 @@ pub fn arcon_state(input: TokenStream) -> TokenStream {
 
         let mut field_getters = Vec::new();
         let mut persist_quotes = Vec::new();
+        let mut key_quotes = Vec::new();
 
         for data in idents.into_iter() {
             let ident = &data.0;
@@ -47,6 +48,8 @@ pub fn arcon_state(input: TokenStream) -> TokenStream {
             if !ephemerals.contains(&(data)) {
                 let field_gen = quote! { self.#ident.persist()?; };
                 persist_quotes.push(field_gen);
+                let field_gen = quote! { self.#ident.set_key(key); };
+                key_quotes.push(field_gen);
             }
 
             let field_gen = quote! { pub fn #ident(&mut self) -> &mut #ty { &mut self.#ident } };
@@ -67,6 +70,10 @@ pub fn arcon_state(input: TokenStream) -> TokenStream {
                     fn persist(&mut self) -> Result<(), ::arcon::ArconStateError> {
                         #(#persist_quotes)*
                         Ok(())
+                    }
+                    #[inline]
+                    fn set_key(&mut self, key: u64) {
+                        #(#key_quotes)*
                     }
                 }
 

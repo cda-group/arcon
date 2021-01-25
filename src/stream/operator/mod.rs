@@ -47,6 +47,8 @@ pub trait Operator: Send + Sized {
 
     /// Determines how the `Operator` persists its state
     fn persist(&mut self) -> OperatorResult<()>;
+
+    fn state(&mut self) -> &mut Self::OperatorState;
 }
 
 /// Helper macro to implement an empty ´handle_timeout` function
@@ -124,7 +126,7 @@ where
 
     /// Get current event time
     #[inline]
-    pub fn current_time(&mut self) -> u64 {
+    pub fn current_time(&mut self) -> OperatorResult<u64> {
         self.timer.current_time()
     }
 

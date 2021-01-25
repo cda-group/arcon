@@ -68,4 +68,5 @@ where
     fn persist(&mut self) -> Result<()> {
         Ok(())
     }
+    fn set_key(&mut self, _: u64) {}
 }

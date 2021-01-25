@@ -275,7 +275,11 @@ where
                     }
 
                     unsafe {
-                        (*self.operator.get()).handle_element(e, make_context!(self))?;
+                        let operator = &mut (*self.operator.get());
+                        // Set key for the current element
+                        // TODO: Should use a pre-defined key for Non-Keyed Streams.
+                        operator.state().set_key(e.data.get_key());
+                        operator.handle_element(e, make_context!(self))?;
                     };
                 }
                 ArconEvent::Watermark(w) => {
@@ -306,7 +310,8 @@ where
 
                         unsafe {
                             let timer = &mut (*self.timer.get());
-                            for timeout in timer.advance_to(new_watermark.timestamp) {
+                            let timeouts = timer.advance_to(new_watermark.timestamp)?;
+                            for timeout in timeouts {
                                 (*self.operator.get())
                                     .handle_timeout(timeout, make_context!(self))?;
                             }

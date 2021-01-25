@@ -2,30 +2,26 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
-    backend::{
-        handles::{ActiveHandle, Handle},
-        Backend, ValueState,
-    },
+    backend::Backend,
     error::*,
-    index::IndexOps,
+    index::{HashTable, IndexOps, ValueIndex},
 };
-use std::sync::Arc;
+use std::{borrow::Cow, sync::Arc};
+
+mod eager;
+mod local;
+
+pub use eager::EagerValue;
+pub use local::LocalValue;
 
 /// An Index suitable for single value operations
-///
-/// Examples include rolling counters, watermarks, and epochs.
-#[derive(Debug)]
 pub struct Value<V, B>
 where
     V: crate::data::Value,
     B: Backend,
 {
-    /// The data itself
-    data: Option<V>,
-    /// Modified flag
-    modified: bool,
-    /// A handle to the ValueState
-    handle: ActiveHandle<B, ValueState<V>>,
+    current_key: u64,
+    hash_table: HashTable<u64, V, B>,
 }
 
 impl<V, B> Value<V, B>
@@ -35,67 +31,40 @@ where
 {
     /// Creates a Value
     pub fn new(id: impl Into<String>, backend: Arc<B>) -> Self {
-        let mut handle = Handle::value(id.into());
-        backend.register_value_handle(&mut handle);
-
-        let handle = handle.activate(backend);
-
-        // Attempt to fetch data from backend, otherwise set to default value..
-        let data = match handle.get() {
-            Ok(Some(v)) => v,
-            Ok(None) => V::default(),
-            Err(_) => V::default(),
-        };
+        let hash_table = HashTable::new(id.into(), backend);
 
         Value {
-            data: Some(data),
-            modified: false,
-            handle,
+            current_key: 0,
+            hash_table,
         }
     }
+}
 
-    /// Clear the data in the index layer, but also the backing ValueState.
-    #[inline(always)]
-    pub fn clear(&mut self) {
-        self.data = None;
-        let _ = self.handle.clear();
+impl<V, B> ValueIndex<V> for Value<V, B>
+where
+    V: crate::data::Value,
+    B: Backend,
+{
+    fn put(&mut self, value: V) -> Result<()> {
+        self.hash_table.put(self.current_key, value)
     }
-
-    /// Access the index value through an Option.
-    #[inline(always)]
-    pub fn get(&self) -> Option<&V> {
-        self.data.as_ref()
+    fn get(&self) -> Result<Option<Cow<V>>> {
+        let value = self.hash_table.get(&self.current_key)?;
+        Ok(value.map(|v| Cow::Borrowed(v)))
     }
-
-    /// Blind insert
-    ///
-    /// Sets the Index data and sets its modify flag to true.
-    #[inline(always)]
-    pub fn put(&mut self, data: V) {
-        self.data = Some(data);
-        self.modified = true;
+    fn remove(&mut self) -> Result<Option<V>> {
+        self.hash_table.remove(&self.current_key)
     }
-
-    /// Read-Modify-Write Operation
-    ///
-    /// If the Value is set, then the function `F`
-    /// is passed a mutable reference to the data. It is then assumed
-    /// that the data has been changed, thus the modified flag is set to true.
-    #[inline(always)]
-    pub fn rmw<F: Sized>(&mut self, mut f: F) -> bool
+    fn clear(&mut self) -> Result<()> {
+        // TODO: fix erase/clear
+        let _ = self.hash_table.remove(&self.current_key)?;
+        Ok(())
+    }
+    fn rmw<F>(&mut self, f: F) -> Result<()>
     where
-        F: FnMut(&mut V),
+        F: FnMut(&mut V) + Sized,
     {
-        if let Some(ref mut v) = self.data.as_mut() {
-            // execute the modification
-            f(v);
-            // assume the data has actually been modified
-            self.modified = true;
-            // indicate that the rmw has successfully modified the data
-            return true;
-        }
-        // Failed to modify Value
-        false
+        self.hash_table.rmw(&self.current_key, V::default, f)
     }
 }
 
@@ -105,33 +74,54 @@ where
     B: Backend,
 {
     fn persist(&mut self) -> Result<()> {
-        if let Some(data) = &self.data {
-            // only push data to the handle if it has actually been modified
-            if self.modified {
-                self.handle.fast_set_by_ref(data)?;
-                self.modified = false;
-            }
-        }
-
-        Ok(())
+        self.hash_table.persist()
+    }
+    fn set_key(&mut self, key: u64) {
+        self.current_key = key;
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use eager::EagerValue;
     use std::sync::Arc;
+
+    fn index_test(mut index: impl ValueIndex<u64>) -> Result<()> {
+        index.set_key(0);
+        assert_eq!(index.get().unwrap(), None);
+        index.put(10u64)?;
+        let curr_value = index.get()?;
+        assert_eq!(curr_value.unwrap().as_ref(), &10u64);
+        index.rmw(|v| {
+            *v += 10;
+        })?;
+        let curr_value = index.get()?;
+        assert_eq!(curr_value.unwrap().as_ref(), &20u64);
+
+        index.set_key(1);
+        assert_eq!(index.get().unwrap(), None);
+        index.put(5u64)?;
+        index.clear()?;
+        assert_eq!(index.get().unwrap(), None);
+
+        index.set_key(0);
+        let removed_value = index.remove()?;
+        assert_eq!(removed_value, Some(20u64));
+
+        Ok(())
+    }
 
     #[test]
     fn value_index_test() {
         let backend = Arc::new(crate::backend::temp_backend());
-        let mut index = Value::new("myvalue", backend);
-        assert_eq!(index.get(), Some(&0u64));
-        index.put(10u64);
-        assert_eq!(index.get(), Some(&10u64));
-        index.rmw(|v| {
-            *v += 10;
-        });
-        assert_eq!(index.get(), Some(&20u64));
+        let index: Value<u64, _> = Value::new("myvalue", backend);
+        assert_eq!(index_test(index).is_ok(), true);
+    }
+    #[test]
+    fn eager_value_index_test() {
+        let backend = Arc::new(crate::backend::temp_backend());
+        let index: EagerValue<u64, _> = EagerValue::new("myvalue", backend);
+        assert_eq!(index_test(index).is_ok(), true);
     }
 }

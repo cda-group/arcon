@@ -73,7 +73,7 @@ where
     window: W,
     // simply persisted state
     state: AssignerState<B>,
-
+    op_state: (),
     _marker: PhantomData<(IN, OUT)>,
 }
 
@@ -128,6 +128,7 @@ where
             keyed,
 
             state,
+            op_state: (),
             _marker: Default::default(),
         }
     }
@@ -185,7 +186,7 @@ where
     ) -> OperatorResult<()> {
         let ts = element.timestamp.unwrap_or(1);
 
-        let time = ctx.current_time();
+        let time = ctx.current_time()?;
 
         let ts_lower_bound = time.saturating_sub(self.late_arrival_time);
 
@@ -258,6 +259,9 @@ where
 
     fn persist(&mut self) -> OperatorResult<()> {
         self.state.persist()
+    }
+    fn state(&mut self) -> &mut Self::OperatorState {
+        &mut self.op_state
     }
 }
 

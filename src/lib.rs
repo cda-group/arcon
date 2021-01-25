@@ -140,9 +140,9 @@ pub mod prelude {
     pub use arcon_state as state;
 
     pub use arcon_state::{
-        AggregatorState, Appender, ArconState, Backend, BackendNever, BackendType, EagerAppender,
-        EagerHashTable, Handle, HashTable, MapState, ReducerState, Sled, Value, ValueState,
-        VecState,
+        AggregatorState, Appender, AppenderIndex, ArconState, Backend, BackendType, EagerAppender,
+        EagerHashTable, EmptyState, Handle, HashTable, MapState, ReducerState, Sled, Value,
+        ValueIndex, ValueState, VecState,
     };
 
     #[cfg(feature = "rayon")]

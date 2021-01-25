@@ -93,4 +93,7 @@ where
     fn persist(&mut self) -> Result<(), arcon_state::error::ArconStateError> {
         self.state.persist()
     }
+    fn state(&mut self) -> &mut Self::OperatorState {
+        &mut self.state
+    }
 }

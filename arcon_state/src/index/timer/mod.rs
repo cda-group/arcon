@@ -1,8 +1,15 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use super::{hash_table::eager::EagerHashTable, value::Value, IndexOps};
-use crate::{backend::Backend, data::Key, error::Result};
+use super::{hash_table::eager::EagerHashTable, IndexOps};
+use crate::{
+    backend::{
+        handles::{ActiveHandle, Handle},
+        Backend, ValueState,
+    },
+    data::Key,
+    error::Result,
+};
 use hierarchical_hash_wheel_timer::{
     wheels::{quad_wheel::*, *},
     *,
@@ -45,7 +52,7 @@ where
 {
     timer: QuadWheelWithOverflow<K>,
     timeouts: EagerHashTable<K, TimerEvent<V>, B>,
-    current_time: Value<u64, B>,
+    time_handle: ActiveHandle<B, ValueState<u64>>,
 }
 
 impl<K, V, B> Timer<K, V, B>
@@ -59,10 +66,15 @@ where
         let timeouts_id = format!("_{}_timeouts", id);
         let time_id = format!("_{}_time", id);
 
+        let mut handle = Handle::value(time_id);
+        backend.register_value_handle(&mut handle);
+
+        let time_handle = handle.activate(backend.clone());
+
         let mut timer = Self {
             timer: QuadWheelWithOverflow::default(),
             timeouts: EagerHashTable::new(timeouts_id, backend.clone()),
-            current_time: Value::new(time_id, backend),
+            time_handle,
         };
 
         // replay and insert back if any exists
@@ -72,7 +84,7 @@ where
     }
 
     fn replay_events(&mut self) {
-        let time = self.current_time.get().unwrap_or(&0);
+        let time = self.current_time().unwrap();
 
         for res in self.timeouts.iter().expect("could not get timeouts") {
             let (id, entry) = res.expect("could not get timeout entry");
@@ -87,42 +99,43 @@ where
     }
 
     #[inline(always)]
-    pub fn set_time(&mut self, ts: u64) {
-        self.current_time.put(ts);
+    pub fn set_time(&mut self, ts: u64) -> Result<()> {
+        self.time_handle.fast_set(ts)
     }
 
     #[inline(always)]
-    pub fn current_time(&self) -> u64 {
-        *self.current_time.get().unwrap_or(&0)
+    pub fn current_time(&self) -> Result<u64> {
+        let time = self.time_handle.get()?;
+        Ok(time.unwrap_or(0))
     }
 
     #[inline(always)]
-    pub fn add_time(&mut self, by: u64) {
-        let curr = self.current_time.get().unwrap();
+    pub fn add_time(&mut self, by: u64) -> Result<()> {
+        let curr = self.current_time().unwrap();
         let new_time = curr + by;
-        self.current_time.put(new_time);
+        self.set_time(new_time)
     }
 
     #[inline(always)]
-    pub fn tick_and_collect(&mut self, mut time_left: u32, res: &mut Vec<V>) {
+    pub fn tick_and_collect(&mut self, mut time_left: u32, res: &mut Vec<V>) -> Result<()> {
         while time_left > 0 {
             match self.timer.can_skip() {
                 Skip::Empty => {
                     // Timer is empty, no point in ticking it
-                    self.add_time(time_left as u64);
-                    return;
+                    self.add_time(time_left as u64)?;
+                    return Ok(());
                 }
                 Skip::Millis(skip_ms) => {
                     // Skip forward
                     if skip_ms >= time_left {
                         // No more ops to gather, skip the remaining time_left and return
                         self.timer.skip(time_left);
-                        self.add_time(time_left as u64);
-                        return;
+                        self.add_time(time_left as u64)?;
+                        return Ok(());
                     } else {
                         // Skip lower than time-left:
                         self.timer.skip(skip_ms);
-                        self.add_time(skip_ms as u64);
+                        self.add_time(skip_ms as u64)?;
                         time_left -= skip_ms;
                     }
                 }
@@ -132,11 +145,12 @@ where
                             res.push(entry);
                         }
                     }
-                    self.add_time(1u64);
+                    self.add_time(1u64)?;
                     time_left -= 1u32;
                 }
             }
         }
+        Ok(())
     }
 
     // Lookup id, remove from storage, and return Executable action
@@ -156,7 +170,7 @@ where
         {
             Ok(_) => {
                 // TODO: fix map_err
-                let event = TimerEvent::new(self.current_time(), delay, entry);
+                let event = TimerEvent::new(self.current_time().unwrap(), delay, entry);
                 let _ = self.timeouts.put(id, event);
                 Ok(())
             }
@@ -167,33 +181,33 @@ where
 
     #[inline]
     pub fn schedule_at(&mut self, id: K, time: u64, entry: V) -> Result<(), V> {
-        let curr_time = self.current_time.get().unwrap();
+        let curr_time = self.current_time().unwrap();
         // Check for expired target time
-        if time <= *curr_time {
+        if time <= curr_time {
             Err(entry)
         } else {
-            let delay = time - *curr_time;
+            let delay = time - curr_time;
             self.schedule_after(id, delay, entry)
         }
     }
 
     #[inline]
-    pub fn advance_to(&mut self, ts: u64) -> Vec<V> {
+    pub fn advance_to(&mut self, ts: u64) -> Result<Vec<V>> {
         let mut res = Vec::new();
-        let curr_time = self.current_time.get().unwrap();
-        if ts < *curr_time {
+        let curr_time = self.current_time().unwrap();
+        if ts < curr_time {
             // advance_to called with lower timestamp than current time
-            return res;
+            return Ok(res);
         }
 
         let mut time_left = ts - curr_time;
         while time_left > std::u32::MAX as u64 {
-            self.tick_and_collect(std::u32::MAX, &mut res);
+            self.tick_and_collect(std::u32::MAX, &mut res)?;
             time_left -= std::u32::MAX as u64;
         }
         // this cast must be safe now
-        self.tick_and_collect(time_left as u32, &mut res);
-        res
+        self.tick_and_collect(time_left as u32, &mut res)?;
+        Ok(res)
     }
 }
 
@@ -205,9 +219,9 @@ where
 {
     fn persist(&mut self) -> crate::error::Result<()> {
         self.timeouts.persist()?;
-        self.current_time.persist()?;
         Ok(())
     }
+    fn set_key(&mut self, _: u64) {}
 }
 
 #[cfg(test)]
@@ -223,9 +237,9 @@ mod tests {
         // Timer per key...
         timer.schedule_at(1, 1000, 10).unwrap();
         timer.schedule_at(2, 1600, 10).unwrap();
-        let evs = timer.advance_to(1500);
+        let evs = timer.advance_to(1500).unwrap();
         assert_eq!(evs.len(), 1);
-        let evs = timer.advance_to(2000);
+        let evs = timer.advance_to(2000).unwrap();
         assert_eq!(evs.len(), 1);
     }
     // TODO: more elaborate tests

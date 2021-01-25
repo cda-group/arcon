@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use arcon_state::{
-    index::{value::Value, IndexOps},
+    index::{IndexOps, LocalValue},
     Aggregator, Backend, *,
 };
 use criterion::{criterion_group, criterion_main, Bencher, Criterion, Throughput};
@@ -44,16 +44,18 @@ fn index_rolling_counter(backend: BackendType, b: &mut Bencher) {
     let dir = tempdir().unwrap();
     with_backend_type!(backend, |B| {
         let backend = Arc::new(B::create(dir.as_ref()).unwrap());
-        let mut value_index: Value<u64, B> = Value::new("_value", backend);
+        let mut value_index: LocalValue<u64, B> = LocalValue::new("_value", backend);
         b.iter(|| {
-            let curr_value = *value_index.get().unwrap();
+            let curr_value = value_index.get().unwrap().unwrap().into_owned();
             for _i in 0..OPS_PER_EPOCH {
-                value_index.rmw(|v| {
-                    *v += 1;
-                });
+                value_index
+                    .rmw(|v| {
+                        *v += 1;
+                    })
+                    .unwrap();
             }
-            let new_value = value_index.get().unwrap();
-            assert_eq!(new_value, &(curr_value + OPS_PER_EPOCH));
+            let new_value = value_index.get().unwrap().unwrap().into_owned();
+            assert_eq!(new_value, (curr_value + OPS_PER_EPOCH));
             // simulate an epoch and persist the value index
             value_index.persist()
         });

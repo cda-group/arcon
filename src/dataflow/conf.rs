@@ -22,13 +22,24 @@ cfg_if::cfg_if! {
 pub struct OperatorConf {
     /// Amount of instances to be created
     pub instances: usize,
+    /// The highest possible key value for a keyed stream
+    ///
+    /// This should not be set too low or ridiculously high
+    pub max_key: u64,
 }
 
 impl Default for OperatorConf {
     fn default() -> OperatorConf {
-        Self { instances: 1 }
+        Self {
+            instances: 1,
+            max_key: 256,
+        }
     }
 }
+
+pub trait StreamKind {}
+pub trait KeyedKind: StreamKind {}
+pub trait LocalKind: StreamKind {}
 
 #[derive(Clone)]
 pub struct OperatorBuilder<OP: Operator, Backend = DefaultBackend> {

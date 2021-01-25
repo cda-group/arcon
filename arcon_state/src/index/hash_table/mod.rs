@@ -357,6 +357,8 @@ where
         };
         Ok(())
     }
+    fn set_key(&mut self, _: u64) {
+    }
 }
 
 #[cfg(test)]

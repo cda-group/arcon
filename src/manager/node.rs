@@ -9,7 +9,10 @@ use crate::{
     },
 };
 use arcon_error::*;
-use arcon_state::{index::EMPTY_STATE_ID, ArconState, Backend, HashTable, Value};
+use arcon_state::{
+    index::{ValueIndex, EMPTY_STATE_ID},
+    ArconState, Backend, HashTable, LocalValue,
+};
 use kompact::prelude::*;
 use std::sync::Arc;
 
@@ -81,8 +84,8 @@ impl Port for NodeManagerPort {
 pub struct NodeManagerState<B: Backend> {
     watermarks: HashTable<NodeID, Watermark, B>,
     epochs: HashTable<NodeID, Epoch, B>,
-    current_watermark: Value<Watermark, B>,
-    current_epoch: Value<Epoch, B>,
+    current_watermark: LocalValue<Watermark, B>,
+    current_epoch: LocalValue<Epoch, B>,
 }
 
 /// A [kompact] component responsible for coordinating a set of Arcon nodes
@@ -147,8 +150,8 @@ where
         let manager_state = NodeManagerState {
             watermarks: HashTable::with_capacity("_watermarks", backend.clone(), 64, 64),
             epochs: HashTable::with_capacity("_epochs", backend.clone(), 64, 64),
-            current_watermark: Value::new("_curr_watermark", backend.clone()),
-            current_epoch: Value::new("_curr_epoch", backend.clone()),
+            current_watermark: LocalValue::new("_curr_watermark", backend.clone()),
+            current_epoch: LocalValue::new("_curr_epoch", backend.clone()),
         };
 
         NodeManager {
@@ -169,7 +172,10 @@ where
     #[inline]
     fn checkpoint(&mut self) -> ArconResult<()> {
         if let Some(base_dir) = &self.ctx.config()["checkpoint_dir"].as_string() {
-            let curr_epoch = self.manager_state.current_epoch().get().unwrap().epoch;
+            let curr_epoch = match self.manager_state.current_epoch().get()? {
+                Some(v) => v.as_ref().epoch,
+                None => return arcon_err!("failed to fetch epoch"),
+            };
 
             let checkpoint_dir = format!(
                 "{}/checkpoint_{id}_{epoch}",
@@ -197,7 +203,7 @@ where
             // bump epoch
             self.manager_state.current_epoch().rmw(|e| {
                 e.epoch += 1;
-            });
+            })?;
 
             debug!(
                 self.ctx.log(),

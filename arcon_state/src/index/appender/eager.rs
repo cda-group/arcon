@@ -8,7 +8,7 @@ use crate::{
     },
     data::Value,
     error::*,
-    index::IndexOps,
+    index::{AppenderIndex, IndexOps},
 };
 use std::sync::Arc;
 
@@ -19,7 +19,7 @@ where
     B: Backend,
 {
     /// A handle to the VecState
-    handle: ActiveHandle<B, VecState<V>>,
+    handle: ActiveHandle<B, VecState<V>, u64>,
 }
 
 impl<V, B> EagerAppender<V, B>
@@ -29,38 +29,10 @@ where
 {
     /// Creates an EagerAppender
     pub fn new(id: impl Into<String>, backend: Arc<B>) -> Self {
-        let mut handle = Handle::vec(id.into());
+        let mut handle = Handle::vec(id.into()).with_item_key(0);
         backend.register_vec_handle(&mut handle);
-        let handle = handle.activate(backend);
+        let handle: ActiveHandle<B, VecState<V>, u64> = handle.activate(backend);
         EagerAppender { handle }
-    }
-
-    #[inline(always)]
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-
-    #[inline(always)]
-    pub fn len(&self) -> usize {
-        self.handle.len().unwrap_or(0)
-    }
-
-    #[inline(always)]
-    pub fn clear(&mut self) -> Result<()> {
-        self.handle.clear()
-    }
-
-    /// Consume the whole batch of data
-    #[inline(always)]
-    pub fn consume(&mut self) -> Result<Vec<V>> {
-        let stored = self.handle.get()?;
-        self.handle.clear()?;
-        Ok(stored)
-    }
-
-    #[inline(always)]
-    pub fn append(&mut self, data: V) -> Result<()> {
-        self.handle.append(data)
     }
 }
 
@@ -71,5 +43,33 @@ where
 {
     fn persist(&mut self) -> Result<()> {
         Ok(())
+    }
+    fn set_key(&mut self, key: u64) {
+        self.handle.set_item_key(key);
+    }
+}
+
+impl<V, B> AppenderIndex<V> for EagerAppender<V, B>
+where
+    V: crate::data::Value,
+    B: Backend,
+{
+    #[inline]
+    fn append(&mut self, data: V) -> Result<()> {
+        self.handle.append(data)
+    }
+    #[inline]
+    fn consume(&mut self) -> Result<Vec<V>> {
+        let stored = self.handle.get()?;
+        self.handle.clear()?;
+        Ok(stored)
+    }
+    #[inline]
+    fn len(&self) -> usize {
+        self.handle.len().unwrap_or(0)
+    }
+    #[inline]
+    fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }
