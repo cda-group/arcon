@@ -3,6 +3,7 @@
 
 use crate::{
     backend::Backend,
+    data::Value,
     error::*,
     index::{HashTable, IndexOps, ValueIndex},
 };
@@ -14,52 +15,56 @@ mod local;
 pub use eager::EagerValue;
 pub use local::LocalValue;
 
-/// An Index suitable for single value operations
-pub struct Value<V, B>
+/// A Lazy ValueIndex
+pub struct LazyValue<V, B>
 where
-    V: crate::data::Value,
+    V: Value,
     B: Backend,
 {
     current_key: u64,
     hash_table: HashTable<u64, V, B>,
 }
 
-impl<V, B> Value<V, B>
+impl<V, B> LazyValue<V, B>
 where
-    V: crate::data::Value,
+    V: Value,
     B: Backend,
 {
-    /// Creates a Value
+    /// Creates a LazyValue
     pub fn new(id: impl Into<String>, backend: Arc<B>) -> Self {
         let hash_table = HashTable::new(id.into(), backend);
 
-        Value {
+        Self {
             current_key: 0,
             hash_table,
         }
     }
 }
 
-impl<V, B> ValueIndex<V> for Value<V, B>
+impl<V, B> ValueIndex<V> for LazyValue<V, B>
 where
-    V: crate::data::Value,
+    V: Value,
     B: Backend,
 {
+    #[inline]
     fn put(&mut self, value: V) -> Result<()> {
         self.hash_table.put(self.current_key, value)
     }
+    #[inline]
     fn get(&self) -> Result<Option<Cow<V>>> {
         let value = self.hash_table.get(&self.current_key)?;
         Ok(value.map(|v| Cow::Borrowed(v)))
     }
-    fn remove(&mut self) -> Result<Option<V>> {
+    #[inline]
+    fn take(&mut self) -> Result<Option<V>> {
         self.hash_table.remove(&self.current_key)
     }
+    #[inline]
     fn clear(&mut self) -> Result<()> {
-        // TODO: fix erase/clear
-        let _ = self.hash_table.remove(&self.current_key)?;
+        let _ = self.take()?;
         Ok(())
     }
+    #[inline]
     fn rmw<F>(&mut self, f: F) -> Result<()>
     where
         F: FnMut(&mut V) + Sized,
@@ -68,14 +73,16 @@ where
     }
 }
 
-impl<V, B> IndexOps for Value<V, B>
+impl<V, B> IndexOps for LazyValue<V, B>
 where
-    V: crate::data::Value,
+    V: Value,
     B: Backend,
 {
+    #[inline]
     fn persist(&mut self) -> Result<()> {
         self.hash_table.persist()
     }
+    #[inline]
     fn set_key(&mut self, key: u64) {
         self.current_key = key;
     }
@@ -106,16 +113,16 @@ mod tests {
         assert_eq!(index.get().unwrap(), None);
 
         index.set_key(0);
-        let removed_value = index.remove()?;
+        let removed_value = index.take()?;
         assert_eq!(removed_value, Some(20u64));
 
         Ok(())
     }
 
     #[test]
-    fn value_index_test() {
+    fn lazy_value_index_test() {
         let backend = Arc::new(crate::backend::temp_backend());
-        let index: Value<u64, _> = Value::new("myvalue", backend);
+        let index: LazyValue<u64, _> = LazyValue::new("myvalue", backend);
         assert_eq!(index_test(index).is_ok(), true);
     }
     #[test]

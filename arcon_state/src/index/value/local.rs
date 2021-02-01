@@ -3,6 +3,7 @@
 
 use crate::{
     backend::{handles::ActiveHandle, Backend, Handle, ValueState},
+    data::Value,
     error::*,
     index::{IndexOps, ValueIndex},
 };
@@ -10,7 +11,7 @@ use std::{borrow::Cow, sync::Arc};
 
 pub struct LocalValue<V, B>
 where
-    V: crate::data::Value,
+    V: Value,
     B: Backend,
 {
     /// The data itself
@@ -23,7 +24,7 @@ where
 
 impl<V, B> LocalValue<V, B>
 where
-    V: crate::data::Value,
+    V: Value,
     B: Backend,
 {
     /// Creates a LocalValue
@@ -50,7 +51,7 @@ where
 
 impl<V, B> ValueIndex<V> for LocalValue<V, B>
 where
-    V: crate::data::Value,
+    V: Value,
     B: Backend,
 {
     fn put(&mut self, value: V) -> Result<()> {
@@ -61,13 +62,13 @@ where
     fn get(&self) -> Result<Option<Cow<V>>> {
         Ok(self.data.as_ref().map(|v| Cow::Borrowed(v)))
     }
-    fn remove(&mut self) -> Result<Option<V>> {
+    fn take(&mut self) -> Result<Option<V>> {
         let data = self.data.take();
         let _ = self.handle.clear();
         Ok(data)
     }
     fn clear(&mut self) -> Result<()> {
-        let _ = self.remove()?;
+        let _ = self.take()?;
         Ok(())
     }
     fn rmw<F>(&mut self, mut f: F) -> Result<()>
@@ -89,7 +90,7 @@ where
 
 impl<V, B> IndexOps for LocalValue<V, B>
 where
-    V: crate::data::Value,
+    V: Value,
     B: Backend,
 {
     fn persist(&mut self) -> Result<()> {

@@ -289,9 +289,9 @@ where
     /// The `P` function defines how a default value is created if there is
     /// no entry in the HashTable.
     #[inline(always)]
-    pub fn rmw<F: Sized, P>(&mut self, key: &K, p: P, mut f: F) -> Result<()>
+    pub fn rmw<F: Sized, P>(&mut self, key: &K, p: P, f: F) -> Result<()>
     where
-        F: FnMut(&mut V),
+        F: FnOnce(&mut V),
         P: FnOnce() -> V,
     {
         let hash = make_hash(&self.hash_builder, key);
@@ -357,8 +357,7 @@ where
         };
         Ok(())
     }
-    fn set_key(&mut self, _: u64) {
-    }
+    fn set_key(&mut self, _: u64) {}
 }
 
 #[cfg(test)]

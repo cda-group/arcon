@@ -17,15 +17,15 @@ use crate::{
     },
 };
 use arcon_error::{arcon_err, arcon_err_kind, ArconResult};
-use arcon_state::{index::IndexOps, Appender, ArconState, Backend, Timer as ArconTimer}; // conflicts with Kompact Timer trait
+use arcon_state::{
+    index::IndexOps, AppenderIndex, ArconState, Backend, EagerAppender, Timer as ArconTimer,
+}; // conflicts with Kompact Timer trait
 use fxhash::*;
 use kompact::prelude::*;
 use std::{cell::UnsafeCell, sync::Arc};
 
 #[cfg(feature = "metrics")]
 use crate::metrics::{counter::Counter, gauge::Gauge, meter::Meter};
-
-const MESSAGE_BUFFER_SIZE: usize = 1024;
 
 /// Type alias for a Node description
 pub type NodeDescriptor = String;
@@ -76,7 +76,7 @@ impl NodeMetrics {
 #[derive(ArconState)]
 pub struct NodeState<OP: Operator + 'static, B: Backend> {
     /// Durable message buffer used for blocked channels
-    message_buffer: Appender<RawArconMessage<OP::IN>, B>,
+    message_buffer: EagerAppender<RawArconMessage<OP::IN>, B>,
     /// Map of senders and their corresponding Watermark
     #[ephemeral]
     watermarks: FxHashMap<NodeID, Watermark>,
@@ -101,8 +101,7 @@ pub struct NodeState<OP: Operator + 'static, B: Backend> {
 
 impl<OP: Operator + 'static, B: Backend> NodeState<OP, B> {
     pub fn new(id: NodeID, in_channels: Vec<NodeID>, backend: Arc<B>) -> Self {
-        let message_buffer =
-            Appender::with_capacity("_messagebuffer", MESSAGE_BUFFER_SIZE, backend);
+        let message_buffer = EagerAppender::new("_messagebuffer", backend);
 
         // initialise watermarks
         let mut watermarks: FxHashMap<NodeID, Watermark> = FxHashMap::default();

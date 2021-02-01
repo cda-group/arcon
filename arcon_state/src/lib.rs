@@ -25,8 +25,8 @@ pub mod index;
 #[doc(hidden)]
 pub use crate::backend::*;
 pub use crate::index::{
-    value::Value, Appender, AppenderIndex, EagerAppender, EagerHashTable, EagerValue, EmptyState,
-    HashTable, IndexOps, LocalValue, Timer, TimerEvent, ValueIndex,
+    AppenderIndex, EagerAppender, EagerHashTable, EagerValue, EmptyState, HashTable, IndexOps,
+    LazyValue, LocalValue, Timer, TimerEvent, ValueIndex,
 };
 
 #[cfg(feature = "arcon_state_derive")]

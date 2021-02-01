@@ -16,13 +16,15 @@ pub struct Event {
 // ANCHOR: state
 #[derive(ArconState)]
 pub struct MyState<B: Backend> {
-    events: Appender<Event, B>,
+    counter: LazyValue<u64, B>,
+    events: EagerAppender<Event, B>,
 }
 
 impl<B: Backend> MyState<B> {
     pub fn new(backend: Arc<B>) -> Self {
         MyState {
-            events: Appender::new("_events", backend),
+            counter: LazyValue::new("_counter", backend.clone()),
+            events: EagerAppender::new("_events", backend),
         }
     }
 }
@@ -56,9 +58,10 @@ fn main() {
         )
         .operator(OperatorBuilder {
             constructor: Arc::new(|backend| {
-                Map::stateful(MyState::new(backend), |x, state| {
-                    state.events().append(x)?;
-                    Ok(x)
+                Map::stateful(MyState::new(backend), |event, state| {
+                    state.counter().rmw(|v| *v += 1)?;
+                    state.events().append(event)?;
+                    Ok(event)
                 })
             }),
             conf: Default::default(),

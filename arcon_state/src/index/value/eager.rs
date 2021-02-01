@@ -6,6 +6,7 @@ use crate::{
         handles::{ActiveHandle, Handle},
         Backend, ValueState,
     },
+    data::Value,
     error::*,
     index::{IndexOps, ValueIndex},
 };
@@ -13,7 +14,7 @@ use std::{borrow::Cow, sync::Arc};
 
 pub struct EagerValue<V, B>
 where
-    V: crate::data::Value,
+    V: Value,
     B: Backend,
 {
     /// A handle to the ValueState
@@ -22,7 +23,7 @@ where
 
 impl<V, B> EagerValue<V, B>
 where
-    V: crate::data::Value,
+    V: Value,
     B: Backend,
 {
     /// Creates an EagerValue
@@ -38,7 +39,7 @@ where
 
 impl<V, B> ValueIndex<V> for EagerValue<V, B>
 where
-    V: crate::data::Value,
+    V: Value,
     B: Backend,
 {
     fn put(&mut self, value: V) -> Result<()> {
@@ -48,7 +49,7 @@ where
         let value = self.handle.get()?;
         Ok(value.map(|v| Cow::Owned(v)))
     }
-    fn remove(&mut self) -> Result<Option<V>> {
+    fn take(&mut self) -> Result<Option<V>> {
         let value = self.handle.get()?;
         self.clear()?;
         Ok(value)
@@ -73,7 +74,7 @@ where
 
 impl<V, B> IndexOps for EagerValue<V, B>
 where
-    V: crate::data::Value,
+    V: Value,
     B: Backend,
 {
     fn persist(&mut self) -> Result<()> {

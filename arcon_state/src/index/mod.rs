@@ -1,6 +1,7 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
+#[allow(dead_code)]
 pub mod appender;
 pub mod hash_table;
 pub mod timer;
@@ -13,10 +14,10 @@ use crate::{
 use std::borrow::Cow;
 
 pub use self::{
-    appender::{eager::EagerAppender, Appender},
+    appender::eager::EagerAppender,
     hash_table::{eager::EagerHashTable, HashTable},
     timer::{Timer, TimerEvent},
-    value::{EagerValue, LocalValue},
+    value::{EagerValue, LazyValue, LocalValue},
 };
 
 /// Common Index Operations
@@ -39,10 +40,11 @@ pub const EMPTY_STATE_ID: &str = "!";
 
 pub type EmptyState = ();
 
-impl ArconState for () {
+impl ArconState for EmptyState {
     const STATE_ID: &'static str = EMPTY_STATE_ID;
 }
-impl IndexOps for () {
+
+impl IndexOps for EmptyState {
     fn persist(&mut self) -> Result<(), crate::error::ArconStateError> {
         Ok(())
     }
@@ -51,7 +53,10 @@ impl IndexOps for () {
     }
 }
 
-pub trait AppenderIndex<V>: IndexOps
+/// Index for Maintaining an Appender per Key
+///
+/// Keys are set by the Arcon runtime.
+pub trait AppenderIndex<V>: Send + Sized + IndexOps + 'static
 where
     V: Value,
 {
@@ -71,22 +76,22 @@ where
 /// Index for Maintaining a single value per Key
 ///
 /// Keys are set by the Arcon runtime.
-pub trait ValueIndex<V>: IndexOps
+pub trait ValueIndex<V>: Send + Sized + IndexOps + 'static
 where
     V: Value,
 {
     /// Blind update of the current value
     fn put(&mut self, value: V) -> Result<()>;
-    /// Fetch the current value. If no value exists, None
-    /// will be returned.
+    /// Fetch the current value.
     ///
     /// The returned value is wrapped in a [Cow] in order to
     /// support both owned and referenced values depending on
     /// whether the index is Eager or Lazy.
     fn get(&self) -> Result<Option<Cow<V>>>;
-    /// Removes value and returns an owned version of the
-    /// value if it exists.
-    fn remove(&mut self) -> Result<Option<V>>;
+    /// Take the value out
+    ///
+    /// Returns `Some(V)` if the value exists or `None` if it does not.
+    fn take(&mut self) -> Result<Option<V>>;
     /// Clear value if it exists
     fn clear(&mut self) -> Result<()>;
     /// Read-Modify-Write operation
@@ -97,22 +102,27 @@ where
         F: FnMut(&mut V) + Sized;
 }
 
-/// Index for Maintaining a Hash Table per Key
-pub trait HashIndex<K, V>: IndexOps
+/// Index for Maintaining a Map per Key
+///
+/// Keys are set by the Arcon runtime.
+pub trait MapIndex<K, V>: Send + Sized + IndexOps + 'static
 where
     K: Key,
     V: Value,
 {
     /// Blind insert
     fn put(&mut self, key: &K, value: V) -> Result<()>;
-    /// Fetch an Value by Key
+    /// Fetch Value by Key
     fn get(&self, key: &K) -> Result<Option<V>>;
-    /// Attempt to remove value and return it if it exists
-    fn remove(&mut self, key: &K) -> Result<Option<V>>;
+    /// Attempt to take the value out of the Map
+    fn take(&mut self, key: &K) -> Result<Option<V>>;
     /// Clear value by key
     fn clear(&mut self, key: &K) -> Result<()>;
+    /// Length of the current Map
     fn len(&self) -> usize;
+    /// Checks whether the Map is empty
     fn is_empty(&self) -> bool;
+    /// Read-Modify-Write operation
     fn rmw<F>(&mut self, key: &K, value: V)
     where
         F: FnMut(&mut V) + Sized;
