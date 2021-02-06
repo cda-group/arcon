@@ -6,7 +6,7 @@ use std::{path::Path, sync::Arc};
 #[cfg_attr(feature = "unsafe_flight", derive(abomonation_derive::Abomonation))]
 // ANCHOR: data
 #[derive(Arcon, prost::Message, Copy, Clone)]
-#[arcon(unsafe_ser_id = 12, reliable_ser_id = 13, version = 1)]
+#[arcon(unsafe_ser_id = 12, reliable_ser_id = 13, version = 1, keys = "id")]
 pub struct Event {
     #[prost(uint64, tag = "1")]
     pub id: u64,

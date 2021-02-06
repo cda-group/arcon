@@ -10,7 +10,7 @@ pub mod source;
 use crate::data::flight_serde::unsafe_remote::UnsafeSerde;
 use crate::{
     data::{flight_serde::reliable_remote::ReliableSerde, RawArconMessage, *},
-    manager::node::{NodeEvent::Checkpoint, *},
+    manager::node::{NodeManagerEvent::Checkpoint, *},
     stream::{
         channel::strategy::ChannelStrategy,
         operator::{Operator, OperatorContext},
@@ -156,8 +156,6 @@ where
     node_state: NodeState<OP, B>,
     /// Event time scheduler
     timer: UnsafeCell<ArconTimer<u64, OP::TimerState, B>>,
-
-    checkpoint_request: Option<Arc<CheckpointRequest>>,
 }
 
 impl<OP, B> Node<OP, B>
@@ -186,7 +184,6 @@ where
             metrics: NodeMetrics::new(),
             node_state,
             timer: UnsafeCell::new(timer),
-            checkpoint_request: None,
         }
     }
 
@@ -198,14 +195,6 @@ where
         }
 
         if self.sender_blocked(&message.sender) {
-            if let Some(req) = &self.checkpoint_request {
-                if req.is_complete() {
-                    self.complete_epoch()?;
-                    // epoch finalised, handle events as normal..
-                    return self.handle_events(message.sender, message.events);
-                }
-            }
-
             // Add the message to the back of the queue
             self.node_state.message_buffer().append(message)?;
             return Ok(());
@@ -225,13 +214,6 @@ where
         }
 
         if self.sender_blocked(&message.sender) {
-            if let Some(req) = &mut self.checkpoint_request {
-                if req.is_complete() {
-                    self.complete_epoch()?;
-                    // epoch finalised, handle events as normal..
-                    return self.handle_events(message.sender, message.events);
-                }
-            }
             // Add the message to the back of the queue
             self.node_state.message_buffer().append(message.into())?;
             return Ok(());
@@ -354,8 +336,10 @@ where
                         };
 
                         // Create checkpoint request and send it off to the NodeManager
-                        let request = Arc::new(CheckpointRequest::new(self.node_state.id, e));
-                        self.checkpoint_request = Some(request.clone());
+                        let request = CheckpointRequest::new(
+                            self.node_state.id,
+                            self.node_state.current_epoch,
+                        );
                         self.node_manager_port.trigger(Checkpoint(request));
 
                         // Forward the Epoch
@@ -365,7 +349,7 @@ where
                         };
 
                         // Update current epoch
-                        self.node_state.current_epoch = e;
+                        self.node_state.current_epoch.epoch += 1;
                     }
                 }
                 ArconEvent::Death(s) => {
@@ -385,9 +369,6 @@ where
     fn complete_epoch(&mut self) -> ArconResult<()> {
         // flush the blocked_channels list
         self.node_state.blocked_channels().clear();
-
-        // Clear request
-        self.checkpoint_request = None;
 
         #[cfg(feature = "metrics")]
         {
@@ -421,7 +402,7 @@ where
             if let Some(interval) = &self.ctx().config()["node_metrics_interval"].as_i64() {
                 let time_dur = std::time::Duration::from_millis(*interval as u64);
                 self.schedule_periodic(time_dur, time_dur, |c_self, _id| {
-                    c_self.node_manager_port.trigger(NodeEvent::Metrics(
+                    c_self.node_manager_port.trigger(NodeManagerEvent::Metrics(
                         c_self.node_state.id,
                         c_self.metrics.clone(),
                     ));
@@ -439,8 +420,20 @@ where
     OP: Operator + 'static,
     B: Backend,
 {
-    fn handle(&mut self, _: Never) -> Handled {
-        unreachable!("Never can't be instantiated!");
+    fn handle(&mut self, event: NodeEvent) -> Handled {
+        match event {
+            NodeEvent::CheckpointComplete => {
+                error!(self.ctx.log(), "Checkpoint Complete at Node",);
+
+                if let Err(error) = self.complete_epoch() {
+                    error!(
+                        self.ctx.log(),
+                        "Failed to complete epoch with error {:?}", error
+                    );
+                }
+            }
+        }
+        Handled::Ok
     }
 }
 
@@ -449,7 +442,7 @@ where
     OP: Operator + 'static,
     B: Backend,
 {
-    fn handle(&mut self, e: NodeEvent) -> Handled {
+    fn handle(&mut self, e: NodeManagerEvent) -> Handled {
         trace!(self.log(), "Ignoring node event: {:?}", e);
         Handled::Ok
     }
@@ -513,68 +506,88 @@ mod tests {
     use std::{sync::Arc, thread, time};
 
     fn node_test_setup() -> (ActorRef<ArconMessage<i32>>, Arc<Component<DebugNode<i32>>>) {
-        // Returns a filter Node with input channels: sender1..sender3
-        // And a debug sink receiving its results
-        let mut pipeline = Pipeline::default();
-        let pool_info = pipeline.get_pool_info();
-        let epoch_manager_ref = pipeline.epoch_manager();
-        let system = &pipeline.data_system();
-
-        let sink = system.create(DebugNode::<i32>::new);
-
-        system
-            .start_notify(&sink)
-            .wait_timeout(std::time::Duration::from_millis(100))
-            .expect("started");
-
-        // Construct Channel to the Debug sink
-        let actor_ref: ActorRefStrong<ArconMessage<i32>> =
-            sink.actor_ref().hold().expect("Failed to fetch");
-        let channel = Channel::Local(actor_ref);
-        let channel_strategy: ChannelStrategy<i32> =
-            ChannelStrategy::Forward(Forward::new(channel, NodeID::new(0), pool_info));
-
-        // Set up  NodeManager
-        let backend = Arc::new(crate::util::temp_backend());
-        let descriptor = String::from("node_");
-        let in_channels = vec![1.into(), 2.into(), 3.into()];
-
-        let nm = NodeManager::new(
-            descriptor.clone(),
-            epoch_manager_ref,
-            in_channels.clone(),
-            backend.clone(),
-        );
-        let node_manager_comp = system.create(|| nm);
-
-        system
-            .start_notify(&node_manager_comp)
-            .wait_timeout(std::time::Duration::from_millis(100))
-            .expect("started");
-
         fn filter_fn(x: &i32) -> bool {
             *x >= 0
         }
 
-        let node = Node::new(
-            descriptor,
-            channel_strategy,
-            Filter::new(&filter_fn),
-            NodeState::new(NodeID::new(0), in_channels, backend.clone()),
-            backend,
-        );
+        let filter = Filter::new(&filter_fn);
 
-        let filter_comp = system.create(|| node);
+        fn setup<OP: Operator<IN = i32, OUT = i32> + 'static>(
+            op: OP,
+        ) -> (ActorRef<ArconMessage<i32>>, Arc<Component<DebugNode<i32>>>) {
+            // Returns a filter Node with input channels: sender1..sender3
+            // And a debug sink receiving its results
+            let mut pipeline = Pipeline::default();
+            let pool_info = pipeline.get_pool_info();
+            let epoch_manager_ref = pipeline.epoch_manager();
+            //let system = &pipeline.data_system();
 
-        biconnect_components::<NodeManagerPort, _, _>(&node_manager_comp, &filter_comp)
-            .expect("connection");
+            let sink = pipeline.data_system().create(DebugNode::<i32>::new);
 
-        system
-            .start_notify(&filter_comp)
-            .wait_timeout(std::time::Duration::from_millis(100))
-            .expect("started");
+            pipeline
+                .data_system()
+                .start_notify(&sink)
+                .wait_timeout(std::time::Duration::from_millis(100))
+                .expect("started");
 
-        (filter_comp.actor_ref(), sink)
+            // Construct Channel to the Debug sink
+            let actor_ref: ActorRefStrong<ArconMessage<i32>> =
+                sink.actor_ref().hold().expect("Failed to fetch");
+            let channel = Channel::Local(actor_ref);
+            let channel_strategy: ChannelStrategy<i32> =
+                ChannelStrategy::Forward(Forward::new(channel, NodeID::new(0), pool_info));
+
+            // Set up  NodeManager
+            let backend = Arc::new(crate::util::temp_backend());
+            let descriptor = String::from("node_");
+            let in_channels = vec![1.into(), 2.into(), 3.into()];
+
+            let nm = NodeManager::<OP, _>::new(
+                descriptor.clone(),
+                pipeline.data_system.clone(),
+                epoch_manager_ref,
+                in_channels.clone(),
+                backend.clone(),
+            );
+            let node_manager_comp = pipeline.ctrl_system().create(|| nm);
+
+            pipeline
+                .ctrl_system()
+                .start_notify(&node_manager_comp)
+                .wait_timeout(std::time::Duration::from_millis(100))
+                .expect("started");
+
+            let node = Node::<OP, _>::new(
+                descriptor,
+                channel_strategy,
+                op,
+                NodeState::new(NodeID::new(0), in_channels, backend.clone()),
+                backend,
+            );
+
+            let filter_comp = pipeline.data_system().create(|| node);
+            let required_ref = filter_comp.on_definition(|cd| cd.node_manager_port.share());
+
+            biconnect_components::<NodeManagerPort, _, _>(&node_manager_comp, &filter_comp)
+                .expect("connection");
+
+            pipeline
+                .data_system()
+                .start_notify(&filter_comp)
+                .wait_timeout(std::time::Duration::from_millis(100))
+                .expect("started");
+
+            let filter_ref = filter_comp.actor_ref();
+
+            node_manager_comp.on_definition(|cd| {
+                // Insert the created Node into the NodeManager
+                cd.nodes.insert(NodeID::new(0), (filter_comp, required_ref));
+            });
+
+            (filter_ref, sink)
+        }
+
+        setup(filter)
     }
 
     fn watermark(time: u64, sender: u32) -> ArconMessage<i32> {

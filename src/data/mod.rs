@@ -6,6 +6,8 @@ pub mod flight_serde;
 /// Known Serialisation IDs for Arcon Types
 mod ser_id;
 
+mod partition;
+
 use crate::buffer::event::BufferReader;
 #[cfg(feature = "unsafe_flight")]
 use abomonation::Abomonation;

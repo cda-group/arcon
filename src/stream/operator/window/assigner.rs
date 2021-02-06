@@ -296,12 +296,12 @@ mod tests {
         let mut pipeline = Pipeline::default();
         let pool_info = pipeline.get_pool_info();
         let epoch_manager_ref = pipeline.epoch_manager();
-        let system = &pipeline.data_system();
 
         // Create a sink
-        let sink = system.create(DebugNode::<u64>::new);
+        let sink = pipeline.data_system().create(DebugNode::<u64>::new);
 
-        system
+        pipeline
+            .data_system()
             .start_notify(&sink)
             .wait_timeout(std::time::Duration::from_millis(100))
             .expect("started");
@@ -315,27 +315,37 @@ mod tests {
             pool_info,
         ));
 
-        fn appender_fn(u: &[u64]) -> u64 {
-            u.len() as u64
-        }
-
         let backend = Arc::new(crate::util::temp_backend());
         let descriptor = String::from("node_");
         let in_channels = vec![0.into()];
 
-        let nm = NodeManager::new(
+        let nm = NodeManager::<
+            WindowAssigner<
+                u64,
+                u64,
+                AppenderWindow<u64, u64, arcon_state::Sled>,
+                arcon_state::Sled,
+            >,
+            _,
+        >::new(
             descriptor.clone(),
+            pipeline.data_system.clone(),
             epoch_manager_ref,
             in_channels.clone(),
             backend.clone(),
         );
 
-        let node_manager_comp = system.create(|| nm);
+        let node_manager_comp = pipeline.ctrl_system().create(|| nm);
 
-        system
+        pipeline
+            .ctrl_system()
             .start_notify(&node_manager_comp)
             .wait_timeout(std::time::Duration::from_millis(100))
             .expect("started");
+
+        fn appender_fn(u: &[u64]) -> u64 {
+            u.len() as u64
+        }
 
         let window = AppenderWindow::new(backend.clone(), &appender_fn);
 
@@ -350,12 +360,14 @@ mod tests {
             backend,
         );
 
-        let window_comp = system.create(|| node);
+        let window_comp = pipeline.data_system().create(|| node);
+        let required_ref = window_comp.on_definition(|cd| cd.node_manager_port.share());
 
         biconnect_components::<NodeManagerPort, _, _>(&node_manager_comp, &window_comp)
             .expect("connection");
 
-        system
+        pipeline
+            .data_system()
             .start_notify(&window_comp)
             .wait_timeout(std::time::Duration::from_millis(100))
             .expect("started");
@@ -364,6 +376,11 @@ mod tests {
             .actor_ref()
             .hold()
             .expect("failed to get strong ref");
+
+        node_manager_comp.on_definition(|cd| {
+            // Insert the created Node into the NodeManager
+            cd.nodes.insert(NodeID::new(0), (window_comp, required_ref));
+        });
 
         (win_ref, sink)
     }
@@ -471,7 +488,7 @@ mod tests {
 
         // Should only materialize first window
         assigner_ref.tell(watermark(moment + 19999));
-        wait(1);
+        wait(2);
         sink.on_definition(|cd| {
             let r0 = &cd.data[0].data;
             assert_eq!(r0, &1);

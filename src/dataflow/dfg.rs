@@ -1,4 +1,4 @@
-use super::{conf::OperatorConf, constructor::*};
+use super::constructor::*;
 
 /// A logical dataflow-graph.
 #[allow(dead_code)]
@@ -41,17 +41,14 @@ pub struct DFGNode {
     pub(crate) kind: DFGNodeKind,
     /// Ingoing edges to a node.
     ingoing: Vec<DFGNodeID>,
-    /// Operator Configuration for this node
-    pub(crate) config: OperatorConf,
     pub(crate) channel_kind: ChannelKind,
 }
 
 impl DFGNode {
-    pub fn new(kind: DFGNodeKind, config: OperatorConf, ingoing: Vec<DFGNodeID>) -> Self {
+    pub fn new(kind: DFGNodeKind, ingoing: Vec<DFGNodeID>) -> Self {
         Self {
             kind,
             ingoing,
-            config,
             channel_kind: Default::default(),
         }
     }
@@ -59,7 +56,7 @@ impl DFGNode {
 
 pub enum DFGNodeKind {
     Source(SourceKind, ChannelKind, SourceManagerConstructor),
-    Node(NodeConstructor, NodeManagerConstructor),
+    Node(NodeManagerConstructor),
 }
 
 #[allow(dead_code)]
@@ -68,20 +65,20 @@ pub enum SourceKind {
     Parallel,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 #[allow(dead_code)]
 pub enum ChannelKind {
     Forward,
     Broadcast,
     RoundRobin,
-    KeyBy,
+    Keyed,
     Console,
     Mute,
 }
 
 impl Default for ChannelKind {
     fn default() -> Self {
-        ChannelKind::Forward
+        ChannelKind::Keyed
     }
 }
 

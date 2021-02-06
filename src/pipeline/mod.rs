@@ -5,7 +5,7 @@ use crate::{
     buffer::event::PoolInfo,
     conf::{ArconConf, ExecutionMode},
     dataflow::{
-        conf::{DefaultBackend, OperatorConf, SourceConf},
+        conf::{DefaultBackend, SourceConf},
         constructor::{source_cons, source_manager_cons},
         dfg::*,
         stream::Context,
@@ -161,7 +161,7 @@ impl Pipeline {
 
         let mut ctx = Context::new(self);
         let kind = DFGNodeKind::Source(SourceKind::Single(cons), Default::default(), manager_cons);
-        let dfg_node = DFGNode::new(kind, OperatorConf::default(), vec![]);
+        let dfg_node = DFGNode::new(kind, vec![]);
         ctx.dfg.insert(dfg_node);
         Stream::new(ctx)
     }
