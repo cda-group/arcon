@@ -145,7 +145,7 @@ pub mod prelude {
     pub use kompact::{get_core_ids, CoreId};
 
     #[cfg(feature = "arcon_arrow")]
-    pub use super::{Arrow, ArrowOps, ToArrow};
+    pub use super::{Arrow, ArrowOps, ArrowTable, ToArrow};
 
     pub use arcon_state as state;
 

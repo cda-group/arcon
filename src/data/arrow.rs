@@ -1,15 +1,17 @@
 use arrow::{
     array::{
         ArrayBuilder, BooleanBuilder, Float32Builder, Float64Builder, Int32Builder, Int64Builder,
-        StringBuilder, StructArray, StructBuilder, UInt32Builder, UInt64Builder,
+        StringBuilder, StructBuilder, UInt32Builder, UInt64Builder,
     },
     datatypes::{DataType, Schema},
     error::ArrowError,
+    record_batch::RecordBatch,
 };
+use std::sync::Arc;
 
 pub trait ToArrow {
     type Builder: ArrayBuilder;
-    fn arrow_type(&self) -> DataType;
+    fn arrow_type() -> DataType;
 }
 
 macro_rules! to_arrow {
@@ -17,7 +19,7 @@ macro_rules! to_arrow {
         impl ToArrow for $type {
             type Builder = $builder_type;
 
-            fn arrow_type(&self) -> DataType {
+            fn arrow_type() -> DataType {
                 $arrow_type
             }
         }
@@ -34,32 +36,55 @@ to_arrow!(f32, Float32Builder, DataType::Float32);
 to_arrow!(String, StringBuilder, DataType::Utf8);
 to_arrow!(bool, BooleanBuilder, DataType::Boolean);
 
-pub trait ArrowOps {
+pub trait ArrowOps: Sized {
     /// Return the Arrow Schema
-    fn schema(&self) -> Schema;
+    fn schema() -> Schema;
+    fn arrow_table(capacity: usize) -> ArrowTable<Self>;
     fn append(self, builder: &mut StructBuilder);
-    fn to_arrow_table(&self, capacity: usize) -> ArrowTable;
 }
 
-pub struct ArrowTable {
+pub struct ArrowTable<A: ArrowOps> {
+    schema: Arc<Schema>,
     builder: StructBuilder,
+    _marker: std::marker::PhantomData<A>,
 }
 
-impl ArrowTable {
+impl<A: ArrowOps> ArrowTable<A> {
     pub fn new(builder: StructBuilder) -> Self {
-        Self { builder }
+        Self {
+            schema: Arc::new(A::schema()),
+            builder,
+            _marker: std::marker::PhantomData,
+        }
     }
-    pub fn load(&mut self, data: Vec<impl ArrowOps>) -> Result<(), ArrowError> {
+    pub fn load(&mut self, data: impl IntoIterator<Item = A>) -> Result<(), ArrowError> {
         for value in data {
             value.append(&mut self.builder);
             self.builder.append(true)?;
         }
         Ok(())
     }
-    pub fn finish(&mut self) -> StructArray {
-        self.builder.finish()
-    }
     pub fn len(&self) -> usize {
         self.builder.len()
+    }
+    pub fn schema(&self) -> Arc<Schema> {
+        self.schema.clone()
+    }
+    pub fn record_batch(&mut self) -> Result<RecordBatch, ArrowError> {
+        let columns = self.schema.fields().len();
+        let data_arr = self.builder.finish();
+        let mut arr = Vec::with_capacity(columns);
+        for i in 0..columns {
+            arr.push(data_arr.column(i).clone());
+        }
+        RecordBatch::try_new(self.schema(), arr)
+    }
+}
+
+impl<A: ArrowOps> From<Vec<A>> for ArrowTable<A> {
+    fn from(input: Vec<A>) -> Self {
+        let mut table: ArrowTable<A> = A::arrow_table(input.len());
+        let _ = table.load(input);
+        table
     }
 }

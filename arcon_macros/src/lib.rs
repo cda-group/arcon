@@ -390,7 +390,7 @@ pub fn arrow(input: TokenStream) -> TokenStream {
             for (field_pos, field) in fields_named.named.iter().enumerate() {
                 let ident = field.ident.clone();
                 let ty = &field.ty;
-                let arrow_quote = quote! { ::arcon::Field::new(stringify!(#ident), self.#ident.arrow_type(), false), };
+                let arrow_quote = quote! { ::arcon::Field::new(stringify!(#ident), <#ty as ToArrow>::arrow_type(), false), };
                 arrow_types.push(arrow_quote);
 
                 let builder_quote = quote! { builder.field_builder::<<#ty as ToArrow>::Builder>(#field_pos).unwrap().append_value(self.#ident).unwrap(); };
@@ -403,32 +403,32 @@ pub fn arrow(input: TokenStream) -> TokenStream {
         let generics = &input.generics;
         let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
+        let fields: proc_macro2::TokenStream = {
+            quote! {
+                vec![#(#arrow_types)*]
+            }
+        };
+
         let output: proc_macro2::TokenStream = {
             quote! {
                 impl #impl_generics ::arcon::ToArrow for #name #ty_generics #where_clause {
                     type Builder = ::arcon::StructBuilder;
 
-                    fn arrow_type(&self) -> ::arcon::DataType {
-                        ::arcon::DataType::Struct(vec![#(#arrow_types)*])
+                    fn arrow_type() -> ::arcon::DataType {
+                        ::arcon::DataType::Struct(#fields)
                     }
                 }
 
                 impl #impl_generics ::arcon::ArrowOps for #name #ty_generics #where_clause {
-                    fn schema(&self) -> ::arcon::Schema {
-                        match self.arrow_type() {
-                            ::arcon::DataType::Struct(fields) => {
-                                ::arcon::Schema::new(fields)
-                            }
-                            _ => panic!("Only structs"),
-                        }
+                    fn schema() -> ::arcon::Schema {
+                        ::arcon::Schema::new(#fields)
                     }
                     fn append(self, builder: &mut ::arcon::StructBuilder) {
                         #(#builders)*
                     }
-                    fn to_arrow_table(&self, capacity: usize) -> ::arcon::ArrowTable {
-                        let fields = vec![#(#arrow_types)*];
-                        let builder = ::arcon::StructBuilder::from_fields(fields, capacity);
-                        ::arcon::ArrowTable::new(builder)
+                    fn arrow_table(capacity: usize) -> ::arcon::ArrowTable<Self> {
+                        let builder = ::arcon::StructBuilder::from_fields(#fields, capacity);
+                        ::arcon::ArrowTable::<Self>::new(builder)
                     }
                 }
             }
