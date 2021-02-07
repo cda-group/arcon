@@ -46,8 +46,15 @@ pub use arcon_state::*;
 pub use arcon_state::{error::ArconStateError, index::ArconState, IndexOps};
 
 // Imports below are exposed for #[derive(Arcon)]
+#[cfg(feature = "arcon_arrow")]
+pub use crate::data::arrow::{ArrowOps, ArrowTable, ToArrow};
 #[doc(hidden)]
 pub use crate::data::{ArconType, VersionId};
+#[cfg(feature = "arcon_arrow")]
+pub use arrow::array::{ArrayBuilder, ArrayData, ArrayDataBuilder, StructArray, StructBuilder};
+#[doc(hidden)]
+#[cfg(feature = "arcon_arrow")]
+pub use arrow::datatypes::{DataType, Field, Schema};
 #[doc(hidden)]
 pub use fxhash::FxHasher;
 #[doc(hidden)]
@@ -136,6 +143,9 @@ pub mod prelude {
 
     #[cfg(feature = "thread_pinning")]
     pub use kompact::{get_core_ids, CoreId};
+
+    #[cfg(feature = "arcon_arrow")]
+    pub use super::{Arrow, ArrowOps, ToArrow};
 
     pub use arcon_state as state;
 

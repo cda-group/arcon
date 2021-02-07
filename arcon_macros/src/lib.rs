@@ -376,6 +376,70 @@ fn arcon_doc_attr(
     (unsafe_ser_id, reliable_ser_id, version, keys)
 }
 
+#[cfg(feature = "arcon_arrow")]
+#[proc_macro_derive(Arrow)]
+pub fn arrow(input: TokenStream) -> TokenStream {
+    let input: DeriveInput = syn::parse(input).unwrap();
+    let name = &input.ident;
+
+    if let syn::Data::Struct(ref s) = input.data {
+        let mut arrow_types = Vec::new();
+        let mut builders = Vec::new();
+
+        if let syn::Fields::Named(ref fields_named) = s.fields {
+            for (field_pos, field) in fields_named.named.iter().enumerate() {
+                let ident = field.ident.clone();
+                let ty = &field.ty;
+                let arrow_quote = quote! { ::arcon::Field::new(stringify!(#ident), self.#ident.arrow_type(), false), };
+                arrow_types.push(arrow_quote);
+
+                let builder_quote = quote! { builder.field_builder::<<#ty as ToArrow>::Builder>(#field_pos).unwrap().append_value(self.#ident).unwrap(); };
+                builders.push(builder_quote);
+            }
+        } else {
+            panic!("#[derive(Arrow)] requires named fields");
+        }
+
+        let generics = &input.generics;
+        let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+
+        let output: proc_macro2::TokenStream = {
+            quote! {
+                impl #impl_generics ::arcon::ToArrow for #name #ty_generics #where_clause {
+                    type Builder = ::arcon::StructBuilder;
+
+                    fn arrow_type(&self) -> ::arcon::DataType {
+                        ::arcon::DataType::Struct(vec![#(#arrow_types)*])
+                    }
+                }
+
+                impl #impl_generics ::arcon::ArrowOps for #name #ty_generics #where_clause {
+                    fn schema(&self) -> ::arcon::Schema {
+                        match self.arrow_type() {
+                            ::arcon::DataType::Struct(fields) => {
+                                ::arcon::Schema::new(fields)
+                            }
+                            _ => panic!("Only structs"),
+                        }
+                    }
+                    fn append(self, builder: &mut ::arcon::StructBuilder) {
+                        #(#builders)*
+                    }
+                    fn to_arrow_table(&self, capacity: usize) -> ::arcon::ArrowTable {
+                        let fields = vec![#(#arrow_types)*];
+                        let builder = ::arcon::StructBuilder::from_fields(fields, capacity);
+                        ::arcon::ArrowTable::new(builder)
+                    }
+                }
+            }
+        };
+
+        proc_macro::TokenStream::from(output)
+    } else {
+        panic!("#[derive(Arrow)] only works for structs");
+    }
+}
+
 /// Implements [std::str::FromStr] for a struct using a delimiter
 ///
 /// If no delimiter is specified, then `,` is chosen as default.

@@ -8,6 +8,9 @@ mod ser_id;
 
 mod partition;
 
+#[cfg(feature = "arcon_arrow")]
+pub mod arrow;
+
 use crate::buffer::event::BufferReader;
 #[cfg(feature = "unsafe_flight")]
 use abomonation::Abomonation;

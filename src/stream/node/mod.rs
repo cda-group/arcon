@@ -423,8 +423,6 @@ where
     fn handle(&mut self, event: NodeEvent) -> Handled {
         match event {
             NodeEvent::CheckpointComplete => {
-                error!(self.ctx.log(), "Checkpoint Complete at Node",);
-
                 if let Err(error) = self.complete_epoch() {
                     error!(
                         self.ctx.log(),
