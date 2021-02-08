@@ -45,7 +45,14 @@ async fn main() -> datafusion::error::Result<()> {
     let df = df.select_columns(vec!["id", "other"])?.filter(filter)?;
     let results = df.collect().await?;
 
+    println!("DATAFRAME:");
     pretty::print_batches(&results)?;
+
+    let sql_query = ctx.sql("SELECT id,other FROM mydata_table WHERE id = 1")?;
+    let sql_result = sql_query.collect().await?;
+
+    println!("SQL:");
+    pretty::print_batches(&sql_result)?;
 
     Ok(())
 }
