@@ -11,6 +11,7 @@ use crate::{
         stream::Context,
     },
     manager::{
+        endpoint::{EndpointManager, ENDPOINT_MANAGER_NAME},
         epoch::{EpochEvent, EpochManager},
         snapshot::SnapshotManager,
     },
@@ -70,6 +71,7 @@ pub struct Pipeline {
     pub(crate) epoch_manager: Option<Arc<Component<EpochManager>>>,
     /// SnapshotManager component for this pipeline
     pub(crate) snapshot_manager: Arc<Component<SnapshotManager>>,
+    endpoint_manager: Arc<Component<EndpointManager>>,
 }
 
 impl Default for Pipeline {
@@ -84,6 +86,19 @@ impl Pipeline {
     fn new(conf: ArconConf) -> Self {
         let allocator = Arc::new(Mutex::new(Allocator::new(conf.allocator_capacity)));
         let (ctrl_system, data_system, snapshot_manager, epoch_manager) = Self::setup(&conf);
+        let endpoint_manager = ctrl_system.create(EndpointManager::new);
+        let timeout = std::time::Duration::from_millis(500);
+
+        ctrl_system
+            .start_notify(&endpoint_manager)
+            .wait_timeout(timeout)
+            .expect("EndpointManager comp never started!");
+
+        if conf.endpoint_host.is_some() {
+            ctrl_system
+                .register_by_alias(&endpoint_manager, ENDPOINT_MANAGER_NAME)
+                .wait_expect(timeout, "Registration never completed.");
+        }
 
         Self {
             ctrl_system,
@@ -93,6 +108,7 @@ impl Pipeline {
             snapshot_manager,
             epoch_manager,
             source_manager: None,
+            endpoint_manager,
         }
     }
 
@@ -111,20 +127,27 @@ impl Pipeline {
         Arc<Component<SnapshotManager>>,
         Option<Arc<Component<EpochManager>>>,
     ) {
-        let data_system = arcon_conf.kompact_conf().build().expect("KompactSystem");
-        let ctrl_system = arcon_conf.kompact_conf().build().expect("KompactSystem");
+        let data_system = arcon_conf
+            .data_system_conf()
+            .build()
+            .expect("KompactSystem");
+        let ctrl_system = arcon_conf
+            .ctrl_system_conf()
+            .build()
+            .expect("KompactSystem");
 
         let snapshot_manager = ctrl_system.create(SnapshotManager::new);
 
-        let epoch_manager = match arcon_conf.execution_mode {
-            ExecutionMode::Local => {
-                let snapshot_manager_ref = snapshot_manager.actor_ref().hold().expect("fail");
-                let epoch_manager =
-                    EpochManager::new(arcon_conf.epoch_interval, snapshot_manager_ref);
-                Some(ctrl_system.create(|| epoch_manager))
-            }
-            ExecutionMode::Distributed => None,
-        };
+        let epoch_manager =
+            match arcon_conf.execution_mode {
+                ExecutionMode::Local => {
+                    let snapshot_manager_ref = snapshot_manager.actor_ref().hold().expect("fail");
+                    Some(ctrl_system.create(|| {
+                        EpochManager::new(arcon_conf.epoch_interval, snapshot_manager_ref)
+                    }))
+                }
+                ExecutionMode::Distributed => None,
+            };
 
         let timeout = std::time::Duration::from_millis(500);
 

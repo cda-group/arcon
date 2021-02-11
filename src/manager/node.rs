@@ -47,10 +47,16 @@ impl CheckpointRequest {
     }
 }
 
+#[derive(Clone, Debug)]
+pub enum CheckpointResponse {
+    /// Nothing has changed, continue as normal.
+    NoAction,
+}
+
 /// Enum representing events that the Manager may send back to a Node
 #[derive(Clone, Debug)]
 pub enum NodeEvent {
-    CheckpointComplete,
+    CheckpointResponse(CheckpointResponse),
 }
 
 /// Enum representing events that a Node may send to its manager
@@ -250,8 +256,10 @@ where
                             self.manager_state.checkpoint_acks.clear();
 
                             for (_, (_, port_ref)) in &self.nodes {
-                                self.data_system
-                                    .trigger_i(NodeEvent::CheckpointComplete, &port_ref);
+                                self.data_system.trigger_i(
+                                    NodeEvent::CheckpointResponse(CheckpointResponse::NoAction),
+                                    &port_ref,
+                                );
                             }
                         }
                     }

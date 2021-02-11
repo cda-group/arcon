@@ -29,6 +29,8 @@
 //!     - Enables RocksDB to be used as a Backend
 //! - `arcon_serde`
 //!     - Adds serde support for Arcon Types
+//! - `arcon_arrow`
+//!     - Enables Arrow support
 
 #![feature(unboxed_closures)]
 #![feature(unsized_fn_params)]
@@ -46,15 +48,16 @@ pub use arcon_state::*;
 pub use arcon_state::{error::ArconStateError, index::ArconState, IndexOps};
 
 // Imports below are exposed for #[derive(Arcon)]
-#[cfg(feature = "arcon_arrow")]
-pub use crate::data::arrow::{ArrowOps, ArrowTable, ToArrow};
+cfg_if::cfg_if! {
+    if #[cfg(feature = "arcon_arrow")] {
+        pub use crate::data::arrow::{ArrowOps, ArrowTable, ToArrow};
+        pub use arrow::array::{ArrayBuilder, StringBuilder, PrimitiveBuilder, ArrayData, ArrayDataBuilder, StructArray, StructBuilder};
+        pub use arrow::error::ArrowError;
+        pub use arrow::datatypes::{DataType, Field, Schema};
+    }
+}
 #[doc(hidden)]
 pub use crate::data::{ArconType, VersionId};
-#[cfg(feature = "arcon_arrow")]
-pub use arrow::array::{ArrayBuilder, ArrayData, ArrayDataBuilder, StructArray, StructBuilder};
-#[doc(hidden)]
-#[cfg(feature = "arcon_arrow")]
-pub use arrow::datatypes::{DataType, Field, Schema};
 #[doc(hidden)]
 pub use fxhash::FxHasher;
 #[doc(hidden)]

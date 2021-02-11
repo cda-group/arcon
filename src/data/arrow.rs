@@ -1,7 +1,10 @@
+// Copyright (c) 2021, KTH Royal Institute of Technology.
+// SPDX-License-Identifier: AGPL-3.0-only
+
 use arrow::{
     array::{
-        ArrayBuilder, BooleanBuilder, Float32Builder, Float64Builder, Int32Builder, Int64Builder,
-        StringBuilder, StructBuilder, UInt32Builder, UInt64Builder,
+        ArrayBuilder, BinaryBuilder, BooleanBuilder, Float32Builder, Float64Builder, Int32Builder,
+        Int64Builder, StringBuilder, StructBuilder, UInt32Builder, UInt64Builder,
     },
     datatypes::{DataType, Schema},
     error::ArrowError,
@@ -9,8 +12,11 @@ use arrow::{
 };
 use std::sync::Arc;
 
+/// Represents an Arcon type that can be converted to Arrow
 pub trait ToArrow {
+    /// Type to help the runtime know which builder to use
     type Builder: ArrayBuilder;
+    /// Returns the underlying Arrow [DataType]
     fn arrow_type() -> DataType;
 }
 
@@ -26,21 +32,28 @@ macro_rules! to_arrow {
     };
 }
 
-// Map basic primitives to Arrow Types
+// Map types to Arrow Types
 to_arrow!(u64, UInt64Builder, DataType::UInt64);
 to_arrow!(u32, UInt32Builder, DataType::UInt32);
 to_arrow!(i64, Int64Builder, DataType::Int64);
 to_arrow!(i32, Int32Builder, DataType::Int32);
 to_arrow!(f64, Float64Builder, DataType::Float64);
 to_arrow!(f32, Float32Builder, DataType::Float32);
-to_arrow!(String, StringBuilder, DataType::Utf8);
 to_arrow!(bool, BooleanBuilder, DataType::Boolean);
+// The following two only works because of this patch: https://github.com/Max-Meldrum/arrow/tree/as_ref_patch
+//
+// TODO: Contribute it upstream
+to_arrow!(String, StringBuilder, DataType::Utf8);
+to_arrow!(Vec<u8>, BinaryBuilder, DataType::Binary);
 
+/// The Arrow derive macro must implement the following trait.
 pub trait ArrowOps: Sized {
     /// Return the Arrow Schema
     fn schema() -> Schema;
+    /// Creates an Empty ArrowTable
     fn arrow_table(capacity: usize) -> ArrowTable<Self>;
-    fn append(self, builder: &mut StructBuilder);
+    /// Used to append `self` to an Arrow StructBuilder
+    fn append(self, builder: &mut StructBuilder) -> Result<(), ArrowError>;
 }
 
 pub struct ArrowTable<A: ArrowOps> {
@@ -59,7 +72,7 @@ impl<A: ArrowOps> ArrowTable<A> {
     }
     pub fn load(&mut self, data: impl IntoIterator<Item = A>) -> Result<(), ArrowError> {
         for value in data {
-            value.append(&mut self.builder);
+            value.append(&mut self.builder)?;
             self.builder.append(true)?;
         }
         Ok(())

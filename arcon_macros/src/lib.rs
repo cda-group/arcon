@@ -393,7 +393,14 @@ pub fn arrow(input: TokenStream) -> TokenStream {
                 let arrow_quote = quote! { ::arcon::Field::new(stringify!(#ident), <#ty as ToArrow>::arrow_type(), false), };
                 arrow_types.push(arrow_quote);
 
-                let builder_quote = quote! { builder.field_builder::<<#ty as ToArrow>::Builder>(#field_pos).unwrap().append_value(self.#ident).unwrap(); };
+                let builder_quote = quote! {
+                    {
+                        let value = self.#ident;
+                        builder.field_builder::<<#ty as ToArrow>::Builder>(#field_pos)
+                            .ok_or(::arcon::ArrowError::SchemaError(format!("Failed to downcast Arrow Builder")))
+                            .and_then(|b| b.append_value(value))?;
+                    }
+                };
                 builders.push(builder_quote);
             }
         } else {
@@ -423,8 +430,9 @@ pub fn arrow(input: TokenStream) -> TokenStream {
                     fn schema() -> ::arcon::Schema {
                         ::arcon::Schema::new(#fields)
                     }
-                    fn append(self, builder: &mut ::arcon::StructBuilder) {
+                    fn append(self, builder: &mut ::arcon::StructBuilder) -> Result<(), ::arcon::ArrowError> {
                         #(#builders)*
+                        Ok(())
                     }
                     fn arrow_table(capacity: usize) -> ::arcon::ArrowTable<Self> {
                         let builder = ::arcon::StructBuilder::from_fields(#fields, capacity);

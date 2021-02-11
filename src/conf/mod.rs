@@ -50,6 +50,8 @@ pub struct ArconConf {
     /// Max amount of bytes allowed to be allocated by the Arcon Allocator
     #[serde(default = "allocator_capacity_default")]
     pub allocator_capacity: usize,
+    #[serde(default = "endpoint_host_default")]
+    pub endpoint_host: Option<String>,
     /// Amount of threads for Kompact's threadpool
     #[serde(default = "kompact_threads_default")]
     pub kompact_threads: usize,
@@ -86,6 +88,7 @@ impl Default for ArconConf {
             buffer_pool_limit: buffer_pool_limit_default(),
             channel_batch_size: channel_batch_size_default(),
             allocator_capacity: allocator_capacity_default(),
+            endpoint_host: endpoint_host_default(),
             kompact_threads: kompact_threads_default(),
             kompact_throughput: kompact_throughput_default(),
             kompact_msg_priority: kompact_msg_priority_default(),
@@ -99,8 +102,26 @@ impl Default for ArconConf {
 }
 
 impl ArconConf {
+    pub(crate) fn ctrl_system_conf(&self) -> KompactConfig {
+        let mut cfg = KompactConfig::default();
+        // inject checkpoint_dir into Kompact
+        let component_cfg = format!(
+            "{{ checkpoint_dir = {:?}, node_metrics_interval = {} }}",
+            self.checkpoint_dir, self.node_metrics_interval
+        );
+
+        cfg.load_config_str(component_cfg);
+
+        if let Some(host) = &self.endpoint_host {
+            let sock_addr = host.parse().unwrap();
+            cfg.system_components(DeadletterBox::new, NetworkConfig::new(sock_addr).build());
+        }
+
+        cfg
+    }
+
     /// Returns a KompactConfig based on loaded ArconConf
-    pub fn kompact_conf(&self) -> KompactConfig {
+    pub fn data_system_conf(&self) -> KompactConfig {
         let mut cfg = KompactConfig::default();
         // inject checkpoint_dir into Kompact
         let component_cfg = format!(
@@ -199,6 +220,10 @@ fn allocator_capacity_default() -> usize {
 
 fn kompact_threads_default() -> usize {
     std::cmp::max(1, num_cpus::get())
+}
+
+fn endpoint_host_default() -> Option<String> {
+    None
 }
 
 fn kompact_throughput_default() -> usize {

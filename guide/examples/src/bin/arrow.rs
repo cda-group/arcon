@@ -2,7 +2,9 @@ use arcon::prelude::*;
 use arrow::util::pretty;
 use datafusion::{datasource::MemTable, prelude::*};
 
-#[derive(Arcon, Arrow, prost::Message, Copy, Clone)]
+#[cfg_attr(feature = "arcon_serde", derive(serde::Deserialize, serde::Serialize))]
+#[cfg_attr(feature = "unsafe_flight", derive(abomonation_derive::Abomonation))]
+#[derive(Arcon, Arrow, prost::Message, Clone)]
 #[arcon(unsafe_ser_id = 12, reliable_ser_id = 13, version = 1)]
 pub struct MyData {
     #[prost(uint64, tag = "1")]
@@ -13,6 +15,10 @@ pub struct MyData {
     pub flag: bool,
     #[prost(sint64, tag = "4")]
     pub other: i64,
+    #[prost(string, tag = "5")]
+    pub some_str: String,
+    #[prost(bytes, tag = "6")]
+    pub bytes: Vec<u8>,
 }
 
 impl MyData {
@@ -22,6 +28,8 @@ impl MyData {
             data,
             flag,
             other,
+            some_str: String::from("my_string"),
+            bytes: vec![0, 1, 0, 1, 0],
         }
     }
 }
@@ -42,13 +50,15 @@ async fn main() -> datafusion::error::Result<()> {
 
     let filter = col("id").eq(lit(1));
 
-    let df = df.select_columns(vec!["id", "other"])?.filter(filter)?;
+    let df = df
+        .select_columns(&["id", "other", "some_str"])?
+        .filter(filter)?;
     let results = df.collect().await?;
 
     println!("DATAFRAME:");
     pretty::print_batches(&results)?;
 
-    let sql_query = ctx.sql("SELECT id,other FROM mydata_table WHERE id = 1")?;
+    let sql_query = ctx.sql("SELECT id,other,some_str FROM mydata_table WHERE id = 1")?;
     let sql_result = sql_query.collect().await?;
 
     println!("SQL:");
