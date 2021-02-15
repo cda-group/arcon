@@ -110,8 +110,10 @@ dependencies = [
  "cfg-if 0.1.10",
  "criterion",
  "crossbeam-utils 0.7.2",
+ "datafusion",
  "futures",
  "fxhash",
+ "hierarchical_hash_wheel_timer",
  "hocon",
  "kompact",
  "lz4-compression",
@@ -165,31 +167,15 @@ dependencies = [
 name = "arcon_state"
 version = "0.1.1"
 dependencies = [
- "arcon_state_derive",
  "bytes 1.0.1",
  "cc",
  "cfg-if 0.1.10",
- "criterion",
- "fxhash",
- "hierarchical_hash_wheel_timer",
- "itertools 0.9.0",
  "once_cell",
  "prost 0.7.0",
- "rand 0.7.3",
  "rocksdb",
- "serde",
  "sled",
  "snafu",
  "tempfile",
-]
-
-[[package]]
-name = "arcon_state_derive"
-version = "0.1.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
 ]
 
 [[package]]

@@ -1,12 +1,8 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::{
-    backend::Backend,
-    data::Value,
-    error::*,
-    index::{HashTable, IndexOps, ValueIndex},
-};
+use super::{HashTable, IndexOps, ValueIndex};
+use arcon_state::{data::Value, error::*, Backend};
 use std::{borrow::Cow, sync::Arc};
 
 mod eager;
@@ -91,6 +87,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_utils::temp_backend;
     use eager::EagerValue;
     use std::sync::Arc;
 
@@ -121,13 +118,13 @@ mod tests {
 
     #[test]
     fn lazy_value_index_test() {
-        let backend = Arc::new(crate::backend::temp_backend());
+        let backend = Arc::new(temp_backend());
         let index: LazyValue<u64, _> = LazyValue::new("myvalue", backend);
         assert_eq!(index_test(index).is_ok(), true);
     }
     #[test]
     fn eager_value_index_test() {
-        let backend = Arc::new(crate::backend::temp_backend());
+        let backend = Arc::new(temp_backend());
         let index: EagerValue<u64, _> = EagerValue::new("myvalue", backend);
         assert_eq!(index_test(index).is_ok(), true);
     }

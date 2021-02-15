@@ -12,21 +12,17 @@ State management features for Arcon
 """
 
 [features]
-default = ["arcon_state_derive", "sled", "sled_checkpoints"]
+default = ["sled", "sled_checkpoints"]
 rocks = ["rocksdb"]
 #faster = ["faster-rs", "serde"]
 sled_checkpoints = ["sled"]
 
 [dependencies]
-arcon_state_derive = { version = "0.1", path = "arcon_state_derive", optional = true }
 prost = "0.7"
 bytes = "1.0"
 snafu = "0.6"
 once_cell = "1.3"
-fxhash = "0.2.1"
 cfg-if = "0.1.10"
-hierarchical_hash_wheel_timer = "1.0"
-serde = { version = "1.0", features = ["serde_derive"], optional = true }
 sled = { version = "0.34", optional = true }
 
 # Downgrade cc 
@@ -45,23 +41,4 @@ optional = true
 #faster-rs = { version = "0.11", optional = true }
 
 [dev-dependencies]
-criterion = { version = "0.3", features = ['real_blackbox'] }
-tempfile = "3.1"
-itertools = "0.9.0"
-rand = "0.7.3"
-
-[[bench]]
-name = "value"
-harness = false
-
-[[bench]]
-name = "hash_table"
-harness = false
-
-[[bench]]
-name = "appender"
-harness = false
-
-[[bench]]
-name = "timer"
-harness = false
+tempfile = "3"

@@ -143,7 +143,7 @@ mod tests {
                 let addr = "127.0.0.1:9999".parse().unwrap();
                 let socket = UdpSocket::bind(&addr).await.unwrap();
 
-                let backend = Arc::new(crate::util::temp_backend());
+                let backend = Arc::new(crate::test_utils::temp_backend());
                 let node_id = NodeID::new(1);
                 let socket_sink = system.create(move || {
                     Node::new(

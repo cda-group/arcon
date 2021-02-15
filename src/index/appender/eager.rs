@@ -1,14 +1,14 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::{
+use crate::index::{AppenderIndex, IndexOps};
+use arcon_state::{
     backend::{
         handles::{ActiveHandle, Handle},
         Backend, VecState,
     },
     data::Value,
     error::*,
-    index::{AppenderIndex, IndexOps},
 };
 use std::sync::Arc;
 
@@ -51,7 +51,7 @@ where
 
 impl<V, B> AppenderIndex<V> for EagerAppender<V, B>
 where
-    V: crate::data::Value,
+    V: Value,
     B: Backend,
 {
     #[inline]

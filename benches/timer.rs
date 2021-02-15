@@ -1,7 +1,8 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use arcon_state::{Backend, Timer, *};
+use arcon::prelude::{ArconTimer, Backend};
+use arcon_state::{with_backend_type, BackendType};
 use criterion::{criterion_group, criterion_main, Bencher, Criterion, Throughput};
 use once_cell::sync::Lazy;
 use rand::Rng;
@@ -26,13 +27,11 @@ fn timer(c: &mut Criterion) {
 
     #[cfg(feature = "rocks")]
     group.bench_function("Inserts Rocks Backed", index_rocks_backed);
-    #[cfg(feature = "sled")]
     group.bench_function("Inserts Sled Backed", index_sled_backed);
 
     group.finish()
 }
 
-#[cfg(feature = "sled")]
 fn index_sled_backed(b: &mut Bencher) {
     timer_inserts(BackendType::Sled, b);
 }
@@ -46,7 +45,7 @@ fn timer_inserts(backend: BackendType, b: &mut Bencher) {
     let dir = tempdir().unwrap();
     with_backend_type!(backend, |B| {
         let backend = Arc::new(B::create(dir.as_ref()).unwrap());
-        let mut index: Timer<u64, u64, B> = Timer::new("_timer", backend);
+        let mut index: ArconTimer<u64, u64, B> = ArconTimer::new("_timer", backend);
         b.iter(|| {
             for id in RANDOM_KEYS.iter() {
                 assert_eq!(index.schedule_at(*id, 10, 1000).is_ok(), true);

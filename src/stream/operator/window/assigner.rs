@@ -4,10 +4,12 @@
 use super::{Window, WindowContext};
 use crate::{
     data::{ArconElement, ArconType},
+    index::{EagerHashTable, IndexOps},
     stream::operator::{Operator, OperatorContext},
 };
 use arcon_error::*;
-use arcon_state::{index::IndexOps, ArconState, Backend, EagerHashTable};
+use arcon_macros::ArconState;
+use arcon_state::Backend;
 use kompact::prelude::ComponentDefinition;
 use prost::Message;
 use std::{marker::PhantomData, sync::Arc};
@@ -315,7 +317,7 @@ mod tests {
             pool_info,
         ));
 
-        let backend = Arc::new(crate::util::temp_backend());
+        let backend = Arc::new(crate::test_utils::temp_backend());
         let descriptor = String::from("node_");
         let in_channels = vec![0.into()];
 

@@ -1,11 +1,10 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
+use crate::index::{HashTable, IndexOps, LazyValue, ValueIndex};
 use arcon_error::*;
-use arcon_state::{
-    index::{HashTable, IndexOps, LazyValue},
-    ArconState, Backend, ValueIndex,
-};
+use arcon_macros::ArconState;
+use arcon_state::Backend;
 
 #[derive(ArconState)]
 pub struct StreamingState<B: Backend> {
@@ -18,7 +17,7 @@ pub struct StreamingState<B: Backend> {
 
 #[test]
 fn streaming_state_test() -> ArconResult<()> {
-    let backend = std::sync::Arc::new(crate::util::temp_backend());
+    let backend = std::sync::Arc::new(crate::test_utils::temp_backend());
 
     let mut state = StreamingState {
         watermark: LazyValue::new("_watermark", backend.clone()),

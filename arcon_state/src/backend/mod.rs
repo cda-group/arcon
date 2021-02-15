@@ -360,10 +360,3 @@ impl Default for BackendType {
         BackendType::Sled
     }
 }
-
-#[cfg(test)]
-pub(crate) fn temp_backend() -> crate::Sled {
-    let test_dir = tempfile::tempdir().unwrap();
-    let path = test_dir.path();
-    crate::backend::Sled::create(path).unwrap()
-}

@@ -1,14 +1,10 @@
-#![recursion_limit = "128"]
-extern crate proc_macro;
-extern crate syn;
-#[macro_use]
-extern crate quote;
+// Copyright (c) 2021, KTH Royal Institute of Technology.
+// SPDX-License-Identifier: AGPL-3.0-only
 
 use proc_macro::TokenStream;
 use syn::{parse_macro_input, DeriveInput};
 
-#[proc_macro_derive(ArconState, attributes(ephemeral))]
-pub fn arcon_state(input: TokenStream) -> TokenStream {
+pub fn derive_state(input: TokenStream) -> TokenStream {
     let item = parse_macro_input!(input as DeriveInput);
     let name = &item.ident;
 

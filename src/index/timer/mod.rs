@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use super::{hash_table::eager::EagerHashTable, IndexOps};
-use crate::{
+use arcon_state::{
     backend::{
         handles::{ActiveHandle, Handle},
         Backend, ValueState,
     },
-    data::Key,
+    data::{Key, Value},
     error::Result,
 };
 use hierarchical_hash_wheel_timer::{
@@ -20,7 +20,7 @@ use core::time::Duration;
 use std::{cmp::Eq, hash::Hash};
 
 #[derive(prost::Message, PartialEq, Clone)]
-pub struct TimerEvent<E: crate::data::Value> {
+pub struct TimerEvent<E: Value> {
     #[prost(uint64, tag = "1")]
     time_when_scheduled: u64,
     #[prost(uint64, tag = "2")]
@@ -29,7 +29,7 @@ pub struct TimerEvent<E: crate::data::Value> {
     payload: E,
 }
 
-impl<E: crate::data::Value> TimerEvent<E> {
+impl<E: Value> TimerEvent<E> {
     fn new(time_when_scheduled: u64, timeout_millis: u64, payload: E) -> Self {
         TimerEvent {
             time_when_scheduled,
@@ -47,7 +47,7 @@ impl<E: crate::data::Value> TimerEvent<E> {
 pub struct Timer<K, V, B>
 where
     K: Key + Eq + Hash,
-    V: crate::data::Value,
+    V: Value,
     B: Backend,
 {
     timer: QuadWheelWithOverflow<K>,
@@ -58,7 +58,7 @@ where
 impl<K, V, B> Timer<K, V, B>
 where
     K: Key + Eq + Hash,
-    V: crate::data::Value,
+    V: Value,
     B: Backend,
 {
     pub fn new(id: impl Into<String>, backend: Arc<B>) -> Self {
@@ -214,7 +214,7 @@ where
 impl<K, V, B> IndexOps for Timer<K, V, B>
 where
     K: Key + Eq + Hash,
-    V: crate::data::Value,
+    V: Value,
     B: Backend,
 {
     fn persist(&mut self) -> crate::error::Result<()> {
@@ -227,11 +227,12 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_utils::temp_backend;
     use std::sync::Arc;
 
     #[test]
     fn timer_index_test() {
-        let backend = Arc::new(crate::backend::temp_backend());
+        let backend = Arc::new(temp_backend());
         let mut timer = Timer::new("mytimer", backend);
 
         // Timer per key...

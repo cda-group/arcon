@@ -225,7 +225,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::util::temp_backend;
+    use crate::test_utils::temp_backend;
     use std::sync::Arc;
 
     #[test]

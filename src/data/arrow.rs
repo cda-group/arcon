@@ -10,6 +10,7 @@ use arrow::{
     error::ArrowError,
     record_batch::RecordBatch,
 };
+use datafusion::{datasource::MemTable, error::DataFusionError};
 use std::sync::Arc;
 
 /// Represents an Arcon type that can be converted to Arrow
@@ -51,31 +52,37 @@ pub trait ArrowOps: Sized {
     /// Return the Arrow Schema
     fn schema() -> Schema;
     /// Creates an Empty ArrowTable
-    fn arrow_table(capacity: usize) -> ArrowTable<Self>;
+    fn arrow_table(capacity: usize) -> ArrowTable;
     /// Used to append `self` to an Arrow StructBuilder
     fn append(self, builder: &mut StructBuilder) -> Result<(), ArrowError>;
 }
 
-pub struct ArrowTable<A: ArrowOps> {
+pub struct ArrowTable {
+    table_name: String,
     schema: Arc<Schema>,
     builder: StructBuilder,
-    _marker: std::marker::PhantomData<A>,
 }
 
-impl<A: ArrowOps> ArrowTable<A> {
-    pub fn new(builder: StructBuilder) -> Self {
+impl ArrowTable {
+    pub fn new(table_name: String, schema: Schema, builder: StructBuilder) -> Self {
         Self {
-            schema: Arc::new(A::schema()),
+            table_name,
+            schema: Arc::new(schema),
             builder,
-            _marker: std::marker::PhantomData,
         }
     }
-    pub fn load(&mut self, data: impl IntoIterator<Item = A>) -> Result<(), ArrowError> {
+    pub fn load(
+        &mut self,
+        data: impl IntoIterator<Item = impl ArrowOps>,
+    ) -> Result<(), ArrowError> {
         for value in data {
             value.append(&mut self.builder)?;
             self.builder.append(true)?;
         }
         Ok(())
+    }
+    pub fn name(&self) -> &str {
+        &self.table_name
     }
     pub fn len(&self) -> usize {
         self.builder.len()
@@ -92,11 +99,16 @@ impl<A: ArrowOps> ArrowTable<A> {
         }
         RecordBatch::try_new(self.schema(), arr)
     }
+
+    pub fn mem_table(&mut self) -> Result<MemTable, DataFusionError> {
+        let record_batch = self.record_batch()?;
+        MemTable::try_new(self.schema(), vec![vec![record_batch]])
+    }
 }
 
-impl<A: ArrowOps> From<Vec<A>> for ArrowTable<A> {
+impl<A: ArrowOps> From<Vec<A>> for ArrowTable {
     fn from(input: Vec<A>) -> Self {
-        let mut table: ArrowTable<A> = A::arrow_table(input.len());
+        let mut table = A::arrow_table(input.len());
         let _ = table.load(input);
         table
     }

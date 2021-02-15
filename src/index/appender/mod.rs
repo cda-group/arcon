@@ -1,11 +1,11 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::{
+use crate::index::{AppenderIndex, HashTable, IndexOps};
+use arcon_state::{
     backend::{handles::ActiveHandle, Backend, VecState},
     data::Value,
     error::*,
-    index::{AppenderIndex, HashTable, IndexOps},
 };
 use prost::*;
 use std::ops::{Deref, DerefMut};
@@ -78,7 +78,7 @@ where
 
 impl<V, B> AppenderIndex<V> for LazyAppender<V, B>
 where
-    V: crate::data::Value,
+    V: Value,
     B: Backend,
 {
     #[inline]
@@ -102,6 +102,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_utils::temp_backend;
     use eager::EagerAppender;
     use std::sync::Arc;
 
@@ -132,7 +133,7 @@ mod tests {
 
     #[test]
     fn eager_appender_test() {
-        let backend = Arc::new(crate::backend::temp_backend());
+        let backend = Arc::new(temp_backend());
         let index = EagerAppender::new("appender", backend);
         assert_eq!(index_test(index).is_ok(), true);
     }

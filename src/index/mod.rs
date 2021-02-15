@@ -7,10 +7,8 @@ pub mod hash_table;
 pub mod timer;
 pub mod value;
 
-use crate::{
-    data::{Key, Value},
-    error::Result,
-};
+use crate::error::Result;
+use arcon_state::data::{Key, Value};
 use std::borrow::Cow;
 
 pub use self::{

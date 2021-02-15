@@ -99,7 +99,7 @@ mod tests {
         let file_path = file.path().to_string_lossy().into_owned();
 
         let node_id = NodeID::new(1);
-        let backend = Arc::new(crate::util::temp_backend());
+        let backend = Arc::new(crate::test_utils::temp_backend());
         let sink_comp = system.create(move || {
             Node::new(
                 String::from("sink_comp"),

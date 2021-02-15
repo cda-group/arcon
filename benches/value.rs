@@ -1,10 +1,8 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use arcon_state::{
-    index::{IndexOps, LocalValue},
-    Aggregator, Backend, *,
-};
+use arcon::prelude::{Aggregator, IndexOps, LocalValue, ValueIndex};
+use arcon_state::{backend::*, with_backend_type};
 use criterion::{criterion_group, criterion_main, Bencher, Criterion, Throughput};
 use std::sync::Arc;
 use tempfile::tempdir;
@@ -16,21 +14,17 @@ fn value(c: &mut Criterion) {
     group.throughput(Throughput::Elements(OPS_PER_EPOCH));
     #[cfg(feature = "rocks")]
     group.bench_function("rolling counter index rocks backed", index_rocks_backed);
-    #[cfg(feature = "sled")]
     group.bench_function("rolling counter index sled backed", index_sled_backed);
     #[cfg(feature = "rocks")]
     group.bench_function("rolling counter naive pure rocks", naive_rolling_rocks);
-    #[cfg(feature = "sled")]
     group.bench_function("rolling counter naive pure sled", naive_rolling_sled);
     #[cfg(feature = "rocks")]
     group.bench_function("specialised rocks", specialised_rocks);
-    #[cfg(feature = "sled")]
     group.bench_function("specialised sled", specialised_sled);
 
     group.finish()
 }
 
-#[cfg(feature = "sled")]
 fn index_sled_backed(b: &mut Bencher) {
     index_rolling_counter(BackendType::Sled, b);
 }
@@ -96,7 +90,6 @@ fn naive_rolling_rocks(b: &mut Bencher) {
     naive_rolling_counter(BackendType::Rocks, b);
 }
 
-#[cfg(feature = "sled")]
 fn naive_rolling_sled(b: &mut Bencher) {
     naive_rolling_counter(BackendType::Sled, b);
 }
@@ -126,7 +119,6 @@ fn specialised_rocks(b: &mut Bencher) {
     specialised_rolling_counter(BackendType::Rocks, b);
 }
 
-#[cfg(feature = "sled")]
 fn specialised_sled(b: &mut Bencher) {
     specialised_rolling_counter(BackendType::Sled, b);
 }

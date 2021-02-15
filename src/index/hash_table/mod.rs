@@ -9,14 +9,14 @@ use std::{
     hash::{BuildHasher, Hash, Hasher},
 };
 
-use crate::{
+use crate::index::IndexOps;
+use arcon_state::{
     backend::{
         handles::{ActiveHandle, Handle},
         MapState,
     },
     data::{Key, Value},
     error::*,
-    index::IndexOps,
 };
 use core::intrinsics::likely;
 use std::sync::Arc;
@@ -363,7 +363,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::{sled::Sled, temp_backend};
+    use crate::test_utils::temp_backend;
+    use arcon_state::backend::sled::Sled;
     use std::sync::Arc;
 
     #[test]

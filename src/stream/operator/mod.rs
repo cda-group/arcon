@@ -5,15 +5,16 @@
 pub mod function;
 /// Available sink operators
 pub mod sink;
-// Available window operators
+/// Available window operators
 pub mod window;
 
 use crate::{
     data::{ArconElement, ArconEvent, ArconType},
+    index::{ArconState, Timer},
     stream::channel::strategy::ChannelStrategy,
 };
 use arcon_error::*;
-use arcon_state::{index::ArconState, Backend, Timer};
+use arcon_state::Backend;
 use kompact::prelude::ComponentDefinition;
 use prost::Message;
 

@@ -1,11 +1,8 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use arcon_state::{
-    index::{hash_table::HashTable, IndexOps},
-    serialization::protobuf::serialize,
-    EagerHashTable, *,
-};
+use arcon::prelude::{EagerHashTable, HashTable, IndexOps};
+use arcon_state::{serialization::protobuf::serialize, with_backend_type, Backend, BackendType};
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use once_cell::sync::Lazy;
 use rand::Rng;
@@ -158,7 +155,6 @@ fn map(c: &mut Criterion) {
             },
         );
 
-        #[cfg(feature = "sled")]
         group.bench_with_input(
             BenchmarkId::new("SmallStruct Hot Keys Read Sled Backed", description.clone()),
             &(mod_capacity, read_capacity),
@@ -174,7 +170,6 @@ fn map(c: &mut Criterion) {
             },
         );
 
-        #[cfg(feature = "sled")]
         group.bench_with_input(
             BenchmarkId::new(
                 "SmallStruct Uniform Keys Read Sled Backed",
@@ -231,7 +226,6 @@ fn map(c: &mut Criterion) {
             },
         );
 
-        #[cfg(feature = "sled")]
         group.bench_with_input(
             BenchmarkId::new("LargeStruct Hot Keys Read Sled Backed", description.clone()),
             &(mod_capacity, read_capacity),
@@ -247,7 +241,6 @@ fn map(c: &mut Criterion) {
             },
         );
 
-        #[cfg(feature = "sled")]
         group.bench_with_input(
             BenchmarkId::new(
                 "LargeStruct Uniform Keys Read Sled Backed",
@@ -343,7 +336,6 @@ fn map(c: &mut Criterion) {
             },
         );
 
-        #[cfg(feature = "sled")]
         group.bench_with_input(
             BenchmarkId::new(
                 "SmallStruct Insert Hot Keys Sled Backed",
@@ -362,7 +354,6 @@ fn map(c: &mut Criterion) {
                 )
             },
         );
-        #[cfg(feature = "sled")]
         group.bench_with_input(
             BenchmarkId::new(
                 "SmallStruct Insert Hot Keys Sled Backed Full Eviction",
@@ -382,7 +373,6 @@ fn map(c: &mut Criterion) {
             },
         );
 
-        #[cfg(feature = "sled")]
         group.bench_with_input(
             BenchmarkId::new(
                 "SmallStruct Insert Uniform Keys Sled Backed",
@@ -402,7 +392,6 @@ fn map(c: &mut Criterion) {
             },
         );
 
-        #[cfg(feature = "sled")]
         group.bench_with_input(
             BenchmarkId::new(
                 "SmallStruct Insert Uniform Keys Sled Backed Full Eviction",
@@ -502,7 +491,6 @@ fn map(c: &mut Criterion) {
             },
         );
 
-        #[cfg(feature = "sled")]
         group.bench_with_input(
             BenchmarkId::new(
                 "LargeStruct Insert Hot Keys Sled Backed",
@@ -521,7 +509,6 @@ fn map(c: &mut Criterion) {
                 )
             },
         );
-        #[cfg(feature = "sled")]
         group.bench_with_input(
             BenchmarkId::new(
                 "LargeStruct Insert Hot Keys Sled Backed Full Eviction",
@@ -541,7 +528,6 @@ fn map(c: &mut Criterion) {
             },
         );
 
-        #[cfg(feature = "sled")]
         group.bench_with_input(
             BenchmarkId::new(
                 "LargeStruct Insert Uniform Keys Sled Backed",
@@ -560,7 +546,6 @@ fn map(c: &mut Criterion) {
                 )
             },
         );
-        #[cfg(feature = "sled")]
         group.bench_with_input(
             BenchmarkId::new(
                 "LargeStruct Insert Uniform Keys Sled Backed Full Eviction",
@@ -656,7 +641,6 @@ fn map(c: &mut Criterion) {
             },
         );
 
-        #[cfg(feature = "sled")]
         group.bench_with_input(
             BenchmarkId::new("RMW SmallStruct Hot Keys Sled Backed", description.clone()),
             &(mod_capacity, read_capacity),
@@ -673,7 +657,6 @@ fn map(c: &mut Criterion) {
             },
         );
 
-        #[cfg(feature = "sled")]
         group.bench_with_input(
             BenchmarkId::new(
                 "RMW SmallStruct Uniform Keys Sled Backed",
@@ -693,7 +676,6 @@ fn map(c: &mut Criterion) {
             },
         );
 
-        #[cfg(feature = "sled")]
         group.bench_with_input(
             BenchmarkId::new(
                 "RMW SmallStruct Hot Keys Sled Backed Full Eviction",
@@ -713,7 +695,6 @@ fn map(c: &mut Criterion) {
             },
         );
 
-        #[cfg(feature = "sled")]
         group.bench_with_input(
             BenchmarkId::new(
                 "RMW SmallStruct Uniform Keys Sled Backed Full Eviction",
@@ -810,7 +791,6 @@ fn map(c: &mut Criterion) {
             },
         );
 
-        #[cfg(feature = "sled")]
         group.bench_with_input(
             BenchmarkId::new("RMW LargeStruct Hot Keys Sled Backed", description.clone()),
             &(mod_capacity, read_capacity),
@@ -827,7 +807,6 @@ fn map(c: &mut Criterion) {
             },
         );
 
-        #[cfg(feature = "sled")]
         group.bench_with_input(
             BenchmarkId::new(
                 "RMW LargeStruct Hot Keys Sled Backed Full Eviction",
@@ -846,7 +825,6 @@ fn map(c: &mut Criterion) {
                 )
             },
         );
-        #[cfg(feature = "sled")]
         group.bench_with_input(
             BenchmarkId::new(
                 "RMW LargeStruct Uniform Keys Sled Backed",
@@ -865,7 +843,6 @@ fn map(c: &mut Criterion) {
                 )
             },
         );
-        #[cfg(feature = "sled")]
         group.bench_with_input(
             BenchmarkId::new(
                 "RMW LargeStruct Uniform Keys Sled Backed Full Eviction",
@@ -958,7 +935,6 @@ fn map(c: &mut Criterion) {
         },
     );
 
-    #[cfg(feature = "sled")]
     group.bench_with_input(
         BenchmarkId::new("Read SmallStruct Uniform Keys Eager Sled", ""),
         &unused_param,
@@ -966,7 +942,6 @@ fn map(c: &mut Criterion) {
             read_eager!(UNIFORM_KEYS, b, SmallStruct, BackendType::Sled);
         },
     );
-    #[cfg(feature = "sled")]
     group.bench_with_input(
         BenchmarkId::new("Read SmallStruct Hot Keys Eager Sled", ""),
         &unused_param,
@@ -975,7 +950,6 @@ fn map(c: &mut Criterion) {
         },
     );
 
-    #[cfg(feature = "sled")]
     group.bench_with_input(
         BenchmarkId::new("Read LargeStruct Uniform Keys Eager Sled", ""),
         &unused_param,
@@ -984,7 +958,6 @@ fn map(c: &mut Criterion) {
         },
     );
 
-    #[cfg(feature = "sled")]
     group.bench_with_input(
         BenchmarkId::new("Read LargeStruct Hot Keys Eager Sled", ""),
         &unused_param,

@@ -3,6 +3,7 @@
 
 use crate::{
     data::{ArconMessage, Epoch, NodeID, StateID, Watermark},
+    index::{HashTable, LocalValue, ValueIndex, EMPTY_STATE_ID},
     manager::{
         epoch::EpochEvent,
         snapshot::{Snapshot, SnapshotEvent, SnapshotManagerPort},
@@ -10,7 +11,8 @@ use crate::{
     stream::operator::Operator,
 };
 use arcon_error::*;
-use arcon_state::{index::EMPTY_STATE_ID, ArconState, Backend, HashTable, LocalValue, ValueIndex};
+use arcon_macros::ArconState;
+use arcon_state::Backend;
 use fxhash::FxHashMap;
 use kompact::{component::AbstractComponent, prelude::*};
 use std::{collections::HashSet, sync::Arc};

@@ -10,16 +10,16 @@ pub mod source;
 use crate::data::flight_serde::unsafe_remote::UnsafeSerde;
 use crate::{
     data::{flight_serde::reliable_remote::ReliableSerde, RawArconMessage, *},
+    index::{AppenderIndex, EagerAppender, IndexOps, Timer as ArconTimer},
     manager::node::{NodeManagerEvent::Checkpoint, *},
     stream::{
         channel::strategy::ChannelStrategy,
         operator::{Operator, OperatorContext},
     },
-};
-use arcon_error::{arcon_err, arcon_err_kind, ArconResult};
-use arcon_state::{
-    index::IndexOps, AppenderIndex, ArconState, Backend, EagerAppender, Timer as ArconTimer,
 }; // conflicts with Kompact Timer trait
+use arcon_error::{arcon_err, arcon_err_kind, ArconResult};
+use arcon_macros::ArconState;
+use arcon_state::Backend;
 use fxhash::*;
 use kompact::prelude::*;
 use std::{cell::UnsafeCell, sync::Arc};
@@ -536,7 +536,7 @@ mod tests {
                 ChannelStrategy::Forward(Forward::new(channel, NodeID::new(0), pool_info));
 
             // Set up  NodeManager
-            let backend = Arc::new(crate::util::temp_backend());
+            let backend = Arc::new(crate::test_utils::temp_backend());
             let descriptor = String::from("node_");
             let in_channels = vec![1.into(), 2.into(), 3.into()];
 

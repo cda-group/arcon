@@ -3,10 +3,10 @@
 
 use crate::{
     data::{ArconType, StateID},
+    index::{ArconState, EMPTY_STATE_ID},
     stream::{operator::Operator, time::ArconTime},
 };
 use arcon_error::*;
-use arcon_state::index::{ArconState, EMPTY_STATE_ID};
 use hocon::HoconLoader;
 use serde::Deserialize;
 use std::{path::Path, sync::Arc};

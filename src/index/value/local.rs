@@ -1,11 +1,14 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::{
-    backend::{handles::ActiveHandle, Backend, Handle, ValueState},
+use crate::index::{IndexOps, ValueIndex};
+use arcon_state::{
+    backend::{
+        handles::{ActiveHandle, Handle},
+        Backend, ValueState,
+    },
     data::Value,
     error::*,
-    index::{IndexOps, ValueIndex},
 };
 use std::{borrow::Cow, sync::Arc};
 

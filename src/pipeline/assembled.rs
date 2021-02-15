@@ -2,8 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use super::Pipeline;
-use crate::{manager::snapshot::Snapshot, stream::node::source::SourceEvent};
-use arcon_state::index::ArconState;
+use crate::{index::ArconState, manager::snapshot::Snapshot, stream::node::source::SourceEvent};
 use kompact::{component::AbstractComponent, prelude::ActorRefFactory};
 use std::sync::{
     mpsc,

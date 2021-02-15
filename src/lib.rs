@@ -34,6 +34,7 @@
 
 #![feature(unboxed_closures)]
 #![feature(unsized_fn_params)]
+#![feature(core_intrinsics)]
 
 // Enable use of arcon_macros within this crate
 #[cfg_attr(test, macro_use)]
@@ -45,7 +46,9 @@ pub use arcon_macros::*;
 #[doc(hidden)]
 pub use arcon_state::*;
 
-pub use arcon_state::{error::ArconStateError, index::ArconState, IndexOps};
+pub use crate::index::{ArconState, IndexOps};
+pub use arcon_state::error::ArconStateError;
+//arcon_state::{error::ArconStateError, index::ArconState, IndexOps};
 
 // Imports below are exposed for #[derive(Arcon)]
 cfg_if::cfg_if! {
@@ -78,6 +81,7 @@ mod conf;
 mod data;
 /// Dataflow API
 mod dataflow;
+mod index;
 /// Module containing different runtime managers
 mod manager;
 #[cfg(feature = "metrics")]
@@ -103,6 +107,13 @@ pub mod test_utils {
 
     pub static ALLOCATOR: Lazy<Arc<Mutex<Allocator>>> =
         Lazy::new(|| Arc::new(Mutex::new(Allocator::new(1073741824))));
+
+    pub fn temp_backend() -> arcon_state::Sled {
+        use arcon_state::backend::Backend;
+        let test_dir = tempfile::tempdir().unwrap();
+        let path = test_dir.path();
+        arcon_state::Sled::create(path).unwrap()
+    }
 }
 
 /// Helper module that imports everything related to arcon into scope
@@ -130,7 +141,7 @@ pub mod prelude {
             source::collection::CollectionSource,
             time::ArconTime,
         },
-        Arcon,
+        Arcon, ArconState,
     };
 
     #[cfg(feature = "kafka")]
@@ -153,9 +164,13 @@ pub mod prelude {
     pub use arcon_state as state;
 
     pub use arcon_state::{
-        AggregatorState, AppenderIndex, ArconState, Backend, BackendType, EagerAppender,
-        EagerHashTable, EagerValue, EmptyState, Handle, HashTable, LazyValue, MapState,
-        ReducerState, Sled, ValueIndex, ValueState, VecState,
+        Aggregator, AggregatorState, Backend, BackendType, Handle, MapState, ReducerState, Sled,
+        ValueState, VecState,
+    };
+
+    pub use crate::index::{
+        AppenderIndex, EagerAppender, EagerHashTable, EagerValue, EmptyState, HashTable, IndexOps,
+        LazyValue, LocalValue, Timer as ArconTimer, ValueIndex,
     };
 
     #[cfg(feature = "rayon")]
