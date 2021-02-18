@@ -8,6 +8,7 @@ pub mod source;
 
 #[cfg(feature = "unsafe_flight")]
 use crate::data::flight_serde::unsafe_remote::UnsafeSerde;
+use crate::index::{ArconState, StateConstructor};
 use crate::{
     data::{flight_serde::reliable_remote::ReliableSerde, RawArconMessage, *},
     index::{AppenderIndex, EagerAppender, IndexOps, Timer as ArconTimer},
@@ -97,6 +98,13 @@ pub struct NodeState<OP: Operator + 'static, B: Backend> {
     /// Identifier for the Node
     #[ephemeral]
     id: NodeID,
+}
+
+impl<OP: Operator + 'static, B: Backend> StateConstructor for NodeState<OP, B> {
+    type BackendType = B;
+    fn new(_: Arc<B>) -> Self {
+        unreachable!();
+    }
 }
 
 impl<OP: Operator + 'static, B: Backend> NodeState<OP, B> {

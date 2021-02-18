@@ -1,10 +1,11 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::index::{AppenderIndex, HashTable, IndexOps};
+#[cfg(feature = "arcon_arrow")]
+use crate::data::arrow::ArrowTable;
+use crate::index::{AppenderIndex, HashTable, IndexOps, IndexValue};
 use arcon_state::{
     backend::{handles::ActiveHandle, Backend, VecState},
-    data::Value,
     error::*,
 };
 use prost::*;
@@ -15,14 +16,14 @@ const DEFAULT_APPENDER_SIZE: usize = 1024;
 pub mod eager;
 
 #[derive(Clone, Message)]
-pub struct ProstVec<V: Value> {
+pub struct ProstVec<V: IndexValue> {
     #[prost(message, repeated, tag = "1")]
     data: Vec<V>,
 }
 
 impl<V> Deref for ProstVec<V>
 where
-    V: Value,
+    V: IndexValue,
 {
     type Target = Vec<V>;
 
@@ -33,7 +34,7 @@ where
 
 impl<V> DerefMut for ProstVec<V>
 where
-    V: Value,
+    V: IndexValue,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.data
@@ -46,7 +47,7 @@ where
 /// the data no longer fits in the specified in-memory capacity.
 pub struct LazyAppender<V, B>
 where
-    V: Value,
+    V: IndexValue,
     B: Backend,
 {
     current_key: u64,
@@ -57,14 +58,14 @@ where
 
 impl<V, B> LazyAppender<V, B>
 where
-    V: Value,
+    V: IndexValue,
     B: Backend,
 {
 }
 
 impl<V, B> IndexOps for LazyAppender<V, B>
 where
-    V: Value,
+    V: IndexValue,
     B: Backend,
 {
     fn persist(&mut self) -> Result<()> {
@@ -74,11 +75,15 @@ where
     fn set_key(&mut self, key: u64) {
         self.current_key = key;
     }
+    #[cfg(feature = "arcon_arrow")]
+    fn arrow_table(&self) -> Result<Option<ArrowTable>> {
+        Ok(None)
+    }
 }
 
 impl<V, B> AppenderIndex<V> for LazyAppender<V, B>
 where
-    V: Value,
+    V: IndexValue,
     B: Backend,
 {
     #[inline]

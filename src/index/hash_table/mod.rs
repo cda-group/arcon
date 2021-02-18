@@ -9,6 +9,8 @@ use std::{
     hash::{BuildHasher, Hash, Hasher},
 };
 
+#[cfg(feature = "arcon_arrow")]
+use crate::data::arrow::ArrowTable;
 use crate::index::IndexOps;
 use arcon_state::{
     backend::{
@@ -358,6 +360,10 @@ where
         Ok(())
     }
     fn set_key(&mut self, _: u64) {}
+    #[cfg(feature = "arcon_arrow")]
+    fn arrow_table(&self) -> Result<Option<ArrowTable>> {
+        Ok(None)
+    }
 }
 
 #[cfg(test)]

@@ -66,6 +66,19 @@ where
                         pool_info,
                     ))
                 }
+                ChannelKind::Keyed => {
+                    let max_key = 256; // fix
+                    let mut channels = Vec::new();
+                    for component in components {
+                        let target_node = component
+                            .downcast::<Arc<dyn AbstractComponent<Message = ArconMessage<S::Data>>>>()
+                            .unwrap();
+                        let actor_ref = target_node.actor_ref().hold().expect("failed to fetch");
+                        let channel = Channel::Local(actor_ref);
+                        channels.push(channel);
+                    }
+                    ChannelStrategy::KeyBy(KeyBy::new(max_key, channels, NodeID::new(0), pool_info))
+                }
                 _ => panic!("TODO"),
             };
             let source_node = SourceNode::new(source, channel_strategy);

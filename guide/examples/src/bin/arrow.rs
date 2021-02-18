@@ -1,6 +1,21 @@
 use arcon::prelude::*;
 use arrow::util::pretty;
-use datafusion::{datasource::MemTable, prelude::*};
+
+#[derive(ArconState)]
+pub struct State<B: Backend> {
+    #[table = "mydata"]
+    values: EagerValue<MyData, B>,
+}
+
+impl<B: Backend> StateConstructor for State<B> {
+    type BackendType = B;
+
+    fn new(backend: Arc<Self::BackendType>) -> Self {
+        Self {
+            values: EagerValue::new("_values", backend),
+        }
+    }
+}
 
 #[cfg_attr(feature = "arcon_serde", derive(serde::Deserialize, serde::Serialize))]
 #[cfg_attr(feature = "unsafe_flight", derive(abomonation_derive::Abomonation))]
@@ -41,12 +56,11 @@ async fn main() -> datafusion::error::Result<()> {
         MyData::new(2, 2.5, false, 190),
     ]);
 
-    let batch = table.record_batch()?;
     let mut ctx = ExecutionContext::new();
-    let provider = MemTable::try_new(table.schema(), vec![vec![batch]])?;
+    let provider = table.mem_table()?;
+    ctx.register_table(table.name(), Box::new(provider));
 
-    ctx.register_table("mydata_table", Box::new(provider));
-    let df = ctx.table("mydata_table")?;
+    let df = ctx.table("mydata")?;
 
     let filter = col("id").eq(lit(1));
 
@@ -58,7 +72,7 @@ async fn main() -> datafusion::error::Result<()> {
     println!("DATAFRAME:");
     pretty::print_batches(&results)?;
 
-    let sql_query = ctx.sql("SELECT id,other,some_str FROM mydata_table WHERE id = 1")?;
+    let sql_query = ctx.sql("SELECT id,other,some_str FROM mydata WHERE id = 1")?;
     let sql_result = sql_query.collect().await?;
 
     println!("SQL:");

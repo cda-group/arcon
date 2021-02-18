@@ -57,6 +57,42 @@ pub trait ArrowOps: Sized {
     fn append(self, builder: &mut StructBuilder) -> Result<(), ArrowError>;
 }
 
+macro_rules! arrow_ops {
+    ($type:ty) => {
+        impl ArrowOps for $type {
+            fn schema() -> Schema {
+                unreachable!(
+                    "ArrowOps not possible for single value {}",
+                    stringify!($type)
+                );
+            }
+            fn arrow_table(_: usize) -> ArrowTable {
+                unreachable!(
+                    "ArrowOps not possible for single value {}",
+                    stringify!($type)
+                );
+            }
+            fn append(self, _: &mut StructBuilder) -> Result<(), ArrowError> {
+                unreachable!(
+                    "ArrowOps not possible for single value {}",
+                    stringify!($type)
+                );
+            }
+        }
+    };
+}
+
+// Implements unreachable ArrowOps impl for single values.
+arrow_ops!(u64);
+arrow_ops!(u32);
+arrow_ops!(i64);
+arrow_ops!(i32);
+arrow_ops!(f64);
+arrow_ops!(f32);
+arrow_ops!(bool);
+arrow_ops!(String);
+arrow_ops!(Vec<u8>);
+
 pub struct ArrowTable {
     table_name: String,
     schema: Arc<Schema>,
@@ -103,6 +139,9 @@ impl ArrowTable {
     pub fn mem_table(&mut self) -> Result<MemTable, DataFusionError> {
         let record_batch = self.record_batch()?;
         MemTable::try_new(self.schema(), vec![vec![record_batch]])
+    }
+    pub fn set_name(&mut self, name: &str) {
+        self.table_name = name.to_string();
     }
 }
 

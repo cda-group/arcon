@@ -7,9 +7,23 @@ pub mod hash_table;
 pub mod timer;
 pub mod value;
 
-use crate::error::Result;
-use arcon_state::data::{Key, Value};
-use std::borrow::Cow;
+use crate::{error::Result, manager::snapshot::Snapshot};
+use arcon_state::{
+    data::{Key, Value},
+    Backend,
+};
+use std::{borrow::Cow, sync::Arc};
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "arcon_arrow")] {
+        use crate::data::arrow::{ArrowOps, ArrowTable};
+        pub trait IndexValue: Value + ArrowOps {}
+        impl<T> IndexValue for T where T: Value + ArrowOps {}
+    } else if #[cfg(not(feature = "arcon_arrow"))] {
+        pub trait IndexValue: Value {}
+        impl<T> IndexValue for T where T: Value {}
+    }
+}
 
 pub use self::{
     appender::eager::EagerAppender,
@@ -26,11 +40,43 @@ pub trait IndexOps {
     fn persist(&mut self) -> Result<()>;
     /// Set the current active key for the index
     fn set_key(&mut self, key: u64);
+
+    /// Create an ArrowTable from the data in the Index
+    #[cfg(feature = "arcon_arrow")]
+    fn arrow_table(&self) -> Result<Option<ArrowTable>>;
+}
+
+/// A separate trait for defining a state constructor for [ArconState]
+pub trait StateConstructor {
+    /// The State Backend that is used
+    type BackendType: Backend;
+
+    /// Constructor method for creating `Self`
+    fn new(backend: Arc<Self::BackendType>) -> Self
+    where
+        Self: Sized;
 }
 
 /// Active Arcon State
-pub trait ArconState: IndexOps + Send + 'static {
+pub trait ArconState: StateConstructor + Send + 'static {
     const STATE_ID: &'static str;
+
+    /// Restores an ArconState from a [Snapshot]
+    fn restore(snapshot: Snapshot) -> Result<Self>
+    where
+        Self: Sized,
+    {
+        let snapshot_dir = std::path::Path::new(&snapshot.snapshot_path);
+        let backend = Self::BackendType::restore(&snapshot_dir, &snapshot_dir)?;
+        Ok(Self::new(Arc::new(backend)))
+    }
+
+    fn persist(&mut self) -> Result<()>;
+    fn set_key(&mut self, key: u64);
+
+    /// Returns a Vec of registered Arrow tables
+    #[cfg(feature = "arcon_arrow")]
+    fn tables(&self) -> Vec<ArrowTable>;
 }
 
 /// Identifier for empty ArconState ()
@@ -40,6 +86,23 @@ pub type EmptyState = ();
 
 impl ArconState for EmptyState {
     const STATE_ID: &'static str = EMPTY_STATE_ID;
+
+    fn persist(&mut self) -> Result<()> {
+        Ok(())
+    }
+    fn set_key(&mut self, _: u64) {}
+    #[cfg(feature = "arcon_arrow")]
+    fn tables(&self) -> Vec<ArrowTable> {
+        Vec::new()
+    }
+}
+
+impl StateConstructor for EmptyState {
+    type BackendType = crate::Sled;
+
+    fn new(_: Arc<Self::BackendType>) -> Self {
+        ()
+    }
 }
 
 impl IndexOps for EmptyState {
@@ -48,6 +111,10 @@ impl IndexOps for EmptyState {
     }
     fn set_key(&mut self, _: u64) {
         // ignore
+    }
+    #[cfg(feature = "arcon_arrow")]
+    fn arrow_table(&self) -> Result<Option<ArrowTable>> {
+        Ok(None)
     }
 }
 

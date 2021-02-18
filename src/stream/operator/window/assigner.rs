@@ -4,7 +4,7 @@
 use super::{Window, WindowContext};
 use crate::{
     data::{ArconElement, ArconType},
-    index::{EagerHashTable, IndexOps},
+    index::{ArconState, EagerHashTable, IndexOps, StateConstructor},
     stream::operator::{Operator, OperatorContext},
 };
 use arcon_error::*;
@@ -45,8 +45,9 @@ pub struct AssignerState<B: Backend> {
     active_windows: EagerHashTable<WindowContext, (), B>,
 }
 
-impl<B: Backend> AssignerState<B> {
-    pub(crate) fn new(backend: Arc<B>) -> Self {
+impl<B: Backend> StateConstructor for AssignerState<B> {
+    type BackendType = B;
+    fn new(backend: Arc<Self::BackendType>) -> Self {
         Self {
             window_start: EagerHashTable::new("_window_start", backend.clone()),
             active_windows: EagerHashTable::new("_active_windows", backend),

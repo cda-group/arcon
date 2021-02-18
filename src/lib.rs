@@ -48,7 +48,6 @@ pub use arcon_state::*;
 
 pub use crate::index::{ArconState, IndexOps};
 pub use arcon_state::error::ArconStateError;
-//arcon_state::{error::ArconStateError, index::ArconState, IndexOps};
 
 // Imports below are exposed for #[derive(Arcon)]
 cfg_if::cfg_if! {
@@ -160,6 +159,8 @@ pub mod prelude {
 
     #[cfg(feature = "arcon_arrow")]
     pub use super::{Arrow, ArrowOps, ArrowTable, ToArrow};
+    #[cfg(feature = "arcon_arrow")]
+    pub use datafusion::prelude::*;
 
     pub use arcon_state as state;
 
@@ -170,7 +171,7 @@ pub mod prelude {
 
     pub use crate::index::{
         AppenderIndex, EagerAppender, EagerHashTable, EagerValue, EmptyState, HashTable, IndexOps,
-        LazyValue, LocalValue, Timer as ArconTimer, ValueIndex,
+        LazyValue, LocalValue, StateConstructor, Timer as ArconTimer, ValueIndex,
     };
 
     #[cfg(feature = "rayon")]

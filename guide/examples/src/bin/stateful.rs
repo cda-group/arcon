@@ -1,6 +1,6 @@
 use arcon::prelude::*;
 use examples::SnapshotComponent;
-use std::{path::Path, sync::Arc};
+use std::sync::Arc;
 
 #[cfg_attr(feature = "arcon_serde", derive(serde::Deserialize, serde::Serialize))]
 #[cfg_attr(feature = "unsafe_flight", derive(abomonation_derive::Abomonation))]
@@ -18,30 +18,20 @@ pub struct Event {
 // ANCHOR: state
 #[derive(ArconState)]
 pub struct MyState<B: Backend> {
-    counter: LazyValue<u64, B>,
     events: EagerAppender<Event, B>,
 }
 
-impl<B: Backend> MyState<B> {
-    pub fn new(backend: Arc<B>) -> Self {
-        MyState {
-            counter: LazyValue::new("_counter", backend.clone()),
+impl<B: Backend> StateConstructor for MyState<B> {
+    type BackendType = B;
+
+    fn new(backend: Arc<Self::BackendType>) -> Self {
+        Self {
             events: EagerAppender::new("_events", backend),
         }
     }
 }
 
 // ANCHOR_END: state
-
-// ANCHOR: snapshot
-impl<B: Backend> From<Snapshot> for MyState<B> {
-    fn from(snapshot: Snapshot) -> Self {
-        let snapshot_dir = Path::new(&snapshot.snapshot_path);
-        let backend = Arc::new(B::restore(&snapshot_dir, &snapshot_dir).unwrap());
-        MyState::new(backend)
-    }
-}
-// ANCHOR_END: snapshot
 
 fn main() {
     let conf = ArconConf {
@@ -61,7 +51,6 @@ fn main() {
         .operator(OperatorBuilder {
             constructor: Arc::new(|backend| {
                 Map::stateful(MyState::new(backend), |event, state| {
-                    state.counter().rmw(|v| *v += 1)?;
                     state.events().append(event)?;
                     Ok(event)
                 })

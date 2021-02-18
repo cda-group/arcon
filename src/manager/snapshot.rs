@@ -18,13 +18,15 @@ pub enum SnapshotEvent {
 pub struct Snapshot {
     pub epoch: u64,
     pub snapshot_path: String,
+    pub backend_name: String,
 }
 
 impl Snapshot {
-    pub fn new(epoch: u64, snapshot_path: String) -> Self {
+    pub fn new(backend_name: String, epoch: u64, snapshot_path: String) -> Self {
         Snapshot {
             epoch,
             snapshot_path,
+            backend_name,
         }
     }
 }

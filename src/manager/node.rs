@@ -3,7 +3,7 @@
 
 use crate::{
     data::{ArconMessage, Epoch, NodeID, StateID, Watermark},
-    index::{HashTable, LocalValue, ValueIndex, EMPTY_STATE_ID},
+    index::{HashTable, IndexOps, LocalValue, StateConstructor, ValueIndex, EMPTY_STATE_ID},
     manager::{
         epoch::EpochEvent,
         snapshot::{Snapshot, SnapshotEvent, SnapshotManagerPort},
@@ -89,6 +89,19 @@ pub struct NodeManagerState<B: Backend> {
     checkpoint_acks: HashSet<(NodeID, Epoch)>,
 }
 
+impl<B: Backend> StateConstructor for NodeManagerState<B> {
+    type BackendType = B;
+    fn new(backend: Arc<Self::BackendType>) -> Self {
+        Self {
+            watermarks: HashTable::with_capacity("_watermarks", backend.clone(), 64, 64),
+            epochs: HashTable::with_capacity("_epochs", backend.clone(), 64, 64),
+            current_watermark: LocalValue::new("_curr_watermark", backend.clone()),
+            current_epoch: LocalValue::new("_curr_epoch", backend.clone()),
+            checkpoint_acks: HashSet::new(),
+        }
+    }
+}
+
 /// A [kompact] component responsible for coordinating a set of Arcon nodes
 ///
 /// The following illustrates the role of a NodeManager in the context of a Pipeline
@@ -152,15 +165,6 @@ where
         in_channels: Vec<NodeID>,
         backend: Arc<B>,
     ) -> Self {
-        // initialise internal state
-        let manager_state = NodeManagerState {
-            watermarks: HashTable::with_capacity("_watermarks", backend.clone(), 64, 64),
-            epochs: HashTable::with_capacity("_epochs", backend.clone(), 64, 64),
-            current_watermark: LocalValue::new("_curr_watermark", backend.clone()),
-            current_epoch: LocalValue::new("_curr_epoch", backend.clone()),
-            checkpoint_acks: HashSet::new(),
-        };
-
         NodeManager {
             ctx: ComponentContext::uninitialised(),
             state_id,
@@ -173,8 +177,8 @@ where
             node_index: 0,
             in_channels,
             nodes: FxHashMap::default(),
+            manager_state: NodeManagerState::new(backend.clone()),
             backend,
-            manager_state,
         }
     }
 
@@ -199,7 +203,11 @@ where
             if self.has_snapshot_state() {
                 self.snapshot_manager_port.trigger(SnapshotEvent::Snapshot(
                     self.state_id.clone(),
-                    Snapshot::new(curr_epoch, checkpoint_dir.clone()),
+                    Snapshot::new(
+                        std::any::type_name::<B>().to_string(),
+                        curr_epoch,
+                        checkpoint_dir.clone(),
+                    ),
                 ));
             }
 

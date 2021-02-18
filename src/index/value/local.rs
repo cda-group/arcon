@@ -1,6 +1,8 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
+#[cfg(feature = "arcon_arrow")]
+use crate::data::arrow::ArrowTable;
 use crate::index::{IndexOps, ValueIndex};
 use arcon_state::{
     backend::{
@@ -107,4 +109,8 @@ where
         Ok(())
     }
     fn set_key(&mut self, _: u64) {}
+    #[cfg(feature = "arcon_arrow")]
+    fn arrow_table(&self) -> Result<Option<ArrowTable>> {
+        Ok(None)
+    }
 }

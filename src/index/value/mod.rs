@@ -1,8 +1,10 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use super::{HashTable, IndexOps, ValueIndex};
-use arcon_state::{data::Value, error::*, Backend};
+use super::{HashTable, IndexOps, IndexValue, ValueIndex};
+#[cfg(feature = "arcon_arrow")]
+use crate::data::arrow::ArrowTable;
+use arcon_state::{error::*, Backend};
 use std::{borrow::Cow, sync::Arc};
 
 mod eager;
@@ -14,7 +16,7 @@ pub use local::LocalValue;
 /// A Lazy ValueIndex
 pub struct LazyValue<V, B>
 where
-    V: Value,
+    V: IndexValue,
     B: Backend,
 {
     current_key: u64,
@@ -23,7 +25,7 @@ where
 
 impl<V, B> LazyValue<V, B>
 where
-    V: Value,
+    V: IndexValue,
     B: Backend,
 {
     /// Creates a LazyValue
@@ -39,7 +41,7 @@ where
 
 impl<V, B> ValueIndex<V> for LazyValue<V, B>
 where
-    V: Value,
+    V: IndexValue,
     B: Backend,
 {
     #[inline]
@@ -71,7 +73,7 @@ where
 
 impl<V, B> IndexOps for LazyValue<V, B>
 where
-    V: Value,
+    V: IndexValue,
     B: Backend,
 {
     #[inline]
@@ -81,6 +83,11 @@ where
     #[inline]
     fn set_key(&mut self, key: u64) {
         self.current_key = key;
+    }
+
+    #[cfg(feature = "arcon_arrow")]
+    fn arrow_table(&self) -> Result<Option<ArrowTable>> {
+        Ok(None)
     }
 }
 

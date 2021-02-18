@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use super::{hash_table::eager::EagerHashTable, IndexOps};
+#[cfg(feature = "arcon_arrow")]
+use crate::data::arrow::ArrowTable;
 use arcon_state::{
     backend::{
         handles::{ActiveHandle, Handle},
@@ -222,6 +224,10 @@ where
         Ok(())
     }
     fn set_key(&mut self, _: u64) {}
+    #[cfg(feature = "arcon_arrow")]
+    fn arrow_table(&self) -> Result<Option<ArrowTable>> {
+        Ok(None)
+    }
 }
 
 #[cfg(test)]

@@ -30,11 +30,6 @@ With the `watch` command, we can get access to some `ArconState` from our applic
 ```rust,edition2018,no_run,noplaypen
 {{#rustdoc_include ../../examples/src/bin/stateful.rs:watch_thread}}
 ```
-For the call to work, MyState needs to implement `From<Snapshot>` as seen below.
-
-```rust,edition2018,no_run,noplaypen
-{{#rustdoc_include ../../examples/src/bin/stateful.rs:snapshot}}
-```
 
 ## Watching from a Kompact component
 
