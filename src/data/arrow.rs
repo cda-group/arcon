@@ -93,6 +93,7 @@ arrow_ops!(bool);
 arrow_ops!(String);
 arrow_ops!(Vec<u8>);
 
+#[derive(Debug)]
 pub struct ArrowTable {
     table_name: String,
     schema: Arc<Schema>,
@@ -150,5 +151,35 @@ impl<A: ArrowOps> From<Vec<A>> for ArrowTable {
         let mut table = A::arrow_table(input.len());
         let _ = table.load(input);
         table
+    }
+}
+
+// impl Send + Sync for ArrowTable
+unsafe impl Send for ArrowTable {}
+unsafe impl Sync for ArrowTable {}
+
+#[derive(Clone)]
+pub struct ImmutableTable {
+    name: String,
+    schema: Arc<Schema>,
+    batches: Vec<RecordBatch>,
+}
+
+impl ImmutableTable {
+    pub fn mem_table(self) -> Result<MemTable, DataFusionError> {
+        MemTable::try_new(self.schema, vec![self.batches])
+    }
+    pub fn name(&self) -> String {
+        self.name.clone()
+    }
+}
+
+impl From<ArrowTable> for ImmutableTable {
+    fn from(mut table: ArrowTable) -> Self {
+        Self {
+            name: table.name().to_string(),
+            schema: table.schema(),
+            batches: vec![table.record_batch().unwrap()],
+        }
     }
 }

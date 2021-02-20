@@ -225,7 +225,7 @@ where
     }
     fn set_key(&mut self, _: u64) {}
     #[cfg(feature = "arcon_arrow")]
-    fn arrow_table(&self) -> Result<Option<ArrowTable>> {
+    fn arrow_table(&mut self) -> Result<Option<ArrowTable>> {
         Ok(None)
     }
 }

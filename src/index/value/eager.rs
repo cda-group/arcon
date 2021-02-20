@@ -88,7 +88,7 @@ where
         self.current_key = key;
     }
     #[cfg(feature = "arcon_arrow")]
-    fn arrow_table(&self) -> Result<Option<ArrowTable>> {
+    fn arrow_table(&mut self) -> Result<Option<ArrowTable>> {
         let len = self.handle.len()?;
         let mut table = V::arrow_table(len);
         let values = self.handle.values()?;

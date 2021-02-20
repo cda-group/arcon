@@ -5,7 +5,7 @@ use std::sync::Arc;
 #[cfg_attr(feature = "arcon_serde", derive(serde::Deserialize, serde::Serialize))]
 #[cfg_attr(feature = "unsafe_flight", derive(abomonation_derive::Abomonation))]
 // ANCHOR: data
-#[derive(Arcon, prost::Message, Copy, Clone)]
+#[derive(Arcon, Arrow, prost::Message, Copy, Clone)]
 #[arcon(unsafe_ser_id = 12, reliable_ser_id = 13, version = 1, keys = "id")]
 pub struct Event {
     #[prost(uint64, tag = "1")]
@@ -18,7 +18,8 @@ pub struct Event {
 // ANCHOR: state
 #[derive(ArconState)]
 pub struct MyState<B: Backend> {
-    events: EagerAppender<Event, B>,
+    #[table = "events"]
+    events: EagerValue<Event, B>,
 }
 
 impl<B: Backend> StateConstructor for MyState<B> {
@@ -26,16 +27,18 @@ impl<B: Backend> StateConstructor for MyState<B> {
 
     fn new(backend: Arc<Self::BackendType>) -> Self {
         Self {
-            events: EagerAppender::new("_events", backend),
+            events: EagerValue::new("_events", backend),
         }
     }
 }
 
 // ANCHOR_END: state
 
-fn main() {
+#[tokio::main]
+async fn main() -> datafusion::error::Result<()> {
     let conf = ArconConf {
         epoch_interval: 10000,
+        endpoint_host: Some("127.0.0.1:2000".to_string()),
         ..Default::default()
     };
 
@@ -51,7 +54,7 @@ fn main() {
         .operator(OperatorBuilder {
             constructor: Arc::new(|backend| {
                 Map::stateful(MyState::new(backend), |event, state| {
-                    state.events().append(event)?;
+                    state.events().put(event)?;
                     Ok(event)
                 })
             }),
@@ -60,10 +63,11 @@ fn main() {
         .build();
 
     // ANCHOR: watch_thread
-    pipeline.watch(|epoch, mut s: MyState<Sled>| {
-        let events_len = s.events().len();
-        println!("Events Length {:?} for Epoch {}", events_len, epoch);
+    pipeline.watch(|epoch, _: MyState<Sled>| {
+        // Gain access to MyState per epoch
+        println!("Got State data for epoch {}", epoch);
     });
+
     // ANCHOR_END: watch_thread
 
     // ANCHOR: watch_component
@@ -81,4 +85,6 @@ fn main() {
 
     pipeline.start();
     pipeline.await_termination();
+
+    Ok(())
 }

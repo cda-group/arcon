@@ -43,7 +43,7 @@ pub trait IndexOps {
 
     /// Create an ArrowTable from the data in the Index
     #[cfg(feature = "arcon_arrow")]
-    fn arrow_table(&self) -> Result<Option<ArrowTable>>;
+    fn arrow_table(&mut self) -> Result<Option<ArrowTable>>;
 }
 
 /// A separate trait for defining a state constructor for [ArconState]
@@ -76,7 +76,10 @@ pub trait ArconState: StateConstructor + Send + 'static {
 
     /// Returns a Vec of registered Arrow tables
     #[cfg(feature = "arcon_arrow")]
-    fn tables(&self) -> Vec<ArrowTable>;
+    fn tables(&mut self) -> Vec<ArrowTable>;
+
+    #[cfg(feature = "arcon_arrow")]
+    fn has_tables() -> bool;
 }
 
 /// Identifier for empty ArconState ()
@@ -92,8 +95,12 @@ impl ArconState for EmptyState {
     }
     fn set_key(&mut self, _: u64) {}
     #[cfg(feature = "arcon_arrow")]
-    fn tables(&self) -> Vec<ArrowTable> {
+    fn tables(&mut self) -> Vec<ArrowTable> {
         Vec::new()
+    }
+    #[cfg(feature = "arcon_arrow")]
+    fn has_tables() -> bool {
+        false
     }
 }
 
@@ -113,7 +120,7 @@ impl IndexOps for EmptyState {
         // ignore
     }
     #[cfg(feature = "arcon_arrow")]
-    fn arrow_table(&self) -> Result<Option<ArrowTable>> {
+    fn arrow_table(&mut self) -> Result<Option<ArrowTable>> {
         Ok(None)
     }
 }

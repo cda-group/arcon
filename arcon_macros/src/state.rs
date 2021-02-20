@@ -54,15 +54,28 @@ pub fn derive_state(input: TokenStream) -> TokenStream {
         let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
         #[cfg(feature = "arcon_arrow")]
+        let has_tables_quote = {
+            if tables.is_empty() {
+                quote! { false }
+            } else {
+                quote! { true }
+            }
+        };
+
+        #[cfg(feature = "arcon_arrow")]
         let tables = quote! {
             #[inline]
-            fn tables(&self) -> Vec<::arcon::ArrowTable> {
+            fn tables(&mut self) -> Vec<::arcon::ArrowTable> {
                 vec![#(#tables)*]
                     .into_iter()
                     .filter_map(|m| m)
                     .collect::<Vec<::arcon::ArrowTable>>()
             }
+            fn has_tables() -> bool {
+                #has_tables_quote
+            }
         };
+
         #[cfg(not(feature = "arcon_arrow"))]
         let tables = quote! {};
 

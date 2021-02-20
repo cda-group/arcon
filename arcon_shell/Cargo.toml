@@ -1,0 +1,11 @@
+[package]
+name = "arcon_shell"
+version = "0.1.0"
+authors = ["Max Meldrum <mmeldrum@kth.se>"]
+edition = "2018"
+
+[dependencies]
+arcon = { path = "../", features = ["arcon_arrow", "quiet"] } 
+clap = "2.33"
+rustyline = "7.1.0"
+prettytable-rs = "0.8"

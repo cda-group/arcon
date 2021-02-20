@@ -338,6 +338,14 @@ where
         self.handle.insert_all_by_ref(iter)
     }
 
+    pub fn full_iter(&mut self) -> Result<(usize, Box<dyn Iterator<Item = Result<V>> + '_>)> {
+        // call our persist method to force possible modified values to the backend
+        self.persist()?;
+        let len = self.handle.len()?;
+        let values = self.handle.values()?;
+        Ok((len, values))
+    }
+
     /// Method only used for testing the TableModIterator of RawTable.
     #[cfg(test)]
     pub(crate) fn modified_iterator(&mut self) -> TableModIterator<K, V> {
@@ -361,7 +369,7 @@ where
     }
     fn set_key(&mut self, _: u64) {}
     #[cfg(feature = "arcon_arrow")]
-    fn arrow_table(&self) -> Result<Option<ArrowTable>> {
+    fn arrow_table(&mut self) -> Result<Option<ArrowTable>> {
         Ok(None)
     }
 }

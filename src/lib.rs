@@ -34,6 +34,7 @@
 
 #![feature(unboxed_closures)]
 #![feature(unsized_fn_params)]
+#![feature(async_closure)]
 #![feature(core_intrinsics)]
 
 // Enable use of arcon_macros within this crate
@@ -115,6 +116,11 @@ pub mod test_utils {
     }
 }
 
+pub mod client {
+    #[cfg(feature = "arcon_arrow")]
+    pub use crate::manager::query::{messages::*, QUERY_MANAGER_NAME};
+}
+
 /// Helper module that imports everything related to arcon into scope
 pub mod prelude {
     /*
@@ -173,6 +179,8 @@ pub mod prelude {
         AppenderIndex, EagerAppender, EagerHashTable, EagerValue, EmptyState, HashTable, IndexOps,
         LazyValue, LocalValue, StateConstructor, Timer as ArconTimer, ValueIndex,
     };
+
+    pub use prost::*;
 
     #[cfg(feature = "rayon")]
     pub use rayon::prelude::*;

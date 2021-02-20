@@ -86,8 +86,13 @@ where
     }
 
     #[cfg(feature = "arcon_arrow")]
-    fn arrow_table(&self) -> Result<Option<ArrowTable>> {
-        Ok(None)
+    fn arrow_table(&mut self) -> Result<Option<ArrowTable>> {
+        let (len, values) = self.hash_table.full_iter()?;
+        let mut table = V::arrow_table(len);
+        table
+            .load(values.filter_map(|v| v.ok()))
+            .map_err(|e| ArconStateError::Unknown { msg: e.to_string() })?;
+        Ok(Some(table))
     }
 }
 

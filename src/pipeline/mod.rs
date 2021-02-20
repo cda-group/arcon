@@ -1,6 +1,8 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
+#[cfg(feature = "arcon_arrow")]
+use crate::manager::query::{QueryManager, QUERY_MANAGER_NAME};
 use crate::{
     buffer::event::PoolInfo,
     conf::{ArconConf, ExecutionMode},
@@ -72,6 +74,8 @@ pub struct Pipeline {
     /// SnapshotManager component for this pipeline
     pub(crate) snapshot_manager: Arc<Component<SnapshotManager>>,
     endpoint_manager: Arc<Component<EndpointManager>>,
+    #[cfg(feature = "arcon_arrow")]
+    pub(crate) query_manager: Arc<Component<QueryManager>>,
 }
 
 impl Default for Pipeline {
@@ -87,6 +91,9 @@ impl Pipeline {
         let allocator = Arc::new(Mutex::new(Allocator::new(conf.allocator_capacity)));
         let (ctrl_system, data_system, snapshot_manager, epoch_manager) = Self::setup(&conf);
         let endpoint_manager = ctrl_system.create(EndpointManager::new);
+        #[cfg(feature = "arcon_arrow")]
+        let query_manager = ctrl_system.create(QueryManager::new);
+
         let timeout = std::time::Duration::from_millis(500);
 
         ctrl_system
@@ -94,9 +101,20 @@ impl Pipeline {
             .wait_timeout(timeout)
             .expect("EndpointManager comp never started!");
 
+        #[cfg(feature = "arcon_arrow")]
+        ctrl_system
+            .start_notify(&query_manager)
+            .wait_timeout(timeout)
+            .expect("QueryManager comp never started!");
+
         if conf.endpoint_host.is_some() {
             ctrl_system
                 .register_by_alias(&endpoint_manager, ENDPOINT_MANAGER_NAME)
+                .wait_expect(timeout, "Registration never completed.");
+
+            #[cfg(feature = "arcon_arrow")]
+            ctrl_system
+                .register_by_alias(&query_manager, QUERY_MANAGER_NAME)
                 .wait_expect(timeout, "Registration never completed.");
         }
 
@@ -109,6 +127,8 @@ impl Pipeline {
             epoch_manager,
             source_manager: None,
             endpoint_manager,
+            #[cfg(feature = "arcon_arrow")]
+            query_manager,
         }
     }
 

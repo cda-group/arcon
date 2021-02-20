@@ -1,6 +1,12 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
+#[cfg(feature = "arcon_arrow")]
+use crate::data::arrow::ImmutableTable;
+#[cfg(feature = "arcon_arrow")]
+use crate::index::ArconState;
+#[cfg(feature = "arcon_arrow")]
+use crate::manager::query::{QueryManagerPort, TableRegistration};
 use crate::{
     data::{ArconMessage, Epoch, NodeID, StateID, Watermark},
     index::{HashTable, IndexOps, LocalValue, StateConstructor, ValueIndex, EMPTY_STATE_ID},
@@ -133,6 +139,9 @@ where
     pub(crate) manager_port: ProvidedPort<NodeManagerPort>,
     /// Port for the SnapshotManager component
     pub(crate) snapshot_manager_port: RequiredPort<SnapshotManagerPort>,
+    /// Port for the QueryManager component
+    #[cfg(feature = "arcon_arrow")]
+    pub(crate) query_manager_port: RequiredPort<QueryManagerPort>,
     /// Actor Reference to the EpochManager
     epoch_manager: ActorRefStrong<EpochEvent>,
     /// Reference to KompactSystem that the Nodes run on..
@@ -151,6 +160,7 @@ where
     backend: Arc<B>,
     /// Internal manager state
     manager_state: NodeManagerState<B>,
+    latest_snapshot: Option<Snapshot>,
 }
 
 impl<OP, B> NodeManager<OP, B>
@@ -170,6 +180,8 @@ where
             state_id,
             manager_port: ProvidedPort::uninitialised(),
             snapshot_manager_port: RequiredPort::uninitialised(),
+            #[cfg(feature = "arcon_arrow")]
+            query_manager_port: RequiredPort::uninitialised(),
             epoch_manager,
             data_system,
             node_parallelism: num_cpus::get(),
@@ -179,6 +191,7 @@ where
             nodes: FxHashMap::default(),
             manager_state: NodeManagerState::new(backend.clone()),
             backend,
+            latest_snapshot: None,
         }
     }
 
@@ -201,14 +214,18 @@ where
 
             // Send snapshot to SnapshotManager
             if self.has_snapshot_state() {
+                let snapshot = Snapshot::new(
+                    std::any::type_name::<B>().to_string(),
+                    curr_epoch,
+                    checkpoint_dir.clone(),
+                );
+
                 self.snapshot_manager_port.trigger(SnapshotEvent::Snapshot(
                     self.state_id.clone(),
-                    Snapshot::new(
-                        std::any::type_name::<B>().to_string(),
-                        curr_epoch,
-                        checkpoint_dir.clone(),
-                    ),
+                    snapshot.clone(),
                 ));
+
+                self.latest_snapshot = Some(snapshot);
             }
 
             // Send Ack to EpochManager
@@ -271,6 +288,24 @@ where
                                     &port_ref,
                                 );
                             }
+
+                            #[cfg(feature = "arcon_arrow")]
+                            {
+                                if OP::OperatorState::has_tables() {
+                                    if let Some(snapshot) = &self.latest_snapshot {
+                                        let mut state =
+                                            OP::OperatorState::restore(snapshot.clone())?;
+                                        for table in state.tables() {
+                                            let imut = ImmutableTable::from(table);
+                                            let registration = TableRegistration {
+                                                epoch: 0, // TODO
+                                                table: imut,
+                                            };
+                                            self.query_manager_port.trigger(registration);
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -308,7 +343,7 @@ where
     B: Backend,
 {
     fn handle(&mut self, _: Never) -> Handled {
-        unreachable!("Never can't be instantiated!");
+        unreachable!("can't be instantiated!");
     }
 }
 
@@ -319,6 +354,17 @@ where
 {
     fn handle(&mut self, _: SnapshotEvent) -> Handled {
         Handled::Ok
+    }
+}
+
+#[cfg(feature = "arcon_arrow")]
+impl<OP, B> Require<QueryManagerPort> for NodeManager<OP, B>
+where
+    OP: Operator + 'static,
+    B: Backend,
+{
+    fn handle(&mut self, _: Never) -> Handled {
+        unreachable!("can't be instantiated!");
     }
 }
 
