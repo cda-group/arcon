@@ -172,6 +172,9 @@ impl ImmutableTable {
     pub fn name(&self) -> String {
         self.name.clone()
     }
+    pub fn schema(&self) -> Arc<Schema> {
+        self.schema.clone()
+    }
 }
 
 impl From<ArrowTable> for ImmutableTable {

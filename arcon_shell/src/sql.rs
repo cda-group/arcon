@@ -2,7 +2,7 @@ use arcon::{
     client::*,
     prelude::{Serialisable, *},
 };
-use prettytable::Table;
+use prettytable::{format, Table};
 use rustyline::{error::ReadlineError, Editor};
 use std::time::Duration;
 
@@ -68,9 +68,7 @@ impl Actor for QuerySender {
             self.outstanding_request.is_none(),
             "One request at the time only"
         );
-        let outgoing_msg = QueryRequestWrapper(QueryRequest {
-            sql_str: msg.request().sql_str.clone(),
-        });
+        let outgoing_msg = QueryRequestWrapper(msg.request().clone());
 
         self.query_manager
             .tell_with_sender(outgoing_msg, self, self.query_sender_path.clone());
@@ -113,31 +111,60 @@ pub fn repl(
     let history_path = format!("{}/sql_history.txt", repl_dir);
     let _ = repl.load_history(&history_path);
 
+    let context = String::from("sql[latest]>> ");
+
     loop {
-        match repl.readline("sql>> ") {
+        match repl.readline(&context) {
             Ok(input) if input == "tables" => {
-                unimplemented!();
-            }
-            Ok(input) if input == "help" => {
-                unimplemented!();
-            }
-            Ok(query) if query.trim_end().ends_with(';') => {
-                repl.add_history_entry(query.clone());
                 match query_sender
-                    .ask(QueryRequest { sql_str: query })
+                    .ask(QueryRequest { msg: Some(RequestMessage::Tables(0)) })
                     .wait_timeout(Duration::from_millis(10000)) // 10 seconds
                 {
-                    Ok(query_response) => {
-                        let table = Table::from_csv_string(&query_response.response)?;
-                        table.printstd();
+                    Ok(table_response) => {
+                        let response = table_response.msg.unwrap();
+                        match response {
+                            ResponseMessage::Tables(t) => {
+                                print_tables(t.tables);
+                            }
+                            _ => panic!("Got unexpected query response"),
+                        }
                     }
                     Err(_) => {
                         println!("Timed out while sending query!");
                     }
                 }
             }
-            Ok(_) => {
+            Ok(input) if input == "contexts" => {
+                unimplemented!();
+            }
+            Ok(input) if input == "help" => {
+                print_help();
+            }
+            Ok(query) if query.trim_end().ends_with(';') => {
+                repl.add_history_entry(query.clone());
+                match query_sender
+                    .ask(QueryRequest { msg: Some(RequestMessage::Query(query)) })
+                    .wait_timeout(Duration::from_millis(10000)) // 10 seconds
+                {
+                    Ok(query_response) => {
+                        let response = query_response.msg.unwrap();
+                        match response {
+                            ResponseMessage::QueryResult(data) => {
+                                let mut table = Table::from_csv_string(&data)?;
+                                table.set_format(*format::consts::FORMAT_NO_LINESEP_WITH_TITLE);
+                                table.printstd();
+                            }
+                            _ => panic!("Got unexpected query response"),
+                        }
+                    }
+                    Err(_) => {
+                        println!("Timed out while sending query!");
+                    }
+                }
+            }
+            Ok(query) => {
                 println!("Did you just try to execute a SQL query without ending it with a ;");
+                repl.add_history_entry(query);
             }
             Err(ReadlineError::Interrupted) => {
                 break;
@@ -154,4 +181,26 @@ pub fn repl(
     repl.save_history(&history_path)?;
 
     Ok(())
+}
+
+fn print_help() {
+    let table = table!(
+        ["Command", "Description"],
+        ["tables", "List all available tables"],
+        ["contexts", "List all availble contexts"],
+        ["set context", "Set the context [Default: latest]"]
+    );
+    table.printstd();
+}
+fn print_tables(tables: Vec<arcon::client::Table>) {
+    if tables.is_empty() {
+        println!("0 tables found!");
+    } else {
+        let mut pretty_table = Table::new();
+        pretty_table.add_row(row!["Name", "Fields"]);
+        for table in tables {
+            pretty_table.add_row(row![&table.name, &table.fields]);
+        }
+        pretty_table.printstd();
+    }
 }

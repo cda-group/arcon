@@ -63,10 +63,6 @@ async fn main() -> datafusion::error::Result<()> {
         .build();
 
     // ANCHOR: watch_thread
-    pipeline.watch(|epoch, _: MyState<Sled>| {
-        // Gain access to MyState per epoch
-        println!("Got State data for epoch {}", epoch);
-    });
 
     // ANCHOR_END: watch_thread
 

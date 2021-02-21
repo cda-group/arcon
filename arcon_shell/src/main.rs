@@ -1,5 +1,7 @@
 #[macro_use]
 extern crate clap;
+#[macro_use]
+extern crate prettytable;
 
 pub mod sql;
 
@@ -111,7 +113,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let _ = sql::repl(&repl_dir, query_sender_ref.clone());
             }
             Ok(input) if input == "help" => {
-                unimplemented!();
+                print_help();
             }
             Ok(_) => {
                 println!("Unknown Command, see \"help\"");
@@ -131,4 +133,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     repl.save_history(&shell_history_path)?;
 
     Ok(())
+}
+
+fn print_help() {
+    let table = table!(["Command", "Description"], ["sql", "Enter SQL repl"]);
+    table.printstd();
 }

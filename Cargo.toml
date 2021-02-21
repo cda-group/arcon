@@ -28,7 +28,7 @@ exclude = [
 [features]
 default = ["serde"]
 arcon_serde = ["serde_json", "bincode", "serde", "uuid/serde"]
-arcon_arrow = ["arrow", "datafusion", "arcon_macros/arcon_arrow"]
+arcon_arrow = ["arrow", "tokio", "datafusion", "arcon_macros/arcon_arrow"]
 unsafe_flight = ["abomonation", "abomonation_derive", "arcon_macros/unsafe_flight"]
 #kafka = ["rdkafka", "futures", "serde_json", "serde"]
 thread_pinning = ["kompact/thread_pinning"]

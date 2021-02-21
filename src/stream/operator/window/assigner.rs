@@ -421,7 +421,7 @@ mod tests {
 
         wait(1);
         assigner_ref.tell(watermark(moment + 12));
-        wait(1);
+        wait(2);
         sink.on_definition(|cd| {
             let r1 = &cd.data.len();
             assert_eq!(r1, &3); // 3 windows received
