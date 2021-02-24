@@ -111,11 +111,13 @@ pub fn repl(
     let history_path = format!("{}/sql_history.txt", repl_dir);
     let _ = repl.load_history(&history_path);
 
-    let context = String::from("sql[latest]>> ");
+    let mut curr_epoch = 0;
+    let mut context = epoch_context(curr_epoch);
 
     loop {
         match repl.readline(&context) {
             Ok(input) if input == "tables" => {
+                repl.add_history_entry(input.clone());
                 match query_sender
                     .ask(QueryRequest { msg: Some(RequestMessage::Tables(0)) })
                     .wait_timeout(Duration::from_millis(10000)) // 10 seconds
@@ -135,22 +137,52 @@ pub fn repl(
                 }
             }
             Ok(input) if input == "contexts" => {
-                unimplemented!();
+                repl.add_history_entry(input.clone());
+                match query_sender
+                    .ask(QueryRequest { msg: Some(RequestMessage::Contexts(0)) })
+                    .wait_timeout(Duration::from_millis(10000)) // 10 seconds
+                {
+                    Ok(response) => {
+                        let response = response.msg.unwrap();
+                        match response {
+                            ResponseMessage::Contexts(c) => {
+                                print_contexts(c.contexts);
+                            }
+                            _ => panic!("Got unexpected query response"),
+                        }
+                    }
+                    Err(_) => {
+                        println!("Timed out while sending query!");
+                    }
+                }
             }
             Ok(input) if input == "help" => {
                 print_help();
             }
+            Ok(input) if input.starts_with("set epoch") => {
+                let data: Vec<&str> = input.split(' ').collect();
+                if data.len() == 3 {
+                    let epoch = data[2].parse::<u64>().unwrap();
+                    curr_epoch = epoch;
+                    context = epoch_context(curr_epoch);
+                }
+            }
             Ok(query) if query.trim_end().ends_with(';') => {
                 repl.add_history_entry(query.clone());
+                let exec_request = ExecRequest {
+                    sql_str: query,
+                    epoch: curr_epoch,
+                };
                 match query_sender
-                    .ask(QueryRequest { msg: Some(RequestMessage::Query(query)) })
+                    .ask(QueryRequest { msg: Some(RequestMessage::Query(exec_request)) })
                     .wait_timeout(Duration::from_millis(10000)) // 10 seconds
                 {
                     Ok(query_response) => {
                         let response = query_response.msg.unwrap();
                         match response {
-                            ResponseMessage::QueryResult(data) => {
-                                let mut table = Table::from_csv_string(&data)?;
+                            ResponseMessage::QueryResult(exec_result) => {
+                                println!("{} rows in set. Query took {} seconds", exec_result.rows, exec_result.runtime);
+                                let mut table = Table::from_csv_string(&exec_result.response)?;
                                 table.set_format(*format::consts::FORMAT_NO_LINESEP_WITH_TITLE);
                                 table.printstd();
                             }
@@ -183,6 +215,10 @@ pub fn repl(
     Ok(())
 }
 
+fn epoch_context(epoch: u64) -> String {
+    format!("sql[epoch: {}]>> ", epoch)
+}
+
 fn print_help() {
     let table = table!(
         ["Command", "Description"],
@@ -202,5 +238,30 @@ fn print_tables(tables: Vec<arcon::client::Table>) {
             pretty_table.add_row(row![&table.name, &table.fields]);
         }
         pretty_table.printstd();
+    }
+}
+
+fn print_contexts(mut contexts: Vec<arcon::client::Context>) {
+    if contexts.is_empty() {
+        println!("0 contexts found!");
+    } else {
+        let mut table = Table::new();
+        table.add_row(row!["Epoch", "Status", "Registration Timestamp"]);
+
+        // sort contexts by epoch
+        contexts.sort_by(|a, b| b.epoch.cmp(&a.epoch));
+
+        for context in contexts {
+            let status = match context.committed {
+                true => "committed",
+                false => "uncommitted",
+            };
+            table.add_row(row![
+                &context.epoch,
+                status,
+                &context.registration_timestamp
+            ]);
+        }
+        table.printstd();
     }
 }

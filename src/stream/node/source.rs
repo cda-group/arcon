@@ -3,6 +3,7 @@
 
 use crate::{
     data::{ArconEvent, Epoch, Watermark},
+    manager::source::{SourceManagerEvent, SourceManagerPort},
     stream::{
         channel::strategy::ChannelStrategy,
         source::{NodeContext, Source, SourceContext},
@@ -36,6 +37,7 @@ where
 {
     /// Component context
     ctx: ComponentContext<Self>,
+    manager_port: RequiredPort<SourceManagerPort>,
     node_context: RefCell<NodeContext<S>>,
     loopback_send: RequiredPort<LoopbackPort>,
     loopback_receive: ProvidedPort<LoopbackPort>,
@@ -49,9 +51,11 @@ where
     pub fn new(source: S, channel_strategy: ChannelStrategy<S::Data>) -> Self {
         Self {
             ctx: ComponentContext::uninitialised(),
+            manager_port: RequiredPort::uninitialised(),
             node_context: RefCell::new(NodeContext {
                 channel_strategy,
                 watermark: 0,
+                ended: false,
             }),
             loopback_send: RequiredPort::uninitialised(),
             loopback_receive: ProvidedPort::uninitialised(),
@@ -112,12 +116,25 @@ where
             self,
             &mut self.node_context.borrow_mut(),
         ));
-        self.loopback_send.trigger(ProcessSource);
+        if self.node_context.borrow().ended {
+            self.manager_port.trigger(SourceManagerEvent::End);
+        } else {
+            self.loopback_send.trigger(ProcessSource);
+        }
         Handled::Ok
     }
 }
 
 impl<S> Require<LoopbackPort> for SourceNode<S>
+where
+    S: Source,
+{
+    fn handle(&mut self, _event: Never) -> Handled {
+        unreachable!("Never type has no instance");
+    }
+}
+
+impl<S> Require<SourceManagerPort> for SourceNode<S>
 where
     S: Source,
 {

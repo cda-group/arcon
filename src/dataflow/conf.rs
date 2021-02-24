@@ -4,7 +4,7 @@
 use crate::{
     data::{ArconType, StateID},
     index::{ArconState, EMPTY_STATE_ID},
-    stream::{operator::Operator, time::ArconTime},
+    stream::{operator::Operator, source::Source, time::ArconTime},
 };
 use arcon_error::*;
 use hocon::HoconLoader;
@@ -122,4 +122,12 @@ impl<S: ArconType> Default for SourceConf<S> {
             time: Default::default(),
         }
     }
+}
+
+#[derive(Clone)]
+pub struct SourceBuilder<S: Source, Backend = DefaultBackend> {
+    /// Source Constructor
+    pub constructor: Arc<dyn Fn(Arc<Backend>) -> S + Send + Sync + 'static>,
+    /// Source Config
+    pub conf: SourceConf<S::Data>,
 }

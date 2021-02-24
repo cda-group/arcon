@@ -6,7 +6,12 @@ use arrow::{datatypes::Schema, util::pretty::*};
 use datafusion::prelude::*;
 use kompact::prelude::*;
 use prost::*;
-use std::{collections::HashSet, fmt, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt,
+    sync::Arc,
+    time::Instant,
+};
 
 pub const QUERY_MANAGER_NAME: &str = "query_manager";
 
@@ -26,15 +31,43 @@ pub mod messages {
         pub tables: Vec<Table>,
     }
 
-    #[derive(Message)]
+    #[derive(Clone, Message)]
     pub struct Context {
+        #[prost(uint64)]
+        pub epoch: u64,
+        #[prost(bool)]
+        pub committed: bool,
+        #[prost(uint64)]
+        pub registration_timestamp: u64,
+    }
+
+    #[derive(Clone, Message)]
+    pub struct Contexts {
+        #[prost(message, repeated)]
+        pub contexts: Vec<Context>,
+    }
+
+    #[derive(Clone, Message)]
+    pub struct ExecResult {
+        #[prost(string)]
+        pub response: String,
+        #[prost(float)]
+        pub runtime: f32,
+        #[prost(uint64)]
+        pub rows: u64,
+    }
+
+    #[derive(Clone, Message)]
+    pub struct ExecRequest {
+        #[prost(string)]
+        pub sql_str: String,
         #[prost(uint64)]
         pub epoch: u64,
     }
 
     #[derive(Clone, Message)]
     pub struct QueryRequest {
-        #[prost(oneof = "RequestMessage", tags = "1,2")]
+        #[prost(oneof = "RequestMessage", tags = "1, 2, 3")]
         pub msg: Option<RequestMessage>,
     }
 
@@ -43,20 +76,24 @@ pub mod messages {
         #[prost(message, tag = "1")]
         Tables(u64),
         #[prost(message, tag = "2")]
-        Query(String),
+        Query(ExecRequest),
+        #[prost(message, tag = "3")]
+        Contexts(u64),
     }
 
     #[derive(Clone, Oneof)]
     pub enum ResponseMessage {
         #[prost(message, tag = "1")]
-        QueryResult(String),
+        QueryResult(ExecResult),
         #[prost(message, tag = "2")]
         Tables(Tables),
+        #[prost(message, tag = "3")]
+        Contexts(Contexts),
     }
 
     #[derive(Clone, Message)]
     pub struct QueryResponse {
-        #[prost(oneof = "ResponseMessage", tags = "1, 2")]
+        #[prost(oneof = "ResponseMessage", tags = "1, 2, 3")]
         pub msg: Option<ResponseMessage>,
     }
 
@@ -114,6 +151,19 @@ pub mod messages {
 }
 
 #[derive(Clone)]
+pub struct QueryContext {
+    pub ctx: ExecutionContext,
+    pub committed: bool,
+    pub registration_timestamp: u64,
+}
+
+#[derive(Debug, Clone)]
+pub enum QueryManagerMsg {
+    TableRegistration(TableRegistration),
+    EpochCommit(u64),
+}
+
+#[derive(Clone)]
 pub struct TableRegistration {
     pub epoch: u64,
     pub table: ImmutableTable,
@@ -129,15 +179,16 @@ pub struct QueryManagerPort;
 
 impl Port for QueryManagerPort {
     type Indication = Never;
-    type Request = TableRegistration;
+    type Request = QueryManagerMsg;
 }
 
 #[derive(ComponentDefinition)]
 pub struct QueryManager {
     ctx: ComponentContext<Self>,
     pub(crate) manager_port: ProvidedPort<QueryManagerPort>,
-    query_ctx: ExecutionContext,
     known_tables: HashSet<(String, String)>,
+    known_contexts: HashMap<u64, QueryContext>,
+    committed_epochs: HashSet<u64>,
 }
 
 impl QueryManager {
@@ -145,18 +196,57 @@ impl QueryManager {
         Self {
             ctx: ComponentContext::uninitialised(),
             manager_port: ProvidedPort::uninitialised(),
-            query_ctx: ExecutionContext::new(),
             known_tables: HashSet::default(),
+            known_contexts: HashMap::default(),
+            committed_epochs: HashSet::default(),
         }
     }
 
+    #[inline]
+    fn new_query_ctx() -> QueryContext {
+        QueryContext {
+            committed: false,
+            ctx: ExecutionContext::new(),
+            registration_timestamp: crate::util::get_system_time(),
+        }
+    }
+
+    #[inline]
+    fn handle_epoch_commit(&mut self, epoch: u64) {
+        if let Some(context) = self.known_contexts.get_mut(&epoch) {
+            // if the context has been registred already, then update status
+            context.committed = true;
+        } else {
+            // if context has not yet been created due to lag in message sending,
+            // add epoch to committed epochs set and handle at registration
+            self.committed_epochs.insert(epoch);
+        }
+    }
+
+    #[inline]
     fn handle_registation(&mut self, table_reg: TableRegistration) {
         let table_name = table_reg.table.name();
         let schema = table_reg.table.schema();
-        trace!(self.ctx.log(), "Registering table {}", table_name);
+        let epoch = table_reg.epoch;
+
+        let query_ctx = self
+            .known_contexts
+            .entry(epoch)
+            .or_insert(Self::new_query_ctx());
+
+        if let Some(_) = self.committed_epochs.take(&epoch) {
+            // If this epoch is found in our committed epochs set,
+            // then remove and update query_ctx status...
+            query_ctx.committed = true;
+        }
+
         let mem_table = table_reg.table.mem_table().unwrap();
-        self.query_ctx
+
+        query_ctx
+            .ctx
             .register_table(&table_name, Box::new(mem_table));
+
+        trace!(self.ctx.log(), "Registering table {}", table_name);
 
         let fields_string = Self::construct_fields_str(schema);
         self.known_tables.insert((table_name, fields_string));
@@ -170,7 +260,7 @@ impl QueryManager {
         data.trim_end().to_string()
     }
 
-    fn tables(&mut self, destination: ActorPath) {
+    fn tables(&mut self, destination: ActorPath) -> Handled {
         let mut tables = Vec::new();
         for (table, fields) in &self.known_tables {
             let table = messages::Table {
@@ -189,30 +279,75 @@ impl QueryManager {
         if let Err(err) = destination.tell_serialised(response, self) {
             error!(self.ctx.log(), "Failed to send tables with err {:?}", err);
         }
+
+        Handled::Ok
     }
 
-    fn contexts(&mut self, destination: ActorPath) {
-        unimplemented!();
+    fn contexts(&mut self, destination: ActorPath) -> Handled {
+        let mut contexts = Vec::new();
+        for (epoch, query_ctx) in &self.known_contexts {
+            let context = messages::Context {
+                epoch: *epoch,
+                committed: query_ctx.committed,
+                registration_timestamp: query_ctx.registration_timestamp,
+            };
+            contexts.push(context);
+        }
+        let response = messages::QueryResponse {
+            msg: Some(messages::ResponseMessage::Contexts(messages::Contexts {
+                contexts,
+            })),
+        };
+
+        if let Err(err) = destination.tell_serialised(response, self) {
+            error!(self.ctx.log(), "Failed to send contexts with err {:?}", err);
+        }
+
+        Handled::Ok
     }
 
     #[tokio::main]
-    async fn sql_query(&mut self, input: &str) -> String {
-        match self.query_ctx.sql(&input) {
+    async fn sql_query(&mut self, exec_request: messages::ExecRequest) -> messages::ExecResult {
+        let epoch = exec_request.epoch;
+        if !self.known_contexts.contains_key(&epoch) {
+            return messages::ExecResult {
+                response: format!("Could not find query context for epoch {}", epoch),
+                runtime: 0.0,
+                rows: 0,
+            };
+        }
+        info!(self.ctx.log(), "Executing Query Using epoch {}", epoch);
+        let query_ctx = self.known_contexts.get_mut(&epoch).unwrap();
+
+        let now = Instant::now();
+        match query_ctx.ctx.sql(&exec_request.sql_str) {
             Ok(sql_query) => match sql_query.collect().await {
-                Ok(sql_result) => pretty_format_batches(&sql_result).unwrap(),
-                Err(err) => err.to_string(),
+                Ok(sql_result) => messages::ExecResult {
+                    response: pretty_format_batches(&sql_result).unwrap(),
+                    runtime: now.elapsed().as_secs_f32(),
+                    rows: sql_result.iter().map(|b| b.num_rows()).sum::<usize>() as u64,
+                },
+                Err(err) => messages::ExecResult {
+                    response: err.to_string(),
+                    runtime: now.elapsed().as_secs_f32(),
+                    rows: 0,
+                },
             },
-            Err(err) => err.to_string(),
+            Err(err) => messages::ExecResult {
+                response: err.to_string(),
+                runtime: now.elapsed().as_secs_f32(),
+                rows: 0,
+            },
         }
     }
 
-    fn query(&mut self, sql_str: String, destination: ActorPath) -> Handled {
-        info!(self.ctx.log(), "Executing Query {:?}", sql_str);
+    fn query(&mut self, exec_request: messages::ExecRequest, destination: ActorPath) -> Handled {
+        info!(self.ctx.log(), "Executing Query {:?}", exec_request.sql_str);
         self.spawn_local(move |mut async_self| async move {
-            let response_str = async_self.sql_query(&sql_str);
+            let exec_result = async_self.sql_query(exec_request);
 
             let response = messages::QueryResponse {
-                msg: Some(messages::ResponseMessage::QueryResult(response_str)),
+                msg: Some(messages::ResponseMessage::QueryResult(exec_result)),
             };
 
             if let Err(err) = destination.tell_serialised(response, &*async_self) {
@@ -243,11 +378,11 @@ impl Actor for QueryManager {
             Ok(request) => {
                 let request_msg = request.msg.unwrap();
                 match request_msg {
-                    messages::RequestMessage::Tables(_) => {
-                        self.tables(msg.sender);
-                        Handled::Ok
+                    messages::RequestMessage::Tables(_) => self.tables(msg.sender),
+                    messages::RequestMessage::Query(exec_request) => {
+                        self.query(exec_request, msg.sender)
                     }
-                    messages::RequestMessage::Query(sql_str) => self.query(sql_str, msg.sender),
+                    messages::RequestMessage::Contexts(_) => self.contexts(msg.sender),
                 }
             }
             Err(err) => {
@@ -271,8 +406,11 @@ impl ComponentLifecycle for QueryManager {
 }
 
 impl Provide<QueryManagerPort> for QueryManager {
-    fn handle(&mut self, table_reg: TableRegistration) -> Handled {
-        self.handle_registation(table_reg);
+    fn handle(&mut self, msg: QueryManagerMsg) -> Handled {
+        match msg {
+            QueryManagerMsg::TableRegistration(reg) => self.handle_registation(reg),
+            QueryManagerMsg::EpochCommit(epoch) => self.handle_epoch_commit(epoch),
+        }
         Handled::Ok
     }
 }

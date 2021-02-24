@@ -31,6 +31,7 @@ where
 {
     pub(crate) channel_strategy: ChannelStrategy<S::Data>,
     pub(crate) watermark: u64,
+    pub(crate) ended: bool,
 }
 
 /// All Source implementations have access to a Context object
@@ -81,6 +82,6 @@ where
     }
 
     pub fn signal_end(&mut self) {
-        // TODO
+        self.node_context.ended = true;
     }
 }

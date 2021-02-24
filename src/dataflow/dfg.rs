@@ -55,7 +55,7 @@ impl DFGNode {
 }
 
 pub enum DFGNodeKind {
-    Source(SourceKind, ChannelKind, SourceManagerConstructor),
+    Source(ChannelKind, SourceManagerConstructor),
     Node(NodeManagerConstructor),
 }
 

@@ -6,7 +6,7 @@ use crate::data::arrow::ImmutableTable;
 #[cfg(feature = "arcon_arrow")]
 use crate::index::ArconState;
 #[cfg(feature = "arcon_arrow")]
-use crate::manager::query::{QueryManagerPort, TableRegistration};
+use crate::manager::query::{QueryManagerMsg, QueryManagerPort, TableRegistration};
 use crate::{
     data::{ArconMessage, Epoch, NodeID, StateID, Watermark},
     index::{HashTable, IndexOps, LocalValue, StateConstructor, ValueIndex, EMPTY_STATE_ID},
@@ -298,10 +298,12 @@ where
                                         for table in state.tables() {
                                             let imut = ImmutableTable::from(table);
                                             let registration = TableRegistration {
-                                                epoch: 0, // TODO
+                                                epoch: epoch.epoch,
                                                 table: imut,
                                             };
-                                            self.query_manager_port.trigger(registration);
+                                            self.query_manager_port.trigger(
+                                                QueryManagerMsg::TableRegistration(registration),
+                                            );
                                         }
                                     }
                                 }

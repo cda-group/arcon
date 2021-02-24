@@ -7,8 +7,8 @@ use crate::{
     buffer::event::PoolInfo,
     conf::{ArconConf, ExecutionMode},
     dataflow::{
-        conf::{DefaultBackend, SourceConf},
-        constructor::{source_cons, source_manager_cons},
+        conf::{DefaultBackend, SourceBuilder, SourceConf},
+        constructor::source_manager_constructor,
         dfg::*,
         stream::Context,
     },
@@ -107,7 +107,11 @@ impl Pipeline {
             .wait_timeout(timeout)
             .expect("QueryManager comp never started!");
 
-        if conf.endpoint_host.is_some() {
+        #[cfg(feature = "arcon_arrow")]
+        biconnect_components(&query_manager, epoch_manager.as_ref().unwrap())
+            .expect("Failed to connect EpochManager and QueryManager");
+
+        if conf.ctrl_system_host.is_some() {
             ctrl_system
                 .register_by_alias(&endpoint_manager, ENDPOINT_MANAGER_NAME)
                 .wait_expect(timeout, "Registration never completed.");
@@ -182,28 +186,29 @@ impl Pipeline {
     /// Create a non-parallel data source
     ///
     /// Returns a [`Stream`] object that users may execute transformations on.
-    pub fn source<S>(self, source: S, conf: SourceConf<S::Data>) -> Stream<S::Data>
+    pub fn source<S>(self, builder: SourceBuilder<S>) -> Stream<S::Data>
     where
         S: Source,
     {
         assert_ne!(
-            conf.time == ArconTime::Event,
-            conf.extractor.is_none(),
+            builder.conf.time == ArconTime::Event,
+            builder.conf.extractor.is_none(),
             "Cannot use ArconTime::Event without specifying a timestamp extractor"
         );
-        let cons = source_cons(source, self.get_pool_info());
+
         let mut state_dir = self.arcon_conf().state_dir.clone();
         state_dir.push("source_manager");
         let backend = Arc::new(DefaultBackend::create(&state_dir).unwrap());
-        let manager_cons = source_manager_cons(
+        let time = builder.conf.time;
+        let manager_constructor = source_manager_constructor::<S, _>(
             String::from("source_manager"),
+            builder,
             backend,
             self.arcon_conf().watermark_interval,
-            conf.time,
+            time,
         );
-
         let mut ctx = Context::new(self);
-        let kind = DFGNodeKind::Source(SourceKind::Single(cons), Default::default(), manager_cons);
+        let kind = DFGNodeKind::Source(Default::default(), manager_constructor);
         let dfg_node = DFGNode::new(kind, vec![]);
         ctx.dfg.insert(dfg_node);
         Stream::new(ctx)
@@ -235,8 +240,14 @@ impl Pipeline {
         );
         let mut conf = SourceConf::default();
         f(&mut conf);
-        let source = LocalFileSource::new(path, conf.clone());
-        self.source(source, conf)
+
+        let conf_copy = conf.clone();
+        let builder = SourceBuilder {
+            constructor: Arc::new(move |_| LocalFileSource::new(path.clone(), conf.clone())),
+            conf: conf_copy,
+        };
+
+        self.source(builder)
     }
 
     /// Creates a bounded data Stream using a Collection
@@ -259,12 +270,18 @@ impl Pipeline {
         let collection = i.into();
         let mut conf = SourceConf::default();
         f(&mut conf);
-        let source = CollectionSource::new(collection, conf.clone());
-        self.source(source, conf)
+
+        let conf_copy = conf.clone();
+
+        let builder = SourceBuilder {
+            constructor: Arc::new(move |_| CollectionSource::new(collection.clone(), conf.clone())),
+            conf: conf_copy,
+        };
+        self.source(builder)
     }
 
-    // Creates a PoolInfo struct to be used by a ChannelStrategy
-    pub fn get_pool_info(&self) -> PoolInfo {
+    // Internal helper for creating PoolInfo for a ChannelStrategy
+    pub(crate) fn get_pool_info(&self) -> PoolInfo {
         PoolInfo::new(
             self.conf.channel_batch_size,
             self.conf.buffer_pool_size,

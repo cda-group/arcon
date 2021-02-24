@@ -37,14 +37,14 @@ impl<B: Backend> StateConstructor for MyState<B> {
 #[tokio::main]
 async fn main() -> datafusion::error::Result<()> {
     let conf = ArconConf {
-        epoch_interval: 10000,
-        endpoint_host: Some("127.0.0.1:2000".to_string()),
+        epoch_interval: 2500,
+        ctrl_system_host: Some("127.0.0.1:2000".to_string()),
         ..Default::default()
     };
 
     let mut pipeline = Pipeline::with_conf(conf)
         .collection(
-            (0..10000000)
+            (0..1000000)
                 .map(|x| Event { id: x, data: 1.5 })
                 .collect::<Vec<Event>>(),
             |conf| {

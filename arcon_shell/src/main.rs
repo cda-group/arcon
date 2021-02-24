@@ -101,7 +101,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let query_sender_ref = query_sender.actor_ref().hold().expect("fail");
 
-    println!("{}", SHELL_MSG);
+    ptable!([SHELL_MSG]);
 
     let mut repl = Editor::<()>::new();
     let shell_history_path = format!("{}/shell_history.txt", repl_dir);
@@ -136,6 +136,5 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn print_help() {
-    let table = table!(["Command", "Description"], ["sql", "Enter SQL repl"]);
-    table.printstd();
+    ptable!(["Command", "Description"], ["sql", "Enter SQL repl"]);
 }

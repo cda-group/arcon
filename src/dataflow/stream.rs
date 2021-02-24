@@ -6,7 +6,7 @@ use crate::{
     dataflow::{
         conf::OperatorBuilder,
         constructor::*,
-        dfg::{ChannelKind, DFGNode, DFGNodeID, DFGNodeKind, SourceKind, DFG},
+        dfg::{ChannelKind, DFGNode, DFGNodeID, DFGNodeKind, DFG},
     },
     pipeline::{AssembledPipeline, Pipeline},
     stream::operator::Operator,
@@ -96,22 +96,12 @@ impl<IN: ArconType> Stream<IN> {
 
         for dfg_node in self.ctx.dfg.graph.into_iter().rev() {
             match dfg_node.kind {
-                DFGNodeKind::Source(source_kind, channel_kind, source_manager_cons) => {
-                    match source_kind {
-                        SourceKind::Single(constructor) => {
-                            let comp = constructor(
-                                target_nodes.take().unwrap(),
-                                channel_kind,
-                                &mut self.ctx.pipeline.data_system(),
-                            );
+                DFGNodeKind::Source(channel_kind, source_manager_cons) => {
+                    let nodes = target_nodes.take().unwrap();
+                    let source_manager =
+                        source_manager_cons(nodes, channel_kind, &mut self.ctx.pipeline);
 
-                            let source_manager =
-                                source_manager_cons(vec![comp], &mut self.ctx.pipeline);
-
-                            self.ctx.pipeline.source_manager = Some(source_manager);
-                        }
-                        SourceKind::Parallel => {}
-                    }
+                    self.ctx.pipeline.source_manager = Some(source_manager);
                 }
                 DFGNodeKind::Node(manager_cons) => {
                     let (channel_kind, components) = {

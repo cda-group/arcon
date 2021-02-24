@@ -10,10 +10,17 @@ use arcon_state::Backend;
 use kompact::{component::AbstractComponent, prelude::*};
 use std::sync::Arc;
 
+#[derive(Debug, Clone)]
+pub enum SourceManagerEvent {
+    /// Signal the end of a Source Stream
+    End,
+}
+
 pub struct SourceManagerPort;
+
 impl Port for SourceManagerPort {
     type Indication = Never;
-    type Request = Never;
+    type Request = SourceManagerEvent;
 }
 
 /// Component that manages a set of Arcon sources
@@ -21,6 +28,7 @@ impl Port for SourceManagerPort {
 pub(crate) struct SourceManager<B: Backend> {
     /// Component Context
     ctx: ComponentContext<Self>,
+    manager_port: ProvidedPort<SourceManagerPort>,
     /// What type of time that is used.
     ///
     /// Either Event or Processing
@@ -34,10 +42,11 @@ pub(crate) struct SourceManager<B: Backend> {
     ///
     /// May contain more than 1 component if the source supports parallelism
     pub(crate) sources: Vec<Arc<dyn AbstractComponent<Message = SourceEvent>>>,
+    pub source_refs: Vec<ActorRefStrong<SourceEvent>>,
     /// A shared backend for sources
     _backend: Arc<B>,
     /// Reference to the EpochManager
-    _epoch_manager: ActorRefStrong<EpochEvent>,
+    epoch_manager: ActorRefStrong<EpochEvent>,
 }
 
 impl<B: Backend> SourceManager<B> {
@@ -45,20 +54,27 @@ impl<B: Backend> SourceManager<B> {
         state_id: StateID,
         arcon_time: ArconTime,
         watermark_interval: u64,
-        sources: Vec<Arc<dyn AbstractComponent<Message = SourceEvent>>>,
         epoch_manager: ActorRefStrong<EpochEvent>,
         backend: Arc<B>,
     ) -> Self {
         Self {
             ctx: ComponentContext::uninitialised(),
+            manager_port: ProvidedPort::uninitialised(),
             arcon_time,
             watermark_interval,
             watermark_timeout: None,
             state_id,
-            sources,
+            sources: Vec::new(),
+            source_refs: Vec::new(),
             _backend: backend,
-            _epoch_manager: epoch_manager,
+            epoch_manager,
         }
+    }
+
+    pub(crate) fn add_source(&mut self, source: Arc<dyn AbstractComponent<Message = SourceEvent>>) {
+        let source_ref = source.actor_ref().hold().expect("failed to fetch ref");
+        self.sources.push(source);
+        self.source_refs.push(source_ref);
     }
 
     fn handle_watermark_timeout(&mut self, timeout_id: ScheduledTimer) -> Handled {
@@ -109,13 +125,27 @@ impl<B: Backend> Actor for SourceManager<B> {
             self.watermark_timeout = Some(timeout);
         }
 
-        for source in &self.sources {
-            source.actor_ref().tell(msg.clone());
+        for source_ref in &self.source_refs {
+            source_ref.tell(msg.clone());
         }
 
         Handled::Ok
     }
     fn receive_network(&mut self, _: NetMessage) -> Handled {
         unimplemented!();
+    }
+}
+
+impl<B> Provide<SourceManagerPort> for SourceManager<B>
+where
+    B: Backend,
+{
+    fn handle(&mut self, event: SourceManagerEvent) -> Handled {
+        match event {
+            SourceManagerEvent::End => {
+                self.epoch_manager.tell(EpochEvent::Halt);
+            }
+        }
+        Handled::Ok
     }
 }

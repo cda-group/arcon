@@ -1,6 +1,8 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
+#[cfg(feature = "arcon_arrow")]
+use crate::manager::query::{QueryManagerMsg, QueryManagerPort};
 use crate::{
     data::{Epoch, StateID},
     stream::node::source::SourceEvent,
@@ -16,6 +18,7 @@ pub enum EpochEvent {
     /// Acknowledgement that `StateID` has committed a checkpoint for epoch `Epoch`
     Ack(StateID, Epoch),
     Register(StateID),
+    Halt,
 }
 
 /// Component that injects epoch makers into an Arcon Pipeline
@@ -41,6 +44,8 @@ pub struct EpochManager {
     epoch_acks: HashSet<(StateID, Epoch)>,
     /// Actor Reference to the SnapshotManager
     snapshot_manager: ActorRefStrong<EpochCommit>,
+    #[cfg(feature = "arcon_arrow")]
+    query_manager_port: RequiredPort<QueryManagerPort>,
 }
 
 impl EpochManager {
@@ -56,6 +61,8 @@ impl EpochManager {
             snapshot_manager,
             source_manager: None,
             epoch_timeout: None,
+            #[cfg(feature = "arcon_arrow")]
+            query_manager_port: RequiredPort::uninitialised(),
         }
     }
     fn handle_timeout(&mut self, timeout_id: ScheduledTimer) -> Handled {
@@ -88,6 +95,9 @@ impl EpochManager {
                             self.last_committed_epoch = epoch.epoch;
                             self.ongoing_epoch_commit = epoch.epoch + 1;
                             self.snapshot_manager.tell(EpochCommit(epoch));
+                            #[cfg(feature = "arcon_arrow")]
+                            self.query_manager_port
+                                .trigger(QueryManagerMsg::EpochCommit(epoch.epoch));
                             self.epoch_acks.clear();
                         }
                     }
@@ -104,6 +114,21 @@ impl EpochManager {
                     panic!("State ID {} cannot be registered multiple times", state_id);
                 } else {
                     self.known_state_ids.insert(state_id);
+                }
+            }
+            EpochEvent::Halt => {
+                if let Some(source_manager) = &self.source_manager {
+                    // Send a final epoch marker before revoking the timer
+                    info!(
+                        self.ctx.log(),
+                        "EpochManager sending final epoch marker {:?}", self.next_epoch
+                    );
+                    source_manager.tell(SourceEvent::Epoch(Epoch::new(self.next_epoch)));
+                    if let Some(timeout) = self.epoch_timeout.take() {
+                        self.cancel_timer(timeout);
+                    }
+                } else {
+                    error!(self.ctx.log(), "SourceManager was never set");
                 }
             }
         }
@@ -133,6 +158,12 @@ impl ComponentLifecycle for EpochManager {
         if let Some(timeout) = self.epoch_timeout.take() {
             self.cancel_timer(timeout);
         }
+        Handled::Ok
+    }
+}
+#[cfg(feature = "arcon_arrow")]
+impl Require<QueryManagerPort> for EpochManager {
+    fn handle(&mut self, _: Never) -> Handled {
         Handled::Ok
     }
 }

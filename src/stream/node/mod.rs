@@ -321,6 +321,7 @@ where
                     }
                 }
                 ArconEvent::Epoch(e) => {
+                    debug!(self.ctx.log(), "Got Epoch {:?}", e);
                     if e < self.node_state.current_epoch {
                         continue 'event_loop;
                     }
