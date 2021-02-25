@@ -35,7 +35,7 @@ use kompact::{
         RequiredRef, *,
     },
 };
-use std::{any::Any, sync::Arc};
+use std::{any::Any, convert::TryInto, sync::Arc};
 
 pub type SourceManagerConstructor = Box<
     dyn FnOnce(Vec<Arc<dyn Any + Send + Sync>>, ChannelKind, &mut Pipeline) -> ErasedSourceManager,
@@ -106,12 +106,8 @@ pub(crate) fn source_manager_constructor<S: Source + 'static, B: Backend>(
             let source_cons = builder.constructor;
             let source = source_cons(backend.clone());
             let pool_info = pipeline.get_pool_info();
-            let channel_strategy = channel_strategy(
-                components.clone(),
-                NodeID::new(0),
-                pool_info.clone(),
-                channel_kind,
-            );
+            let channel_strategy =
+                channel_strategy(components.clone(), NodeID::new(0), pool_info, channel_kind);
             let source_node = SourceNode::new(source, channel_strategy);
             let source_node_comp = pipeline.data_system().create(|| source_node);
 
@@ -215,13 +211,12 @@ pub(crate) fn node_manager_constructor<OP: Operator + 'static, B: Backend>(
                 _ => panic!("Not supported yet"),
             };
 
-            let mut curr_node_id = 0;
             let pool_info = pipeline.get_pool_info();
             let operator = builder.constructor;
 
-            for _ in 0..instances {
+            for (curr_node_id, _) in (0..instances).enumerate() {
                 let node_descriptor = format!("{}_{}", descriptor, curr_node_id);
-                let node_id = NodeID::new(curr_node_id);
+                let node_id = NodeID::new(curr_node_id.try_into().unwrap());
 
                 let node = Node::new(
                     node_descriptor,
@@ -249,8 +244,6 @@ pub(crate) fn node_manager_constructor<OP: Operator + 'static, B: Backend>(
                     // Insert the created Node into the NodeManager
                     cd.nodes.insert(node_id, (node_comp, required_ref));
                 });
-
-                curr_node_id += 1;
             }
 
             let nodes: ErasedComponents = manager_comp.on_definition(|cd| {

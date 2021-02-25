@@ -232,9 +232,9 @@ impl QueryManager {
         let query_ctx = self
             .known_contexts
             .entry(epoch)
-            .or_insert(Self::new_query_ctx());
+            .or_insert_with(Self::new_query_ctx);
 
-        if let Some(_) = self.committed_epochs.take(&epoch) {
+        if self.committed_epochs.take(&epoch).is_some() {
             // If this epoch is found in our committed epochs set,
             // then remove and update query_ctx status...
             query_ctx.committed = true;

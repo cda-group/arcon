@@ -338,6 +338,7 @@ where
         self.handle.insert_all_by_ref(iter)
     }
 
+    #[allow(clippy::type_complexity)]
     pub fn full_iter(&mut self) -> Result<(usize, Box<dyn Iterator<Item = Result<V>> + '_>)> {
         // call our persist method to force possible modified values to the backend
         self.persist()?;

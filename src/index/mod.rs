@@ -107,9 +107,7 @@ impl ArconState for EmptyState {
 impl StateConstructor for EmptyState {
     type BackendType = crate::Sled;
 
-    fn new(_: Arc<Self::BackendType>) -> Self {
-        ()
-    }
+    fn new(_: Arc<Self::BackendType>) -> Self {}
 }
 
 impl IndexOps for EmptyState {

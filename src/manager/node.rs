@@ -102,7 +102,7 @@ impl<B: Backend> StateConstructor for NodeManagerState<B> {
             watermarks: HashTable::with_capacity("_watermarks", backend.clone(), 64, 64),
             epochs: HashTable::with_capacity("_epochs", backend.clone(), 64, 64),
             current_watermark: LocalValue::new("_curr_watermark", backend.clone()),
-            current_epoch: LocalValue::new("_curr_epoch", backend.clone()),
+            current_epoch: LocalValue::new("_curr_epoch", backend),
             checkpoint_acks: HashSet::new(),
         }
     }
@@ -282,7 +282,7 @@ where
                             self.checkpoint()?;
                             self.manager_state.checkpoint_acks.clear();
 
-                            for (_, (_, port_ref)) in &self.nodes {
+                            for (_, port_ref) in self.nodes.values() {
                                 self.data_system.trigger_i(
                                     NodeEvent::CheckpointResponse(CheckpointResponse::NoAction),
                                     &port_ref,

@@ -75,7 +75,7 @@ where
 
         let mut timer = Self {
             timer: QuadWheelWithOverflow::default(),
-            timeouts: EagerHashTable::new(timeouts_id, backend.clone()),
+            timeouts: EagerHashTable::new(timeouts_id, backend),
             time_handle,
         };
 

@@ -52,7 +52,7 @@ where
     }
     fn get(&self) -> Result<Option<Cow<V>>> {
         let value = self.handle.get(&self.current_key)?;
-        Ok(value.map(|v| Cow::Owned(v)))
+        Ok(value.map(Cow::Owned))
     }
     fn take(&mut self) -> Result<Option<V>> {
         self.handle.remove(&self.current_key)
