@@ -3,11 +3,12 @@
 
 use crate::{
     data::{ArconElement, ArconNever, ArconType},
+    index::ArconState,
     stream::operator::{Operator, OperatorContext},
     util::ArconFnBounds,
 };
 use arcon_error::*;
-use arcon_state::{index::ArconState, Backend};
+use arcon_state::Backend;
 use kompact::prelude::ComponentDefinition;
 use std::marker::PhantomData;
 
@@ -79,5 +80,8 @@ where
 
     fn persist(&mut self) -> Result<(), arcon_state::error::ArconStateError> {
         self.state.persist()
+    }
+    fn state(&mut self) -> &mut Self::OperatorState {
+        &mut self.state
     }
 }

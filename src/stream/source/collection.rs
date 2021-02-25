@@ -6,7 +6,7 @@ use crate::{data::ArconType, dataflow::conf::SourceConf, stream::time::ArconTime
 use kompact::prelude::*;
 use std::cell::RefCell;
 
-const RESCHEDULE_EVERY: usize = 10000;
+const RESCHEDULE_EVERY: usize = 5000;
 
 pub struct CollectionSource<A>
 where

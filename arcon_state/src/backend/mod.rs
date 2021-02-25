@@ -249,8 +249,6 @@ impl<A: Aggregator> Default for AggregatorState<A> {
 
 //pub mod metered;
 //pub use self::metered::Metered;
-pub mod never;
-pub use self::never::BackendNever;
 
 #[cfg(feature = "rocks")]
 pub mod rocks;
@@ -361,11 +359,4 @@ impl Default for BackendType {
     fn default() -> Self {
         BackendType::Sled
     }
-}
-
-#[cfg(test)]
-pub(crate) fn temp_backend() -> crate::Sled {
-    let test_dir = tempfile::tempdir().unwrap();
-    let path = test_dir.path();
-    crate::backend::Sled::create(path).unwrap()
 }

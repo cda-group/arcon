@@ -21,6 +21,7 @@ where
     IN: ArconType,
 {
     file: RefCell<File>,
+    op_state: (),
     _marker: PhantomData<IN>,
 }
 
@@ -40,6 +41,7 @@ where
 
         LocalFileSink {
             file,
+            op_state: (),
             _marker: PhantomData,
         }
     }
@@ -66,6 +68,10 @@ where
     }
     crate::ignore_timeout!();
     crate::ignore_persist!();
+
+    fn state(&mut self) -> &mut Self::OperatorState {
+        &mut self.op_state
+    }
 }
 
 #[cfg(test)]
@@ -93,7 +99,7 @@ mod tests {
         let file_path = file.path().to_string_lossy().into_owned();
 
         let node_id = NodeID::new(1);
-        let backend = Arc::new(crate::util::temp_backend());
+        let backend = Arc::new(crate::test_utils::temp_backend());
         let sink_comp = system.create(move || {
             Node::new(
                 String::from("sink_comp"),

@@ -1,10 +1,8 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use arcon_state::{
-    index::{value::Value, IndexOps},
-    Aggregator, Backend, *,
-};
+use arcon::prelude::{Aggregator, IndexOps, LocalValue, ValueIndex};
+use arcon_state::{backend::*, with_backend_type};
 use criterion::{criterion_group, criterion_main, Bencher, Criterion, Throughput};
 use std::sync::Arc;
 use tempfile::tempdir;
@@ -16,21 +14,17 @@ fn value(c: &mut Criterion) {
     group.throughput(Throughput::Elements(OPS_PER_EPOCH));
     #[cfg(feature = "rocks")]
     group.bench_function("rolling counter index rocks backed", index_rocks_backed);
-    #[cfg(feature = "sled")]
     group.bench_function("rolling counter index sled backed", index_sled_backed);
     #[cfg(feature = "rocks")]
     group.bench_function("rolling counter naive pure rocks", naive_rolling_rocks);
-    #[cfg(feature = "sled")]
     group.bench_function("rolling counter naive pure sled", naive_rolling_sled);
     #[cfg(feature = "rocks")]
     group.bench_function("specialised rocks", specialised_rocks);
-    #[cfg(feature = "sled")]
     group.bench_function("specialised sled", specialised_sled);
 
     group.finish()
 }
 
-#[cfg(feature = "sled")]
 fn index_sled_backed(b: &mut Bencher) {
     index_rolling_counter(BackendType::Sled, b);
 }
@@ -44,16 +38,18 @@ fn index_rolling_counter(backend: BackendType, b: &mut Bencher) {
     let dir = tempdir().unwrap();
     with_backend_type!(backend, |B| {
         let backend = Arc::new(B::create(dir.as_ref()).unwrap());
-        let mut value_index: Value<u64, B> = Value::new("_value", backend);
+        let mut value_index: LocalValue<u64, B> = LocalValue::new("_value", backend);
         b.iter(|| {
-            let curr_value = *value_index.get().unwrap();
+            let curr_value = value_index.get().unwrap().unwrap().into_owned();
             for _i in 0..OPS_PER_EPOCH {
-                value_index.rmw(|v| {
-                    *v += 1;
-                });
+                value_index
+                    .rmw(|v| {
+                        *v += 1;
+                    })
+                    .unwrap();
             }
-            let new_value = value_index.get().unwrap();
-            assert_eq!(new_value, &(curr_value + OPS_PER_EPOCH));
+            let new_value = value_index.get().unwrap().unwrap().into_owned();
+            assert_eq!(new_value, (curr_value + OPS_PER_EPOCH));
             // simulate an epoch and persist the value index
             value_index.persist()
         });
@@ -94,7 +90,6 @@ fn naive_rolling_rocks(b: &mut Bencher) {
     naive_rolling_counter(BackendType::Rocks, b);
 }
 
-#[cfg(feature = "sled")]
 fn naive_rolling_sled(b: &mut Bencher) {
     naive_rolling_counter(BackendType::Sled, b);
 }
@@ -124,7 +119,6 @@ fn specialised_rocks(b: &mut Bencher) {
     specialised_rolling_counter(BackendType::Rocks, b);
 }
 
-#[cfg(feature = "sled")]
 fn specialised_sled(b: &mut Bencher) {
     specialised_rolling_counter(BackendType::Sled, b);
 }

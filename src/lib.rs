@@ -29,9 +29,13 @@
 //!     - Enables RocksDB to be used as a Backend
 //! - `arcon_serde`
 //!     - Adds serde support for Arcon Types
+//! - `arcon_arrow`
+//!     - Enables Arrow support
 
 #![feature(unboxed_closures)]
 #![feature(unsized_fn_params)]
+#![feature(async_closure)]
+#![feature(core_intrinsics)]
 
 // Enable use of arcon_macros within this crate
 #[cfg_attr(test, macro_use)]
@@ -43,9 +47,18 @@ pub use arcon_macros::*;
 #[doc(hidden)]
 pub use arcon_state::*;
 
-pub use arcon_state::{error::ArconStateError, index::ArconState, IndexOps};
+pub use crate::index::{ArconState, IndexOps};
+pub use arcon_state::error::ArconStateError;
 
 // Imports below are exposed for #[derive(Arcon)]
+cfg_if::cfg_if! {
+    if #[cfg(feature = "arcon_arrow")] {
+        pub use crate::data::arrow::{ArrowOps, ArrowTable, ToArrow};
+        pub use arrow::array::{ArrayBuilder, StringBuilder, PrimitiveBuilder, ArrayData, ArrayDataBuilder, StructArray, StructBuilder};
+        pub use arrow::error::ArrowError;
+        pub use arrow::datatypes::{DataType, Field, Schema};
+    }
+}
 #[doc(hidden)]
 pub use crate::data::{ArconType, VersionId};
 #[doc(hidden)]
@@ -68,6 +81,7 @@ mod conf;
 mod data;
 /// Dataflow API
 mod dataflow;
+mod index;
 /// Module containing different runtime managers
 mod manager;
 #[cfg(feature = "metrics")]
@@ -93,6 +107,18 @@ pub mod test_utils {
 
     pub static ALLOCATOR: Lazy<Arc<Mutex<Allocator>>> =
         Lazy::new(|| Arc::new(Mutex::new(Allocator::new(1073741824))));
+
+    pub fn temp_backend() -> arcon_state::Sled {
+        use arcon_state::backend::Backend;
+        let test_dir = tempfile::tempdir().unwrap();
+        let path = test_dir.path();
+        arcon_state::Sled::create(path).unwrap()
+    }
+}
+
+pub mod client {
+    #[cfg(feature = "arcon_arrow")]
+    pub use crate::manager::query::{messages::*, QUERY_MANAGER_NAME};
 }
 
 /// Helper module that imports everything related to arcon into scope
@@ -120,7 +146,7 @@ pub mod prelude {
             source::collection::CollectionSource,
             time::ArconTime,
         },
-        Arcon,
+        Arcon, ArconState,
     };
 
     #[cfg(feature = "kafka")]
@@ -137,13 +163,24 @@ pub mod prelude {
     #[cfg(feature = "thread_pinning")]
     pub use kompact::{get_core_ids, CoreId};
 
+    #[cfg(feature = "arcon_arrow")]
+    pub use super::{Arrow, ArrowOps, ArrowTable, ToArrow};
+    #[cfg(feature = "arcon_arrow")]
+    pub use datafusion::prelude::*;
+
     pub use arcon_state as state;
 
     pub use arcon_state::{
-        AggregatorState, Appender, ArconState, Backend, BackendNever, BackendType, EagerAppender,
-        EagerHashTable, Handle, HashTable, MapState, ReducerState, Sled, Value, ValueState,
-        VecState,
+        Aggregator, AggregatorState, Backend, BackendType, Handle, MapState, ReducerState, Sled,
+        ValueState, VecState,
     };
+
+    pub use crate::index::{
+        AppenderIndex, EagerAppender, EagerHashTable, EagerValue, EmptyState, HashTable, IndexOps,
+        LazyValue, LocalValue, StateConstructor, Timer as ArconTimer, ValueIndex,
+    };
+
+    pub use prost::*;
 
     #[cfg(feature = "rayon")]
     pub use rayon::prelude::*;

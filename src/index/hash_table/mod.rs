@@ -9,14 +9,16 @@ use std::{
     hash::{BuildHasher, Hash, Hasher},
 };
 
-use crate::{
+#[cfg(feature = "arcon_arrow")]
+use crate::data::arrow::ArrowTable;
+use crate::index::IndexOps;
+use arcon_state::{
     backend::{
         handles::{ActiveHandle, Handle},
         MapState,
     },
     data::{Key, Value},
     error::*,
-    index::IndexOps,
 };
 use core::intrinsics::likely;
 use std::sync::Arc;
@@ -289,9 +291,9 @@ where
     /// The `P` function defines how a default value is created if there is
     /// no entry in the HashTable.
     #[inline(always)]
-    pub fn rmw<F: Sized, P>(&mut self, key: &K, p: P, mut f: F) -> Result<()>
+    pub fn rmw<F: Sized, P>(&mut self, key: &K, p: P, f: F) -> Result<()>
     where
-        F: FnMut(&mut V),
+        F: FnOnce(&mut V),
         P: FnOnce() -> V,
     {
         let hash = make_hash(&self.hash_builder, key);
@@ -336,6 +338,15 @@ where
         self.handle.insert_all_by_ref(iter)
     }
 
+    #[allow(clippy::type_complexity)]
+    pub fn full_iter(&mut self) -> Result<(usize, Box<dyn Iterator<Item = Result<V>> + '_>)> {
+        // call our persist method to force possible modified values to the backend
+        self.persist()?;
+        let len = self.handle.len()?;
+        let values = self.handle.values()?;
+        Ok((len, values))
+    }
+
     /// Method only used for testing the TableModIterator of RawTable.
     #[cfg(test)]
     pub(crate) fn modified_iterator(&mut self) -> TableModIterator<K, V> {
@@ -357,12 +368,18 @@ where
         };
         Ok(())
     }
+    fn set_key(&mut self, _: u64) {}
+    #[cfg(feature = "arcon_arrow")]
+    fn arrow_table(&mut self) -> Result<Option<ArrowTable>> {
+        Ok(None)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::{sled::Sled, temp_backend};
+    use crate::test_utils::temp_backend;
+    use arcon_state::backend::sled::Sled;
     use std::sync::Arc;
 
     #[test]

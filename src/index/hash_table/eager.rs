@@ -1,14 +1,16 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::{
+#[cfg(feature = "arcon_arrow")]
+use crate::data::arrow::ArrowTable;
+use crate::index::IndexOps;
+use arcon_state::{
     backend::{
         handles::{ActiveHandle, BoxedIteratorOfResult, Handle},
         Backend, MapState,
     },
     data::{Key, Value},
     error::*,
-    index::IndexOps,
 };
 use std::sync::Arc;
 
@@ -67,5 +69,10 @@ where
 {
     fn persist(&mut self) -> Result<()> {
         Ok(())
+    }
+    fn set_key(&mut self, _: u64) {}
+    #[cfg(feature = "arcon_arrow")]
+    fn arrow_table(&mut self) -> Result<Option<ArrowTable>> {
+        Ok(None)
     }
 }

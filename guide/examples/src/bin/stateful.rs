@@ -1,54 +1,51 @@
 use arcon::prelude::*;
 use examples::SnapshotComponent;
-use std::{path::Path, sync::Arc};
+use std::sync::Arc;
 
 #[cfg_attr(feature = "arcon_serde", derive(serde::Deserialize, serde::Serialize))]
 #[cfg_attr(feature = "unsafe_flight", derive(abomonation_derive::Abomonation))]
 // ANCHOR: data
-#[derive(Arcon, prost::Message, Copy, Clone)]
-#[arcon(unsafe_ser_id = 12, reliable_ser_id = 13, version = 1)]
+#[derive(Arcon, Arrow, prost::Message, Copy, Clone)]
+#[arcon(unsafe_ser_id = 12, reliable_ser_id = 13, version = 1, keys = "id")]
 pub struct Event {
     #[prost(uint64, tag = "1")]
     pub id: u64,
+    #[prost(float, tag = "2")]
+    pub data: f32,
 }
 // ANCHOR_END: data
 
 // ANCHOR: state
 #[derive(ArconState)]
 pub struct MyState<B: Backend> {
-    events: Appender<Event, B>,
+    #[table = "events"]
+    events: EagerValue<Event, B>,
 }
 
-impl<B: Backend> MyState<B> {
-    pub fn new(backend: Arc<B>) -> Self {
-        MyState {
-            events: Appender::new("_events", backend),
+impl<B: Backend> StateConstructor for MyState<B> {
+    type BackendType = B;
+
+    fn new(backend: Arc<Self::BackendType>) -> Self {
+        Self {
+            events: EagerValue::new("_events", backend),
         }
     }
 }
 
 // ANCHOR_END: state
 
-// ANCHOR: snapshot
-impl<B: Backend> From<Snapshot> for MyState<B> {
-    fn from(snapshot: Snapshot) -> Self {
-        let snapshot_dir = Path::new(&snapshot.snapshot_path);
-        let backend = Arc::new(B::restore(&snapshot_dir, &snapshot_dir).unwrap());
-        MyState::new(backend)
-    }
-}
-// ANCHOR_END: snapshot
-
-fn main() {
+#[tokio::main]
+async fn main() -> datafusion::error::Result<()> {
     let conf = ArconConf {
-        epoch_interval: 10000,
+        epoch_interval: 2500,
+        ctrl_system_host: Some("127.0.0.1:2000".to_string()),
         ..Default::default()
     };
 
     let mut pipeline = Pipeline::with_conf(conf)
         .collection(
-            (0..10000000)
-                .map(|x| Event { id: x })
+            (0..1000000)
+                .map(|x| Event { id: x, data: 1.5 })
                 .collect::<Vec<Event>>(),
             |conf| {
                 conf.set_timestamp_extractor(|x: &Event| x.id);
@@ -56,9 +53,9 @@ fn main() {
         )
         .operator(OperatorBuilder {
             constructor: Arc::new(|backend| {
-                Map::stateful(MyState::new(backend), |x, state| {
-                    state.events().append(x)?;
-                    Ok(x)
+                Map::stateful(MyState::new(backend), |event, state| {
+                    state.events().put(event)?;
+                    Ok(event)
                 })
             }),
             conf: Default::default(),
@@ -66,10 +63,7 @@ fn main() {
         .build();
 
     // ANCHOR: watch_thread
-    pipeline.watch(|epoch, mut s: MyState<Sled>| {
-        let events_len = s.events().len();
-        println!("Events Length {:?} for Epoch {}", events_len, epoch);
-    });
+
     // ANCHOR_END: watch_thread
 
     // ANCHOR: watch_component
@@ -87,4 +81,6 @@ fn main() {
 
     pipeline.start();
     pipeline.await_termination();
+
+    Ok(())
 }

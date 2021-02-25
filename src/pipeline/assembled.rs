@@ -2,8 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use super::Pipeline;
-use crate::{manager::snapshot::Snapshot, stream::node::source::SourceEvent};
-use arcon_state::index::ArconState;
+use crate::{index::ArconState, manager::snapshot::Snapshot, stream::node::source::SourceEvent};
 use kompact::{component::AbstractComponent, prelude::ActorRefFactory};
 use std::sync::{
     mpsc,
@@ -75,14 +74,14 @@ impl AssembledPipeline {
     /// Spawns a new thread to run the function `F` on the ArconState `S` per epoch.
     pub fn watch<S, F>(&mut self, f: F)
     where
-        S: ArconState + std::convert::From<Snapshot>,
+        S: ArconState,
         F: Fn(u64, S) + Send + Sync + 'static,
     {
         let (tx, rx): (Sender<Snapshot>, Receiver<Snapshot>) = mpsc::channel();
         std::thread::spawn(move || loop {
             let snapshot = rx.recv().unwrap();
             let epoch = snapshot.epoch;
-            let state: S = snapshot.into();
+            let state: S = S::restore(snapshot).unwrap();
             f(epoch, state);
         });
 

@@ -27,6 +27,7 @@ where
 {
     tx_channel: channel::mpsc::Sender<Bytes>,
     runtime_handle: Handle,
+    op_state: (),
     _handle: JoinHandle<()>,
     _marker: PhantomData<IN>,
 }
@@ -71,6 +72,7 @@ where
         SocketSink {
             tx_channel: tx,
             runtime_handle,
+            op_state: (),
             _handle: th,
             _marker: PhantomData,
         }
@@ -112,6 +114,9 @@ where
     }
     crate::ignore_timeout!();
     crate::ignore_persist!();
+    fn state(&mut self) -> &mut Self::OperatorState {
+        &mut self.op_state
+    }
 }
 
 #[cfg(test)]
@@ -138,7 +143,7 @@ mod tests {
                 let addr = "127.0.0.1:9999".parse().unwrap();
                 let socket = UdpSocket::bind(&addr).await.unwrap();
 
-                let backend = Arc::new(crate::util::temp_backend());
+                let backend = Arc::new(crate::test_utils::temp_backend());
                 let node_id = NodeID::new(1);
                 let socket_sink = system.create(move || {
                     Node::new(

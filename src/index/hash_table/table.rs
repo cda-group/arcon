@@ -15,13 +15,11 @@ use core::{
 };
 use std::alloc::{alloc, dealloc, handle_alloc_error};
 
-use crate::{
-    data::{Key, Value},
-    index::hash_table::{
-        bitmask::{BitMask, BitMaskIter},
-        imp::Group,
-    },
+use crate::index::hash_table::{
+    bitmask::{BitMask, BitMaskIter},
+    imp::Group,
 };
+use arcon_state::data::{Key, Value};
 
 /// Augments `AllocErr` with a `CapacityOverflow` variant.
 #[derive(Clone, PartialEq, Eq, Debug)]

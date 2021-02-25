@@ -120,6 +120,8 @@ pub enum ArconStateError {
         source: ::sled::Error,
         backtrace: Backtrace,
     },
+    #[snafu(display("Error : {}", msg))]
+    Unknown { msg: String },
 }
 
 #[cfg(all(feature = "faster", target_os = "linux"))]

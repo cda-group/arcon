@@ -9,3 +9,7 @@ pub mod node;
 pub mod source;
 
 pub mod snapshot;
+
+pub mod endpoint;
+#[cfg(feature = "arcon_arrow")]
+pub mod query;
