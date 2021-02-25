@@ -17,8 +17,8 @@ serde = { version = "1.0.104", features = ["derive"] }
 abomonation = "0.7.3"
 abomonation_derive = "0.5.0"
 tempfile = "3"
-arrow = { git = "https://github.com/Max-Meldrum/arrow.git", branch = "as_ref_patch"}
-datafusion = { git = "https://github.com/Max-Meldrum/arrow.git", branch = "as_ref_patch"}
+arrow = { git = "https://github.com/apache/arrow.git", optional = true }
+datafusion = { git = "https://github.com/apache/arrow.git", optional = true }
 tokio = { version = "1.0", features = ["macros", "rt", "rt-multi-thread", "sync"] }
 
 [build-dependencies]

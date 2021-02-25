@@ -224,7 +224,7 @@ fn print_help() {
         ["Command", "Description"],
         ["tables", "List all available tables"],
         ["contexts", "List all availble contexts"],
-        ["set context", "Set the context [Default: latest]"]
+        ["set epoch", "Set the epoch [Default: 0]"]
     );
     table.printstd();
 }

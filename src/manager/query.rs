@@ -244,7 +244,7 @@ impl QueryManager {
 
         query_ctx
             .ctx
-            .register_table(&table_name, Box::new(mem_table));
+            .register_table(&table_name, Arc::new(mem_table));
 
         trace!(self.ctx.log(), "Registering table {}", table_name);
 

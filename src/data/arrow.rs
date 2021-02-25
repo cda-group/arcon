@@ -41,9 +41,6 @@ to_arrow!(i32, Int32Builder, DataType::Int32);
 to_arrow!(f64, Float64Builder, DataType::Float64);
 to_arrow!(f32, Float32Builder, DataType::Float32);
 to_arrow!(bool, BooleanBuilder, DataType::Boolean);
-// The following two only works because of this patch: https://github.com/Max-Meldrum/arrow/tree/as_ref_patch
-//
-// TODO: Contribute it upstream
 to_arrow!(String, StringBuilder, DataType::Utf8);
 to_arrow!(Vec<u8>, BinaryBuilder, DataType::Binary);
 
