@@ -15,4 +15,5 @@
 	- [State Backends](pipeline/backends.md)
 	- [State Indexes](pipeline/indexes.md)
 	- [State Access](pipeline/state.md)
+- [Roadmap](roadmap.md)
 - [Project Info](project_info.md)
