@@ -34,20 +34,30 @@ pub enum ParallelismStrategy {
 impl Default for ParallelismStrategy {
     fn default() -> Self {
         // static for now until managed is complete and stable..
-        //ParallelismStrategy::Static(num_cpus::get() / 2)
-        ParallelismStrategy::Static(1)
+        ParallelismStrategy::Static(num_cpus::get() / 2)
     }
 }
 
 #[derive(Deserialize, Clone, Debug)]
+pub enum StreamKind {
+    Keyed,
+    Local,
+}
+
+impl Default for StreamKind {
+    fn default() -> Self {
+        StreamKind::Keyed
+    }
+}
+
+#[derive(Deserialize, Default, Clone, Debug)]
 pub struct OperatorConf {
     /// Parallelism Strategy for this Operator
     pub parallelism_strategy: ParallelismStrategy,
-    /// The highest possible key value for a keyed stream
-    ///
-    /// This should not be set too low or ridiculously high
-    pub max_key: u64,
+    /// Defines the type of Stream, by default streams are Keyed in Arcon.
+    pub stream_kind: StreamKind,
 }
+
 impl OperatorConf {
     pub fn from_file(path: impl AsRef<Path>) -> ArconResult<OperatorConf> {
         let data = std::fs::read_to_string(path)
@@ -62,15 +72,6 @@ impl OperatorConf {
             .map_err(|e| arcon_err_kind!("Failed to resolve ArconConf with err {}", e))?;
 
         Ok(conf)
-    }
-}
-
-impl Default for OperatorConf {
-    fn default() -> Self {
-        Self {
-            parallelism_strategy: Default::default(),
-            max_key: 256,
-        }
     }
 }
 

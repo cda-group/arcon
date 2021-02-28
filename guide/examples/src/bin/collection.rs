@@ -10,6 +10,10 @@ fn main() {
             constructor: Arc::new(|_| Filter::new(|x| *x > 50)),
             conf: Default::default(),
         })
+        .operator(OperatorBuilder {
+            constructor: Arc::new(|_| Map::new(|x| x + 10)),
+            conf: Default::default(),
+        })
         .to_console()
         .build();
 

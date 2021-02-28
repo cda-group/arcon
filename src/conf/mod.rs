@@ -35,6 +35,11 @@ pub struct ArconConf {
     /// Generation interval in milliseconds for Watermarks at sources
     #[serde(default = "watermark_interval_default")]
     pub watermark_interval: u64,
+    /// The highest possible key value for a keyed stream
+    ///
+    /// This should not be set too low or ridiculously high
+    #[serde(default = "max_key_default")]
+    pub max_key: u64,
     /// Interval in milliseconds for sending off metrics from nodes
     #[serde(default = "node_metrics_interval_default")]
     pub node_metrics_interval: u64,
@@ -83,6 +88,7 @@ impl Default for ArconConf {
             checkpoint_dir: checkpoint_dir_default(),
             watermark_interval: watermark_interval_default(),
             epoch_interval: epoch_interval_default(),
+            max_key: max_key_default(),
             node_metrics_interval: node_metrics_interval_default(),
             buffer_pool_size: buffer_pool_size_default(),
             buffer_pool_limit: buffer_pool_limit_default(),
@@ -200,6 +206,10 @@ fn epoch_interval_default() -> u64 {
 fn watermark_interval_default() -> u64 {
     // in milliseconds
     250
+}
+
+fn max_key_default() -> u64 {
+    1024
 }
 
 fn node_metrics_interval_default() -> u64 {

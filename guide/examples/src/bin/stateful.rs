@@ -8,9 +8,9 @@ use std::sync::Arc;
 #[derive(Arcon, Arrow, prost::Message, Copy, Clone)]
 #[arcon(unsafe_ser_id = 12, reliable_ser_id = 13, version = 1, keys = "id")]
 pub struct Event {
-    #[prost(uint64, tag = "1")]
+    #[prost(uint64)]
     pub id: u64,
-    #[prost(float, tag = "2")]
+    #[prost(float)]
     pub data: f32,
 }
 // ANCHOR_END: data
@@ -34,8 +34,7 @@ impl<B: Backend> StateConstructor for MyState<B> {
 
 // ANCHOR_END: state
 
-#[tokio::main]
-async fn main() -> datafusion::error::Result<()> {
+fn main() {
     let conf = ArconConf {
         epoch_interval: 2500,
         ctrl_system_host: Some("127.0.0.1:2000".to_string()),
@@ -81,6 +80,4 @@ async fn main() -> datafusion::error::Result<()> {
 
     pipeline.start();
     pipeline.await_termination();
-
-    Ok(())
 }
