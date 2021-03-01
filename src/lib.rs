@@ -133,7 +133,9 @@ pub mod prelude {
     pub use crate::{
         conf::ArconConf,
         data::{ArconElement, ArconNever, ArconType, StateID, VersionId},
-        dataflow::conf::{OperatorBuilder, OperatorConf, SourceConf},
+        dataflow::conf::{
+            OperatorBuilder, OperatorConf, ParallelismStrategy, SourceConf, StreamKind,
+        },
         manager::snapshot::Snapshot,
         pipeline::{AssembledPipeline, Pipeline, Stream},
         stream::{
