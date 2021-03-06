@@ -39,15 +39,24 @@ pub struct DFGNodeID(pub usize);
 #[allow(dead_code)]
 pub struct DFGNode {
     pub(crate) kind: DFGNodeKind,
+    pub(crate) outgoing_channels: usize,
+    pub(crate) ingoing_channels: usize,
     /// Ingoing edges to a node.
-    ingoing: Vec<DFGNodeID>,
+    pub(crate) ingoing: Vec<DFGNodeID>,
     pub(crate) channel_kind: ChannelKind,
 }
 
 impl DFGNode {
-    pub fn new(kind: DFGNodeKind, ingoing: Vec<DFGNodeID>) -> Self {
+    pub fn new(
+        kind: DFGNodeKind,
+        outgoing_channels: usize,
+        ingoing_channels: usize,
+        ingoing: Vec<DFGNodeID>,
+    ) -> Self {
         Self {
             kind,
+            outgoing_channels,
+            ingoing_channels,
             ingoing,
             channel_kind: Default::default(),
         }

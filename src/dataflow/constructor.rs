@@ -15,7 +15,7 @@ use crate::{
     pipeline::Pipeline,
     stream::{
         channel::{
-            strategy::{forward::Forward, key_by::KeyBy, *},
+            strategy::{forward::Forward, keyed::Keyed, *},
             Channel,
         },
         node::{
@@ -58,6 +58,7 @@ fn channel_strategy<OUT: ArconType>(
     mut components: ErasedComponents,
     node_id: NodeID,
     pool_info: PoolInfo,
+    max_key: u64,
     channel_kind: ChannelKind,
 ) -> ChannelStrategy<OUT> {
     match channel_kind {
@@ -71,7 +72,6 @@ fn channel_strategy<OUT: ArconType>(
             ChannelStrategy::Forward(Forward::new(Channel::Local(actor_ref), node_id, pool_info))
         }
         ChannelKind::Keyed => {
-            let max_key = 256; // fix
             let mut channels = Vec::new();
             for component in components {
                 let target_node = component
@@ -81,7 +81,7 @@ fn channel_strategy<OUT: ArconType>(
                 let channel = Channel::Local(actor_ref);
                 channels.push(channel);
             }
-            ChannelStrategy::KeyBy(KeyBy::new(max_key, channels, node_id, pool_info))
+            ChannelStrategy::Keyed(Keyed::new(max_key, channels, node_id, pool_info))
         }
         ChannelKind::Console => ChannelStrategy::Console,
         ChannelKind::Mute => ChannelStrategy::Mute,
@@ -106,8 +106,14 @@ pub(crate) fn source_manager_constructor<S: Source + 'static, B: Backend>(
             let source_cons = builder.constructor;
             let source = source_cons(backend.clone());
             let pool_info = pipeline.get_pool_info();
-            let channel_strategy =
-                channel_strategy(components.clone(), NodeID::new(0), pool_info, channel_kind);
+            let max_key = pipeline.conf.max_key;
+            let channel_strategy = channel_strategy(
+                components.clone(),
+                NodeID::new(0),
+                pool_info,
+                max_key,
+                channel_kind,
+            );
             let source_node = SourceNode::new(source, channel_strategy);
             let source_node_comp = pipeline.data_system().create(|| source_node);
 
@@ -173,6 +179,14 @@ pub(crate) fn node_manager_constructor<OP: Operator + 'static, B: Backend>(
               pipeline: &mut Pipeline| {
             let epoch_manager_ref = pipeline.epoch_manager();
 
+            // How many instances of this Operator we are initially creating
+            let instances = match builder.conf.parallelism_strategy {
+                ParallelismStrategy::Static(s) => s,
+                _ => panic!("Managed ParallelismStrategy not supported yet"),
+            };
+
+            let max_key = pipeline.conf.max_key as usize;
+
             // Define the NodeManager
             let manager = NodeManager::<OP, B>::new(
                 descriptor.clone(),
@@ -206,21 +220,25 @@ pub(crate) fn node_manager_constructor<OP: Operator + 'static, B: Backend>(
                 .wait_timeout(std::time::Duration::from_millis(2000))
                 .expect("Failed to start NodeManager");
 
-            let instances = match builder.conf.parallelism_strategy {
-                ParallelismStrategy::Static(s) => s,
-                _ => panic!("Not supported yet"),
-            };
-
+            // Fetch PoolInfo object that ChannelStrategies use to organise their buffers
             let pool_info = pipeline.get_pool_info();
+            // Fetch the Operator constructor from the builder
             let operator = builder.constructor;
 
+            // Create `instances` number of Nodes and add them into the NodeManager
             for (curr_node_id, _) in (0..instances).enumerate() {
                 let node_descriptor = format!("{}_{}", descriptor, curr_node_id);
                 let node_id = NodeID::new(curr_node_id.try_into().unwrap());
 
                 let node = Node::new(
                     node_descriptor,
-                    channel_strategy(components.clone(), node_id, pool_info.clone(), channel_kind),
+                    channel_strategy(
+                        components.clone(),
+                        node_id,
+                        pool_info.clone(),
+                        max_key as u64,
+                        channel_kind,
+                    ),
                     operator(backend.clone()),
                     NodeState::new(node_id, in_channels.clone(), backend.clone()),
                     backend.clone(),
@@ -246,6 +264,8 @@ pub(crate) fn node_manager_constructor<OP: Operator + 'static, B: Backend>(
                 });
             }
 
+            // Fetch all created Nodes on this NodeManager and return them as Erased
+            // for the next stage..
             let nodes: ErasedComponents = manager_comp.on_definition(|cd| {
                 cd.nodes
                     .values()

@@ -12,7 +12,7 @@ use kompact::prelude::{ComponentDefinition, SerError};
 /// A Channel Strategy for Keyed Data Streams
 ///
 /// Data is split onto a contiguous key space containing N key ranges.
-pub struct KeyBy<A>
+pub struct Keyed<A>
 where
     A: ArconType,
 {
@@ -32,17 +32,17 @@ where
     _pool_info: PoolInfo,
 }
 
-impl<A> KeyBy<A>
+impl<A> Keyed<A>
 where
     A: ArconType,
 {
-    /// Creates a KeyBy strategy
+    /// Creates a Keyed strategy
     pub fn new(
         max_key: u64,
         channels: Vec<Channel<A>>,
         sender_id: NodeID,
         pool_info: PoolInfo,
-    ) -> KeyBy<A> {
+    ) -> Keyed<A> {
         let channels_len: u64 = channels.len() as u64;
         assert!(
             channels.len() < pool_info.capacity,
@@ -63,7 +63,7 @@ where
             buffer_map.insert(i, (channel, writer));
         }
 
-        KeyBy {
+        Keyed {
             buffer_pool,
             key_ranges: channels_len,
             max_key,
@@ -99,7 +99,7 @@ where
                         let _ = buffer.push(e);
                     }
                 } else {
-                    panic!("Bad KeyBy setup");
+                    panic!("Bad Keyed setup");
                 }
             }
             _ => {
@@ -206,7 +206,7 @@ mod tests {
 
         let max_key = 256;
         let mut channel_strategy =
-            ChannelStrategy::KeyBy(KeyBy::new(max_key, channels, NodeID::new(1), pool_info));
+            ChannelStrategy::Keyed(Keyed::new(max_key, channels, NodeID::new(1), pool_info));
 
         let mut rng = rand::thread_rng();
 

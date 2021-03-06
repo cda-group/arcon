@@ -34,7 +34,6 @@
 
 #![feature(unboxed_closures)]
 #![feature(unsized_fn_params)]
-#![feature(async_closure)]
 #![feature(core_intrinsics)]
 
 // Enable use of arcon_macros within this crate
@@ -133,7 +132,9 @@ pub mod prelude {
     pub use crate::{
         conf::ArconConf,
         data::{ArconElement, ArconNever, ArconType, StateID, VersionId},
-        dataflow::conf::{OperatorBuilder, OperatorConf, SourceConf},
+        dataflow::conf::{
+            OperatorBuilder, OperatorConf, ParallelismStrategy, SourceConf, StreamKind,
+        },
         manager::snapshot::Snapshot,
         pipeline::{AssembledPipeline, Pipeline, Stream},
         stream::{

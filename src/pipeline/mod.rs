@@ -209,7 +209,9 @@ impl Pipeline {
         );
         let mut ctx = Context::new(self);
         let kind = DFGNodeKind::Source(Default::default(), manager_constructor);
-        let dfg_node = DFGNode::new(kind, vec![]);
+        let incoming_channels = 0; // sources have 0 incoming channels..
+        let outgoing_channels = 1; // TODO
+        let dfg_node = DFGNode::new(kind, outgoing_channels, incoming_channels, vec![]);
         ctx.dfg.insert(dfg_node);
         Stream::new(ctx)
     }

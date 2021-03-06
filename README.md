@@ -49,6 +49,7 @@ More advanced examples can be found [here](guide/examples).
 * [`arcon_build`]: Protobuf builder
 * [`arcon_error`]: Common error utilities.
 * [`arcon_macros`]: Arcon derive macros.
+* [`arcon_shell`]: Explore a live Arcon application
 * [`arcon_state`]: State management features.
 * [`arcon_tests`]: Integration tests
 * [`arcon_tui`]: Text-based dashboard.
@@ -57,6 +58,7 @@ More advanced examples can be found [here](guide/examples).
 [`arcon_build`]: arcon_build
 [`arcon_error`]: arcon_error
 [`arcon_macros`]: arcon_macros
+[`arcon_shell`]: arcon_shell
 [`arcon_state`]: arcon_state
 [`arcon_tests`]: arcon_tests
 [`arcon_tui`]: arcon_tui

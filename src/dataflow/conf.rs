@@ -6,7 +6,6 @@ use crate::{
     index::{ArconState, EMPTY_STATE_ID},
     stream::{operator::Operator, source::Source, time::ArconTime},
 };
-use arcon_error::*;
 use hocon::HoconLoader;
 use serde::Deserialize;
 use std::{path::Path, sync::Arc};
@@ -34,46 +33,53 @@ pub enum ParallelismStrategy {
 impl Default for ParallelismStrategy {
     fn default() -> Self {
         // static for now until managed is complete and stable..
-        //ParallelismStrategy::Static(num_cpus::get() / 2)
-        ParallelismStrategy::Static(1)
+        ParallelismStrategy::Static(num_cpus::get() / 2)
     }
 }
 
+/// Defines whether a stream is Keyed or Local
+///
+/// Streams are by default Keyed in Arcon.
 #[derive(Deserialize, Clone, Debug)]
+pub enum StreamKind {
+    Keyed,
+    Local,
+}
+
+impl Default for StreamKind {
+    fn default() -> Self {
+        StreamKind::Keyed
+    }
+}
+
+/// Operator Configuration
+///
+/// Defines how an Operator is to be executed on Arcon.
+#[derive(Deserialize, Default, Clone, Debug)]
 pub struct OperatorConf {
     /// Parallelism Strategy for this Operator
     pub parallelism_strategy: ParallelismStrategy,
-    /// The highest possible key value for a keyed stream
-    ///
-    /// This should not be set too low or ridiculously high
-    pub max_key: u64,
+    /// Defines the type of Stream, by default streams are Keyed in Arcon.
+    pub stream_kind: StreamKind,
 }
+
 impl OperatorConf {
-    pub fn from_file(path: impl AsRef<Path>) -> ArconResult<OperatorConf> {
-        let data = std::fs::read_to_string(path)
-            .map_err(|e| arcon_err_kind!("Failed to read config file with err {}", e))?;
-
-        let loader: HoconLoader = HoconLoader::new()
+    /// Load an OperatorConf from a File using the Hocon format
+    pub fn from_file(path: impl AsRef<Path>) -> OperatorConf {
+        // okay to panic here as this is during setup code...
+        let data = std::fs::read_to_string(path).unwrap();
+        HoconLoader::new()
             .load_str(&data)
-            .map_err(|e| arcon_err_kind!("Failed to load Hocon Loader with err {}", e))?;
-
-        let conf = loader
+            .unwrap()
             .resolve()
-            .map_err(|e| arcon_err_kind!("Failed to resolve ArconConf with err {}", e))?;
-
-        Ok(conf)
+            .unwrap()
     }
 }
 
-impl Default for OperatorConf {
-    fn default() -> Self {
-        Self {
-            parallelism_strategy: Default::default(),
-            max_key: 256,
-        }
-    }
-}
-
+/// Operator Builder
+///
+/// Defines everything needed in order for Arcon to instantiate
+/// and manage an Operator during runtime.
 #[derive(Clone)]
 pub struct OperatorBuilder<OP: Operator, Backend = DefaultBackend> {
     /// Operator Constructor
@@ -100,6 +106,7 @@ impl<OP: Operator, Backend: arcon_state::Backend> OperatorBuilder<OP, Backend> {
 
 pub type TimestampExtractor<A> = Arc<dyn Fn(&A) -> u64 + Send + Sync>;
 
+/// Source Configuration
 #[derive(Clone)]
 pub struct SourceConf<S: ArconType> {
     pub extractor: Option<TimestampExtractor<S>>,
@@ -107,9 +114,11 @@ pub struct SourceConf<S: ArconType> {
 }
 
 impl<S: ArconType> SourceConf<S> {
+    /// Set [ArconTime] to be used for a Source
     pub fn set_arcon_time(&mut self, time: ArconTime) {
         self.time = time;
     }
+    /// Set a Timestamp Extractor for a Source
     pub fn set_timestamp_extractor(&mut self, f: impl Fn(&S) -> u64 + Send + Sync + 'static) {
         self.extractor = Some(Arc::new(f));
     }
@@ -124,6 +133,9 @@ impl<S: ArconType> Default for SourceConf<S> {
     }
 }
 
+/// Source Builder
+///
+/// Defines how Sources are constructed and managed during runtime.
 #[derive(Clone)]
 pub struct SourceBuilder<S: Source, Backend = DefaultBackend> {
     /// Source Constructor

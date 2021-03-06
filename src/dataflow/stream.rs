@@ -4,7 +4,7 @@
 use crate::{
     data::{ArconType, NodeID},
     dataflow::{
-        conf::OperatorBuilder,
+        conf::{OperatorBuilder, ParallelismStrategy},
         constructor::*,
         dfg::{ChannelKind, DFGNode, DFGNodeID, DFGNodeKind, DFG},
     },
@@ -50,6 +50,11 @@ impl<IN: ArconType> Stream<IN> {
         state_dir.push(state_id.clone());
         let backend = builder.create_backend(state_dir);
 
+        let outgoing_channels = match builder.conf.parallelism_strategy {
+            ParallelismStrategy::Static(num) => num,
+            _ => unreachable!("Managed Parallelism not Supported yet"),
+        };
+
         let manager_constructor = node_manager_constructor::<OP, _>(
             state_id,
             self.ctx.pipeline.data_system.clone(),
@@ -57,12 +62,15 @@ impl<IN: ArconType> Stream<IN> {
             backend,
         );
 
-        let next_dfg_id = self
-            .ctx
-            .dfg
-            .insert(DFGNode::new(DFGNodeKind::Node(manager_constructor), vec![
-                self.prev_dfg_id,
-            ]));
+        let prev_dfg_node = self.ctx.dfg.get_mut(&self.prev_dfg_id);
+        let incoming_channels = prev_dfg_node.outgoing_channels;
+
+        let next_dfg_id = self.ctx.dfg.insert(DFGNode::new(
+            DFGNodeKind::Node(manager_constructor),
+            outgoing_channels,
+            incoming_channels,
+            vec![self.prev_dfg_id],
+        ));
 
         self.prev_dfg_id = next_dfg_id;
         Stream {
@@ -118,8 +126,13 @@ impl<IN: ArconType> Stream<IN> {
                         }
                     };
 
+                    // Create expected incoming channels ids
+                    let in_channels: Vec<NodeID> = (0..dfg_node.ingoing_channels)
+                        .map(|i| NodeID::new(i as u32))
+                        .collect();
+
                     let nodes = manager_cons(
-                        vec![NodeID::new(0)],
+                        in_channels,
                         components,
                         channel_kind,
                         &mut self.ctx.pipeline,

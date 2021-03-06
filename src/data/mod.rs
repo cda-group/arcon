@@ -7,7 +7,7 @@ pub mod arrow;
 /// Serialisers and Deserialiser for in-flight data
 pub mod flight_serde;
 #[allow(dead_code)]
-mod partition;
+pub mod partition;
 /// Known Serialisation IDs for Arcon Types
 mod ser_id;
 

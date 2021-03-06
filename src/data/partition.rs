@@ -1,17 +1,26 @@
 use super::NodeID;
 use prost::*;
 
-pub struct PartitionGroup {
-    /// Holds information about how a keyed stream is partitioned.
-    ///
-    /// One Arcon node per KeyRange
-    ///
-    /// Example: ((1, KeyRange(0, 31), (2, KeyRange(32, 64), ....)
+/// Keyed state in Arcon is split into Regions.
+#[derive(Debug)]
+pub struct Region {
+    /// A Region may internally further split up the key ranges
+    /// Example: ((0, KeyRange(0, 31), (1, KeyRange(32, 64), ....)
     ranges: Vec<(NodeID, KeyRange)>,
 }
 
-impl PartitionGroup {
-    pub fn new(ranges: Vec<(NodeID, KeyRange)>) -> Self {
+impl Region {
+    pub fn new(instances: usize, max_key: usize) -> Self {
+        let mut ranges = Vec::new();
+        for index in 0..instances {
+            let start = (index * max_key + instances - 1) / instances;
+            let end = ((index + 1) * max_key - 1) / instances;
+            ranges.push((
+                NodeID::new(index as u32),
+                KeyRange::new(start as u64, end as u64),
+            ));
+        }
+
         Self { ranges }
     }
 }
@@ -20,10 +29,10 @@ impl PartitionGroup {
 #[derive(Message, PartialEq, Clone)]
 pub struct KeyRange {
     /// Start of the Key Range
-    #[prost(uint64, tag = "1")]
+    #[prost(uint64)]
     pub start: u64,
     /// End of the Key Range
-    #[prost(uint64, tag = "2")]
+    #[prost(uint64)]
     pub end: u64,
 }
 
