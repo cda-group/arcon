@@ -44,6 +44,8 @@ impl Operator for MyOperator {
     }
 }
 // ANCHOR_END: operator
+
+// ANCHOR: timer_operator
 #[derive(Default)]
 pub struct TimerOperator(EmptyState);
 

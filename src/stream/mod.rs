@@ -9,5 +9,5 @@ pub mod node;
 pub mod operator;
 /// Module containing all available arcon sources
 pub mod source;
-
+/// Module containing time logic within Arcon
 pub mod time;

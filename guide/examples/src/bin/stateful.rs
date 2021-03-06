@@ -62,7 +62,9 @@ fn main() {
         .build();
 
     // ANCHOR: watch_thread
-
+    pipeline.watch(|epoch: u64, _: MyState<Sled>| {
+        println!("Got state object for epoch {}", epoch);
+    });
     // ANCHOR_END: watch_thread
 
     // ANCHOR: watch_component

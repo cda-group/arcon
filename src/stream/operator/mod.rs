@@ -49,6 +49,9 @@ pub trait Operator: Send + Sized {
     /// Determines how the `Operator` persists its state
     fn persist(&mut self) -> OperatorResult<()>;
 
+    /// A get function to the operator's state.
+    ///
+    /// Use the ``ignore_state!()`` macro to indicate its an empty state.
     fn state(&mut self) -> &mut Self::OperatorState;
 }
 
@@ -72,6 +75,16 @@ macro_rules! ignore_persist {
     () => {
         fn persist(&mut self) -> OperatorResult<()> {
             Ok(())
+        }
+    };
+}
+
+/// Helper macro to implement an empty ´state` function
+#[macro_export]
+macro_rules! ignore_state {
+    () => {
+        fn state(&mut self) -> &mut Self::OperatorState {
+            crate::index::EmptyState
         }
     };
 }

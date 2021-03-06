@@ -10,12 +10,15 @@ or adding your own `Source` implementation.
 
 ## Source Configuration
 
-Whether you are using a pre-defined source or your own. You will have access 
-to modify a `SourceConf` object through a closure.
+Whether you are using a pre-defined source or your own. You will have the chance
+to configure a ``SourceConf`` object. Time in Arcon is by default based on event time.
+However, if you wish to swap to Process Time, you may do so by choosing ``ArconTime::Process``.
+Note that if you are using ``ArconTime::Event``, then a Timestamp Extractor also needs to be set. See down 
+below that shows an example of a Source that is working with the primitive ``u64``.
 
-By default, `Time` in Arcon is based on event time. However if you want to configure
-it to Process time, see the [File](#file) source example.
-
+```rust,edition2018,no_run,noplaypen
+{{#rustdoc_include ../../examples/src/bin/api.rs:source_conf}}
+```
 
 ## Pre-defined Sources
 
