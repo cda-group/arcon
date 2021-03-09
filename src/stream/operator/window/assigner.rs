@@ -199,23 +199,24 @@ where
         }
 
         let key = self.get_key(&element);
-
-        // Will store the index of the highest and lowest window it should go into
-        let mut floor = 0;
-        let mut ceil = 0;
-
-        match self.state.window_start().get(&key)? {
-            Some(start) => {
-                // Get the highest window the element goes into
-                ceil = (ts - start) / self.window_slide;
-                if ceil >= (self.window_length / self.window_slide) {
-                    floor = ceil - (self.window_length / self.window_slide) + 1;
+        let start = match self.state.window_start().get(&key)? {
+            Some(start) => start,
+            None => {
+                if ts < self.late_arrival_time {
+                    0
+                } else {
+                    let start = ts - self.late_arrival_time;
+                    self.state.window_start().put(key, start)?;
+                    start
                 }
             }
-            None => {
-                self.state.window_start().put(key, ts)?;
-            }
-        }
+        };
+        let ceil = (ts - start) / self.window_slide;
+        let floor = if ceil >= (self.window_length / self.window_slide) {
+            ceil - (self.window_length / self.window_slide) + 1
+        } else {
+            0
+        };
 
         // For all windows, insert element....
         for index in floor..=ceil {
@@ -471,9 +472,37 @@ mod tests {
         wait(1);
         // Inspect and assert
         sink.on_definition(|cd| {
-            let r0 = &cd.data[0].data;
+            let w0 = &cd.data[0].data;
+            let w0_ts = &cd.data[0].timestamp.expect("should have a timestamp");
             assert_eq!(&cd.data.len(), &(1_usize));
-            assert_eq!(r0, &2);
+            assert_eq!(w0, &2);
+            assert_eq!(w0_ts, &(moment + 10));
+        });
+    }
+    #[test]
+    fn window_allow_late_arrival() {
+        // Send 2 messages on time, and then 1 message which is too late
+        let (assigner_ref, sink) = window_assigner_test_setup(10, 10, 10);
+        wait(1);
+        // Send messages
+        let moment = now();
+        assigner_ref.tell(timestamped_event(moment));
+        assigner_ref.tell(timestamped_event(moment));
+        assigner_ref.tell(timestamped_event(moment - 5));
+        assigner_ref.tell(watermark(moment + 21));
+        wait(1);
+        wait(1);
+        // Inspect and assert
+        sink.on_definition(|cd| {
+            let w0 = &cd.data[0].data;
+            let w0_ts = &cd.data[0].timestamp.expect("should have a timestamp");
+            let w1 = &cd.data[1].data;
+            let w1_ts = &cd.data[1].timestamp.expect("should have a timestamp");
+            assert_eq!(&cd.data.len(), &(2_usize));
+            assert_eq!(w0, &1);
+            assert_eq!(w0_ts, &(moment));
+            assert_eq!(w1, &2);
+            assert_eq!(w1_ts, &(moment + 10));
         });
     }
     #[test]
