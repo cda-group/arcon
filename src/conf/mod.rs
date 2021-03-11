@@ -18,7 +18,7 @@ pub enum ExecutionMode {
 }
 #[derive(Deserialize, Clone, Debug)]
 pub struct DistributedConf {
-  peers: Vec<String>, // ["192.168.1.1:2000",  "192.168.1.2:2000"]
+    peers: Vec<String>, // ["192.168.1.1:2000",  "192.168.1.2:2000"]
 }
 
 /// Configuration for an Arcon Pipeline
