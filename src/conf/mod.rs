@@ -14,7 +14,11 @@ use std::path::{Path, PathBuf};
 #[derive(Deserialize, Clone, Debug)]
 pub enum ExecutionMode {
     Local,
-    Distributed,
+    Distributed(DistributedConf),
+}
+#[derive(Deserialize, Clone, Debug)]
+pub struct DistributedConf {
+    peers: Vec<String>, // ["192.168.1.1:2000",  "192.168.1.2:2000"]
 }
 
 /// Configuration for an Arcon Pipeline
