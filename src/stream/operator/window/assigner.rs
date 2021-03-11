@@ -5,7 +5,10 @@ use super::{Window, WindowContext};
 use crate::{
     data::{ArconElement, ArconType},
     index::{ArconState, EagerHashTable, IndexOps, StateConstructor},
-    stream::operator::{Operator, OperatorContext},
+    stream::{
+        operator::{Operator, OperatorContext},
+        time::Time,
+    },
 };
 use arcon_error::*;
 use arcon_macros::ArconState;
@@ -91,24 +94,31 @@ where
     pub fn tumbling(
         window: W,
         backend: Arc<B>,
-        length: u64,
-        late_arrival_time: u64,
+        length: Time,
+        late_arrival_time: Time,
         keyed: bool,
     ) -> Self {
-        let slide = length; // slide = length means that we operate on tumbling windows
-        Self::setup(window, backend, length, slide, late_arrival_time, keyed)
+        let slide = length.0; // slide = length means that we operate on tumbling windows
+        Self::setup(window, backend, length.0, slide, late_arrival_time.0, keyed)
     }
 
     /// Create a WindowAssigner for sliding windows
     pub fn sliding(
         window: W,
         backend: Arc<B>,
-        length: u64,
-        slide: u64,
-        late_arrival_time: u64,
+        length: Time,
+        slide: Time,
+        late_arrival_time: Time,
         keyed: bool,
     ) -> Self {
-        Self::setup(window, backend, length, slide, late_arrival_time, keyed)
+        Self::setup(
+            window,
+            backend,
+            length.0,
+            slide.0,
+            late_arrival_time.0,
+            keyed,
+        )
     }
 
     // Setup method for both sliding and tumbling windows
@@ -353,8 +363,14 @@ mod tests {
 
         let window = AppenderWindow::new(backend.clone(), &appender_fn);
 
-        let window_assigner =
-            WindowAssigner::sliding(window, backend.clone(), length, slide, late, true);
+        let window_assigner = WindowAssigner::sliding(
+            window,
+            backend.clone(),
+            Time::seconds(length),
+            Time::seconds(slide),
+            Time::seconds(late),
+            true,
+        );
 
         let node = Node::new(
             descriptor,

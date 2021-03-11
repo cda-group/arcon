@@ -145,7 +145,7 @@ pub mod prelude {
                 Operator, OperatorContext,
             },
             source::collection::CollectionSource,
-            time::ArconTime,
+            time::{ArconTime, Time},
         },
         Arcon, ArconState,
     };
