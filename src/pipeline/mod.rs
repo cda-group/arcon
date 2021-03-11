@@ -170,7 +170,7 @@ impl Pipeline {
                         EpochManager::new(arcon_conf.epoch_interval, snapshot_manager_ref)
                     }))
                 }
-                ExecutionMode::Distributed => None,
+                ExecutionMode::Distributed(_) => None,
             };
 
         let timeout = std::time::Duration::from_millis(500);
