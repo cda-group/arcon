@@ -20,14 +20,27 @@ fn main() {
                 }
 
                 let function = IncrementalWindow::new(backend.clone(), &init, &aggregation);
-                WindowAssigner::sliding(function, backend, 1000, 500, 0, false)
+                WindowAssigner::sliding(
+                    function,
+                    backend,
+                    Time::seconds(1000),
+                    Time::seconds(500),
+                    Time::seconds(0),
+                    false,
+                )
             }),
             conf: Default::default(),
         })
         .operator(OperatorBuilder {
             constructor: Arc::new(|backend| {
                 let function = AppenderWindow::new(backend.clone(), &window_sum);
-                WindowAssigner::tumbling(function, backend, 2000, 0, false)
+                WindowAssigner::tumbling(
+                    function,
+                    backend,
+                    Time::seconds(2000),
+                    Time::seconds(0),
+                    false,
+                )
             }),
             conf: Default::default(),
         })
