@@ -133,7 +133,8 @@ pub mod prelude {
         conf::ArconConf,
         data::{ArconElement, ArconNever, ArconType, StateID, VersionId},
         dataflow::conf::{
-            OperatorBuilder, OperatorConf, ParallelismStrategy, SourceConf, StreamKind,
+            OperatorBuilder, OperatorConf, ParallelismStrategy, SourceBuilder, SourceConf,
+            StreamKind,
         },
         manager::snapshot::Snapshot,
         pipeline::{AssembledPipeline, Pipeline, Stream},
@@ -144,7 +145,7 @@ pub mod prelude {
                 window::{AppenderWindow, IncrementalWindow, WindowAssigner},
                 Operator, OperatorContext,
             },
-            source::collection::CollectionSource,
+            source::{Source, SourceContext},
             time::{ArconTime, Time},
         },
         Arcon, ArconState,

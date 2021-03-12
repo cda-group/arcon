@@ -20,7 +20,7 @@ use crate::{
     prelude::*,
     stream::{
         node::source::SourceEvent,
-        source::{local_file::LocalFileSource, Source},
+        source::{collection::CollectionSource, local_file::LocalFileSource, Source},
     },
 };
 use arcon_allocator::Allocator;
