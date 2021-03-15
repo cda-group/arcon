@@ -419,6 +419,7 @@ where
                 });
             }
         }
+
         unsafe {
             let operator = &mut (*self.operator.get());
             if let Err(_) = operator.on_start(make_context!(self)) {
@@ -428,6 +429,7 @@ where
                 );
             }
         };
+
         Handled::Ok
     }
 }
