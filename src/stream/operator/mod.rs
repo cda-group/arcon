@@ -32,6 +32,12 @@ pub trait Operator: Send + Sized {
     /// State type for the Operator
     type OperatorState: ArconState;
 
+    /// Determines what the `Operator` runs before beginning to process Elements
+    fn on_start(&mut self, mut _ctx: OperatorContext<Self, impl Backend, impl
+    ComponentDefinition>) -> OperatorResult<()> {
+        Ok(())
+    }
+
     /// Determines how the `Operator` processes Elements
     fn handle_element(
         &mut self,
