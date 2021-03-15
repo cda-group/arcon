@@ -234,8 +234,8 @@ fn channel_batch_size_default() -> usize {
 }
 
 fn allocator_capacity_default() -> usize {
-    // 500 MB
-    524288000
+    // 5 GB
+    5368709120
 }
 
 fn kompact_threads_default() -> usize {
