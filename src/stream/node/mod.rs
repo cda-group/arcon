@@ -422,7 +422,7 @@ where
 
         unsafe {
             let operator = &mut (*self.operator.get());
-            if let Err(_) = operator.on_start(make_context!(self)) {
+            if operator.on_start(make_context!(self)).is_err() {
                 error!(self.ctx.log(), "Failed to run startup code");
             }
         };
