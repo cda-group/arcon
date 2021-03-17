@@ -1,7 +1,7 @@
 // Copyright (c) 2021, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::data::arrow::ImmutableTable;
+use crate::table::ImmutableTable;
 use arrow::{datatypes::Schema, util::pretty::*};
 use datafusion::prelude::*;
 use kompact::prelude::*;

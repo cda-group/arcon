@@ -1,9 +1,9 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-#[cfg(feature = "arcon_arrow")]
-use crate::data::arrow::ArrowTable;
 use crate::index::{AppenderIndex, IndexOps};
+#[cfg(feature = "arcon_arrow")]
+use crate::table::ImmutableTable;
 use arcon_state::{
     backend::{
         handles::{ActiveHandle, Handle},
@@ -50,7 +50,7 @@ where
         self.handle.set_item_key(key);
     }
     #[cfg(feature = "arcon_arrow")]
-    fn arrow_table(&mut self) -> Result<Option<ArrowTable>> {
+    fn table(&mut self) -> Result<Option<ImmutableTable>> {
         Ok(None)
     }
 }
