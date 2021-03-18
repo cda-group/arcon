@@ -14,7 +14,7 @@ use arrow::{
     record_batch::RecordBatch,
 };
 use datafusion::{datasource::MemTable, error::DataFusionError};
-use std::sync::Arc;
+use std::{convert::TryFrom, sync::Arc};
 
 // Size for each RecordBatch in Arrow
 pub const RECORD_BATCH_SIZE: usize = 1024;
@@ -95,13 +95,11 @@ impl RecordBatchBuilder {
             builder,
         }
     }
-    /// Append an Element to the table
     #[inline]
     pub fn append(&mut self, elem: impl ArrowOps) -> Result<(), ArrowError> {
         elem.append(&mut self.builder)?;
         self.builder.append(true)
     }
-
     pub fn name(&self) -> &str {
         &self.table_name
     }
@@ -123,11 +121,6 @@ impl RecordBatchBuilder {
         }
         RecordBatch::try_new(self.schema(), arr)
     }
-
-    pub fn mem_table(&mut self) -> Result<MemTable, DataFusionError> {
-        let record_batch = self.record_batch()?;
-        MemTable::try_new(self.schema(), vec![vec![record_batch]])
-    }
     pub fn set_name(&mut self, name: &str) {
         self.table_name = name.to_string();
     }
@@ -142,35 +135,6 @@ pub struct ImmutableTable {
 }
 
 impl ImmutableTable {
-    /// Creates a Raw version of ImmutableTable that can be persisted to disk
-    /// or sent over the network.
-    pub fn raw_table(&self) -> Result<RawTable, ArrowError> {
-        let ipc = IpcDataGenerator::default();
-        let write_options = IpcWriteOptions::default();
-        let mut tracker = DictionaryTracker::new(false);
-
-        let encoded_data = ipc.schema_to_bytes(&*self.schema, &write_options);
-        let raw_schema = encoded_data.ipc_message;
-
-        let mut raw_batches: Vec<RawRecordBatch> = Vec::with_capacity(self.batches.len());
-
-        for batch in self.batches.iter() {
-            let (_, encoded_data) = ipc
-                .encoded_batch(&batch, &mut tracker, &write_options)
-                .map_err(|e| ArrowError::IoError(e.to_string()))?;
-
-            raw_batches.push(RawRecordBatch {
-                ipc_message: encoded_data.ipc_message,
-                arrow_data: encoded_data.arrow_data,
-            });
-        }
-
-        Ok(RawTable {
-            name: self.name.clone(),
-            schema: raw_schema,
-            batches: raw_batches,
-        })
-    }
     pub fn mem_table(self) -> Result<MemTable, DataFusionError> {
         MemTable::try_new(self.schema, vec![self.batches])
     }
@@ -183,8 +147,13 @@ impl ImmutableTable {
     pub fn set_name(&mut self, name: &str) {
         self.name = name.to_string();
     }
-    /// Restore a ImmutableTable from a RawTable
-    pub fn from_raw_table(table: RawTable) -> Result<Self, ArrowError> {
+}
+
+/// Restore a ImmutableTable from a RawTable
+impl TryFrom<RawTable> for ImmutableTable {
+    type Error = ArrowError;
+
+    fn try_from(table: RawTable) -> Result<Self, Self::Error> {
         let s = schema_from_bytes(&table.schema).map_err(|e| ArrowError::IoError(e.to_string()))?;
         let schema_ref = Arc::new(s);
         let dict_fields = Vec::new();
@@ -239,6 +208,38 @@ pub struct RawTable {
     pub batches: Vec<RawRecordBatch>,
 }
 
+impl TryFrom<ImmutableTable> for RawTable {
+    type Error = ArrowError;
+
+    fn try_from(table: ImmutableTable) -> Result<Self, Self::Error> {
+        let ipc = IpcDataGenerator::default();
+        let write_options = IpcWriteOptions::default();
+        let mut tracker = DictionaryTracker::new(false);
+
+        let encoded_data = ipc.schema_to_bytes(&*table.schema(), &write_options);
+        let raw_schema = encoded_data.ipc_message;
+
+        let mut raw_batches: Vec<RawRecordBatch> = Vec::with_capacity(table.batches.len());
+
+        for batch in table.batches.iter() {
+            let (_, encoded_data) = ipc
+                .encoded_batch(&batch, &mut tracker, &write_options)
+                .map_err(|e| ArrowError::IoError(e.to_string()))?;
+
+            raw_batches.push(RawRecordBatch {
+                ipc_message: encoded_data.ipc_message,
+                arrow_data: encoded_data.arrow_data,
+            });
+        }
+
+        Ok(RawTable {
+            name: table.name.clone(),
+            schema: raw_schema,
+            batches: raw_batches,
+        })
+    }
+}
+
 /// A Raw version of an Arrow RecordBatch
 #[derive(prost::Message, Clone)]
 pub struct RawRecordBatch {
@@ -273,8 +274,8 @@ mod tests {
         }
 
         let immutable: ImmutableTable = table.to_immutable().unwrap();
-        let raw_table: RawTable = immutable.raw_table().unwrap();
-        let back_to_immutable: ImmutableTable = ImmutableTable::from_raw_table(raw_table).unwrap();
+        let raw_table: RawTable = RawTable::try_from(immutable).unwrap();
+        let back_to_immutable: ImmutableTable = ImmutableTable::try_from(raw_table).unwrap();
         // create a mem table and check that we have correct number of rows...
         let mem_table = back_to_immutable.mem_table().unwrap();
         assert_eq!(mem_table.statistics().num_rows, Some(1548));
