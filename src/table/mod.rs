@@ -69,7 +69,7 @@ impl MutableTable {
     }
 
     /// Converts the MutableTable into an ImmutableTable
-    pub fn to_immutable(mut self) -> Result<ImmutableTable, ArrowError> {
+    pub fn immutable(mut self) -> Result<ImmutableTable, ArrowError> {
         self.finish()?;
 
         Ok(ImmutableTable {
@@ -233,7 +233,7 @@ impl TryFrom<ImmutableTable> for RawTable {
         }
 
         Ok(RawTable {
-            name: table.name.clone(),
+            name: table.name,
             schema: raw_schema,
             batches: raw_batches,
         })
@@ -273,7 +273,7 @@ mod tests {
             table.append(event).unwrap();
         }
 
-        let immutable: ImmutableTable = table.to_immutable().unwrap();
+        let immutable: ImmutableTable = table.immutable().unwrap();
         let raw_table: RawTable = RawTable::try_from(immutable).unwrap();
         let back_to_immutable: ImmutableTable = ImmutableTable::try_from(raw_table).unwrap();
         // create a mem table and check that we have correct number of rows...

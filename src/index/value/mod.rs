@@ -93,7 +93,7 @@ where
             .load(values.filter_map(|v| v.ok()))
             .map_err(|e| ArconStateError::Unknown { msg: e.to_string() })?;
         let imut = table
-            .to_immutable()
+            .immutable()
             .map_err(|e| ArconStateError::Unknown { msg: e.to_string() })?;
         Ok(Some(imut))
     }

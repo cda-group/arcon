@@ -3,8 +3,6 @@
 
 #[cfg(feature = "arcon_arrow")]
 use crate::manager::query::{QueryManagerMsg, QueryManagerPort, TableRegistration};
-#[cfg(feature = "arcon_arrow")]
-use crate::table::ImmutableTable;
 use crate::{
     data::{ArconMessage, Epoch, NodeID, StateID, Watermark},
     index::{
@@ -296,10 +294,9 @@ where
                                         let mut state =
                                             OP::OperatorState::restore(snapshot.clone())?;
                                         for table in state.tables() {
-                                            let imut = ImmutableTable::from(table);
                                             let registration = TableRegistration {
                                                 epoch: epoch.epoch,
-                                                table: imut,
+                                                table,
                                             };
                                             self.query_manager_port.trigger(
                                                 QueryManagerMsg::TableRegistration(registration),
