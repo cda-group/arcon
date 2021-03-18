@@ -16,7 +16,8 @@ use std::{borrow::Cow, sync::Arc};
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "arcon_arrow")] {
-        use crate::data::arrow::{ArrowOps, ArrowTable};
+        use crate::data::arrow::ArrowOps;
+        use crate::table::ImmutableTable;
         pub trait IndexValue: Value + ArrowOps {}
         impl<T> IndexValue for T where T: Value + ArrowOps {}
     } else if #[cfg(not(feature = "arcon_arrow"))] {
@@ -41,9 +42,9 @@ pub trait IndexOps {
     /// Set the current active key for the index
     fn set_key(&mut self, key: u64);
 
-    /// Create an ArrowTable from the data in the Index
+    /// Create a [ImmutableTable] from the data in the Index
     #[cfg(feature = "arcon_arrow")]
-    fn arrow_table(&mut self) -> Result<Option<ArrowTable>>;
+    fn table(&mut self) -> Result<Option<ImmutableTable>>;
 }
 
 /// A separate trait for defining a state constructor for [ArconState]
@@ -74,9 +75,9 @@ pub trait ArconState: StateConstructor + Send + 'static {
     fn persist(&mut self) -> Result<()>;
     fn set_key(&mut self, key: u64);
 
-    /// Returns a Vec of registered Arrow tables
+    /// Returns a Vec of registered tables
     #[cfg(feature = "arcon_arrow")]
-    fn tables(&mut self) -> Vec<ArrowTable>;
+    fn tables(&mut self) -> Vec<ImmutableTable>;
 
     #[cfg(feature = "arcon_arrow")]
     fn has_tables() -> bool;
@@ -95,7 +96,7 @@ impl ArconState for EmptyState {
     }
     fn set_key(&mut self, _: u64) {}
     #[cfg(feature = "arcon_arrow")]
-    fn tables(&mut self) -> Vec<ArrowTable> {
+    fn tables(&mut self) -> Vec<ImmutableTable> {
         Vec::new()
     }
     #[cfg(feature = "arcon_arrow")]
@@ -118,7 +119,7 @@ impl IndexOps for EmptyState {
         // ignore
     }
     #[cfg(feature = "arcon_arrow")]
-    fn arrow_table(&mut self) -> Result<Option<ArrowTable>> {
+    fn table(&mut self) -> Result<Option<ImmutableTable>> {
         Ok(None)
     }
 }

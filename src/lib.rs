@@ -52,7 +52,8 @@ pub use arcon_state::error::ArconStateError;
 // Imports below are exposed for #[derive(Arcon)]
 cfg_if::cfg_if! {
     if #[cfg(feature = "arcon_arrow")] {
-        pub use crate::data::arrow::{ArrowOps, ArrowTable, ToArrow};
+        pub use crate::data::arrow::{ArrowOps, ToArrow};
+        pub use crate::table::{RECORD_BATCH_SIZE, ImmutableTable, RecordBatchBuilder, MutableTable};
         pub use arrow::array::{ArrayBuilder, StringBuilder, PrimitiveBuilder, ArrayData, ArrayDataBuilder, StructArray, StructBuilder};
         pub use arrow::error::ArrowError;
         pub use arrow::datatypes::{DataType, Field, Schema};
@@ -91,6 +92,9 @@ mod metrics;
 mod pipeline;
 /// Contains the core stream logic
 mod stream;
+/// Table implementations
+#[cfg(feature = "arcon_arrow")]
+mod table;
 /// Test module containing some more complex unit tests
 #[cfg(test)]
 mod test;
@@ -166,7 +170,7 @@ pub mod prelude {
     pub use kompact::{get_core_ids, CoreId};
 
     #[cfg(feature = "arcon_arrow")]
-    pub use super::{Arrow, ArrowOps, ArrowTable, ToArrow};
+    pub use super::{Arrow, ArrowOps, MutableTable, ToArrow};
     #[cfg(feature = "arcon_arrow")]
     pub use datafusion::prelude::*;
 

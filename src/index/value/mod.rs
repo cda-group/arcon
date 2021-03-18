@@ -3,7 +3,7 @@
 
 use super::{HashTable, IndexOps, IndexValue, ValueIndex};
 #[cfg(feature = "arcon_arrow")]
-use crate::data::arrow::ArrowTable;
+use crate::table::ImmutableTable;
 use arcon_state::{error::*, Backend};
 use std::{borrow::Cow, sync::Arc};
 
@@ -86,13 +86,16 @@ where
     }
 
     #[cfg(feature = "arcon_arrow")]
-    fn arrow_table(&mut self) -> Result<Option<ArrowTable>> {
-        let (len, values) = self.hash_table.full_iter()?;
-        let mut table = V::arrow_table(len);
+    fn table(&mut self) -> Result<Option<ImmutableTable>> {
+        let (_, values) = self.hash_table.full_iter()?;
+        let mut table = V::table();
         table
             .load(values.filter_map(|v| v.ok()))
             .map_err(|e| ArconStateError::Unknown { msg: e.to_string() })?;
-        Ok(Some(table))
+        let imut = table
+            .immutable()
+            .map_err(|e| ArconStateError::Unknown { msg: e.to_string() })?;
+        Ok(Some(imut))
     }
 }
 

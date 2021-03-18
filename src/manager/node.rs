@@ -2,14 +2,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 #[cfg(feature = "arcon_arrow")]
-use crate::data::arrow::ImmutableTable;
-#[cfg(feature = "arcon_arrow")]
-use crate::index::ArconState;
-#[cfg(feature = "arcon_arrow")]
 use crate::manager::query::{QueryManagerMsg, QueryManagerPort, TableRegistration};
 use crate::{
     data::{ArconMessage, Epoch, NodeID, StateID, Watermark},
-    index::{HashTable, IndexOps, LocalValue, StateConstructor, ValueIndex, EMPTY_STATE_ID},
+    index::{
+        ArconState, HashTable, IndexOps, LocalValue, StateConstructor, ValueIndex, EMPTY_STATE_ID,
+    },
     manager::{
         epoch::EpochEvent,
         snapshot::{Snapshot, SnapshotEvent, SnapshotManagerPort},
@@ -296,10 +294,9 @@ where
                                         let mut state =
                                             OP::OperatorState::restore(snapshot.clone())?;
                                         for table in state.tables() {
-                                            let imut = ImmutableTable::from(table);
                                             let registration = TableRegistration {
                                                 epoch: epoch.epoch,
-                                                table: imut,
+                                                table,
                                             };
                                             self.query_manager_port.trigger(
                                                 QueryManagerMsg::TableRegistration(registration),

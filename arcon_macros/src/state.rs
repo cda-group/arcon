@@ -65,11 +65,11 @@ pub fn derive_state(input: TokenStream) -> TokenStream {
         #[cfg(feature = "arcon_arrow")]
         let tables = quote! {
             #[inline]
-            fn tables(&mut self) -> Vec<::arcon::ArrowTable> {
+            fn tables(&mut self) -> Vec<::arcon::ImmutableTable> {
                 vec![#(#tables)*]
                     .into_iter()
                     .filter_map(|m| m)
-                    .collect::<Vec<::arcon::ArrowTable>>()
+                    .collect::<Vec<::arcon::ImmutableTable>>()
             }
             fn has_tables() -> bool {
                 #has_tables_quote
@@ -128,7 +128,7 @@ fn get_table(
             ..
         }) => {
             let quote = quote! {
-                match self.#ident.arrow_table() {
+                match self.#ident.table() {
                     Ok(table) => table.and_then(|mut t| { t.set_name(#table_name); Some(t)}),
                     Err(_) => None,
                 }

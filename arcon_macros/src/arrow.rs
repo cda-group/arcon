@@ -60,10 +60,10 @@ pub fn derive_arrow(input: TokenStream) -> TokenStream {
                         #(#builders)*
                         Ok(())
                     }
-                    fn arrow_table(capacity: usize) -> ::arcon::ArrowTable {
-                        let builder = ::arcon::StructBuilder::from_fields(#fields, capacity);
+                    fn table() -> ::arcon::MutableTable {
+                        let builder = ::arcon::StructBuilder::from_fields(#fields, ::arcon::RECORD_BATCH_SIZE);
                         let table_name = stringify!(#name).to_lowercase();
-                        ::arcon::ArrowTable::new(table_name, Self::schema(), builder)
+                        ::arcon::MutableTable::new(::arcon::RecordBatchBuilder::new(table_name, Self::schema(), builder))
                     }
                 }
             }

@@ -1,9 +1,9 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-#[cfg(feature = "arcon_arrow")]
-use crate::data::arrow::ArrowTable;
 use crate::index::{IndexOps, IndexValue, ValueIndex};
+#[cfg(feature = "arcon_arrow")]
+use crate::table::ImmutableTable;
 use arcon_state::{
     backend::{
         handles::{ActiveHandle, Handle},
@@ -88,13 +88,15 @@ where
         self.current_key = key;
     }
     #[cfg(feature = "arcon_arrow")]
-    fn arrow_table(&mut self) -> Result<Option<ArrowTable>> {
-        let len = self.handle.len()?;
-        let mut table = V::arrow_table(len);
+    fn table(&mut self) -> Result<Option<ImmutableTable>> {
+        let mut table = V::table();
         let values = self.handle.values()?;
         table
             .load(values.filter_map(|v| v.ok()))
             .map_err(|e| ArconStateError::Unknown { msg: e.to_string() })?;
-        Ok(Some(table))
+        let imut = table
+            .immutable()
+            .map_err(|e| ArconStateError::Unknown { msg: e.to_string() })?;
+        Ok(Some(imut))
     }
 }
