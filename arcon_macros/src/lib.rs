@@ -15,6 +15,7 @@ mod arcon;
 #[cfg(feature = "arcon_arrow")]
 mod arrow;
 mod decoder;
+mod proto;
 mod state;
 
 /// Derive macro for declaring an ArconType
@@ -59,4 +60,23 @@ pub fn arrow(input: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn arcon_decoder(delimiter: TokenStream, input: TokenStream) -> TokenStream {
     decoder::derive_decoder(delimiter, input)
+}
+
+/// Makes a struct or enum prost-compatible.
+///
+/// ```rust,ignore
+/// #[arcon_macros::prost]
+/// struct Event {
+///     s: String,
+///     p: Point,
+/// }
+/// #[arcon_macros::prost]
+/// struct Point {
+///     x: i32,
+///     y: i32,
+/// }
+/// ```
+#[proc_macro_attribute]
+pub fn proto(_: TokenStream, input: TokenStream) -> TokenStream {
+    proto::derive_proto(input)
 }
