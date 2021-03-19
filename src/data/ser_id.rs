@@ -1,5 +1,7 @@
 use kompact::prelude::SerId;
 
+pub const UNIT_ID: SerId = 48;
+
 pub const NEVER_ID: SerId = 49;
 
 // Serialisation IDs for Arcon primitives

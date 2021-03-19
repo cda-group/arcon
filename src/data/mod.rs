@@ -484,6 +484,25 @@ impl PartialEq for ArconF64 {
     }
 }
 
+/// A `Unit` compatible with `prost`. This is needed because `prost` throws an error when using the
+/// standard `()` type.
+#[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
+#[derive(Clone, PartialEq, Eq, prost::Message)]
+pub struct ArconUnit {}
+
+impl ArconType for ArconUnit {
+    #[cfg(feature = "unsafe_flight")]
+    const UNSAFE_SER_ID: SerId = ser_id::UNIT_ID;
+    const RELIABLE_SER_ID: SerId = ser_id::UNIT_ID;
+    const VERSION_ID: VersionId = 1;
+    fn get_key(&self) -> u64 {
+        0
+    }
+}
+
+#[cfg(feature = "unsafe_flight")]
+impl Abomonation for ArconUnit {}
+
 /// Arcon variant of the `Never` (or `!`) type which fulfills `ArconType` requirements
 #[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
 #[derive(Clone, PartialEq, Eq)]

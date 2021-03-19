@@ -7,3 +7,6 @@
 pub mod basic_v3 {
     include!(concat!(env!("OUT_DIR"), "/arcon_basic_v3.rs"));
 }
+
+/// Tests for deriving `prost` from structs.
+mod proto_derive_test;
