@@ -112,7 +112,7 @@ mod nested_enums {
     }
 }
 
-/// Test `arcon::prelude::ArconUnit` type.
+/// Test `()` type.
 #[cfg(test)]
 mod unit {
 
@@ -128,13 +128,10 @@ mod unit {
 
     #[test]
     fn test() {
-        use arcon::prelude::ArconUnit;
-        let _f = Foo {
-            u: ArconUnit::default(),
-        };
+        let _f = Foo { u: () };
 
         let _b = Bar {
-            this: Some(BarEnum::U(ArconUnit::default())),
+            this: Some(BarEnum::U(())),
         };
     }
 }
@@ -156,14 +153,61 @@ mod list {
 
     #[test]
     fn test() {
-        use arcon::prelude::ArconUnit;
         let _list = List {
             this: Some(ListEnum::Cons(Cons {
                 val: 5,
                 tail: Box::new(List {
-                    this: Some(ListEnum::Nil(ArconUnit::default())),
+                    this: Some(ListEnum::Nil(())),
                 }),
             })),
         };
+    }
+}
+
+/// Test to see that prost can correctly handle unit type.
+#[cfg(test)]
+mod prost_unit {
+    use prost::{Message, Oneof};
+
+    #[derive(Message, Clone, Eq, PartialEq)]
+    struct Foo {
+        #[prost(message, required)]
+        u0: (),
+        #[prost(int32)]
+        i: i32,
+        #[prost(message, required)]
+        u1: (),
+        #[prost(message, required)]
+        u2: (),
+        #[prost(oneof = "Bar", tags = "10, 11")]
+        b: Option<Bar>,
+    }
+
+    #[derive(Oneof, Clone, Eq, PartialEq)]
+    enum Bar {
+        #[prost(message, tag = "10")]
+        Baz(()),
+        #[prost(message, tag = "11")]
+        Qux(()),
+    }
+
+    #[test]
+    fn test() {
+        let f = Foo {
+            u0: (),
+            i: 0,
+            u1: (),
+            u2: (),
+            b: Some(Bar::Qux(())),
+        };
+
+        let mut buf = Vec::new();
+
+        let expected = f.clone();
+
+        f.encode(&mut buf).unwrap();
+        let found = Foo::decode(&buf[..]).unwrap();
+
+        assert_eq!(expected, found);
     }
 }
