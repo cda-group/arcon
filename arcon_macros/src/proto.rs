@@ -24,11 +24,8 @@ fn rewrite_enum(mut item: syn::ItemEnum) -> pm::TokenStream {
                 "#[proto] expects variant fields to take exactly one argument"
             );
             let field = variant.fields.iter_mut().next().unwrap();
-            let (attr, is_unit) = get_prost_field_attr(&field.ty, Some(tag));
+            let attr = get_prost_field_attr(&field.ty, Some(tag));
             variant.attrs.push(attr);
-            if is_unit {
-                field.ty = syn::parse_quote!(arcon::prelude::ArconUnit)
-            }
         });
     let vis = item.vis.clone();
     let tags = item
@@ -66,11 +63,8 @@ fn rewrite_enum(mut item: syn::ItemEnum) -> pm::TokenStream {
 /// Rewrites a struct into a `prost::Message`.
 fn rewrite_struct(mut item: syn::ItemStruct) -> pm::TokenStream {
     item.fields.iter_mut().for_each(|field| {
-        let (attr, is_unit) = get_prost_field_attr(&field.ty, None);
+        let attr = get_prost_field_attr(&field.ty, None);
         field.attrs.push(attr);
-        if is_unit {
-            field.ty = syn::parse_quote!(arcon::prelude::ArconUnit)
-        }
     });
     quote!(
         #[derive(prost::Message)]
@@ -89,8 +83,7 @@ fn rewrite_struct(mut item: syn::ItemStruct) -> pm::TokenStream {
 /// if it is not.
 ///
 /// For prost-type conversions, see: https://github.com/danburkert/prost#fields.
-fn get_prost_field_attr(ty: &syn::Type, tag: Option<usize>) -> (syn::Attribute, bool) {
-    let mut is_unit = false;
+fn get_prost_field_attr(ty: &syn::Type, tag: Option<usize>) -> syn::Attribute {
     let ty = match &ty {
         syn::Type::Path(ty) => {
             let seg = ty.path.segments.iter().next().unwrap();
@@ -108,18 +101,15 @@ fn get_prost_field_attr(ty: &syn::Type, tag: Option<usize>) -> (syn::Attribute, 
             }
             .to_string()
         }
-        syn::Type::Tuple(ty) if ty.elems.is_empty() => {
-            is_unit = true;
-            "message".to_string()
-        }
+        // unit-type
+        syn::Type::Tuple(ty) if ty.elems.is_empty() => "message".to_string(),
         _ => panic!("#[proto] expects all types to be mangled and de-aliased."),
     };
     let ident = syn::Ident::new(&ty, pm2::Span::call_site());
-    let attr = if let Some(tag) = tag {
+    if let Some(tag) = tag {
         let lit = syn::LitStr::new(&format!("{}", tag), pm2::Span::call_site());
         syn::parse_quote!(#[prost(#ident, tag = #lit)])
     } else {
         syn::parse_quote!(#[prost(#ident, required)])
-    };
-    (attr, is_unit)
+    }
 }
