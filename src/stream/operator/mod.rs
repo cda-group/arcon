@@ -28,7 +28,7 @@ pub trait Operator: Send + Sized {
     /// The type of output elements this operator produces
     type OUT: ArconType;
     /// Storage state type for timer facilities
-    type TimerState: Message + Clone + Default + PartialEq;
+    type TimerState: Message + Clone + Default;
     /// State type for the Operator
     type OperatorState: ArconState;
 
