@@ -1,9 +1,10 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::index::{IndexOps, IndexValue, ValueIndex};
-#[cfg(feature = "arcon_arrow")]
-use crate::table::ImmutableTable;
+use crate::{
+    index::{IndexOps, IndexValue, ValueIndex},
+    table::ImmutableTable,
+};
 use arcon_state::{
     backend::{
         handles::{ActiveHandle, Handle},
@@ -87,7 +88,6 @@ where
     fn set_key(&mut self, key: u64) {
         self.current_key = key;
     }
-    #[cfg(feature = "arcon_arrow")]
     fn table(&mut self) -> Result<Option<ImmutableTable>> {
         let mut table = V::table();
         let values = self.handle.values()?;

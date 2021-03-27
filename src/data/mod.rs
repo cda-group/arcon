@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /// Arrow related types
-#[cfg(feature = "arcon_arrow")]
 pub mod arrow;
 /// Serialisers and Deserialiser for in-flight data
 pub mod flight_serde;

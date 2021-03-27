@@ -9,9 +9,7 @@ use std::{
     hash::{BuildHasher, Hash, Hasher},
 };
 
-use crate::index::IndexOps;
-#[cfg(feature = "arcon_arrow")]
-use crate::table::ImmutableTable;
+use crate::{index::IndexOps, table::ImmutableTable};
 use arcon_state::{
     backend::{
         handles::{ActiveHandle, Handle},
@@ -369,7 +367,6 @@ where
         Ok(())
     }
     fn set_key(&mut self, _: u64) {}
-    #[cfg(feature = "arcon_arrow")]
     fn table(&mut self) -> Result<Option<ImmutableTable>> {
         Ok(None)
     }

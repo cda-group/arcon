@@ -29,8 +29,6 @@
 //!     - Enables RocksDB to be used as a Backend
 //! - `arcon_serde`
 //!     - Adds serde support for Arcon Types
-//! - `arcon_arrow`
-//!     - Enables Arrow support
 
 #![feature(unboxed_closures)]
 #![feature(unsized_fn_params)]
@@ -49,18 +47,24 @@ pub use arcon_state::*;
 pub use crate::index::{ArconState, IndexOps};
 pub use arcon_state::error::ArconStateError;
 
-// Imports below are exposed for #[derive(Arcon)]
-cfg_if::cfg_if! {
-    if #[cfg(feature = "arcon_arrow")] {
-        pub use crate::data::arrow::{ArrowOps, ToArrow};
-        pub use crate::table::{RECORD_BATCH_SIZE, ImmutableTable, RecordBatchBuilder, MutableTable};
-        pub use arrow::array::{ArrayBuilder, StringBuilder, PrimitiveBuilder, ArrayData, ArrayDataBuilder, StructArray, StructBuilder};
-        pub use arrow::error::ArrowError;
-        pub use arrow::datatypes::{DataType, Field, Schema};
-    }
-}
+// Imports below are exposed for ``arcon_macros``
+
 #[doc(hidden)]
 pub use crate::data::{ArconType, VersionId};
+#[doc(hidden)]
+pub use crate::{
+    data::arrow::ToArrow,
+    table::{ImmutableTable, MutableTable, RecordBatchBuilder, RECORD_BATCH_SIZE},
+};
+#[doc(hidden)]
+pub use arrow::{
+    array::{
+        ArrayBuilder, ArrayData, ArrayDataBuilder, PrimitiveBuilder, StringBuilder, StructArray,
+        StructBuilder,
+    },
+    datatypes::{DataType, Field, Schema},
+    error::ArrowError,
+};
 #[doc(hidden)]
 pub use fxhash::FxHasher;
 #[doc(hidden)]
@@ -93,7 +97,6 @@ mod pipeline;
 /// Contains the core stream logic
 mod stream;
 /// Table implementations
-#[cfg(feature = "arcon_arrow")]
 mod table;
 /// Test module containing some more complex unit tests
 #[cfg(test)]
@@ -120,7 +123,6 @@ pub mod test_utils {
 }
 
 pub mod client {
-    #[cfg(feature = "arcon_arrow")]
     pub use crate::manager::query::{messages::*, QUERY_MANAGER_NAME};
 }
 
@@ -169,9 +171,8 @@ pub mod prelude {
     #[cfg(feature = "thread_pinning")]
     pub use kompact::{get_core_ids, CoreId};
 
-    #[cfg(feature = "arcon_arrow")]
-    pub use super::{Arrow, ArrowOps, MutableTable, ToArrow};
-    #[cfg(feature = "arcon_arrow")]
+    pub use super::{Arrow, MutableTable, ToArrow};
+    pub use arrow::util::pretty;
     pub use datafusion::prelude::*;
 
     pub use arcon_state as state;

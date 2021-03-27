@@ -17,6 +17,12 @@ pub trait ToArrow {
     type Builder: ArrayBuilder;
     /// Returns the underlying Arrow [DataType]
     fn arrow_type() -> DataType;
+    /// Return the Arrow Schema
+    fn schema() -> Schema;
+    /// Creates a new MutableTable
+    fn table() -> MutableTable;
+    /// Used to append `self` to an Arrow StructBuilder
+    fn append(self, builder: &mut StructBuilder) -> Result<(), ArrowError>;
 }
 
 macro_rules! to_arrow {
@@ -26,6 +32,24 @@ macro_rules! to_arrow {
 
             fn arrow_type() -> DataType {
                 $arrow_type
+            }
+            fn schema() -> Schema {
+                unreachable!(
+                    "Operation not possible for single value {}",
+                    stringify!($type)
+                );
+            }
+            fn table() -> MutableTable {
+                unreachable!(
+                    "Operation not possible for single value {}",
+                    stringify!($type)
+                );
+            }
+            fn append(self, _: &mut StructBuilder) -> Result<(), ArrowError> {
+                unreachable!(
+                    "Operation not possible for single value {}",
+                    stringify!($type)
+                );
             }
         }
     };
@@ -41,49 +65,3 @@ to_arrow!(f32, Float32Builder, DataType::Float32);
 to_arrow!(bool, BooleanBuilder, DataType::Boolean);
 to_arrow!(String, StringBuilder, DataType::Utf8);
 to_arrow!(Vec<u8>, BinaryBuilder, DataType::Binary);
-
-/// The Arrow derive macro must implement the following trait.
-pub trait ArrowOps: Sized {
-    /// Return the Arrow Schema
-    fn schema() -> Schema;
-    /// Creates a new MutableTable
-    fn table() -> MutableTable;
-    /// Used to append `self` to an Arrow StructBuilder
-    fn append(self, builder: &mut StructBuilder) -> Result<(), ArrowError>;
-}
-
-macro_rules! arrow_ops {
-    ($type:ty) => {
-        impl ArrowOps for $type {
-            fn schema() -> Schema {
-                unreachable!(
-                    "ArrowOps not possible for single value {}",
-                    stringify!($type)
-                );
-            }
-            fn table() -> MutableTable {
-                unreachable!(
-                    "ArrowOps not possible for single value {}",
-                    stringify!($type)
-                );
-            }
-            fn append(self, _: &mut StructBuilder) -> Result<(), ArrowError> {
-                unreachable!(
-                    "ArrowOps not possible for single value {}",
-                    stringify!($type)
-                );
-            }
-        }
-    };
-}
-
-// Implements unreachable ArrowOps impl for single values.
-arrow_ops!(u64);
-arrow_ops!(u32);
-arrow_ops!(i64);
-arrow_ops!(i32);
-arrow_ops!(f64);
-arrow_ops!(f32);
-arrow_ops!(bool);
-arrow_ops!(String);
-arrow_ops!(Vec<u8>);

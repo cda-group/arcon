@@ -1,10 +1,9 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-#[cfg(feature = "arcon_arrow")]
-use crate::manager::query::{QueryManagerMsg, QueryManagerPort};
 use crate::{
     data::{Epoch, StateID},
+    manager::query::{QueryManagerMsg, QueryManagerPort},
     stream::node::source::SourceEvent,
 };
 use kompact::prelude::*;
@@ -42,7 +41,6 @@ pub struct EpochManager {
     epoch_acks: HashSet<(StateID, Epoch)>,
     /// Actor Reference to the SnapshotManager
     snapshot_manager: ActorRefStrong<EpochCommit>,
-    #[cfg(feature = "arcon_arrow")]
     query_manager_port: RequiredPort<QueryManagerPort>,
 }
 
@@ -58,7 +56,6 @@ impl EpochManager {
             snapshot_manager,
             source_manager: None,
             epoch_timeout: None,
-            #[cfg(feature = "arcon_arrow")]
             query_manager_port: RequiredPort::uninitialised(),
         }
     }
@@ -91,7 +88,6 @@ impl EpochManager {
                         if self.epoch_acks.len() == self.known_state_ids.len() {
                             self.ongoing_epoch_commit = epoch.epoch + 1;
                             self.snapshot_manager.tell(EpochCommit(epoch));
-                            #[cfg(feature = "arcon_arrow")]
                             self.query_manager_port
                                 .trigger(QueryManagerMsg::EpochCommit(epoch.epoch));
                             self.epoch_acks.clear();
@@ -157,7 +153,6 @@ impl ComponentLifecycle for EpochManager {
         Handled::Ok
     }
 }
-#[cfg(feature = "arcon_arrow")]
 impl Require<QueryManagerPort> for EpochManager {
     fn handle(&mut self, _: Never) -> Handled {
         Handled::Ok

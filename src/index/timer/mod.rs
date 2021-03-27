@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use super::{hash_table::eager::EagerHashTable, IndexOps};
-#[cfg(feature = "arcon_arrow")]
 use crate::table::ImmutableTable;
 use arcon_state::{
     backend::{
@@ -224,7 +223,6 @@ where
         Ok(())
     }
     fn set_key(&mut self, _: u64) {}
-    #[cfg(feature = "arcon_arrow")]
     fn table(&mut self) -> Result<Option<ImmutableTable>> {
         Ok(None)
     }

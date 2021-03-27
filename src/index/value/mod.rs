@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use super::{HashTable, IndexOps, IndexValue, ValueIndex};
-#[cfg(feature = "arcon_arrow")]
 use crate::table::ImmutableTable;
 use arcon_state::{error::*, Backend};
 use std::{borrow::Cow, sync::Arc};
@@ -85,7 +84,6 @@ where
         self.current_key = key;
     }
 
-    #[cfg(feature = "arcon_arrow")]
     fn table(&mut self) -> Result<Option<ImmutableTable>> {
         let (_, values) = self.hash_table.full_iter()?;
         let mut table = V::table();

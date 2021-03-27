@@ -22,9 +22,10 @@ pub fn derive_arrow(input: TokenStream) -> TokenStream {
                 let builder_quote = quote! {
                     {
                         let value = self.#ident;
-                        builder.field_builder::<<#ty as ToArrow>::Builder>(#field_pos)
-                            .ok_or(::arcon::ArrowError::SchemaError(format!("Failed to downcast Arrow Builder")))
-                            .and_then(|b| b.append_value(value))?;
+                        match builder.field_builder::<<#ty as ToArrow>::Builder>(#field_pos) {
+                            Some(b) => b.append_value(value)?,
+                            None => return Err(::arcon::ArrowError::SchemaError(format!("Failed to downcast Arrow Builder"))),
+                        }
                     }
                 };
                 builders.push(builder_quote);
@@ -50,9 +51,6 @@ pub fn derive_arrow(input: TokenStream) -> TokenStream {
                     fn arrow_type() -> ::arcon::DataType {
                         ::arcon::DataType::Struct(#fields)
                     }
-                }
-
-                impl #impl_generics ::arcon::ArrowOps for #name #ty_generics #where_clause {
                     fn schema() -> ::arcon::Schema {
                         ::arcon::Schema::new(#fields)
                     }

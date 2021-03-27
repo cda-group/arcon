@@ -12,7 +12,6 @@ extern crate quote;
 use proc_macro::TokenStream;
 
 mod arcon;
-#[cfg(feature = "arcon_arrow")]
 mod arrow;
 mod decoder;
 mod proto;
@@ -47,7 +46,6 @@ pub fn state(input: TokenStream) -> TokenStream {
 }
 
 /// Derive macro for declaring a type a type that supports the Arrow data format the Arrow data format
-#[cfg(feature = "arcon_arrow")]
 #[proc_macro_derive(Arrow)]
 pub fn arrow(input: TokenStream) -> TokenStream {
     arrow::derive_arrow(input)

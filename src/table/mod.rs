@@ -1,7 +1,7 @@
 // Copyright (c) 2021, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::data::arrow::ArrowOps;
+use crate::data::arrow::ToArrow;
 use arrow::{
     array::{ArrayBuilder, StructBuilder},
     datatypes::Schema,
@@ -38,7 +38,7 @@ impl MutableTable {
 
     /// Append a single element to the table
     #[inline]
-    pub fn append(&mut self, elem: impl ArrowOps) -> Result<(), ArrowError> {
+    pub fn append(&mut self, elem: impl ToArrow) -> Result<(), ArrowError> {
         if self.builder.len() == RECORD_BATCH_SIZE {
             let batch = self.builder.record_batch()?;
             self.batches.push(batch);
@@ -51,7 +51,7 @@ impl MutableTable {
     #[inline]
     pub fn load(
         &mut self,
-        elems: impl IntoIterator<Item = impl ArrowOps>,
+        elems: impl IntoIterator<Item = impl ToArrow>,
     ) -> Result<(), ArrowError> {
         for elem in elems {
             self.append(elem)?;
@@ -96,7 +96,7 @@ impl RecordBatchBuilder {
         }
     }
     #[inline]
-    pub fn append(&mut self, elem: impl ArrowOps) -> Result<(), ArrowError> {
+    pub fn append(&mut self, elem: impl ToArrow) -> Result<(), ArrowError> {
         elem.append(&mut self.builder)?;
         self.builder.append(true)
     }
@@ -129,9 +129,9 @@ impl RecordBatchBuilder {
 /// An Immutable Table
 #[derive(Clone)]
 pub struct ImmutableTable {
-    name: String,
-    schema: Arc<Schema>,
-    batches: Vec<RecordBatch>,
+    pub(crate) name: String,
+    pub(crate) schema: Arc<Schema>,
+    pub(crate) batches: Vec<RecordBatch>,
 }
 
 impl ImmutableTable {

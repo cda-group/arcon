@@ -7,24 +7,17 @@ pub mod hash_table;
 pub mod timer;
 pub mod value;
 
-use crate::{error::Result, manager::snapshot::Snapshot};
+use crate::{
+    data::arrow::ToArrow, error::Result, manager::snapshot::Snapshot, table::ImmutableTable,
+};
 use arcon_state::{
     data::{Key, Value},
     Backend,
 };
 use std::{borrow::Cow, sync::Arc};
 
-cfg_if::cfg_if! {
-    if #[cfg(feature = "arcon_arrow")] {
-        use crate::data::arrow::ArrowOps;
-        use crate::table::ImmutableTable;
-        pub trait IndexValue: Value + ArrowOps {}
-        impl<T> IndexValue for T where T: Value + ArrowOps {}
-    } else if #[cfg(not(feature = "arcon_arrow"))] {
-        pub trait IndexValue: Value {}
-        impl<T> IndexValue for T where T: Value {}
-    }
-}
+pub trait IndexValue: Value + ToArrow {}
+impl<T> IndexValue for T where T: Value + ToArrow {}
 
 pub use self::{
     appender::eager::EagerAppender,
@@ -43,7 +36,6 @@ pub trait IndexOps {
     fn set_key(&mut self, key: u64);
 
     /// Create a [ImmutableTable] from the data in the Index
-    #[cfg(feature = "arcon_arrow")]
     fn table(&mut self) -> Result<Option<ImmutableTable>>;
 }
 
@@ -76,10 +68,12 @@ pub trait ArconState: StateConstructor + Send + 'static {
     fn set_key(&mut self, key: u64);
 
     /// Returns a Vec of registered tables
-    #[cfg(feature = "arcon_arrow")]
     fn tables(&mut self) -> Vec<ImmutableTable>;
 
-    #[cfg(feature = "arcon_arrow")]
+    fn table_ids() -> Vec<String>;
+
+    fn get_table(&mut self, id: &str) -> Result<Option<ImmutableTable>>;
+
     fn has_tables() -> bool;
 }
 
@@ -95,11 +89,15 @@ impl ArconState for EmptyState {
         Ok(())
     }
     fn set_key(&mut self, _: u64) {}
-    #[cfg(feature = "arcon_arrow")]
     fn tables(&mut self) -> Vec<ImmutableTable> {
         Vec::new()
     }
-    #[cfg(feature = "arcon_arrow")]
+    fn table_ids() -> Vec<String> {
+        Vec::new()
+    }
+    fn get_table(&mut self, _: &str) -> Result<Option<ImmutableTable>> {
+        Ok(None)
+    }
     fn has_tables() -> bool {
         false
     }
@@ -118,7 +116,6 @@ impl IndexOps for EmptyState {
     fn set_key(&mut self, _: u64) {
         // ignore
     }
-    #[cfg(feature = "arcon_arrow")]
     fn table(&mut self) -> Result<Option<ImmutableTable>> {
         Ok(None)
     }

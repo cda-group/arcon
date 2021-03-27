@@ -9,8 +9,9 @@ pub fn derive_state(input: TokenStream) -> TokenStream {
     let name = &item.ident;
 
     if let syn::Data::Struct(ref s) = item.data {
-        #[cfg(feature = "arcon_arrow")]
         let mut tables = Vec::new();
+        let mut table_ids = Vec::new();
+        let mut table_lookups = Vec::new();
 
         let mut field_getters = Vec::new();
         let mut persist_quotes = Vec::new();
@@ -23,7 +24,6 @@ pub fn derive_state(input: TokenStream) -> TokenStream {
                 let ty = &field.ty;
                 for attr in field.attrs.iter() {
                     ephemeral = is_ephemeral(attr);
-                    #[cfg(feature = "arcon_arrow")]
                     {
                         match get_table(attr, &ident) {
                             Ok(Some(quote)) => {
@@ -31,6 +31,9 @@ pub fn derive_state(input: TokenStream) -> TokenStream {
                                     ephemeral, true,
                                     "Cannot use ephemeral attribute with table attribute"
                                 );
+                                let table_id = get_table_id(attr).unwrap();
+                                table_lookups.push(quote! { #table_id => self.#ident.table(), });
+                                table_ids.push(quote! { #table_id.to_string() });
                                 tables.push(quote)
                             }
                             Ok(None) => (),
@@ -53,7 +56,6 @@ pub fn derive_state(input: TokenStream) -> TokenStream {
         let generics = &item.generics;
         let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
-        #[cfg(feature = "arcon_arrow")]
         let has_tables_quote = {
             if tables.is_empty() {
                 quote! { false }
@@ -62,7 +64,6 @@ pub fn derive_state(input: TokenStream) -> TokenStream {
             }
         };
 
-        #[cfg(feature = "arcon_arrow")]
         let tables = quote! {
             #[inline]
             fn tables(&mut self) -> Vec<::arcon::ImmutableTable> {
@@ -74,10 +75,16 @@ pub fn derive_state(input: TokenStream) -> TokenStream {
             fn has_tables() -> bool {
                 #has_tables_quote
             }
+            fn get_table(&mut self, id: &str) -> Result<Option<::arcon::ImmutableTable>, ::arcon::ArconStateError> {
+                match id {
+                    #(#table_lookups)*
+                    _ => Ok(None),
+                }
+            }
+            fn table_ids() -> Vec<String> {
+                vec![#(#table_ids)*]
+            }
         };
-
-        #[cfg(not(feature = "arcon_arrow"))]
-        let tables = quote! {};
 
         let output: proc_macro2::TokenStream = {
             quote! {
@@ -113,7 +120,19 @@ fn is_ephemeral(attr: &syn::Attribute) -> bool {
     attr.path.is_ident("ephemeral")
 }
 
-#[cfg(feature = "arcon_arrow")]
+fn get_table_id(attr: &syn::Attribute) -> syn::Result<syn::LitStr> {
+    match attr.parse_meta()? {
+        syn::Meta::NameValue(syn::MetaNameValue {
+            lit: syn::Lit::Str(table_name),
+            ..
+        }) => Ok(table_name),
+        _ => {
+            let message = "expected #[table = \"...\"]";
+            Err(syn::Error::new_spanned(attr, message))
+        }
+    }
+}
+
 fn get_table(
     attr: &syn::Attribute,
     ident: &Option<syn::Ident>,

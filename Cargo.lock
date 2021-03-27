@@ -107,7 +107,6 @@ dependencies = [
  "criterion",
  "crossbeam-utils 0.7.2",
  "datafusion",
- "futures",
  "fxhash",
  "hierarchical_hash_wheel_timer",
  "hocon",
