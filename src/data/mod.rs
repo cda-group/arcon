@@ -195,6 +195,42 @@ impl Epoch {
     }
 }
 
+/// Container that holds two possible variants of messages
+pub enum MessageContainer<A: ArconType> {
+    /// Batch of events backed Rust's system allocator
+    ///
+    /// Used when receiving events from the network or when restoring messages from a state backend
+    Raw(RawArconMessage<A>),
+    /// Batch of events backed by Arcon's allocator
+    Local(ArconMessage<A>),
+}
+
+impl<A: ArconType> MessageContainer<A> {
+    /// Return a reference to the sender ID of this message
+    #[inline]
+    pub fn sender(&self) -> &NodeID {
+        match self {
+            MessageContainer::Raw(r) => &r.sender,
+            MessageContainer::Local(l) => &l.sender,
+        }
+    }
+    /// Return number of events in the message
+    #[inline]
+    pub fn total_events(&self) -> u64 {
+        match self {
+            MessageContainer::Raw(r) => r.events.len() as u64,
+            MessageContainer::Local(l) => l.events.len() as u64,
+        }
+    }
+    /// Consumes the container and returns a RawArconMessage
+    pub fn raw(self) -> RawArconMessage<A> {
+        match self {
+            MessageContainer::Raw(r) => r,
+            MessageContainer::Local(l) => l.into(),
+        }
+    }
+}
+
 /// An ArconMessage backed by a reusable EventBuffer
 #[derive(Debug, Clone)]
 pub struct ArconMessage<A: ArconType> {
