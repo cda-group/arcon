@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 #[cfg(feature = "arcon_arrow")]
+use crate::index::ArconState;
+#[cfg(feature = "arcon_arrow")]
 use crate::manager::query::{QueryManagerMsg, QueryManagerPort, TableRegistration};
 use crate::{
     data::{ArconMessage, Epoch, NodeID, StateID, Watermark},
-    index::{
-        ArconState, HashTable, IndexOps, LocalValue, StateConstructor, ValueIndex, EMPTY_STATE_ID,
-    },
+    index::{HashTable, IndexOps, LocalValue, StateConstructor, ValueIndex, EMPTY_STATE_ID},
     manager::{
         epoch::EpochEvent,
         snapshot::{Snapshot, SnapshotEvent, SnapshotManagerPort},

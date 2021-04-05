@@ -195,42 +195,25 @@ where
         }
     }
 
-    /// Handle a Raw ArconMessage that has either been sent remotely or temporarily stored in the state backend
+    /// Message handler for both locally and remote sent messages
     #[inline]
-    fn handle_raw_msg(&mut self, message: RawArconMessage<OP::IN>) -> ArconResult<()> {
-        if !self.node_state.in_channels.contains(&message.sender) {
+    fn handle_message(&mut self, message: MessageContainer<OP::IN>) -> ArconResult<()> {
+        if !self.node_state.in_channels.contains(message.sender()) {
             return arcon_err!("Message from invalid sender");
         }
 
-        if self.sender_blocked(&message.sender) {
-            // Add the message to the back of the queue
-            self.node_state.message_buffer().append(message)?;
+        if self.sender_blocked(message.sender()) {
+            self.node_state.message_buffer().append(message.raw())?;
             return Ok(());
         }
 
         #[cfg(feature = "metrics")]
-        self.record_incoming_events(message.events.len() as u64);
+        self.record_incoming_events(message.total_events());
 
-        self.handle_events(message.sender, message.events)
-    }
-
-    /// Handle a local ArconMessage that is backed by the arcon allocator
-    #[inline]
-    fn handle_message(&mut self, message: ArconMessage<OP::IN>) -> ArconResult<()> {
-        if !self.node_state.in_channels.contains(&message.sender) {
-            return arcon_err!("Message from invalid sender");
+        match message {
+            MessageContainer::Raw(r) => self.handle_events(r.sender, r.events),
+            MessageContainer::Local(l) => self.handle_events(l.sender, l.events),
         }
-
-        if self.sender_blocked(&message.sender) {
-            // Add the message to the back of the queue
-            self.node_state.message_buffer().append(message.into())?;
-            return Ok(());
-        }
-
-        #[cfg(feature = "metrics")]
-        self.record_incoming_events(message.events.len() as u64);
-
-        self.handle_events(message.sender, message.events)
     }
 
     #[inline(always)]
@@ -470,7 +453,7 @@ where
     type Message = ArconMessage<OP::IN>;
 
     fn receive_local(&mut self, msg: Self::Message) -> Handled {
-        if let Err(err) = self.handle_message(msg) {
+        if let Err(err) = self.handle_message(MessageContainer::Local(msg)) {
             error!(self.ctx.log(), "Failed to handle message: {}", err);
         }
         Handled::Ok
@@ -495,7 +478,7 @@ where
 
         match arcon_msg {
             Ok(m) => {
-                if let Err(err) = self.handle_raw_msg(m) {
+                if let Err(err) = self.handle_message(MessageContainer::Raw(m)) {
                     error!(self.ctx.log(), "Failed to handle node message: {}", err);
                 }
             }
