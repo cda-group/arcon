@@ -244,7 +244,8 @@ impl QueryManager {
 
         query_ctx
             .ctx
-            .register_table(&table_name, Arc::new(mem_table));
+            .register_table(table_name.as_str(), Arc::new(mem_table))
+            .expect("failed to register datafusion table");
 
         trace!(self.ctx.log(), "Registering table {}", table_name);
 

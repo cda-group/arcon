@@ -215,6 +215,7 @@ impl<A: ArconType> MessageContainer<A> {
         }
     }
     /// Return number of events in the message
+    #[cfg(feature = "metrics")]
     #[inline]
     pub fn total_events(&self) -> u64 {
         match self {
@@ -322,12 +323,6 @@ impl NodeID {
 impl From<u32> for NodeID {
     fn from(id: u32) -> Self {
         NodeID::new(id)
-    }
-}
-
-impl Into<u32> for NodeID {
-    fn into(self) -> u32 {
-        self.id
     }
 }
 

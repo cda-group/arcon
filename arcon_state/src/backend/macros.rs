@@ -21,7 +21,9 @@ macro_rules! cfg_if_rocks {
     (@pat $i: pat) => {
         _
     };
-    ($($body:tt)*) => { unreachable!() };
+    ($($body:tt)*) => {
+        unreachable!()
+    };
 }
 
 #[doc(hidden)]
@@ -43,7 +45,9 @@ macro_rules! cfg_if_sled {
     (@pat $i: pat) => {
         _
     };
-    ($($body:tt)*) => { unreachable!() };
+    ($($body:tt)*) => {
+        unreachable!()
+    };
 }
 
 #[doc(hidden)]
@@ -65,7 +69,9 @@ macro_rules! cfg_if_faster {
     (@pat $i: pat) => {
         _
     };
-    ($($body:tt)*) => { unreachable!() };
+    ($($body:tt)*) => {
+        unreachable!()
+    };
 }
 // endregion
 

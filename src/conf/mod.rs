@@ -115,7 +115,10 @@ impl ArconConf {
     pub(crate) fn ctrl_system_conf(&self) -> KompactConfig {
         let mut cfg = KompactConfig::default();
 
-        cfg.label("ctrl_system");
+        cfg.set_config_value(
+            &kompact::config_keys::system::LABEL,
+            "ctrl_system".to_string(),
+        );
 
         // inject checkpoint_dir into Kompact
         let component_cfg = format!(
@@ -137,7 +140,10 @@ impl ArconConf {
     pub fn data_system_conf(&self) -> KompactConfig {
         let mut cfg = KompactConfig::default();
 
-        cfg.label("data_system");
+        cfg.set_config_value(
+            &kompact::config_keys::system::LABEL,
+            "data_system".to_string(),
+        );
 
         // inject checkpoint_dir into Kompact
         let component_cfg = format!(
@@ -146,9 +152,15 @@ impl ArconConf {
         );
 
         cfg.load_config_str(component_cfg);
-        cfg.threads(self.kompact_threads);
-        cfg.throughput(self.kompact_throughput);
-        cfg.msg_priority(self.kompact_msg_priority);
+        cfg.set_config_value(&kompact::config_keys::system::THREADS, self.kompact_threads);
+        cfg.set_config_value(
+            &kompact::config_keys::system::THROUGHPUT,
+            self.kompact_throughput,
+        );
+        cfg.set_config_value(
+            &kompact::config_keys::system::MESSAGE_PRIORITY,
+            self.kompact_msg_priority,
+        );
 
         // Set up Kompact network only if we are gonna use it..
         if let Some(host) = &self.kompact_network_host {
@@ -247,11 +259,11 @@ fn ctrl_system_host_default() -> Option<String> {
 }
 
 fn kompact_throughput_default() -> usize {
-    50
+    25
 }
 
 fn kompact_msg_priority_default() -> f32 {
-    1.0
+    0.5
 }
 
 fn kompact_network_host_default() -> Option<String> {

@@ -137,12 +137,10 @@ fn hashable_fields(s: &syn::DataStruct) -> Vec<String> {
                             VEC_IDENT => {
                                 if let syn::PathArguments::AngleBracketed(ag) = &segment.arguments {
                                     for a in ag.args.iter() {
-                                        if let syn::GenericArgument::Type(t) = a {
-                                            if let syn::Type::Path(tp) = t {
-                                                for s in &tp.path.segments {
-                                                    if s.ident == U8_IDENT {
-                                                        fields.push(ident.to_string());
-                                                    }
+                                        if let syn::GenericArgument::Type(syn::Type::Path(tp)) = a {
+                                            for s in &tp.path.segments {
+                                                if s.ident == U8_IDENT {
+                                                    fields.push(ident.to_string());
                                                 }
                                             }
                                         }
@@ -195,12 +193,12 @@ fn bytes_estimation(s: &syn::DataStruct, fields: Vec<String>) -> usize {
                                         &segment.arguments
                                     {
                                         for a in ag.args.iter() {
-                                            if let syn::GenericArgument::Type(t) = a {
-                                                if let syn::Type::Path(tp) = t {
-                                                    for s in &tp.path.segments {
-                                                        if s.ident == U8_IDENT {
-                                                            bytes += BYTE_ARRAY_ESTIMATION;
-                                                        }
+                                            if let syn::GenericArgument::Type(syn::Type::Path(tp)) =
+                                                a
+                                            {
+                                                for s in &tp.path.segments {
+                                                    if s.ident == U8_IDENT {
+                                                        bytes += BYTE_ARRAY_ESTIMATION;
                                                     }
                                                 }
                                             }

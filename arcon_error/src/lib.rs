@@ -48,11 +48,7 @@ impl StdError for Error {
         if let ErrorKind::StateError(e) = &self.kind {
             return e.source();
         }
-
-        match self.cause {
-            Some(ref x) => Some(&**x),
-            None => None,
-        }
+        self.cause.as_ref().map(|x| x.as_ref() as _)
     }
 }
 

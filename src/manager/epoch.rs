@@ -38,8 +38,6 @@ pub struct EpochManager {
     known_state_ids: HashSet<StateID>,
     /// The epoch that is currently in process of being comitted
     ongoing_epoch_commit: u64,
-    /// Last known epoch that has been committed
-    last_committed_epoch: u64,
     /// Set of Acks for a commit process
     epoch_acks: HashSet<(StateID, Epoch)>,
     /// Actor Reference to the SnapshotManager
@@ -55,7 +53,6 @@ impl EpochManager {
             next_epoch: 0,
             known_state_ids: HashSet::new(),
             epoch_acks: HashSet::new(),
-            last_committed_epoch: 0,
             ongoing_epoch_commit: 0,
             epoch_interval,
             snapshot_manager,
@@ -92,7 +89,6 @@ impl EpochManager {
                     if epoch.epoch == self.ongoing_epoch_commit {
                         self.epoch_acks.insert((state_id, epoch));
                         if self.epoch_acks.len() == self.known_state_ids.len() {
-                            self.last_committed_epoch = epoch.epoch;
                             self.ongoing_epoch_commit = epoch.epoch + 1;
                             self.snapshot_manager.tell(EpochCommit(epoch));
                             #[cfg(feature = "arcon_arrow")]
