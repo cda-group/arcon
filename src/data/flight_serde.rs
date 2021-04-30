@@ -235,7 +235,7 @@ mod test {
 
     fn get_systems() -> (KompactSystem, KompactSystem) {
         let system = || {
-            let mut cfg = KompactConfig::new();
+            let mut cfg = KompactConfig::default();
             cfg.system_components(DeadletterBox::new, NetworkConfig::default().build());
             cfg.build().expect("KompactSystem")
         };
