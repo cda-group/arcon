@@ -13,8 +13,8 @@ impl<A: Message + Default> From<Option<A>> for ProstOption<A> {
     }
 }
 
-impl<A: Message + Default> Into<Option<A>> for ProstOption<A> {
-    fn into(self) -> Option<A> {
-        self.inner
+impl<A: Message + Default> From<ProstOption<A>> for Option<A> {
+    fn from(opt: ProstOption<A>) -> Self {
+        opt.inner
     }
 }

@@ -30,8 +30,8 @@ mod with_arcon {
 
     #[arcon::proto]
     #[cfg_attr(feature = "arcon_serde", derive(serde::Serialize, serde::Deserialize))]
-    #[arcon(reliable_ser_id = 1, unsafe_ser_id = 2, version = 1)]
     #[derive(Arcon, Clone, abomonation_derive::Abomonation)]
+    #[arcon(reliable_ser_id = 1, unsafe_ser_id = 2, version = 1)]
     struct Point {
         x: i32,
         y: i32,

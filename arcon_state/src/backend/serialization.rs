@@ -60,8 +60,8 @@ pub mod fixed_bytes {
         let dest_len = target.remaining_mut();
         let needed = usize::SIZE + payload.len();
         ensure!(dest_len >= needed, FixedBytesSerializationError {
-            needed,
-            dest_len
+            dest_len,
+            needed
         });
         serialize_into(target, &payload.len())?;
         target.put_slice(payload);
@@ -113,7 +113,7 @@ pub mod fixed_bytes {
                     let bytes = payload.to_le_bytes();
                     let needed = bytes.len();
                     let dest_len = target.remaining_mut();
-                    ensure!(dest_len >= needed, FixedBytesSerializationError { needed, dest_len });
+                    ensure!(dest_len >= needed, FixedBytesSerializationError { dest_len, needed });
                     target.put_slice(&bytes);
                     Ok(())
                 }
@@ -123,7 +123,7 @@ pub mod fixed_bytes {
                     let needed = buf.len();
                     let source_len = bytes.len();
                     ensure!(source_len >= needed,
-                        FixedBytesDeserializationError { needed, source_len });
+                        FixedBytesDeserializationError { source_len, needed});
                     buf.copy_from_slice(bytes);
                     Ok(Self::from_le_bytes(buf))
                 }
@@ -133,7 +133,7 @@ pub mod fixed_bytes {
                     let needed = buf.len();
                     let source_len = source.remaining();
                     ensure!(source_len >= needed,
-                        FixedBytesDeserializationError { needed, source_len });
+                        FixedBytesDeserializationError { source_len, needed });
                     source.copy_to_slice(&mut buf);
                     Ok(Self::from_le_bytes(buf))
                 }

@@ -326,12 +326,6 @@ impl From<u32> for NodeID {
     }
 }
 
-impl Into<u32> for NodeID {
-    fn into(self) -> u32 {
-        self.id
-    }
-}
-
 // Implement ArconType for primitives.
 // NOTE: This is mainly for testing and development. In practice,
 // an ArconType is always a struct or enum.

@@ -28,10 +28,10 @@ impl WindowContext {
     }
 }
 
-impl Into<u64> for WindowContext {
-    fn into(self) -> u64 {
+impl From<WindowContext> for u64 {
+    fn from(ctx: WindowContext) -> Self {
         let mut s = FxHasher::default();
-        self.hash(&mut s);
+        ctx.hash(&mut s);
         s.finish()
     }
 }
@@ -211,14 +211,14 @@ where
         self.aggregator.set_item_key(ctx.key);
         self.aggregator.set_namespace(ctx.index);
 
-        Ok(self.aggregator.get()?)
+        self.aggregator.get()
     }
 
     fn clear(&mut self, ctx: WindowContext) -> OperatorResult<()> {
         self.aggregator.set_item_key(ctx.key);
         self.aggregator.set_namespace(ctx.index);
 
-        Ok(self.aggregator.clear()?)
+        self.aggregator.clear()
     }
 }
 

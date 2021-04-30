@@ -53,8 +53,6 @@ pub struct SnapshotManager {
     uncommitted_catalog: FxHashMap<Epoch, FxHashMap<StateID, Snapshot>>,
     /// Snapshot catalog of uncommitted snapshots
     committed_catalog: FxHashMap<Epoch, FxHashMap<StateID, Snapshot>>,
-    /// Latest known epoch that has been comitted
-    last_epoch_committed: u64,
     /// A map matching state ids to a channel Sender
     pub(crate) channels: FxHashMap<StateID, Sender<Snapshot>>,
     /// A map of component subscribers per State ID
@@ -71,13 +69,11 @@ impl SnapshotManager {
             committed_catalog: FxHashMap::default(),
             channels: FxHashMap::default(),
             subscribers: FxHashMap::default(),
-            last_epoch_committed: 0,
         }
     }
 
     fn handle_epoch_commit(&mut self, commit: EpochCommit) {
         let epoch = commit.0;
-        self.last_epoch_committed = epoch.epoch;
 
         if let Some(snapshot_map) = self.uncommitted_catalog.remove(&epoch) {
             for (state_id, snapshot) in &snapshot_map {
