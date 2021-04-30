@@ -97,7 +97,7 @@ where
             };
             if let Err(SerError::BufferError(err)) = send(channel, msg, source) {
                 // TODO: Figure out how to get more space for `tell_serialised`
-                panic!(format!("Buffer Error {}", err));
+                panic!("Buffer Error {}", err);
             };
 
             self.curr_index += 1;

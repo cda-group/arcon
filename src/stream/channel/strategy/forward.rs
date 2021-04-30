@@ -90,7 +90,7 @@ where
 
         if let Err(SerError::BufferError(err)) = send(&self.channel, msg, source) {
             // TODO: Figure out how to get more space for `tell_serialised`
-            panic!(format!("Buffer Error {}", err));
+            panic!("Buffer Error {}", err);
         };
 
         // TODO: Should probably not busy wait here..

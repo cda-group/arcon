@@ -91,7 +91,10 @@ impl<T> EventBuffer<T> {
     /// Should only be called from the writer
     #[inline]
     pub fn try_reserve(&self) -> bool {
-        self.free.compare_and_swap(true, false, Ordering::Relaxed)
+        match self.free.compare_exchange_weak(true, false, Ordering::Relaxed, Ordering::Relaxed) {
+            Ok(res) => res,
+            Err(res) => res,
+        }
     }
 }
 
