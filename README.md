@@ -33,10 +33,6 @@ See the roadmap [here](https://cda-group.github.io/arcon/roadmap.html)
 
 ## Vision
 
-*   Unified Analytics (e.g., Streams, ML, Graphs, SQL)
-*   Hardware Accelerated (e.g., GPU, FPGA)
-*   State Querying with event time semantics
-
 <p align="center">
   <img width="600" height="300" src=".github/arcon_vision.png">
 </p>
