@@ -104,6 +104,7 @@ pub(crate) fn source_manager_constructor<S: Source + 'static, B: Backend>(
 
             // TODO: Clean up and handle multiple source components!
             let source_cons = builder.constructor;
+            let source_conf = builder.conf;
             let source = source_cons(backend.clone());
             let pool_info = pipeline.get_pool_info();
             let max_key = pipeline.conf.max_key;
@@ -114,7 +115,7 @@ pub(crate) fn source_manager_constructor<S: Source + 'static, B: Backend>(
                 max_key,
                 channel_kind,
             );
-            let source_node = SourceNode::new(source, channel_strategy);
+            let source_node = SourceNode::new(source, source_conf, channel_strategy);
             let source_node_comp = pipeline.data_system().create(|| source_node);
 
             pipeline

@@ -1,87 +1,71 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::{
-    data::{ArconElement, ArconEvent, ArconType},
-    stream::channel::strategy::ChannelStrategy,
-};
-use kompact::prelude::ComponentDefinition;
+use crate::data::ArconType;
 
-pub mod collection;
 pub mod local_file;
 //#[cfg(feature = "kafka")]
 //pub mod kafka;
 //#[cfg(feature = "socket")]
 //pub mod socket;
 
+#[derive(Debug, Clone)]
+pub enum Poll<A> {
+    Ready(A),
+    Pending,
+    Done,
+    Error(String),
+}
+
 /// Defines an Arcon Source and the methods it must implement
-pub trait Source: Send + Sized + 'static {
-    /// The type of data produced by the Source
-    type Data: ArconType;
-
-    /// Process a batch of source data
+pub trait Source: Send + 'static {
+    type Item: ArconType;
+    /// Poll Source for an Item
     ///
-    /// Safety: This method must be non-blocking
-    fn process_batch(&self, ctx: SourceContext<Self, impl ComponentDefinition>);
+    /// `Poll::Ready(v)` makes value `v` available.
+    /// `Poll::Pending` tells the runtime that there is currently no records to process.
+    /// `Poll::Done` indicates that the source is finished.
+    /// `Poll::Error(err)` for reporting errors
+    fn poll_next(&mut self) -> Poll<Self::Item>;
+    /// Set offset for the source
+    ///
+    /// May be used by replayble sources to set a certain offset..
+    fn set_offset(&mut self, offset: usize);
 }
 
-pub struct NodeContext<S>
+// Implement Source for IntoIterator<Item = ArconType>
+impl<D, I> Source for I
 where
-    S: Source,
+    I: IntoIterator<Item = D> + Iterator<Item = D> + Send + 'static,
+    D: ArconType,
 {
-    pub(crate) channel_strategy: ChannelStrategy<S::Data>,
-    pub(crate) watermark: u64,
-    pub(crate) ended: bool,
-}
+    type Item = D;
 
-/// All Source implementations have access to a Context object
-pub struct SourceContext<'a, 'c, S, CD>
-where
-    S: Source,
-    CD: ComponentDefinition + Sized + 'static,
-{
-    node_context: &'c mut NodeContext<S>,
-    /// A reference to the backing ComponentDefinition
-    source: &'a CD,
-}
-
-impl<'a, 'c, S, CD> SourceContext<'a, 'c, S, CD>
-where
-    S: Source,
-    CD: ComponentDefinition + Sized + 'static,
-{
-    #[inline]
-    pub(crate) fn new(source: &'a CD, node_context: &'c mut NodeContext<S>) -> Self {
-        Self {
-            node_context,
-            source,
+    fn poll_next(&mut self) -> Poll<Self::Item> {
+        if let Some(item) = self.next() {
+            Poll::Ready(item)
+        } else {
+            Poll::Done
         }
     }
+    fn set_offset(&mut self, _: usize) {}
+}
 
-    #[inline]
-    pub fn output(&mut self, data: S::Data) {
-        self.send(ArconEvent::Element(ArconElement::new(data)));
-    }
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    #[inline]
-    pub fn output_with_timestamp(&mut self, data: S::Data, timestamp: u64) {
-        self.update_watermark(timestamp);
-        self.send(ArconEvent::Element(ArconElement::with_timestamp(
-            data, timestamp,
-        )));
-    }
-
-    #[inline(always)]
-    fn send(&mut self, event: ArconEvent<S::Data>) {
-        self.node_context.channel_strategy.add(event, self.source);
-    }
-
-    #[inline(always)]
-    fn update_watermark(&mut self, ts: u64) {
-        self.node_context.watermark = std::cmp::max(ts, self.node_context.watermark);
-    }
-
-    pub fn signal_end(&mut self) {
-        self.node_context.ended = true;
+    #[test]
+    fn iterator_source_test() {
+        fn sum(mut s: impl Source<Item = u32>) -> u32 {
+            let mut sum = 0;
+            while let Poll::Ready(v) = s.poll_next() {
+                sum += v;
+            }
+            sum
+        }
+        let v: Vec<u32> = vec![1, 2, 3, 4];
+        let sum = sum(v.into_iter());
+        assert_eq!(sum, 10);
     }
 }

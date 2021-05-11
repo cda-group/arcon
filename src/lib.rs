@@ -149,7 +149,7 @@ pub mod prelude {
                 window::{AppenderWindow, IncrementalWindow, WindowAssigner},
                 Operator, OperatorContext,
             },
-            source::{Source, SourceContext},
+            source::Source,
             time::{ArconTime, Time},
         },
         Arcon, ArconState,
