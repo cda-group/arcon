@@ -1,15 +1,14 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-#[cfg(feature = "arcon_arrow")]
-use crate::index::ArconState;
-#[cfg(feature = "arcon_arrow")]
-use crate::manager::query::{QueryManagerMsg, QueryManagerPort, TableRegistration};
 use crate::{
     data::{ArconMessage, Epoch, NodeID, StateID, Watermark},
-    index::{HashTable, IndexOps, LocalValue, StateConstructor, ValueIndex, EMPTY_STATE_ID},
+    index::{
+        ArconState, HashTable, IndexOps, LocalValue, StateConstructor, ValueIndex, EMPTY_STATE_ID,
+    },
     manager::{
         epoch::EpochEvent,
+        query::{QueryManagerMsg, QueryManagerPort, TableRegistration},
         snapshot::{Snapshot, SnapshotEvent, SnapshotManagerPort},
     },
     stream::operator::Operator,
@@ -138,7 +137,6 @@ where
     /// Port for the SnapshotManager component
     pub(crate) snapshot_manager_port: RequiredPort<SnapshotManagerPort>,
     /// Port for the QueryManager component
-    #[cfg(feature = "arcon_arrow")]
     pub(crate) query_manager_port: RequiredPort<QueryManagerPort>,
     /// Actor Reference to the EpochManager
     epoch_manager: ActorRefStrong<EpochEvent>,
@@ -178,7 +176,6 @@ where
             state_id,
             manager_port: ProvidedPort::uninitialised(),
             snapshot_manager_port: RequiredPort::uninitialised(),
-            #[cfg(feature = "arcon_arrow")]
             query_manager_port: RequiredPort::uninitialised(),
             epoch_manager,
             data_system,
@@ -287,21 +284,17 @@ where
                                 );
                             }
 
-                            #[cfg(feature = "arcon_arrow")]
-                            {
-                                if OP::OperatorState::has_tables() {
-                                    if let Some(snapshot) = &self.latest_snapshot {
-                                        let mut state =
-                                            OP::OperatorState::restore(snapshot.clone())?;
-                                        for table in state.tables() {
-                                            let registration = TableRegistration {
-                                                epoch: epoch.epoch,
-                                                table,
-                                            };
-                                            self.query_manager_port.trigger(
-                                                QueryManagerMsg::TableRegistration(registration),
-                                            );
-                                        }
+                            if OP::OperatorState::has_tables() {
+                                if let Some(snapshot) = &self.latest_snapshot {
+                                    let mut state = OP::OperatorState::restore(snapshot.clone())?;
+                                    for table in state.tables() {
+                                        let registration = TableRegistration {
+                                            epoch: epoch.epoch,
+                                            table,
+                                        };
+                                        self.query_manager_port.trigger(
+                                            QueryManagerMsg::TableRegistration(registration),
+                                        );
                                     }
                                 }
                             }
@@ -356,7 +349,6 @@ where
     }
 }
 
-#[cfg(feature = "arcon_arrow")]
 impl<OP, B> Require<QueryManagerPort> for NodeManager<OP, B>
 where
     OP: Operator + 'static,

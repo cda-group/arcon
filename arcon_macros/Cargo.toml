@@ -14,7 +14,6 @@ edition = "2018"
 [features]
 arcon_serde = []
 unsafe_flight = []
-arcon_arrow = []
 
 [dependencies]
 syn = { version = "1.0", features = ["full"] }

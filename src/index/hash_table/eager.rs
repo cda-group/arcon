@@ -1,9 +1,7 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::index::IndexOps;
-#[cfg(feature = "arcon_arrow")]
-use crate::table::ImmutableTable;
+use crate::{index::IndexOps, table::ImmutableTable};
 use arcon_state::{
     backend::{
         handles::{ActiveHandle, BoxedIteratorOfResult, Handle},
@@ -71,7 +69,6 @@ where
         Ok(())
     }
     fn set_key(&mut self, _: u64) {}
-    #[cfg(feature = "arcon_arrow")]
     fn table(&mut self) -> Result<Option<ImmutableTable>> {
         Ok(None)
     }

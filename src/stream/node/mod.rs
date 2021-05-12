@@ -471,9 +471,7 @@ where
                 .map_err(|e| {
                     arcon_err_kind!("Failed to unpack unreliable ArconMessage with err {:?}", e)
                 }),
-            _ => {
-                panic!("Unexpected deserialiser")
-            }
+            _ => panic!("Unexpected deserialiser"),
         };
 
         match arcon_msg {
@@ -517,7 +515,6 @@ mod tests {
             let mut pipeline = Pipeline::default();
             let pool_info = pipeline.get_pool_info();
             let epoch_manager_ref = pipeline.epoch_manager();
-            //let system = &pipeline.data_system();
 
             let sink = pipeline.data_system().create(DebugNode::<i32>::new);
 

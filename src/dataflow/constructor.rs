@@ -206,7 +206,6 @@ pub(crate) fn node_manager_constructor<OP: Operator + 'static, B: Backend>(
                 });
             });
 
-            #[cfg(feature = "arcon_arrow")]
             pipeline.query_manager.on_definition(|scd| {
                 manager_comp.on_definition(|cd| {
                     biconnect_ports(&mut scd.manager_port, &mut cd.query_manager_port);
