@@ -36,7 +36,6 @@ pub struct SourceNode<S>
 where
     S: Source,
 {
-    /// Component context
     ctx: ComponentContext<Self>,
     manager_port: RequiredPort<SourceManagerPort>,
     loopback_send: RequiredPort<LoopbackPort>,
@@ -99,6 +98,7 @@ where
                 }
                 Poll::Error(err) => {
                     error!(self.ctx.log(), "{}", err);
+                    counter += 1;
                 }
                 Poll::Done => {
                     // signal end..

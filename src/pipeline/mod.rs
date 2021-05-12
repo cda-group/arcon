@@ -271,11 +271,9 @@ impl Pipeline {
         let mut conf = SourceConf::default();
         f(&mut conf);
 
-        let conf_copy = conf.clone();
-
         let builder = SourceBuilder {
-            constructor: Arc::new(move |_| collection.clone().into_iter()),
-            conf: conf_copy,
+            constructor: Arc::new(move |_| collection.clone().into_iter()), // TODO: avoid clone?
+            conf,
         };
         self.source(builder)
     }

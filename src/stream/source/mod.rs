@@ -9,11 +9,16 @@ pub mod local_file;
 //#[cfg(feature = "socket")]
 //pub mod socket;
 
+/// Enum containing Poll responses for an Arcon source
 #[derive(Debug, Clone)]
 pub enum Poll<A> {
+    /// Makes the value `A` avaiable
     Ready(A),
+    /// Tells the runtime there is currently no records to process
     Pending,
+    /// Indicates that the source is finished
     Done,
+    /// An error occured while polling
     Error(String),
 }
 
@@ -21,11 +26,6 @@ pub enum Poll<A> {
 pub trait Source: Send + 'static {
     type Item: ArconType;
     /// Poll Source for an Item
-    ///
-    /// `Poll::Ready(v)` makes value `v` available.
-    /// `Poll::Pending` tells the runtime that there is currently no records to process.
-    /// `Poll::Done` indicates that the source is finished.
-    /// `Poll::Error(err)` for reporting errors
     fn poll_next(&mut self) -> Poll<Self::Item>;
     /// Set offset for the source
     ///
@@ -42,10 +42,9 @@ where
     type Item = D;
 
     fn poll_next(&mut self) -> Poll<Self::Item> {
-        if let Some(item) = self.next() {
-            Poll::Ready(item)
-        } else {
-            Poll::Done
+        match self.next() {
+            Some(item) => Poll::Ready(item),
+            None => Poll::Done,
         }
     }
     fn set_offset(&mut self, _: usize) {}
