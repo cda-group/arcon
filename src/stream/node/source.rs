@@ -2,11 +2,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
-    data::{ArconEvent, Epoch, Watermark},
+    data::{ArconElement, ArconEvent, Epoch, Watermark},
     manager::source::{SourceManagerEvent, SourceManagerPort},
+    prelude::SourceConf,
     stream::{
         channel::strategy::ChannelStrategy,
-        source::{NodeContext, Source, SourceContext},
+        source::{Poll, Source},
         time::ArconTime,
     },
 };
@@ -35,45 +36,110 @@ pub struct SourceNode<S>
 where
     S: Source,
 {
-    /// Component context
     ctx: ComponentContext<Self>,
     manager_port: RequiredPort<SourceManagerPort>,
-    node_context: RefCell<NodeContext<S>>,
     loopback_send: RequiredPort<LoopbackPort>,
     loopback_receive: ProvidedPort<LoopbackPort>,
-    source: RefCell<S>,
+    watermark: u64,
+    ended: bool,
+    channel_strategy: RefCell<ChannelStrategy<S::Item>>,
+    conf: SourceConf<S::Item>,
+    source: S,
 }
 
 impl<S> SourceNode<S>
 where
     S: Source,
 {
-    pub fn new(source: S, channel_strategy: ChannelStrategy<S::Data>) -> Self {
+    pub fn new(
+        source: S,
+        conf: SourceConf<S::Item>,
+        channel_strategy: ChannelStrategy<S::Item>,
+    ) -> Self {
         Self {
             ctx: ComponentContext::uninitialised(),
             manager_port: RequiredPort::uninitialised(),
-            node_context: RefCell::new(NodeContext {
-                channel_strategy,
-                watermark: 0,
-                ended: false,
-            }),
             loopback_send: RequiredPort::uninitialised(),
             loopback_receive: ProvidedPort::uninitialised(),
-            source: RefCell::new(source),
+            channel_strategy: RefCell::new(channel_strategy),
+            ended: false,
+            watermark: 0,
+            conf,
+            source,
         }
+    }
+    pub fn process(&mut self) {
+        let mut counter = 0;
+
+        loop {
+            if counter >= self.conf.batch_size {
+                break;
+            }
+
+            match self.source.poll_next() {
+                Poll::Ready(record) => {
+                    match self.conf.time {
+                        ArconTime::Event => match &self.conf.extractor {
+                            Some(extractor) => {
+                                let timestamp = extractor(&record);
+                                self.output_with_timestamp(record, timestamp);
+                            }
+                            None => {
+                                panic!("Cannot use ArconTime::Event without an timestamp extractor")
+                            }
+                        },
+                        ArconTime::Process => self.output(record),
+                    }
+                    counter += 1;
+                }
+                Poll::Pending => {
+                    // nothing to collect, reschedule...
+                    break;
+                }
+                Poll::Error(err) => {
+                    error!(self.ctx.log(), "{}", err);
+                    counter += 1;
+                }
+                Poll::Done => {
+                    // signal end..
+                    self.ended = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    #[inline]
+    pub fn output(&mut self, data: S::Item) {
+        self.send(ArconEvent::Element(ArconElement::new(data)));
+    }
+
+    #[inline]
+    pub fn output_with_timestamp(&mut self, data: S::Item, timestamp: u64) {
+        self.update_watermark(timestamp);
+        self.send(ArconEvent::Element(ArconElement::with_timestamp(
+            data, timestamp,
+        )));
+    }
+
+    #[inline(always)]
+    fn send(&mut self, event: ArconEvent<S::Item>) {
+        self.channel_strategy.borrow_mut().add(event, self);
+    }
+
+    #[inline(always)]
+    fn update_watermark(&mut self, ts: u64) {
+        self.watermark = std::cmp::max(ts, self.watermark);
     }
 
     pub fn handle_source_event(&mut self, event: SourceEvent) {
         match event {
             SourceEvent::Epoch(epoch) => {
-                self.node_context
-                    .borrow_mut()
-                    .channel_strategy
-                    .add(ArconEvent::Epoch(epoch), self);
+                self.send(ArconEvent::Epoch(epoch));
             }
             SourceEvent::Watermark(time) => {
                 let wm = match time {
-                    ArconTime::Event => Watermark::new(self.node_context.borrow().watermark),
+                    ArconTime::Event => Watermark::new(self.watermark),
                     ArconTime::Process => {
                         let system_time = crate::util::get_system_time();
                         Watermark::new(system_time)
@@ -81,13 +147,10 @@ where
                 };
 
                 // update internal watermark
-                self.node_context.borrow_mut().watermark = wm.timestamp;
+                self.update_watermark(wm.timestamp);
 
                 // send watermark downstream
-                self.node_context
-                    .borrow_mut()
-                    .channel_strategy
-                    .add(ArconEvent::Watermark(wm), self);
+                self.send(ArconEvent::Watermark(wm));
             }
             SourceEvent::Start => {
                 self.loopback_send.trigger(ProcessSource);
@@ -112,11 +175,9 @@ where
     S: Source,
 {
     fn handle(&mut self, _event: ProcessSource) -> Handled {
-        self.source.borrow_mut().process_batch(SourceContext::new(
-            self,
-            &mut self.node_context.borrow_mut(),
-        ));
-        if self.node_context.borrow().ended {
+        self.process();
+
+        if self.ended {
             self.manager_port.trigger(SourceManagerEvent::End);
         } else {
             self.loopback_send.trigger(ProcessSource);

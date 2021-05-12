@@ -111,6 +111,7 @@ pub type TimestampExtractor<A> = Arc<dyn Fn(&A) -> u64 + Send + Sync>;
 pub struct SourceConf<S: ArconType> {
     pub extractor: Option<TimestampExtractor<S>>,
     pub time: ArconTime,
+    pub batch_size: usize,
 }
 
 impl<S: ArconType> SourceConf<S> {
@@ -122,6 +123,10 @@ impl<S: ArconType> SourceConf<S> {
     pub fn set_timestamp_extractor(&mut self, f: impl Fn(&S) -> u64 + Send + Sync + 'static) {
         self.extractor = Some(Arc::new(f));
     }
+    // Set batch size per process iteration
+    pub fn set_batch_size(&mut self, size: usize) {
+        self.batch_size = size;
+    }
 }
 
 impl<S: ArconType> Default for SourceConf<S> {
@@ -129,6 +134,7 @@ impl<S: ArconType> Default for SourceConf<S> {
         Self {
             extractor: None,
             time: Default::default(),
+            batch_size: 1024,
         }
     }
 }
@@ -141,5 +147,5 @@ pub struct SourceBuilder<S: Source, Backend = DefaultBackend> {
     /// Source Constructor
     pub constructor: Arc<dyn Fn(Arc<Backend>) -> S + Send + Sync + 'static>,
     /// Source Config
-    pub conf: SourceConf<S::Data>,
+    pub conf: SourceConf<S::Item>,
 }

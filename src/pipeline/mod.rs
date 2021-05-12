@@ -19,7 +19,7 @@ use crate::{
     prelude::*,
     stream::{
         node::source::SourceEvent,
-        source::{collection::CollectionSource, local_file::LocalFileSource, Source},
+        source::{local_file::LocalFileSource, Source},
     },
 };
 use arcon_allocator::Allocator;
@@ -179,7 +179,7 @@ impl Pipeline {
     /// Create a non-parallel data source
     ///
     /// Returns a [`Stream`] object that users may execute transformations on.
-    pub fn source<S>(self, builder: SourceBuilder<S>) -> Stream<S::Data>
+    pub fn source<S>(self, builder: SourceBuilder<S>) -> Stream<S::Item>
     where
         S: Source,
     {
@@ -236,12 +236,10 @@ impl Pipeline {
         let mut conf = SourceConf::default();
         f(&mut conf);
 
-        let conf_copy = conf.clone();
         let builder = SourceBuilder {
-            constructor: Arc::new(move |_| LocalFileSource::new(path.clone(), conf.clone())),
-            conf: conf_copy,
+            constructor: Arc::new(move |_| LocalFileSource::new(path.clone())),
+            conf,
         };
-
         self.source(builder)
     }
 
@@ -259,18 +257,16 @@ impl Pipeline {
     /// ```
     pub fn collection<I, A>(self, i: I, f: impl FnOnce(&mut SourceConf<A>)) -> Stream<A>
     where
-        I: Into<Vec<A>>,
         A: ArconType,
+        I: Into<Vec<A>> + Send + Sync,
     {
         let collection = i.into();
         let mut conf = SourceConf::default();
         f(&mut conf);
 
-        let conf_copy = conf.clone();
-
         let builder = SourceBuilder {
-            constructor: Arc::new(move |_| CollectionSource::new(collection.clone(), conf.clone())),
-            conf: conf_copy,
+            constructor: Arc::new(move |_| collection.clone().into_iter()), // TODO: avoid clone?
+            conf,
         };
         self.source(builder)
     }
