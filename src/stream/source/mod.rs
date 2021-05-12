@@ -12,7 +12,7 @@ pub mod local_file;
 /// Enum containing Poll responses for an Arcon source
 #[derive(Debug, Clone)]
 pub enum Poll<A> {
-    /// Makes the value `A` avaiable
+    /// Makes the value `A` available
     Ready(A),
     /// Tells the runtime there is currently no records to process
     Pending,
@@ -29,7 +29,7 @@ pub trait Source: Send + 'static {
     fn poll_next(&mut self) -> Poll<Self::Item>;
     /// Set offset for the source
     ///
-    /// May be used by replayble sources to set a certain offset..
+    /// May be used by replayable sources to set a certain offset..
     fn set_offset(&mut self, offset: usize);
 }
 

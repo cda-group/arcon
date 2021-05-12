@@ -18,6 +18,25 @@ Arcon currently requires Rust nightly (See current toolchain [here](rust-toolcha
 
 More detailed information about Arcon can be found [here](https://cda-group.github.io/arcon)
 
+### Roadmap
+
+See the roadmap [here](https://cda-group.github.io/arcon/roadmap.html)
+
+## Highlights
+
+*   Arrow-native
+*   Hybrid Row(Protobuf) / Columnar (Arrow) System
+*   Dynamic & Scalable [Middleware](https://github.com/kompics/kompact)
+*   Flexible State Management
+    *   Backend per Operator (e.g., RocksDB, Sled)
+    *   Eager and Lazy state indexes
+
+## Vision
+
+<p align="center">
+  <img width="600" height="300" src=".github/arcon_vision.png">
+</p>
+
 ## Example
 
 ```rust,no_run
