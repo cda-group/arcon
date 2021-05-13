@@ -204,13 +204,21 @@ fn execution_mode_default() -> ExecutionMode {
 }
 
 fn state_dir_default() -> PathBuf {
+    #[cfg(test)]
+    let mut res = tempfile::tempdir().unwrap().into_path();
+    #[cfg(not(test))]
     let mut res = std::env::temp_dir();
+
     res.push("arcon/live_states");
     res
 }
 
 fn checkpoint_dir_default() -> PathBuf {
+    #[cfg(test)]
+    let mut res = tempfile::tempdir().unwrap().into_path();
+    #[cfg(not(test))]
     let mut res = std::env::temp_dir();
+
     res.push("arcon/checkpoints");
     res
 }
