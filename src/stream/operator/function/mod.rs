@@ -10,3 +10,107 @@ pub use filter::Filter;
 pub use flatmap::FlatMap;
 pub use map::Map;
 pub use map_in_place::MapInPlace;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::prelude::*;
+
+    fn wait(millis: u64) {
+        std::thread::sleep(std::time::Duration::from_millis(millis));
+    }
+
+    #[test]
+    fn map_test() {
+        let pipeline = Pipeline::default()
+            .with_debug_node()
+            .collection((0..10).collect::<Vec<u64>>(), |conf| {
+                conf.set_arcon_time(ArconTime::Process);
+            })
+            .operator(OperatorBuilder {
+                constructor: Arc::new(|_| Map::new(|x| x + 10)),
+                conf: Default::default(),
+            })
+            .build();
+        check_map_result(pipeline);
+    }
+
+    #[test]
+    fn map_in_place_test() {
+        let pipeline = Pipeline::default()
+            .with_debug_node()
+            .collection((0..10).collect::<Vec<u64>>(), |conf| {
+                conf.set_arcon_time(ArconTime::Process);
+            })
+            .operator(OperatorBuilder {
+                constructor: Arc::new(|_| MapInPlace::new(|x| *x += 10)),
+                conf: Default::default(),
+            })
+            .build();
+
+        check_map_result(pipeline);
+    }
+
+    // helper to check common result between Map/MapInPlace
+    fn check_map_result(mut pipeline: AssembledPipeline) {
+        pipeline.start();
+        wait(250);
+
+        let debug_node = pipeline.get_debug_node::<u64>().unwrap();
+
+        debug_node.on_definition(|cd| {
+            let sum: u64 = cd.data.iter().map(|elem| elem.data).sum();
+            assert_eq!(sum, 145);
+        });
+    }
+
+    #[test]
+    fn filter_test() {
+        let mut pipeline = Pipeline::default()
+            .with_debug_node()
+            .collection((0..10).collect::<Vec<u64>>(), |conf| {
+                conf.set_arcon_time(ArconTime::Process);
+            })
+            .operator(OperatorBuilder {
+                constructor: Arc::new(|_| Filter::new(|x| *x < 5)),
+                conf: Default::default(),
+            })
+            .build();
+
+        pipeline.start();
+
+        wait(250);
+
+        let debug_node = pipeline.get_debug_node::<u64>().unwrap();
+
+        debug_node.on_definition(|cd| {
+            assert_eq!(cd.data.len(), 5);
+        });
+    }
+
+    #[test]
+    fn flatmap_test() {
+        let mut pipeline = Pipeline::default()
+            .with_debug_node()
+            .collection((0..5).collect::<Vec<u64>>(), |conf| {
+                conf.set_arcon_time(ArconTime::Process);
+            })
+            .operator(OperatorBuilder {
+                constructor: Arc::new(|_| FlatMap::new(|x| (0..x))),
+                conf: Default::default(),
+            })
+            .build();
+
+        pipeline.start();
+
+        wait(250);
+
+        let debug_node = pipeline.get_debug_node::<u64>().unwrap();
+
+        debug_node.on_definition(|cd| {
+            assert_eq!(cd.data.len(), 10);
+            let sum: u64 = cd.data.iter().map(|elem| elem.data).sum();
+            assert_eq!(sum, 10);
+        });
+    }
+}

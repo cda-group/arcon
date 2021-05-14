@@ -2,8 +2,16 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use super::Pipeline;
-use crate::{index::ArconState, manager::snapshot::Snapshot, stream::node::source::SourceEvent};
-use kompact::{component::AbstractComponent, prelude::ActorRefFactory};
+use crate::{
+    data::ArconType,
+    index::ArconState,
+    manager::snapshot::Snapshot,
+    stream::node::{debug::DebugNode, source::SourceEvent},
+};
+use kompact::{
+    component::AbstractComponent,
+    prelude::{ActorRefFactory, Component},
+};
 use std::sync::{
     mpsc,
     mpsc::{Receiver, Sender},
@@ -55,6 +63,17 @@ impl AssembledPipeline {
         }
 
         self.start_flag = true;
+    }
+
+    /// Fetch [DebugNode] component of the [Pipeline]
+    ///
+    /// Returns `None` if the [Pipeline] was not configured with a [DebugNode].
+    /// Note that it is up to the user to make sure `A` is of correct type.
+    pub fn get_debug_node<A>(&self) -> Option<Arc<Component<DebugNode<A>>>>
+    where
+        A: ArconType,
+    {
+        self.pipeline.get_debug_node()
     }
 
     /// Awaits termination from the pipeline

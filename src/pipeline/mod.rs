@@ -4,9 +4,10 @@
 use crate::{
     buffer::event::PoolInfo,
     conf::{ArconConf, ExecutionMode},
+    data::ArconMessage,
     dataflow::{
         conf::{DefaultBackend, SourceBuilder, SourceConf},
-        constructor::source_manager_constructor,
+        constructor::{source_manager_constructor, ErasedComponent},
         dfg::*,
         stream::Context,
     },
@@ -18,7 +19,7 @@ use crate::{
     },
     prelude::*,
     stream::{
-        node::source::SourceEvent,
+        node::{debug::DebugNode, source::SourceEvent},
         source::{local_file::LocalFileSource, Source},
     },
 };
@@ -74,6 +75,12 @@ pub struct Pipeline {
     pub(crate) snapshot_manager: Arc<Component<SnapshotManager>>,
     endpoint_manager: Arc<Component<EndpointManager>>,
     pub(crate) query_manager: Arc<Component<QueryManager>>,
+    /// Flag indicating whether to spawn a debug node for the Pipeline
+    debug_node_flag: bool,
+    // Type erased Arc<Component<DebugNode<A>>>
+    pub(crate) debug_node: Option<ErasedComponent>,
+    // Type erased Arc<dyn AbstractComponent<Message = ArconMessage<A>>>
+    pub(crate) abstract_debug_node: Option<ErasedComponent>,
 }
 
 impl Default for Pipeline {
@@ -126,6 +133,9 @@ impl Pipeline {
             source_manager: None,
             endpoint_manager,
             query_manager,
+            debug_node_flag: false,
+            debug_node: None,
+            abstract_debug_node: None,
         }
     }
 
@@ -153,20 +163,24 @@ impl Pipeline {
             .build()
             .expect("KompactSystem");
 
+        let timeout = std::time::Duration::from_millis(500);
+
         let snapshot_manager = ctrl_system.create(SnapshotManager::new);
 
-        let epoch_manager =
-            match arcon_conf.execution_mode {
-                ExecutionMode::Local => {
-                    let snapshot_manager_ref = snapshot_manager.actor_ref().hold().expect("fail");
-                    Some(ctrl_system.create(|| {
-                        EpochManager::new(arcon_conf.epoch_interval, snapshot_manager_ref)
-                    }))
-                }
-                ExecutionMode::Distributed(_) => None,
-            };
+        let epoch_manager = match arcon_conf.execution_mode {
+            ExecutionMode::Local => {
+                let snapshot_manager_ref = snapshot_manager.actor_ref().hold().expect("fail");
+                let epoch_manager = ctrl_system
+                    .create(|| EpochManager::new(arcon_conf.epoch_interval, snapshot_manager_ref));
+                ctrl_system
+                    .start_notify(&epoch_manager)
+                    .wait_timeout(timeout)
+                    .expect("EpochManager comp never started!");
 
-        let timeout = std::time::Duration::from_millis(500);
+                Some(epoch_manager)
+            }
+            ExecutionMode::Distributed(_) => None,
+        };
 
         ctrl_system
             .start_notify(&snapshot_manager)
@@ -271,6 +285,15 @@ impl Pipeline {
         self.source(builder)
     }
 
+    /// Enable [DebugNode] for the Pipeline
+    ///
+    ///
+    /// The component can be accessed through [method](AssembledPipeline::get_debug_node).
+    pub fn with_debug_node(mut self) -> Self {
+        self.debug_node_flag = true;
+        self
+    }
+
     // Internal helper for creating PoolInfo for a ChannelStrategy
     pub(crate) fn get_pool_info(&self) -> PoolInfo {
         PoolInfo::new(
@@ -311,5 +334,41 @@ impl Pipeline {
                 "Only local reference supported for now. should really be an ActorPath later on"
             );
         }
+    }
+    pub fn debug_node_enabled(&self) -> bool {
+        self.debug_node_flag
+    }
+
+    // internal helper to create a DebugNode from a Stream object
+    pub(crate) fn create_debug_node<A>(&mut self, node: DebugNode<A>)
+    where
+        A: ArconType,
+    {
+        assert_ne!(
+            self.debug_node.is_some(),
+            true,
+            "DebugNode has already been created!"
+        );
+        let component = self.ctrl_system.create(|| node);
+
+        self.ctrl_system
+            .start_notify(&component)
+            .wait_timeout(std::time::Duration::from_millis(500))
+            .expect("DebugNode comp never started!");
+
+        self.debug_node = Some(component.clone());
+        // define abstract version of the component as the building phase needs it to downcast properly..
+        let comp: Arc<dyn AbstractComponent<Message = ArconMessage<A>>> = component;
+        self.abstract_debug_node = Some(Arc::new(comp) as ErasedComponent);
+    }
+
+    // internal helper to help fetch DebugNode from an AssembledPipeline
+    pub(crate) fn get_debug_node<A: ArconType>(&self) -> Option<Arc<Component<DebugNode<A>>>> {
+        self.debug_node.as_ref().map(|erased_comp| {
+            erased_comp
+                .clone()
+                .downcast::<Component<DebugNode<A>>>()
+                .unwrap()
+        })
     }
 }
