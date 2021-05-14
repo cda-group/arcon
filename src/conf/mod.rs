@@ -315,7 +315,6 @@ mod tests {
         assert_eq!(conf.checkpoint_dir, PathBuf::from("/dev/null"));
         assert_eq!(conf.watermark_interval, 1000);
         // Check defaults
-        assert_eq!(conf.state_dir, state_dir_default());
         assert_eq!(conf.node_metrics_interval, node_metrics_interval_default());
         assert_eq!(conf.channel_batch_size, channel_batch_size_default());
         assert_eq!(conf.buffer_pool_size, buffer_pool_size_default());

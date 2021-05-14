@@ -163,20 +163,24 @@ impl Pipeline {
             .build()
             .expect("KompactSystem");
 
+        let timeout = std::time::Duration::from_millis(500);
+
         let snapshot_manager = ctrl_system.create(SnapshotManager::new);
 
-        let epoch_manager =
-            match arcon_conf.execution_mode {
-                ExecutionMode::Local => {
-                    let snapshot_manager_ref = snapshot_manager.actor_ref().hold().expect("fail");
-                    Some(ctrl_system.create(|| {
-                        EpochManager::new(arcon_conf.epoch_interval, snapshot_manager_ref)
-                    }))
-                }
-                ExecutionMode::Distributed(_) => None,
-            };
+        let epoch_manager = match arcon_conf.execution_mode {
+            ExecutionMode::Local => {
+                let snapshot_manager_ref = snapshot_manager.actor_ref().hold().expect("fail");
+                let epoch_manager = ctrl_system
+                    .create(|| EpochManager::new(arcon_conf.epoch_interval, snapshot_manager_ref));
+                ctrl_system
+                    .start_notify(&epoch_manager)
+                    .wait_timeout(timeout)
+                    .expect("EpochManager comp never started!");
 
-        let timeout = std::time::Duration::from_millis(500);
+                Some(epoch_manager)
+            }
+            ExecutionMode::Distributed(_) => None,
+        };
 
         ctrl_system
             .start_notify(&snapshot_manager)
@@ -281,6 +285,10 @@ impl Pipeline {
         self.source(builder)
     }
 
+    /// Enable [DebugNode] for the Pipeline
+    ///
+    ///
+    /// The component can be accessed through [method](AssembledPipeline::get_debug_node).
     pub fn with_debug_node(mut self) -> Self {
         self.debug_node_flag = true;
         self

@@ -81,6 +81,8 @@ impl<IN: ArconType> Stream<IN> {
     }
 
     /// Will make sure the most downstream Node will print its result to the console
+    ///
+    /// Note that if the Pipeline has been configured with a debug node, it will take precedence.
     #[allow(clippy::wrong_self_convention)]
     pub fn to_console(mut self) -> Stream<IN> {
         self.ctx.console_output = true;

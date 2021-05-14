@@ -66,6 +66,7 @@ impl EpochManager {
                     source_manager.tell(SourceEvent::Epoch(Epoch::new(self.next_epoch)));
                     self.next_epoch += 1;
                 } else {
+                    #[cfg(not(test))]
                     error!(self.ctx.log(), "SourceManager was never set");
                 }
                 Handled::Ok
