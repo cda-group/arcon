@@ -204,13 +204,21 @@ fn execution_mode_default() -> ExecutionMode {
 }
 
 fn state_dir_default() -> PathBuf {
+    #[cfg(test)]
+    let mut res = tempfile::tempdir().unwrap().into_path();
+    #[cfg(not(test))]
     let mut res = std::env::temp_dir();
+
     res.push("arcon/live_states");
     res
 }
 
 fn checkpoint_dir_default() -> PathBuf {
+    #[cfg(test)]
+    let mut res = tempfile::tempdir().unwrap().into_path();
+    #[cfg(not(test))]
     let mut res = std::env::temp_dir();
+
     res.push("arcon/checkpoints");
     res
 }
@@ -307,7 +315,6 @@ mod tests {
         assert_eq!(conf.checkpoint_dir, PathBuf::from("/dev/null"));
         assert_eq!(conf.watermark_interval, 1000);
         // Check defaults
-        assert_eq!(conf.state_dir, state_dir_default());
         assert_eq!(conf.node_metrics_interval, node_metrics_interval_default());
         assert_eq!(conf.channel_batch_size, channel_batch_size_default());
         assert_eq!(conf.buffer_pool_size, buffer_pool_size_default());

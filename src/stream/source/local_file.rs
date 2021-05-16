@@ -44,7 +44,7 @@ where
         match self.lines.next() {
             Some(Ok(line)) => match line.parse::<Self::Item>() {
                 Ok(record) => Poll::Ready(record),
-                Err(_) => Poll::Error("failed to parse line".to_string()),
+                Err(_) => Poll::Error("failed to parse line".to_string()), // todo
             },
             Some(Err(err)) => Poll::Error(err.to_string()),
             None => Poll::Done,

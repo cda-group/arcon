@@ -9,7 +9,7 @@ use crate::{
         dfg::{ChannelKind, DFGNode, DFGNodeID, DFGNodeKind, DFG},
     },
     pipeline::{AssembledPipeline, Pipeline},
-    stream::operator::Operator,
+    stream::{node::debug::DebugNode, operator::Operator},
 };
 use std::{marker::PhantomData, sync::Arc};
 
@@ -81,6 +81,8 @@ impl<IN: ArconType> Stream<IN> {
     }
 
     /// Will make sure the most downstream Node will print its result to the console
+    ///
+    /// Note that if the Pipeline has been configured with a debug node, it will take precedence.
     #[allow(clippy::wrong_self_convention)]
     pub fn to_console(mut self) -> Stream<IN> {
         self.ctx.console_output = true;
@@ -115,14 +117,27 @@ impl<IN: ArconType> Stream<IN> {
                     let (channel_kind, components) = {
                         match target_nodes {
                             Some(comps) => (dfg_node.channel_kind, comps),
-                            None => (
-                                if self.ctx.console_output {
-                                    ChannelKind::Console
-                                } else {
-                                    ChannelKind::Mute
-                                },
-                                vec![],
-                            ),
+                            None => {
+                                // At the end of the graph....
+                                if self.ctx.pipeline.debug_node_enabled() {
+                                    let node: DebugNode<IN> = DebugNode::new();
+                                    self.ctx.pipeline.create_debug_node(node);
+                                }
+
+                                match self.ctx.pipeline.abstract_debug_node {
+                                    Some(ref debug_node) => {
+                                        (ChannelKind::Forward, vec![debug_node.clone()])
+                                    }
+                                    None => (
+                                        if self.ctx.console_output {
+                                            ChannelKind::Console
+                                        } else {
+                                            ChannelKind::Mute
+                                        },
+                                        vec![],
+                                    ),
+                                }
+                            }
                         }
                     };
 
