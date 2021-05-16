@@ -60,7 +60,7 @@ pub use crate::{
 pub use arrow::{
     array::{
         ArrayBuilder, ArrayData, ArrayDataBuilder, PrimitiveBuilder, StringBuilder, StructArray,
-        StructBuilder,
+        StructBuilder, UInt64Array,
     },
     datatypes::{DataType, Field, Schema},
     error::ArrowError,
@@ -172,10 +172,8 @@ pub mod prelude {
     pub use kompact::{get_core_ids, CoreId};
 
     pub use super::{Arrow, MutableTable, ToArrow};
-    pub use arrow::util::pretty;
-    pub use arrow::record_batch::RecordBatch;
-    pub use arrow::datatypes::Schema;
-    pub use datafusion::prelude::*;
+    pub use arrow::{datatypes::Schema, record_batch::RecordBatch, util::pretty};
+    pub use datafusion::{datasource::MemTable, prelude::*};
 
     pub use arcon_state as state;
 

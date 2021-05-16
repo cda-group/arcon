@@ -1,7 +1,24 @@
 use arcon::prelude::*;
+use tokio::runtime::Runtime;
+
 
 fn arrow_udf(schema: Arc<Schema>, batches: Vec<RecordBatch>) -> OperatorResult<u64> {
-    Ok(1)
+    let mut ctx = ExecutionContext::new();
+    let provider = MemTable::try_new(schema, vec![batches]).unwrap();
+    ctx.register_table("t", Arc::new(provider)).unwrap();
+    let df = ctx.table("t").unwrap();
+    let group_expr = vec![col("data")];
+    let aggr_expr = vec![sum(col("data"))];
+
+    let runtime = Runtime::new()
+    .expect("Failed to create Tokio runtime");
+
+    let df = df.aggregate(group_expr, aggr_expr).unwrap();
+    let mut results = runtime.block_on(df.collect()).unwrap();
+    let batch = results.remove(0);
+    let sum = batch.column(0).as_any().downcast_ref::<arcon::UInt64Array>().unwrap();
+
+    Ok(sum.value(0))
 }
 
 #[cfg_attr(feature = "arcon_serde", derive(serde::Deserialize, serde::Serialize))]
@@ -16,10 +33,14 @@ pub struct Event {
 
 fn main() {
     let mut pipeline = Pipeline::default()
-        .collection((0..100000).map(|i| Event { data: i}).collect::<Vec<Event>>(), |conf| {
-            conf.set_arcon_time(ArconTime::Event);
-            conf.set_timestamp_extractor(|x: &Event| x.data);
-        })
+        .collection(
+            (0..100000)
+                .map(|i| Event { data: i })
+                .collect::<Vec<Event>>(),
+            |conf| {
+                conf.set_arcon_time(ArconTime::Process);
+            },
+        )
         .operator(OperatorBuilder {
             constructor: Arc::new(|backend| {
                 let function = ArrowWindow::new(backend.clone(), &arrow_udf);
@@ -31,7 +52,10 @@ fn main() {
                     false,
                 )
             }),
-            conf: Default::default(),
+            conf: OperatorConf {
+                parallelism_strategy: ParallelismStrategy::Static(1),
+                ..Default::default()
+            },
         })
         .to_console()
         .build();

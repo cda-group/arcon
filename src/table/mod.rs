@@ -155,61 +155,61 @@ impl ImmutableTable {
 }
 
 #[inline]
-pub fn to_record_batches(schema: Arc<Schema>, raw_batches: Vec<RawRecordBatch>) -> Result<Vec<RecordBatch>, ArrowError> {
+pub fn to_record_batches(
+    schema: Arc<Schema>,
+    raw_batches: Vec<RawRecordBatch>,
+) -> Result<Vec<RecordBatch>, ArrowError> {
     let dict_fields = Vec::new();
     let mut batches = Vec::with_capacity(raw_batches.len());
-        for raw in raw_batches {
-            let message = arrow::ipc::root_as_message(&raw.ipc_message)
-                .map_err(|e| ArrowError::IoError(e.to_string()))?;
+    for raw in raw_batches {
+        let message = arrow::ipc::root_as_message(&raw.ipc_message)
+            .map_err(|e| ArrowError::IoError(e.to_string()))?;
 
-            match message.header_type() {
-                arrow::ipc::MessageHeader::RecordBatch => {
-                    if let Some(batch) = message.header_as_record_batch() {
-                        let record_batch = read_record_batch(
-                            &raw.arrow_data,
-                            batch,
-                            schema.clone(),
-                            &dict_fields,
-                        )
-                        .map_err(|e| ArrowError::IoError(e.to_string()))?;
-                        batches.push(record_batch);
-                    } else {
-                        return Err(ArrowError::IoError(
-                            "Failed to match RecordBatch".to_string(),
-                        ));
-                    }
-                }
-                _ => {
+        match message.header_type() {
+            arrow::ipc::MessageHeader::RecordBatch => {
+                if let Some(batch) = message.header_as_record_batch() {
+                    let record_batch =
+                        read_record_batch(&raw.arrow_data, batch, schema.clone(), &dict_fields)
+                            .map_err(|e| ArrowError::IoError(e.to_string()))?;
+                    batches.push(record_batch);
+                } else {
                     return Err(ArrowError::IoError(
-                        "Matched unexpected ipc message".to_string(),
-                    ))
+                        "Failed to match RecordBatch".to_string(),
+                    ));
                 }
             }
+            _ => {
+                return Err(ArrowError::IoError(
+                    "Matched unexpected ipc message".to_string(),
+                ))
+            }
         }
-        Ok(batches)
+    }
+    Ok(batches)
 }
 
 #[inline]
-pub fn to_raw_batches(batches: impl IntoIterator<Item = RecordBatch>) -> Result<Vec<RawRecordBatch>, ArrowError> {
-        //let mut raw_batches = Vec::with_capacity(batches.into_iter().len());
-        let mut raw_batches = Vec::new();
-        let ipc = IpcDataGenerator::default();
-        let write_options = IpcWriteOptions::default();
-        let mut tracker = DictionaryTracker::new(false);
+pub fn to_raw_batches(
+    batches: impl IntoIterator<Item = RecordBatch>,
+) -> Result<Vec<RawRecordBatch>, ArrowError> {
+    //let mut raw_batches = Vec::with_capacity(batches.into_iter().len());
+    let mut raw_batches = Vec::new();
+    let ipc = IpcDataGenerator::default();
+    let write_options = IpcWriteOptions::default();
+    let mut tracker = DictionaryTracker::new(false);
 
-        for batch in batches.into_iter() {
-            let (_, encoded_data) = ipc
-                .encoded_batch(&batch, &mut tracker, &write_options)
-                .map_err(|e| ArrowError::IoError(e.to_string()))?;
+    for batch in batches.into_iter() {
+        let (_, encoded_data) = ipc
+            .encoded_batch(&batch, &mut tracker, &write_options)
+            .map_err(|e| ArrowError::IoError(e.to_string()))?;
 
-            raw_batches.push(RawRecordBatch {
-                ipc_message: encoded_data.ipc_message,
-                arrow_data: encoded_data.arrow_data,
-            });
-        }
+        raw_batches.push(RawRecordBatch {
+            ipc_message: encoded_data.ipc_message,
+            arrow_data: encoded_data.arrow_data,
+        });
+    }
 
-        Ok(raw_batches)
-
+    Ok(raw_batches)
 }
 
 /// Restore a ImmutableTable from a RawTable
