@@ -78,6 +78,11 @@ impl MutableTable {
             batches: self.batches,
         })
     }
+
+    pub fn raw_batches(&mut self) -> Result<Vec<RawRecordBatch>, ArrowError> {
+        self.finish()?;
+        to_raw_batches(self.batches.drain(..))
+    }
 }
 
 #[derive(Debug)]
@@ -149,18 +154,11 @@ impl ImmutableTable {
     }
 }
 
-/// Restore a ImmutableTable from a RawTable
-impl TryFrom<RawTable> for ImmutableTable {
-    type Error = ArrowError;
-
-    fn try_from(table: RawTable) -> Result<Self, Self::Error> {
-        let s = schema_from_bytes(&table.schema).map_err(|e| ArrowError::IoError(e.to_string()))?;
-        let schema_ref = Arc::new(s);
-        let dict_fields = Vec::new();
-
-        let mut batches = Vec::with_capacity(table.batches.len());
-
-        for raw in table.batches {
+#[inline]
+pub fn to_record_batches(schema: Arc<Schema>, raw_batches: Vec<RawRecordBatch>) -> Result<Vec<RecordBatch>, ArrowError> {
+    let dict_fields = Vec::new();
+    let mut batches = Vec::with_capacity(raw_batches.len());
+        for raw in raw_batches {
             let message = arrow::ipc::root_as_message(&raw.ipc_message)
                 .map_err(|e| ArrowError::IoError(e.to_string()))?;
 
@@ -170,7 +168,7 @@ impl TryFrom<RawTable> for ImmutableTable {
                         let record_batch = read_record_batch(
                             &raw.arrow_data,
                             batch,
-                            schema_ref.clone(),
+                            schema.clone(),
                             &dict_fields,
                         )
                         .map_err(|e| ArrowError::IoError(e.to_string()))?;
@@ -188,10 +186,44 @@ impl TryFrom<RawTable> for ImmutableTable {
                 }
             }
         }
+        Ok(batches)
+}
+
+#[inline]
+pub fn to_raw_batches(batches: impl IntoIterator<Item = RecordBatch>) -> Result<Vec<RawRecordBatch>, ArrowError> {
+        //let mut raw_batches = Vec::with_capacity(batches.into_iter().len());
+        let mut raw_batches = Vec::new();
+        let ipc = IpcDataGenerator::default();
+        let write_options = IpcWriteOptions::default();
+        let mut tracker = DictionaryTracker::new(false);
+
+        for batch in batches.into_iter() {
+            let (_, encoded_data) = ipc
+                .encoded_batch(&batch, &mut tracker, &write_options)
+                .map_err(|e| ArrowError::IoError(e.to_string()))?;
+
+            raw_batches.push(RawRecordBatch {
+                ipc_message: encoded_data.ipc_message,
+                arrow_data: encoded_data.arrow_data,
+            });
+        }
+
+        Ok(raw_batches)
+
+}
+
+/// Restore a ImmutableTable from a RawTable
+impl TryFrom<RawTable> for ImmutableTable {
+    type Error = ArrowError;
+
+    fn try_from(table: RawTable) -> Result<Self, Self::Error> {
+        let s = schema_from_bytes(&table.schema).map_err(|e| ArrowError::IoError(e.to_string()))?;
+        let schema = Arc::new(s);
+        let batches = to_record_batches(schema.clone(), table.batches)?;
 
         Ok(ImmutableTable {
             name: table.name,
-            schema: schema_ref,
+            schema,
             batches,
         })
     }

@@ -62,8 +62,8 @@ prost-types = "0.7"
 bytes = "1.0"
 
 
-arrow = "4.0.0"
-datafusion = "4.0.0"
+arrow = { git = "https://github.com/Max-Meldrum/arrow-rs", branch = "array_builder_send" }
+datafusion = { git = "https://github.com/Max-Meldrum/arrow-datafusion", branch = "array_builder_send" }
 
 # Optional
 #rdkafka = { version = "0.23", optional = true }

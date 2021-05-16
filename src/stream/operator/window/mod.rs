@@ -3,18 +3,17 @@
 
 pub mod assigner;
 
+use arrow::record_batch::RecordBatch;
+use arrow::datatypes::Schema;
 pub use assigner::WindowAssigner;
 
-use crate::{
-    prelude::*,
-    util::{prost_helpers::ProstOption, SafelySendableFn},
-};
+use crate::{prelude::*, table::{RawRecordBatch, to_record_batches}, util::{ArconFnBounds, SafelySendableFn, prost_helpers::ProstOption}};
 use arcon_error::OperatorResult;
 use arcon_state::{backend::handles::ActiveHandle, Aggregator, AggregatorState, Backend, VecState};
 use fxhash::FxHasher;
-use std::hash::{Hash, Hasher};
+use std::{hash::{Hash, Hasher}, marker::PhantomData};
 
-#[derive(prost::Message, Hash, Copy, Clone)]
+#[derive(prost::Message, Hash, Copy,  Clone)]
 pub struct WindowContext {
     #[prost(uint64)]
     key: u64,
@@ -27,6 +26,13 @@ impl WindowContext {
         WindowContext { key, index }
     }
 }
+impl PartialEq for WindowContext {
+    fn eq(&self, other: &Self) -> bool {
+        self.key == other.key && self.index == other.index
+    }
+}
+impl Eq for WindowContext {}
+
 
 impl From<WindowContext> for u64 {
     fn from(ctx: WindowContext) -> Self {
@@ -51,6 +57,107 @@ where
     fn result(&mut self, ctx: WindowContext) -> OperatorResult<OUT>;
     /// Clears the window state for the passed context
     fn clear(&mut self, ctx: WindowContext) -> OperatorResult<()>;
+
+    fn persist(&mut self) -> OperatorResult<()>;
+}
+
+pub struct ArrowWindow<IN, OUT, F, B>
+where
+    IN: ArconType + ToArrow,
+    OUT: ArconType,
+    F: Fn(Arc<Schema>, Vec<RecordBatch>) -> OperatorResult<OUT> + ArconFnBounds,
+    B: Backend,
+{
+    handle: ActiveHandle<B, VecState<RawRecordBatch>, u64, u64>,
+    map: std::collections::HashMap<WindowContext, MutableTable>,
+    udf: F,
+    //materializer: &'static dyn SafelySendableFn(Arc<Schema>, Vec<RecordBatch>) -> OUT,
+    _marker: std::marker::PhantomData<IN>,
+}
+
+impl<IN, OUT, F, B> ArrowWindow<IN, OUT, F, B>
+where
+    IN: ArconType + ToArrow,
+    OUT: ArconType,
+    F: Fn(Arc<Schema>, Vec<RecordBatch>) -> OperatorResult<OUT> + ArconFnBounds,
+    B: Backend,
+{
+    pub fn new(
+        backend: Arc<B>,
+        udf: F,
+    ) -> Self {
+        let mut handle = Handle::vec("window_handle")
+            .with_item_key(0)
+            .with_namespace(0);
+
+        backend.register_vec_handle(&mut handle);
+
+        let handle = handle.activate(backend);
+
+        Self {
+            handle,
+            map: std::collections::HashMap::new(),
+            udf,
+            _marker: PhantomData,
+        }
+    }
+}
+
+impl<IN, OUT, F, B> Window<IN, OUT> for ArrowWindow<IN, OUT, F, B>
+where
+    IN: ArconType + ToArrow,
+    OUT: ArconType,
+    F: Fn(Arc<Schema>, Vec<RecordBatch>) -> OperatorResult<OUT> + ArconFnBounds,
+    B: Backend,
+{
+    fn on_element(&mut self, element: IN, ctx: WindowContext) -> OperatorResult<()> {
+        let table = self.map.entry(ctx).or_insert(IN::table());
+        table.append(element).unwrap();
+
+        Ok(())
+    }
+
+    fn result(&mut self, ctx: WindowContext) -> OperatorResult<OUT> {
+        // first make sure everything in memory is drained
+        let table = self.map.entry(ctx).or_insert(IN::table());
+        self.handle.set_item_key(ctx.key);
+        self.handle.set_namespace(ctx.index);
+
+        for batch in table.raw_batches().unwrap() {
+            self.handle.append(batch)?;
+        }
+
+        // fetch all batches from the backend
+        let raw_batches = self.handle.get()?;
+        let batches = to_record_batches(Arc::new(IN::schema()), raw_batches).unwrap();
+        (self.udf)(Arc::new(IN::schema()),  batches)
+    }
+
+    fn clear(&mut self, ctx: WindowContext) -> OperatorResult<()> {
+        // clear from memory layer
+        let _ = self.map.remove(&ctx);
+
+        // clear everything in the backend
+        self.handle.set_item_key(ctx.key);
+        self.handle.set_namespace(ctx.index);
+
+        self.handle.clear()?;
+
+        Ok(())
+    }
+
+    fn persist(&mut self) -> OperatorResult<()> {
+        for (ctx, table)in self.map.iter_mut() {
+            self.handle.set_item_key(ctx.key);
+            self.handle.set_namespace(ctx.index);
+
+            let batches = table.raw_batches().unwrap();
+            for batch in batches {
+                self.handle.append(batch)?;
+            }
+        }
+        Ok(())
+    }
 }
 
 pub struct AppenderWindow<IN, OUT, B>
@@ -115,6 +222,9 @@ where
         self.handle.set_namespace(ctx.index);
 
         self.handle.clear()?;
+        Ok(())
+    }
+    fn persist(&mut self) -> OperatorResult<()> {
         Ok(())
     }
 }
@@ -219,6 +329,9 @@ where
         self.aggregator.set_namespace(ctx.index);
 
         self.aggregator.clear()
+    }
+    fn persist(&mut self) -> OperatorResult<()> {
+        Ok(())
     }
 }
 

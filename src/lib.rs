@@ -148,7 +148,7 @@ pub mod prelude {
             operator::{
                 function::{Filter, FlatMap, Map, MapInPlace},
                 sink::local_file::LocalFileSink,
-                window::{AppenderWindow, IncrementalWindow, WindowAssigner},
+                window::{AppenderWindow, ArrowWindow, IncrementalWindow, WindowAssigner},
                 Operator, OperatorContext,
             },
             source::Source,
@@ -173,6 +173,8 @@ pub mod prelude {
 
     pub use super::{Arrow, MutableTable, ToArrow};
     pub use arrow::util::pretty;
+    pub use arrow::record_batch::RecordBatch;
+    pub use arrow::datatypes::Schema;
     pub use datafusion::prelude::*;
 
     pub use arcon_state as state;

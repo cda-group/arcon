@@ -272,7 +272,8 @@ where
     }
 
     fn persist(&mut self) -> OperatorResult<()> {
-        self.state.persist()
+        self.state.persist()?;
+        self.window.persist()
     }
     fn state(&mut self) -> &mut Self::OperatorState {
         &mut self.op_state

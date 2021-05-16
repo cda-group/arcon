@@ -231,9 +231,8 @@ checksum = "23b62fc65de8e4e7f52534fb52b0f3ed04746ae267519eef2a83941e8085068b"
 
 [[package]]
 name = "arrow"
-version = "4.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "014c7490f839d9dd4ce28f8232d4731f8b1fb93fa477d69e6fe881814ac2b6bb"
+version = "4.0.0-SNAPSHOT"
+source = "git+https://github.com/Max-Meldrum/arrow-rs?branch=array_builder_send#8e3591c08d988a23ddd789bd6e732c8aede30d81"
 dependencies = [
  "cfg_aliases",
  "chrono",
@@ -243,6 +242,7 @@ dependencies = [
  "indexmap",
  "lazy_static",
  "lexical-core",
+ "multiversion",
  "num",
  "prettytable-rs",
  "rand 0.7.3",
@@ -903,15 +903,13 @@ dependencies = [
 
 [[package]]
 name = "datafusion"
-version = "4.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a9d28e885465d9c4ce7154b52511a3d3263c1a484010145dc84eb686abc56c2d"
+version = "4.0.0-SNAPSHOT"
+source = "git+https://github.com/Max-Meldrum/arrow-datafusion?branch=array_builder_send#8cfd68e96a1f6493308d6f7702a57240584f1065"
 dependencies = [
  "ahash",
  "arrow",
  "async-trait",
  "chrono",
- "clap",
  "futures",
  "hashbrown 0.11.2",
  "lazy_static",
@@ -923,7 +921,6 @@ dependencies = [
  "paste",
  "pin-project-lite",
  "regex",
- "rustyline",
  "sha2",
  "smallvec",
  "sqlparser",
@@ -1768,6 +1765,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 
 [[package]]
+name = "multiversion"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "025c962a3dd3cc5e0e520aa9c612201d127dcdf28616974961a649dca64f5373"
+dependencies = [
+ "multiversion-macros",
+]
+
+[[package]]
+name = "multiversion-macros"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a8a3e2bde382ebf960c1f3e79689fa5941625fe9bf694a1cb64af3e85faff3af"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "nix"
 version = "0.19.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1984,9 +2001,8 @@ dependencies = [
 
 [[package]]
 name = "parquet"
-version = "4.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32858ae16bd61fda406be4b76af617d2f632fed4f0093810245aa4f5316ac865"
+version = "4.0.0-SNAPSHOT"
+source = "git+https://github.com/Max-Meldrum/arrow-rs?branch=array_builder_send#8e3591c08d988a23ddd789bd6e732c8aede30d81"
 dependencies = [
  "arrow",
  "base64 0.12.3",
