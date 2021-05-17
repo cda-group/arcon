@@ -3,9 +3,9 @@
 
 use crate::data::ArconType;
 
+#[cfg(feature = "kafka")]
+pub mod kafka;
 pub mod local_file;
-//#[cfg(feature = "kafka")]
-//pub mod kafka;
 //#[cfg(feature = "socket")]
 //pub mod socket;
 

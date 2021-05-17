@@ -158,7 +158,10 @@ pub mod prelude {
     };
 
     #[cfg(feature = "kafka")]
-    pub use crate::stream::operator::sink::kafka::KafkaSink;
+    pub use crate::stream::source::kafka::KafkaConsumerConf;
+    #[cfg(feature = "kafka")]
+    pub use rdkafka::config::ClientConfig;
+    //pub use crate::stream::operator::sink::kafka::KafkaSink;
 
     pub use arcon_error::{arcon_err, arcon_err_kind, ArconResult, OperatorResult};
 

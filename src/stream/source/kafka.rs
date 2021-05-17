@@ -1,16 +1,129 @@
-// Copyright (c) 2020, KTH Royal Institute of Technology.
+// Copyright (c) 2021, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
+use super::{Poll, Source};
 use crate::prelude::*;
-use futures::executor::block_on_stream;
 use rdkafka::{
-    config::ClientConfig,
-    consumer::{stream_consumer::StreamConsumer, CommitMode, Consumer},
-    error::KafkaResult,
+    config::{ClientConfig, FromClientConfig},
+    consumer::{BaseConsumer, Consumer, DefaultConsumerContext},
     message::*,
-    topic_partition_list::Offset,
 };
-use std::{cell::RefCell, collections::HashMap, time::Duration};
+use std::time::Duration;
+
+/// Default timeout duration for consumer polling
+const DEFAULT_POLL_TIMEOUT_MS: u64 = 250;
+
+impl Default for KafkaConsumerConf {
+    fn default() -> Self {
+        Self {
+            client_config: ClientConfig::default(),
+            poll_timeout_ms: DEFAULT_POLL_TIMEOUT_MS,
+            topics: Vec::new(),
+        }
+    }
+}
+/// Kafka Source Configuration
+#[derive(Debug, Clone)]
+pub struct KafkaConsumerConf {
+    /// Holds the config of [rdkafka] client
+    client_config: ClientConfig,
+    /// Timeout in milliseconds of how long to wait for during poll
+    poll_timeout_ms: u64,
+    /// Vec of topics that are subscribed to
+    topics: Vec<String>,
+}
+
+impl KafkaConsumerConf {
+    /// Set topics for the conf
+    pub fn with_topics(mut self, topics: &[&str]) -> Self {
+        for topic in topics {
+            self.topics.push(topic.to_string())
+        }
+        self
+    }
+    /// Set poll timeout for the Kafka consumer
+    ///
+    /// If not defined, the default [DEFAULT_POLL_TIMEOUT] will be used.
+    pub fn with_poll_timeout(mut self, timeout_ms: u64) -> Self {
+        self.poll_timeout_ms = timeout_ms;
+        self
+    }
+
+    /// Configure rdkafka's ClientConfig
+    pub fn set(mut self, key: &str, value: &str) -> Self {
+        self.client_config.set(key, value);
+        self
+    }
+
+    pub fn client_config(&self) -> &ClientConfig {
+        &self.client_config
+    }
+    pub fn topics(&self) -> &[String] {
+        &self.topics
+    }
+    pub fn poll_timeout(&self) -> u64 {
+        self.poll_timeout_ms
+    }
+}
+
+pub struct KafkaConsumer<IN>
+where
+    IN: ArconType + ::serde::de::DeserializeOwned,
+{
+    conf: KafkaConsumerConf,
+    consumer: BaseConsumer<DefaultConsumerContext>,
+    _marker: std::marker::PhantomData<IN>,
+}
+
+impl<IN> KafkaConsumer<IN>
+where
+    IN: ArconType + ::serde::de::DeserializeOwned,
+{
+    pub fn new(conf: KafkaConsumerConf) -> Self {
+        let consumer = BaseConsumer::from_config(&conf.client_config()).unwrap();
+        let topics: Vec<&str> = conf.topics().iter().map(|x| &**x).collect();
+
+        consumer
+            .subscribe(&topics)
+            .expect("failed to subscribe to topics");
+        Self {
+            conf,
+            consumer,
+            _marker: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<IN> Source for KafkaConsumer<IN>
+where
+    IN: ArconType + ::serde::de::DeserializeOwned,
+{
+    type Item = IN;
+
+    fn poll_next(&mut self) -> Poll<Self::Item> {
+        match self
+            .consumer
+            .poll(Duration::from_millis(self.conf.poll_timeout()))
+        {
+            Some(Ok(msg)) => match msg.payload_view::<str>() {
+                Some(Ok(payload)) => match serde_json::from_str(&payload) {
+                    Ok(data) => Poll::Ready(data),
+                    Err(err) => Poll::Error(err.to_string()),
+                },
+                Some(Err(err)) => Poll::Error(err.to_string()),
+                None => Poll::Pending,
+            },
+            Some(Err(err)) => Poll::Error(err.to_string()),
+            None => {
+                // Nothing to collect
+                Poll::Pending
+            }
+        }
+    }
+    fn set_offset(&mut self, _: usize) {}
+}
+
+/*
 
 /*
     KafkaSource: work in progress
@@ -335,4 +448,6 @@ mod tests {
             .tell(ArconMessage::<Thing>::epoch(1, 0.into()));
     }
 }
+*/
+
 */

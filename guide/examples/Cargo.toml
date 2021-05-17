@@ -11,7 +11,7 @@ arcon_serde = ["arcon/arcon_serde", "arcon_build/arcon_serde"]
 default = []
 
 [dependencies]
-arcon = { path = "../../"}
+arcon = { path = "../../" , features = ["kafka"]}
 prost = "0.7"
 serde = { version = "1.0.104", features = ["derive"] }
 abomonation = "0.7.3"
