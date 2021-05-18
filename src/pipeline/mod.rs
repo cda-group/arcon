@@ -301,7 +301,7 @@ impl Pipeline {
     ///  .set("enable.auto.commit", "false");
     ///
     /// let stream: Stream<u64> = Pipeline::default()
-    ///  .kafka(consumer_conf, JsonScheam::new(), |conf| {
+    ///  .kafka(consumer_conf, JsonSchema::new(), |conf| {
     ///     conf.set_arcon_time(ArconTime::Event);
     ///     conf.set_timestamp_extractor(|x: &u64| *x);
     ///  });
@@ -323,7 +323,7 @@ impl Pipeline {
         self.source(builder)
     }
 
-    /// Enable [DebugNode] for the Pipeline
+    /// Enable DebugNode for the Pipeline
     ///
     ///
     /// The component can be accessed through [method](AssembledPipeline::get_debug_node).
