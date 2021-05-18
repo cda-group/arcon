@@ -151,7 +151,7 @@ pub mod prelude {
                 window::{AppenderWindow, IncrementalWindow, WindowAssigner},
                 Operator, OperatorContext,
             },
-            source::Source,
+            source::{schema::ProtoSchema, Source},
             time::{ArconTime, Time},
         },
         Arcon, ArconState,
@@ -159,6 +159,8 @@ pub mod prelude {
 
     #[cfg(feature = "kafka")]
     pub use crate::stream::source::kafka::KafkaConsumerConf;
+    #[cfg(feature = "serde_json")]
+    pub use crate::stream::source::schema::JsonSchema;
     #[cfg(feature = "kafka")]
     pub use rdkafka::config::ClientConfig;
     //pub use crate::stream::operator::sink::kafka::KafkaSink;

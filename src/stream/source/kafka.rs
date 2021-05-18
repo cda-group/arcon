@@ -1,8 +1,7 @@
 // Copyright (c) 2021, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use super::{Poll, Source};
-use crate::prelude::*;
+use super::{schema::SourceSchema, Poll, Source};
 use rdkafka::{
     config::{ClientConfig, FromClientConfig},
     consumer::{BaseConsumer, Consumer, DefaultConsumerContext},
@@ -66,20 +65,20 @@ impl KafkaConsumerConf {
     }
 }
 
-pub struct KafkaConsumer<IN>
+pub struct KafkaConsumer<S>
 where
-    IN: ArconType + ::serde::de::DeserializeOwned,
+    S: SourceSchema,
 {
     conf: KafkaConsumerConf,
     consumer: BaseConsumer<DefaultConsumerContext>,
-    _marker: std::marker::PhantomData<IN>,
+    schema: S,
 }
 
-impl<IN> KafkaConsumer<IN>
+impl<S> KafkaConsumer<S>
 where
-    IN: ArconType + ::serde::de::DeserializeOwned,
+    S: SourceSchema,
 {
-    pub fn new(conf: KafkaConsumerConf) -> Self {
+    pub fn new(conf: KafkaConsumerConf, schema: S) -> Self {
         let consumer = BaseConsumer::from_config(&conf.client_config()).unwrap();
         let topics: Vec<&str> = conf.topics().iter().map(|x| &**x).collect();
 
@@ -89,28 +88,24 @@ where
         Self {
             conf,
             consumer,
-            _marker: std::marker::PhantomData,
+            schema,
         }
     }
 }
 
-impl<IN> Source for KafkaConsumer<IN>
+impl<S> Source for KafkaConsumer<S>
 where
-    IN: ArconType + ::serde::de::DeserializeOwned,
+    S: SourceSchema,
 {
-    type Item = IN;
+    type Item = S::Data;
 
     fn poll_next(&mut self) -> Poll<Self::Item> {
         match self
             .consumer
             .poll(Duration::from_millis(self.conf.poll_timeout()))
         {
-            Some(Ok(msg)) => match msg.payload_view::<str>() {
-                Some(Ok(payload)) => match serde_json::from_str(&payload) {
-                    Ok(data) => Poll::Ready(data),
-                    Err(err) => Poll::Error(err.to_string()),
-                },
-                Some(Err(err)) => Poll::Error(err.to_string()),
+            Some(Ok(msg)) => match msg.payload() {
+                Some(bytes) => Poll::Ready(self.schema.from_bytes(bytes).unwrap()),
                 None => Poll::Pending,
             },
             Some(Err(err)) => Poll::Error(err.to_string()),

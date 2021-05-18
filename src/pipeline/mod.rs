@@ -22,7 +22,7 @@ use crate::{
     prelude::*,
     stream::{
         node::{debug::DebugNode, source::SourceEvent},
-        source::{local_file::LocalFileSource, Source},
+        source::{local_file::LocalFileSource, schema::SourceSchema, Source},
     },
 };
 use arcon_allocator::Allocator;
@@ -301,25 +301,23 @@ impl Pipeline {
     ///  .set("enable.auto.commit", "false");
     ///
     /// let stream: Stream<u64> = Pipeline::default()
-    ///  .kafka(consumer_conf, |conf| {
+    ///  .kafka(consumer_conf, JsonScheam::new(), |conf| {
     ///     conf.set_arcon_time(ArconTime::Event);
     ///     conf.set_timestamp_extractor(|x: &u64| *x);
     ///  });
     /// ```
     #[cfg(feature = "kafka")]
-    pub fn kafka<A>(
+    pub fn kafka<S: SourceSchema>(
         self,
         kafka_conf: KafkaConsumerConf,
-        f: impl FnOnce(&mut SourceConf<A>),
-    ) -> Stream<A>
-    where
-        A: ArconType + ::serde::de::DeserializeOwned,
-    {
+        schema: S,
+        f: impl FnOnce(&mut SourceConf<S::Data>),
+    ) -> Stream<S::Data> {
         let mut conf = SourceConf::default();
         f(&mut conf);
 
         let builder = SourceBuilder {
-            constructor: Arc::new(move |_| KafkaConsumer::new(kafka_conf.clone())),
+            constructor: Arc::new(move |_| KafkaConsumer::new(kafka_conf.clone(), schema.clone())),
             conf,
         };
         self.source(builder)
