@@ -17,6 +17,16 @@ where
 }
 
 #[cfg(feature = "serde_json")]
+impl<IN> Default for JsonSchema<IN>
+where
+    IN: ArconType + ::serde::de::DeserializeOwned,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(feature = "serde_json")]
 impl<IN> JsonSchema<IN>
 where
     IN: ArconType + ::serde::de::DeserializeOwned,
@@ -49,6 +59,15 @@ where
     IN: ArconType,
 {
     _marker: std::marker::PhantomData<IN>,
+}
+
+impl<IN> Default for ProtoSchema<IN>
+where
+    IN: ArconType,
+{
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<IN> ProtoSchema<IN>
