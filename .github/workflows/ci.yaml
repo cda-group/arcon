@@ -55,6 +55,7 @@ jobs:
             experimental: false
           - build: Windows
             os: windows-latest
+            features: cmake-build,libz-static
             experimental: true
     steps:
       - name: checkout
