@@ -3,11 +3,11 @@
 
 use crate::{
     data::{ArconElement, ArconNever, ArconType},
+    error::*,
     index::ArconState,
     stream::operator::{Operator, OperatorContext},
     util::ArconFnBounds,
 };
-use arcon_error::*;
 use arcon_state::Backend;
 use kompact::prelude::ComponentDefinition;
 use std::marker::PhantomData;
@@ -70,7 +70,7 @@ where
         &mut self,
         element: ArconElement<IN>,
         mut ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> OperatorResult<()> {
+    ) -> ArconResult<()> {
         if (self.udf)(&element.data, &mut self.state) {
             ctx.output(element);
         }

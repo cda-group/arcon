@@ -3,9 +3,9 @@
 
 use crate::{
     data::{ArconElement, ArconNever, ArconType},
+    error::{ArconResult, StateResult},
     stream::operator::{Operator, OperatorContext},
 };
-use arcon_error::OperatorResult;
 use arcon_state::Backend;
 use kompact::prelude::*;
 use std::{
@@ -60,7 +60,7 @@ where
         &mut self,
         element: ArconElement<IN>,
         _ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> OperatorResult<()> {
+    ) -> ArconResult<()> {
         if let Err(err) = writeln!(self.file.borrow_mut(), "{:?}", element.data) {
             eprintln!("Error while writing to file sink {}", err.to_string());
         }

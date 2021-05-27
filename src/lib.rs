@@ -44,10 +44,12 @@ pub use arcon_macros::*;
 #[doc(hidden)]
 pub use arcon_state::*;
 
-pub use crate::index::{ArconState, IndexOps};
-pub use arcon_state::error::ArconStateError;
-
 // Imports below are exposed for ``arcon_macros``
+
+#[doc(hidden)]
+pub use crate::index::{ArconState, IndexOps};
+#[doc(hidden)]
+pub use arcon_state::error::ArconStateError;
 
 #[doc(hidden)]
 pub use crate::data::{ArconType, VersionId};
@@ -85,6 +87,7 @@ mod conf;
 mod data;
 /// Dataflow API
 mod dataflow;
+pub mod error;
 mod index;
 /// Module containing different runtime managers
 mod manager;
@@ -94,6 +97,7 @@ mod manager;
 mod metrics;
 /// Utilities for creating an Arcon pipeline
 mod pipeline;
+//pub mod result;
 /// Contains the core stream logic
 mod stream;
 /// Table implementations
@@ -160,7 +164,7 @@ pub mod prelude {
     #[cfg(feature = "kafka")]
     pub use crate::stream::operator::sink::kafka::KafkaSink;
 
-    pub use arcon_error::{arcon_err, arcon_err_kind, ArconResult, OperatorResult};
+    pub use crate::error::{ArconResult, StateResult};
 
     #[doc(hidden)]
     pub use kompact::{

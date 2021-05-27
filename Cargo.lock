@@ -97,7 +97,6 @@ dependencies = [
  "abomonation",
  "abomonation_derive",
  "arcon_allocator",
- "arcon_error",
  "arcon_macros",
  "arcon_state",
  "arrow",
@@ -122,6 +121,7 @@ dependencies = [
  "serde",
  "serde_json",
  "slog",
+ "snafu",
  "tempfile",
  "tokio",
  "tokio-util",
@@ -141,13 +141,6 @@ name = "arcon_build"
 version = "0.1.0"
 dependencies = [
  "prost-build",
-]
-
-[[package]]
-name = "arcon_error"
-version = "0.1.1"
-dependencies = [
- "arcon_state",
 ]
 
 [[package]]

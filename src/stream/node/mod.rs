@@ -8,7 +8,11 @@ pub mod source;
 
 #[cfg(feature = "unsafe_flight")]
 use crate::data::flight_serde::unsafe_remote::UnsafeSerde;
-use crate::index::{ArconState, StateConstructor};
+use crate::{
+    arcon_err, arcon_err_kind,
+    error::ArconResult,
+    index::{ArconState, StateConstructor},
+};
 use crate::{
     data::{flight_serde::reliable_remote::ReliableSerde, RawArconMessage, *},
     index::{AppenderIndex, EagerAppender, IndexOps, Timer as ArconTimer},
@@ -18,7 +22,6 @@ use crate::{
         operator::{Operator, OperatorContext},
     },
 }; // conflicts with Kompact Timer trait
-use arcon_error::{arcon_err, arcon_err_kind, ArconResult};
 use arcon_macros::ArconState;
 use arcon_state::Backend;
 use fxhash::*;

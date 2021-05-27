@@ -3,8 +3,10 @@
 
 #[cfg(feature = "unsafe_flight")]
 use crate::data::flight_serde::unsafe_remote::UnsafeSerde;
-use crate::data::{flight_serde::reliable_remote::ReliableSerde, *};
-use arcon_error::arcon_err_kind;
+use crate::{
+    arcon_err_kind,
+    data::{flight_serde::reliable_remote::ReliableSerde, *},
+};
 use kompact::prelude::*;
 
 /// A DebugNode is a debug version of [Node]

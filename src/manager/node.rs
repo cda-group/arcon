@@ -3,6 +3,7 @@
 
 use crate::{
     data::{ArconMessage, Epoch, NodeID, StateID, Watermark},
+    error::*,
     index::{
         ArconState, HashTable, IndexOps, LocalValue, StateConstructor, ValueIndex, EMPTY_STATE_ID,
     },
@@ -13,7 +14,6 @@ use crate::{
     },
     stream::operator::Operator,
 };
-use arcon_error::*;
 use arcon_macros::ArconState;
 use arcon_state::Backend;
 use fxhash::FxHashMap;
@@ -195,7 +195,7 @@ where
         if let Some(base_dir) = &self.ctx.config()["checkpoint_dir"].as_string() {
             let curr_epoch = match self.manager_state.current_epoch().get()? {
                 Some(v) => v.as_ref().epoch,
-                None => return arcon_err!("failed to fetch epoch"),
+                None => return crate::arcon_err!("failed to fetch epoch"),
             };
 
             let checkpoint_dir = format!(
@@ -239,7 +239,7 @@ where
                 "Completed a Checkpoint to path {}", checkpoint_dir
             );
         } else {
-            return arcon_err!("Failed to fetch checkpoint_dir from Config");
+            return crate::arcon_err!("Failed to fetch checkpoint_dir from Config");
         }
 
         Ok(())
@@ -266,7 +266,7 @@ where
                 if self.nodes.contains_key(&request.id) {
                     let epoch = match self.manager_state.current_epoch().get()? {
                         Some(v) => v.into_owned(),
-                        None => return arcon_err!("failed to fetch epoch"),
+                        None => return crate::arcon_err!("failed to fetch epoch"),
                     };
                     if request.epoch == epoch {
                         self.manager_state

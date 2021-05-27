@@ -40,7 +40,6 @@ rocksdb = ["arcon_state/rocks"]
 
 [dependencies]
 arcon_macros = { version = "0.1", path = "arcon_macros" }
-arcon_error = { version = "0.1", path = "arcon_error" }
 arcon_state = { version = "0.1", path = "arcon_state" }
 arcon_allocator = { version = "0.1", path = "arcon_allocator" }
 
@@ -51,6 +50,7 @@ crossbeam-utils = "0.7"
 num_cpus = "1.0"
 hierarchical_hash_wheel_timer = "1.0"
 hocon = {version = "0.3", default-features = false, features = ["serde-support"]}
+snafu = "0.6"
 
 # Hashing
 fxhash = "0.2.1"

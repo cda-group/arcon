@@ -1,7 +1,7 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use arcon_error::*;
+use crate::error::*;
 use hocon::HoconLoader;
 use kompact::{
     net::buffers::BufferConfig,
@@ -184,15 +184,15 @@ impl ArconConf {
     /// Loads ArconConf from a file
     pub fn from_file(path: impl AsRef<Path>) -> ArconResult<ArconConf> {
         let data = std::fs::read_to_string(path)
-            .map_err(|e| arcon_err_kind!("Failed to read config file with err {}", e))?;
+            .map_err(|e| crate::arcon_err_kind!("Failed to read config file with err {}", e))?;
 
         let loader: HoconLoader = HoconLoader::new()
             .load_str(&data)
-            .map_err(|e| arcon_err_kind!("Failed to load Hocon Loader with err {}", e))?;
+            .map_err(|e| crate::arcon_err_kind!("Failed to load Hocon Loader with err {}", e))?;
 
         let conf = loader
             .resolve()
-            .map_err(|e| arcon_err_kind!("Failed to resolve ArconConf with err {}", e))?;
+            .map_err(|e| crate::arcon_err_kind!("Failed to resolve ArconConf with err {}", e))?;
         Ok(conf)
     }
 }

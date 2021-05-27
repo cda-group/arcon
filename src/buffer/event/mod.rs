@@ -1,8 +1,8 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
+use crate::error::*;
 use arcon_allocator::{AllocId, AllocResult, Allocator};
-use arcon_error::*;
 use crossbeam_utils::CachePadded;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -42,7 +42,7 @@ impl<T> EventBuffer<T> {
                 free: AtomicBool::new(true).into(),
             })
         } else {
-            arcon_err!("EventBuffer Alloc err")
+            crate::arcon_err!("EventBuffer Alloc err")
         }
     }
 

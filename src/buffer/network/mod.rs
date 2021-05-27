@@ -1,8 +1,8 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
+use crate::error::*;
 use arcon_allocator::{AllocId, AllocResult, Allocator};
-use arcon_error::*;
 use kompact::net::buffers::Chunk;
 use std::sync::{Arc, Mutex};
 
@@ -37,7 +37,7 @@ impl NetworkBuffer {
                 capacity,
             })
         } else {
-            arcon_err!("NetworkBuffer Alloc err")
+            crate::arcon_err!("NetworkBuffer Alloc err")
         }
     }
 

@@ -10,10 +10,10 @@ pub mod window;
 
 use crate::{
     data::{ArconElement, ArconEvent, ArconType},
+    error::{timer::TimerResult, *},
     index::{ArconState, Timer},
     stream::channel::strategy::ChannelStrategy,
 };
-use arcon_error::*;
 use arcon_state::Backend;
 use kompact::prelude::ComponentDefinition;
 use prost::Message;
@@ -36,7 +36,7 @@ pub trait Operator: Send + Sized {
     fn on_start(
         &mut self,
         mut _ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> OperatorResult<()> {
+    ) -> ArconResult<()> {
         Ok(())
     }
 
@@ -45,17 +45,17 @@ pub trait Operator: Send + Sized {
         &mut self,
         element: ArconElement<Self::IN>,
         ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> OperatorResult<()>;
+    ) -> ArconResult<()>;
 
     /// Determines how the `Operator` handles timeouts it registered earlier when they are triggered
     fn handle_timeout(
         &mut self,
         timeout: Self::TimerState,
         ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> OperatorResult<()>;
+    ) -> ArconResult<()>;
 
     /// Determines how the `Operator` persists its state
-    fn persist(&mut self) -> OperatorResult<()>;
+    fn persist(&mut self) -> StateResult<()>;
 
     /// A get function to the operator's state.
     ///
@@ -71,7 +71,7 @@ macro_rules! ignore_timeout {
             &mut self,
             _timeout: Self::TimerState,
             _ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-        ) -> OperatorResult<()> {
+        ) -> ArconResult<()> {
             Ok(())
         }
     };
@@ -81,7 +81,7 @@ macro_rules! ignore_timeout {
 #[macro_export]
 macro_rules! ignore_persist {
     () => {
-        fn persist(&mut self) -> OperatorResult<()> {
+        fn persist(&mut self) -> StateResult<()> {
             Ok(())
         }
     };
@@ -148,7 +148,7 @@ where
 
     /// Get current event time
     #[inline]
-    pub fn current_time(&mut self) -> OperatorResult<u64> {
+    pub fn current_time(&mut self) -> StateResult<u64> {
         self.timer.current_time()
     }
 
@@ -162,7 +162,8 @@ where
         key: I,
         time: u64,
         entry: OP::TimerState,
-    ) -> Result<(), OP::TimerState> {
+        //) -> Result<(), OP::TimerState> {
+    ) -> TimerResult<OP::TimerState> {
         self.timer.schedule_at(key.into(), time, entry)
     }
 }

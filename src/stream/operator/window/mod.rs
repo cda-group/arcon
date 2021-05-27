@@ -9,8 +9,9 @@ use crate::{
     prelude::*,
     util::{prost_helpers::ProstOption, SafelySendableFn},
 };
-use arcon_error::OperatorResult;
-use arcon_state::{backend::handles::ActiveHandle, Aggregator, AggregatorState, Backend, VecState};
+use arcon_state::{
+    backend::handles::ActiveHandle, error::*, Aggregator, AggregatorState, Backend, VecState,
+};
 use fxhash::FxHasher;
 use std::hash::{Hash, Hasher};
 
@@ -46,11 +47,11 @@ where
     OUT: ArconType,
 {
     /// The `on_element` function is called per received window element
-    fn on_element(&mut self, element: IN, ctx: WindowContext) -> OperatorResult<()>;
+    fn on_element(&mut self, element: IN, ctx: WindowContext) -> Result<()>;
     /// The `result` function is called at the end of a window's lifetime
-    fn result(&mut self, ctx: WindowContext) -> OperatorResult<OUT>;
+    fn result(&mut self, ctx: WindowContext) -> Result<OUT>;
     /// Clears the window state for the passed context
-    fn clear(&mut self, ctx: WindowContext) -> OperatorResult<()>;
+    fn clear(&mut self, ctx: WindowContext) -> Result<()>;
 }
 
 pub struct AppenderWindow<IN, OUT, B>
@@ -94,7 +95,7 @@ where
     OUT: ArconType,
     B: Backend,
 {
-    fn on_element(&mut self, element: IN, ctx: WindowContext) -> OperatorResult<()> {
+    fn on_element(&mut self, element: IN, ctx: WindowContext) -> Result<()> {
         self.handle.set_item_key(ctx.key);
         self.handle.set_namespace(ctx.index);
 
@@ -102,7 +103,7 @@ where
         Ok(())
     }
 
-    fn result(&mut self, ctx: WindowContext) -> OperatorResult<OUT> {
+    fn result(&mut self, ctx: WindowContext) -> Result<OUT> {
         self.handle.set_item_key(ctx.key);
         self.handle.set_namespace(ctx.index);
 
@@ -110,7 +111,7 @@ where
         Ok((self.materializer)(&buf))
     }
 
-    fn clear(&mut self, ctx: WindowContext) -> OperatorResult<()> {
+    fn clear(&mut self, ctx: WindowContext) -> Result<()> {
         self.handle.set_item_key(ctx.key);
         self.handle.set_namespace(ctx.index);
 
@@ -198,7 +199,7 @@ where
     OUT: ArconType,
     B: Backend,
 {
-    fn on_element(&mut self, element: IN, ctx: WindowContext) -> OperatorResult<()> {
+    fn on_element(&mut self, element: IN, ctx: WindowContext) -> Result<()> {
         self.aggregator.set_item_key(ctx.key);
         self.aggregator.set_namespace(ctx.index);
 
@@ -207,14 +208,14 @@ where
         Ok(())
     }
 
-    fn result(&mut self, ctx: WindowContext) -> OperatorResult<OUT> {
+    fn result(&mut self, ctx: WindowContext) -> Result<OUT> {
         self.aggregator.set_item_key(ctx.key);
         self.aggregator.set_namespace(ctx.index);
 
         self.aggregator.get()
     }
 
-    fn clear(&mut self, ctx: WindowContext) -> OperatorResult<()> {
+    fn clear(&mut self, ctx: WindowContext) -> Result<()> {
         self.aggregator.set_item_key(ctx.key);
         self.aggregator.set_namespace(ctx.index);
 
