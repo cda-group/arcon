@@ -66,7 +66,6 @@ More advanced examples can be found [here](guide/examples).
 
 * [`arcon_allocator`]: Custom allocator.
 * [`arcon_build`]: Protobuf builder
-* [`arcon_error`]: Common error utilities.
 * [`arcon_macros`]: Arcon derive macros.
 * [`arcon_shell`]: Explore a live Arcon application
 * [`arcon_state`]: State management features.
@@ -75,7 +74,6 @@ More advanced examples can be found [here](guide/examples).
 
 [`arcon_allocator`]: arcon_allocator
 [`arcon_build`]: arcon_build
-[`arcon_error`]: arcon_error
 [`arcon_macros`]: arcon_macros
 [`arcon_shell`]: arcon_shell
 [`arcon_state`]: arcon_state
