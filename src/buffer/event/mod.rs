@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::error::*;
-use arcon_allocator::{AllocId, AllocResult, Allocator};
+use arcon_allocator::{Alloc, AllocId, Allocator};
 use crossbeam_utils::CachePadded;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -33,16 +33,17 @@ impl<T> EventBuffer<T> {
     pub fn new(capacity: usize, allocator: Arc<Mutex<Allocator>>) -> ArconResult<EventBuffer<T>> {
         let mut a = allocator.lock().unwrap();
 
-        if let AllocResult::Alloc(id, ptr) = unsafe { a.alloc::<T>(capacity) } {
-            Ok(EventBuffer {
+        match unsafe { a.alloc::<T>(capacity) } {
+            Ok(Alloc(id, ptr)) => Ok(EventBuffer {
                 ptr: ptr as *mut T,
                 allocator: allocator.clone(),
                 id,
                 capacity,
                 free: AtomicBool::new(true).into(),
-            })
-        } else {
-            crate::arcon_err!("EventBuffer Alloc err")
+            }),
+            Err(err) => Err(Error::Unsupported {
+                msg: err.to_string(),
+            }),
         }
     }
 

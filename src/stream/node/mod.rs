@@ -9,14 +9,13 @@ pub mod source;
 #[cfg(feature = "unsafe_flight")]
 use crate::data::flight_serde::unsafe_remote::UnsafeSerde;
 use crate::{
-    arcon_err, arcon_err_kind,
-    error::ArconResult,
-    index::{ArconState, StateConstructor},
-};
-use crate::{
     data::{flight_serde::reliable_remote::ReliableSerde, RawArconMessage, *},
-    index::{AppenderIndex, EagerAppender, IndexOps, Timer as ArconTimer},
+    error::{ArconResult, *},
+    index::{
+        AppenderIndex, ArconState, EagerAppender, IndexOps, StateConstructor, Timer as ArconTimer,
+    },
     manager::node::{NodeManagerEvent::Checkpoint, *},
+    reportable_error,
     stream::{
         channel::strategy::ChannelStrategy,
         operator::{Operator, OperatorContext},
@@ -202,7 +201,12 @@ where
     #[inline]
     fn handle_message(&mut self, message: MessageContainer<OP::IN>) -> ArconResult<()> {
         if !self.node_state.in_channels.contains(message.sender()) {
-            return arcon_err!("Message from invalid sender");
+            error!(
+                self.ctx.log(),
+                "Message from invalid sender id {:?}",
+                message.sender()
+            );
+            return Ok(());
         }
 
         if self.sender_blocked(message.sender()) {
@@ -242,7 +246,7 @@ where
                 ArconEvent::Element(e) => {
                     let watermark = match self.node_state.watermarks().get(&sender) {
                         Some(wm) => wm,
-                        None => return arcon_err!("Uninitialised watermark"),
+                        None => return reportable_error!("Uninitialised watermark"),
                     };
 
                     if e.timestamp.unwrap_or(u64::max_value()) <= watermark.timestamp {
@@ -260,7 +264,7 @@ where
                 ArconEvent::Watermark(w) => {
                     let watermark = match self.node_state.watermarks().get(&sender) {
                         Some(wm) => wm,
-                        None => return arcon_err!("Uninitialised watermark"),
+                        None => return reportable_error!("Uninitialised watermark"),
                     };
                     if w <= *watermark {
                         continue 'event_loop;
@@ -465,16 +469,16 @@ where
         let arcon_msg = match *msg.ser_id() {
             id if id == OP::IN::RELIABLE_SER_ID => msg
                 .try_deserialise::<RawArconMessage<OP::IN>, ReliableSerde<OP::IN>>()
-                .map_err(|e| {
-                    arcon_err_kind!("Failed to unpack reliable ArconMessage with err {:?}", e)
+                .map_err(|e| Error::Unsupported {
+                    msg: format!("Failed to unpack reliable ArconMessage with err {:?}", e),
                 }),
             #[cfg(feature = "unsafe_flight")]
             id if id == OP::IN::UNSAFE_SER_ID => msg
                 .try_deserialise::<RawArconMessage<OP::IN>, UnsafeSerde<OP::IN>>()
-                .map_err(|e| {
-                    arcon_err_kind!("Failed to unpack unreliable ArconMessage with err {:?}", e)
+                .map_err(|e| Error::Unsupported {
+                    msg: format!("Failed to unpack unreliable ArconMessage with err {:?}", e),
                 }),
-            _ => panic!("Unexpected deserialiser"),
+            id => reportable_error!("Unexpected deserialiser with id {}", id),
         };
 
         match arcon_msg {

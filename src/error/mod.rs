@@ -1,23 +1,11 @@
 // Copyright (c) 2021, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/// A helper macro to indicate a reportable bug
 #[macro_export]
 macro_rules! reportable_error {
     ( $($arg:tt)* ) => ({
         $crate::error::ArconResult::Err($crate::error::Error::ReportableBug { msg: format!($($arg)*) })
-    })
-}
-
-#[macro_export]
-macro_rules! arcon_err {
-    ( $($arg:tt)* ) => ({
-        $crate::error::ArconResult::Err($crate::error::Error::Unsupported { msg: format!($($arg)*) })
-    })
-}
-#[macro_export]
-macro_rules! arcon_err_kind {
-    ( $($arg:tt)* ) => ({
-        $crate::error::Error::Unsupported { msg: format!($($arg)*) }
     })
 }
 

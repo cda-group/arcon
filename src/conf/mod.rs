@@ -1,7 +1,6 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::error::*;
 use hocon::HoconLoader;
 use kompact::{
     net::buffers::BufferConfig,
@@ -182,18 +181,12 @@ impl ArconConf {
     }
 
     /// Loads ArconConf from a file
-    pub fn from_file(path: impl AsRef<Path>) -> ArconResult<ArconConf> {
-        let data = std::fs::read_to_string(path)
-            .map_err(|e| crate::arcon_err_kind!("Failed to read config file with err {}", e))?;
+    pub fn from_file(path: impl AsRef<Path>) -> ArconConf {
+        let data = std::fs::read_to_string(path).unwrap();
 
-        let loader: HoconLoader = HoconLoader::new()
-            .load_str(&data)
-            .map_err(|e| crate::arcon_err_kind!("Failed to load Hocon Loader with err {}", e))?;
+        let loader: HoconLoader = HoconLoader::new().load_str(&data).unwrap();
 
-        let conf = loader
-            .resolve()
-            .map_err(|e| crate::arcon_err_kind!("Failed to resolve ArconConf with err {}", e))?;
-        Ok(conf)
+        loader.resolve().unwrap()
     }
 }
 
@@ -309,7 +302,7 @@ mod tests {
         file.write_all(config_str.as_bytes()).unwrap();
 
         // Load conf
-        let conf: ArconConf = ArconConf::from_file(&file_path).unwrap();
+        let conf: ArconConf = ArconConf::from_file(&file_path);
 
         // Check custom values
         assert_eq!(conf.checkpoint_dir, PathBuf::from("/dev/null"));

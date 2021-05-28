@@ -6,3 +6,4 @@ edition = "2018"
 
 [dependencies]
 fxhash = "0.2.1"
+snafu = "0.6"

@@ -164,7 +164,7 @@ pub mod prelude {
     #[cfg(feature = "kafka")]
     pub use crate::stream::operator::sink::kafka::KafkaSink;
 
-    pub use crate::error::{ArconResult, StateResult};
+    pub use crate::error::{timer::TimerExpiredError, ArconResult, StateResult};
 
     #[doc(hidden)]
     pub use kompact::{

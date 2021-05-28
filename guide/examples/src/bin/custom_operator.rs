@@ -64,7 +64,7 @@ impl Operator for TimerOperator {
         let key = element.data.get_key();
         let time = current_time + 1000;
 
-        if let Err(err) = ctx.schedule_at(key, time, element.data.id) {
+        if let Err(err) = ctx.schedule_at(key, time, element.data.id)? {
             error!(ctx.log(), "Failed to schedule timer with err {}", err);
         }
 
