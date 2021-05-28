@@ -26,7 +26,7 @@ impl Operator for MyOperator {
         &mut self,
         element: ArconElement<Self::IN>,
         mut ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> OperatorResult<()> {
+    ) -> ArconResult<()> {
         let custom_event = CustomEvent { id: element.data };
 
         ctx.output(ArconElement {
@@ -59,12 +59,12 @@ impl Operator for TimerOperator {
         &mut self,
         element: ArconElement<Self::IN>,
         mut ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> OperatorResult<()> {
+    ) -> ArconResult<()> {
         let current_time = ctx.current_time()?;
         let key = element.data.get_key();
         let time = current_time + 1000;
 
-        if let Err(err) = ctx.schedule_at(key, time, element.data.id) {
+        if let Err(err) = ctx.schedule_at(key, time, element.data.id)? {
             error!(ctx.log(), "Failed to schedule timer with err {}", err);
         }
 
@@ -77,7 +77,7 @@ impl Operator for TimerOperator {
         &mut self,
         timeout: Self::TimerState,
         ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> OperatorResult<()> {
+    ) -> ArconResult<()> {
         info!(ctx.log(), "Got a timer timeout for {:?}", timeout);
         Ok(())
     }

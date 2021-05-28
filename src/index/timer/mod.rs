@@ -2,7 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use super::{hash_table::eager::EagerHashTable, IndexOps};
-use crate::table::ImmutableTable;
+use crate::{
+    error::timer::{TimerExpiredError, TimerResult},
+    table::ImmutableTable,
+};
 use arcon_state::{
     backend::{
         handles::{ActiveHandle, Handle},
@@ -164,28 +167,35 @@ where
     }
 
     #[inline(always)]
-    pub fn schedule_after(&mut self, id: K, delay: u64, entry: V) -> Result<(), V> {
+    pub fn schedule_after(&mut self, id: K, delay: u64, entry: V) -> TimerResult<V> {
         match self
             .timer
             .insert_with_delay(id.clone(), Duration::from_millis(delay))
         {
             Ok(_) => {
-                // TODO: fix map_err
                 let event = TimerEvent::new(self.current_time().unwrap(), delay, entry);
-                let _ = self.timeouts.put(id, event);
-                Ok(())
+                self.timeouts.put(id, event)?;
+                Ok(Ok(()))
             }
-            Err(TimerError::Expired(_)) => Err(entry),
-            Err(f) => panic!("Could not insert timer entry! {:?}", f),
+            Err(TimerError::Expired(_)) => Ok(Err(TimerExpiredError {
+                current_time: self.current_time().unwrap(),
+                scheduled_time: delay,
+                entry,
+            })),
+            Err(f) => crate::reportable_error!("Could not insert timer entry! {:?}", f),
         }
     }
 
     #[inline]
-    pub fn schedule_at(&mut self, id: K, time: u64, entry: V) -> Result<(), V> {
+    pub fn schedule_at(&mut self, id: K, time: u64, entry: V) -> TimerResult<V> {
         let curr_time = self.current_time().unwrap();
         // Check for expired target time
         if time <= curr_time {
-            Err(entry)
+            Ok(Err(TimerExpiredError {
+                current_time: curr_time,
+                scheduled_time: time,
+                entry,
+            }))
         } else {
             let delay = time - curr_time;
             self.schedule_after(id, delay, entry)
@@ -218,7 +228,7 @@ where
     V: Value,
     B: Backend,
 {
-    fn persist(&mut self) -> crate::error::Result<()> {
+    fn persist(&mut self) -> arcon_state::error::Result<()> {
         self.timeouts.persist()?;
         Ok(())
     }
@@ -240,8 +250,8 @@ mod tests {
         let mut timer = Timer::new("mytimer", backend);
 
         // Timer per key...
-        timer.schedule_at(1, 1000, 10).unwrap();
-        timer.schedule_at(2, 1600, 10).unwrap();
+        let _ = timer.schedule_at(1, 1000, 10).unwrap();
+        let _ = timer.schedule_at(2, 1600, 10).unwrap();
         let evs = timer.advance_to(1500).unwrap();
         assert_eq!(evs.len(), 1);
         let evs = timer.advance_to(2000).unwrap();
