@@ -1,6 +1,8 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
+#[cfg(feature = "kafka")]
+use crate::stream::source::kafka::{KafkaConsumer, KafkaConsumerConf};
 use crate::{
     buffer::event::PoolInfo,
     conf::{ArconConf, ExecutionMode},
@@ -20,7 +22,7 @@ use crate::{
     prelude::*,
     stream::{
         node::{debug::DebugNode, source::SourceEvent},
-        source::{local_file::LocalFileSource, Source},
+        source::{local_file::LocalFileSource, schema::SourceSchema, Source},
     },
 };
 use arcon_allocator::Allocator;
@@ -285,7 +287,43 @@ impl Pipeline {
         self.source(builder)
     }
 
-    /// Enable [DebugNode] for the Pipeline
+    /// Creates an unbounded stream using Kafka
+    ///
+    /// Returns a [`Stream`] object that users may execute transformations on.
+    ///
+    /// Example
+    /// ```
+    /// use arcon::prelude::*;
+    /// let consumer_conf = KafkaConsumerConf::default()
+    ///  .with_topics(&["test"])
+    ///  .set("group.id", "test")
+    ///  .set("bootstrap.servers", "127.0.0.1:9092")
+    ///  .set("enable.auto.commit", "false");
+    ///
+    /// let stream: Stream<u64> = Pipeline::default()
+    ///  .kafka(consumer_conf, JsonSchema::new(), |conf| {
+    ///     conf.set_arcon_time(ArconTime::Event);
+    ///     conf.set_timestamp_extractor(|x: &u64| *x);
+    ///  });
+    /// ```
+    #[cfg(feature = "kafka")]
+    pub fn kafka<S: SourceSchema>(
+        self,
+        kafka_conf: KafkaConsumerConf,
+        schema: S,
+        f: impl FnOnce(&mut SourceConf<S::Data>),
+    ) -> Stream<S::Data> {
+        let mut conf = SourceConf::default();
+        f(&mut conf);
+
+        let builder = SourceBuilder {
+            constructor: Arc::new(move |_| KafkaConsumer::new(kafka_conf.clone(), schema.clone())),
+            conf,
+        };
+        self.source(builder)
+    }
+
+    /// Enable DebugNode for the Pipeline
     ///
     ///
     /// The component can be accessed through [method](AssembledPipeline::get_debug_node).

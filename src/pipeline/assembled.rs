@@ -65,9 +65,9 @@ impl AssembledPipeline {
         self.start_flag = true;
     }
 
-    /// Fetch [DebugNode] component of the [Pipeline]
+    /// Fetch DebugNode component of the [Pipeline]
     ///
-    /// Returns `None` if the [Pipeline] was not configured with a [DebugNode].
+    /// Returns `None` if the [Pipeline] was not configured with a DebugNode.
     /// Note that it is up to the user to make sure `A` is of correct type.
     pub fn get_debug_node<A>(&self) -> Option<Arc<Component<DebugNode<A>>>>
     where
