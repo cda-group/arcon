@@ -5,13 +5,8 @@ use super::{ArconResult, Error};
 use snafu::Snafu;
 use std::fmt::Debug;
 
+/// TimerResult type utilised while scheduling timers
 pub type TimerResult<A> = ArconResult<std::result::Result<(), TimerExpiredError<A>>>;
-
-impl<A: Debug> From<Error> for TimerResult<A> {
-    fn from(error: Error) -> Self {
-        Err(error)
-    }
-}
 
 #[derive(Debug, Snafu)]
 #[snafu(display(
@@ -27,4 +22,10 @@ pub struct TimerExpiredError<A: Debug> {
     pub scheduled_time: u64,
     /// Timer Entry
     pub entry: A,
+}
+
+impl<A: Debug> From<Error> for TimerResult<A> {
+    fn from(error: Error) -> Self {
+        Err(error)
+    }
 }

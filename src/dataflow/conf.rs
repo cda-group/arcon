@@ -14,7 +14,10 @@ use std::{path::Path, sync::Arc};
 // custom-defined state but still need a backend defined for internal runtime state.
 cfg_if::cfg_if! {
     if #[cfg(feature = "rocksdb")]  {
+        #[cfg(not(test))]
         pub type DefaultBackend = arcon_state::Rocks;
+        #[cfg(test)]
+        pub type DefaultBackend = arcon_state::Sled;
     } else {
         pub type DefaultBackend = arcon_state::Sled;
     }

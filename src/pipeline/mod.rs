@@ -264,7 +264,7 @@ impl Pipeline {
     /// Returns a [`Stream`] object that users may execute transformations on.
     ///
     /// Example
-    /// ```
+    /// ```no_run
     /// use arcon::prelude::*;
     /// let stream: Stream<u64> = Pipeline::default()
     ///     .collection((0..100).collect::<Vec<u64>>(), |conf| {
@@ -292,7 +292,7 @@ impl Pipeline {
     /// Returns a [`Stream`] object that users may execute transformations on.
     ///
     /// Example
-    /// ```
+    /// ```no_run
     /// use arcon::prelude::*;
     /// let consumer_conf = KafkaConsumerConf::default()
     ///  .with_topics(&["test"])
