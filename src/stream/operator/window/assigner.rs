@@ -352,6 +352,7 @@ mod tests {
             epoch_manager_ref,
             in_channels.clone(),
             backend.clone(),
+            pipeline.arcon_logger.clone(),
         );
 
         let node_manager_comp = pipeline.ctrl_system().create(|| nm);
@@ -383,6 +384,7 @@ mod tests {
             window_assigner,
             NodeState::new(NodeID::new(0), in_channels, backend.clone()),
             backend,
+            pipeline.arcon_logger.clone(),
         );
 
         let window_comp = pipeline.data_system().create(|| node);

@@ -3,6 +3,7 @@
 
 use crate::{
     buffer::event::PoolInfo,
+    conf::logger::ArconLogger,
     data::{ArconMessage, ArconType, NodeID},
     dataflow::{
         conf::{OperatorBuilder, ParallelismStrategy, SourceBuilder},
@@ -115,7 +116,12 @@ pub(crate) fn source_manager_constructor<S: Source + 'static, B: Backend>(
                 max_key,
                 channel_kind,
             );
-            let source_node = SourceNode::new(source, source_conf, channel_strategy);
+            let source_node = SourceNode::new(
+                source,
+                source_conf,
+                channel_strategy,
+                pipeline.arcon_logger.clone(),
+            );
             let source_node_comp = pipeline.data_system().create(|| source_node);
 
             pipeline
@@ -130,6 +136,7 @@ pub(crate) fn source_manager_constructor<S: Source + 'static, B: Backend>(
                 watermark_interval,
                 epoch_manager_ref,
                 backend,
+                pipeline.arcon_logger.clone(),
             );
             let source_manager_comp = pipeline.ctrl_system().create(|| manager);
 
@@ -172,6 +179,7 @@ pub(crate) fn node_manager_constructor<OP: Operator + 'static, B: Backend>(
     data_system: KompactSystem,
     builder: OperatorBuilder<OP, B>,
     backend: Arc<B>,
+    logger: ArconLogger,
 ) -> NodeManagerConstructor {
     Box::new(
         move |in_channels: Vec<NodeID>,
@@ -195,6 +203,7 @@ pub(crate) fn node_manager_constructor<OP: Operator + 'static, B: Backend>(
                 epoch_manager_ref,
                 in_channels.clone(),
                 backend.clone(),
+                logger.clone(),
             );
 
             // Create the actual NodeManager component
@@ -242,6 +251,7 @@ pub(crate) fn node_manager_constructor<OP: Operator + 'static, B: Backend>(
                     operator(backend.clone()),
                     NodeState::new(node_id, in_channels.clone(), backend.clone()),
                     backend.clone(),
+                    pipeline.arcon_logger.clone(),
                 );
 
                 let node_comp = pipeline.data_system().create(|| node);

@@ -9,6 +9,7 @@ pub mod sink;
 pub mod window;
 
 use crate::{
+    conf::logger::ArconLogger,
     data::{ArconElement, ArconEvent, ArconType},
     error::{timer::TimerResult, *},
     index::{ArconState, Timer},
@@ -17,9 +18,6 @@ use crate::{
 use arcon_state::Backend;
 use kompact::prelude::ComponentDefinition;
 use prost::Message;
-
-/// As we are using Slog with Kompact, we crate an arcon alias for it.
-pub type ArconLogger = kompact::KompactLogger;
 
 /// Defines the methods an `Operator` must implement
 pub trait Operator: Send + Sized {
@@ -98,7 +96,7 @@ macro_rules! ignore_state {
 }
 
 /// Context Available to an Arcon Operator
-pub struct OperatorContext<'a, 'c, 'b, OP, B, CD>
+pub struct OperatorContext<'a, 'c, 'b, 'd, OP, B, CD>
 where
     OP: Operator + 'static,
     B: Backend,
@@ -110,9 +108,11 @@ where
     timer: &'b mut Timer<u64, OP::TimerState, B>,
     /// A reference to the backing ComponentDefinition
     source: &'a CD,
+    /// Reference to logger
+    logger: &'d ArconLogger,
 }
 
-impl<'a, 'c, 'b, OP, B, CD> OperatorContext<'a, 'c, 'b, OP, B, CD>
+impl<'a, 'c, 'b, 'd, OP, B, CD> OperatorContext<'a, 'c, 'b, 'd, OP, B, CD>
 where
     OP: Operator + 'static,
     B: Backend,
@@ -123,11 +123,13 @@ where
         source: &'a CD,
         timer: &'b mut Timer<u64, OP::TimerState, B>,
         channel_strategy: &'c mut ChannelStrategy<OP::OUT>,
+        logger: &'d ArconLogger,
     ) -> Self {
         OperatorContext {
             channel_strategy,
             timer,
             source,
+            logger,
         }
     }
 
@@ -143,7 +145,7 @@ where
     /// `error!(ctx.log(), "Something bad happened!");
     #[inline]
     pub fn log(&self) -> &ArconLogger {
-        self.source.log()
+        self.logger
     }
 
     /// Get current event time

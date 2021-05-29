@@ -6,6 +6,7 @@ pub mod debug;
 
 pub mod source;
 
+use crate::conf::logger::ArconLogger;
 #[cfg(feature = "unsafe_flight")]
 use crate::data::flight_serde::unsafe_remote::UnsafeSerde;
 use crate::{
@@ -138,6 +139,7 @@ macro_rules! make_context {
             $sel,
             &mut (*$sel.timer.get()),
             &mut (*$sel.channel_strategy.get()),
+            &$sel.logger,
         )
     };
 }
@@ -166,6 +168,7 @@ where
     node_state: NodeState<OP, B>,
     /// Event time scheduler
     timer: UnsafeCell<ArconTimer<u64, OP::TimerState, B>>,
+    logger: ArconLogger,
 }
 
 impl<OP, B> Node<OP, B>
@@ -180,6 +183,7 @@ where
         operator: OP,
         node_state: NodeState<OP, B>,
         backend: Arc<B>,
+        logger: ArconLogger,
     ) -> Self {
         let timer_id = format!("_{}_timer", descriptor);
         let timer = ArconTimer::new(timer_id, backend);
@@ -194,6 +198,7 @@ where
             metrics: NodeMetrics::new(),
             node_state,
             timer: UnsafeCell::new(timer),
+            logger,
         }
     }
 
@@ -202,7 +207,7 @@ where
     fn handle_message(&mut self, message: MessageContainer<OP::IN>) -> ArconResult<()> {
         if !self.node_state.in_channels.contains(message.sender()) {
             error!(
-                self.ctx.log(),
+                self.logger,
                 "Message from invalid sender id {:?}",
                 message.sender()
             );
@@ -311,7 +316,7 @@ where
                     }
                 }
                 ArconEvent::Epoch(e) => {
-                    debug!(self.ctx.log(), "Got Epoch {:?}", e);
+                    debug!(self.logger, "Got Epoch {:?}", e);
                     if e < self.node_state.current_epoch {
                         continue 'event_loop;
                     }
@@ -391,7 +396,7 @@ where
 {
     fn on_start(&mut self) -> Handled {
         debug!(
-            self.ctx.log(),
+            self.logger,
             "Started Arcon Node {} with Node ID {:?}", self.descriptor, self.node_state.id
         );
 
@@ -413,7 +418,7 @@ where
         unsafe {
             let operator = &mut (*self.operator.get());
             if operator.on_start(make_context!(self)).is_err() {
-                error!(self.ctx.log(), "Failed to run startup code");
+                error!(self.logger, "Failed to run startup code");
             }
         };
 
@@ -431,7 +436,7 @@ where
             NodeEvent::CheckpointResponse(_) => {
                 if let Err(error) = self.complete_epoch() {
                     error!(
-                        self.ctx.log(),
+                        self.logger,
                         "Failed to complete epoch with error {:?}", error
                     );
                 }
@@ -447,7 +452,7 @@ where
     B: Backend,
 {
     fn handle(&mut self, e: NodeManagerEvent) -> Handled {
-        trace!(self.log(), "Ignoring node event: {:?}", e);
+        trace!(self.logger, "Ignoring node event: {:?}", e);
         Handled::Ok
     }
 }
@@ -461,7 +466,7 @@ where
 
     fn receive_local(&mut self, msg: Self::Message) -> Handled {
         if let Err(err) = self.handle_message(MessageContainer::Local(msg)) {
-            error!(self.ctx.log(), "Failed to handle message: {}", err);
+            error!(self.logger, "Failed to handle message: {}", err);
         }
         Handled::Ok
     }
@@ -484,10 +489,10 @@ where
         match arcon_msg {
             Ok(m) => {
                 if let Err(err) = self.handle_message(MessageContainer::Raw(m)) {
-                    error!(self.ctx.log(), "Failed to handle node message: {}", err);
+                    error!(self.logger, "Failed to handle node message: {}", err);
                 }
             }
-            Err(e) => error!(self.ctx.log(), "Error ArconNetworkMessage: {:?}", e),
+            Err(e) => error!(self.logger, "Error ArconNetworkMessage: {:?}", e),
         }
         Handled::Ok
     }
@@ -549,6 +554,7 @@ mod tests {
                 epoch_manager_ref,
                 in_channels.clone(),
                 backend.clone(),
+                pipeline.arcon_logger.clone(),
             );
             let node_manager_comp = pipeline.ctrl_system().create(|| nm);
 
@@ -564,6 +570,7 @@ mod tests {
                 op,
                 NodeState::new(NodeID::new(0), in_channels, backend.clone()),
                 backend,
+                pipeline.arcon_logger.clone(),
             );
 
             let filter_comp = pipeline.data_system().create(|| node);

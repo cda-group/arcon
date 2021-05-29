@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
+    conf::logger::ArconLogger,
     data::{ArconMessage, Epoch, NodeID, StateID, Watermark},
     error::*,
     index::{
@@ -158,6 +159,7 @@ where
     /// Internal manager state
     manager_state: NodeManagerState<B>,
     latest_snapshot: Option<Snapshot>,
+    logger: ArconLogger,
 }
 
 impl<OP, B> NodeManager<OP, B>
@@ -171,6 +173,7 @@ where
         epoch_manager: ActorRefStrong<EpochEvent>,
         in_channels: Vec<NodeID>,
         backend: Arc<B>,
+        logger: ArconLogger,
     ) -> Self {
         NodeManager {
             ctx: ComponentContext::uninitialised(),
@@ -188,6 +191,7 @@ where
             manager_state: NodeManagerState::new(backend.clone()),
             backend,
             latest_snapshot: None,
+            logger,
         }
     }
 
@@ -236,7 +240,7 @@ where
             })?;
 
             debug!(
-                self.ctx.log(),
+                self.logger,
                 "Completed a Checkpoint to path {}", checkpoint_dir
             );
         } else {
@@ -316,7 +320,7 @@ where
     B: Backend,
 {
     fn on_start(&mut self) -> Handled {
-        info!(self.ctx.log(), "Started NodeManager for {}", self.state_id,);
+        info!(self.logger, "Started NodeManager for {}", self.state_id,);
 
         // Register state id
         if self.has_snapshot_state() {
@@ -368,7 +372,7 @@ where
     fn handle(&mut self, event: NodeManagerEvent) -> Handled {
         if let Err(err) = self.handle_node_event(event) {
             error!(
-                self.ctx.log(),
+                self.logger,
                 "Failed to handle NodeManagerEvent {:?}",
                 err.to_string()
             );
