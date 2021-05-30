@@ -122,53 +122,37 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        data::{ArconMessage, NodeID},
-        stream::{
-            channel::strategy::ChannelStrategy,
-            node::{Node, NodeState},
-        },
-    };
-    use std::sync::Arc;
+    use crate::prelude::*;
+    use std::{net::SocketAddr, sync::Arc};
 
     #[test]
     fn udp_sink_test() {
-        let system = KompactConfig::default().build().expect("KompactSystem");
         const MAX_DATAGRAM_SIZE: usize = 65_507;
         let mut buf = vec![0u8; MAX_DATAGRAM_SIZE];
-
         let len = Runtime::new()
             .expect("couln't create tokio runtime")
             .block_on(async {
-                let addr = "127.0.0.1:9999".parse().unwrap();
+                let addr: SocketAddr = "127.0.0.1:9999".parse().unwrap();
+                let mut pipeline = Pipeline::default()
+                    .collection(vec![10], |conf| {
+                        conf.set_arcon_time(ArconTime::Process);
+                    })
+                    .operator(OperatorBuilder {
+                        constructor: Arc::new(move |_| SocketSink::udp(addr)),
+                        conf: OperatorConf {
+                            parallelism_strategy: ParallelismStrategy::Static(1),
+                            ..Default::default()
+                        },
+                    })
+                    .build();
+
                 let socket = UdpSocket::bind(&addr).await.unwrap();
-
-                let backend = Arc::new(crate::test_utils::temp_backend());
-                let node_id = NodeID::new(1);
-                let socket_sink = system.create(move || {
-                    Node::new(
-                        String::from("socket_sink"),
-                        ChannelStrategy::Mute,
-                        SocketSink::udp(addr),
-                        NodeState::new(NodeID::new(0), vec![node_id], backend.clone()),
-                        backend,
-                    )
-                });
-                system
-                    .start_notify(&socket_sink)
-                    .wait_timeout(std::time::Duration::from_millis(100))
-                    .expect("started");
-
-                let target: ActorRef<ArconMessage<i64>> = socket_sink.actor_ref();
-                target.tell(ArconMessage::element(10_i64, None, 1.into()));
-
+                pipeline.start();
                 let (len, _) = socket.recv_from(&mut buf).await.expect("did not receive");
                 len
             });
 
         let recv = String::from_utf8_lossy(&buf[..len]);
         assert_eq!(recv, String::from("10\n"));
-
-        let _ = system.shutdown();
     }
 }

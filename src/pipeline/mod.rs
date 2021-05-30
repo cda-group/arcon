@@ -2,10 +2,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 #[cfg(feature = "kafka")]
-use crate::stream::source::kafka::{KafkaConsumer, KafkaConsumerConf};
+use crate::stream::source::{
+    kafka::{KafkaConsumer, KafkaConsumerConf},
+    schema::SourceSchema,
+};
 use crate::{
     buffer::event::PoolInfo,
-    conf::{ArconConf, ExecutionMode},
+    conf::{logger::ArconLogger, ArconConf, ExecutionMode},
     data::ArconMessage,
     dataflow::{
         conf::{DefaultBackend, SourceBuilder, SourceConf},
@@ -22,7 +25,7 @@ use crate::{
     prelude::*,
     stream::{
         node::{debug::DebugNode, source::SourceEvent},
-        source::{local_file::LocalFileSource, schema::SourceSchema, Source},
+        source::{local_file::LocalFileSource, Source},
     },
 };
 use arcon_allocator::Allocator;
@@ -83,6 +86,8 @@ pub struct Pipeline {
     pub(crate) debug_node: Option<ErasedComponent>,
     // Type erased Arc<dyn AbstractComponent<Message = ArconMessage<A>>>
     pub(crate) abstract_debug_node: Option<ErasedComponent>,
+    /// Configured Logger for the Pipeline
+    pub(crate) arcon_logger: ArconLogger,
 }
 
 impl Default for Pipeline {
@@ -96,7 +101,9 @@ impl Pipeline {
     /// Creates a new Pipeline using the given ArconConf
     fn new(conf: ArconConf) -> Self {
         let allocator = Arc::new(Mutex::new(Allocator::new(conf.allocator_capacity)));
-        let (ctrl_system, data_system, snapshot_manager, epoch_manager) = Self::setup(&conf);
+        let arcon_logger = conf.arcon_logger();
+        let (ctrl_system, data_system, snapshot_manager, epoch_manager) =
+            Self::setup(&conf, &arcon_logger);
         let endpoint_manager = ctrl_system.create(EndpointManager::new);
         let query_manager = ctrl_system.create(QueryManager::new);
 
@@ -138,6 +145,7 @@ impl Pipeline {
             debug_node_flag: false,
             debug_node: None,
             abstract_debug_node: None,
+            arcon_logger,
         }
     }
 
@@ -150,6 +158,7 @@ impl Pipeline {
     #[allow(clippy::type_complexity)]
     fn setup(
         arcon_conf: &ArconConf,
+        logger: &ArconLogger,
     ) -> (
         KompactSystem,
         KompactSystem,
@@ -172,8 +181,13 @@ impl Pipeline {
         let epoch_manager = match arcon_conf.execution_mode {
             ExecutionMode::Local => {
                 let snapshot_manager_ref = snapshot_manager.actor_ref().hold().expect("fail");
-                let epoch_manager = ctrl_system
-                    .create(|| EpochManager::new(arcon_conf.epoch_interval, snapshot_manager_ref));
+                let epoch_manager = ctrl_system.create(|| {
+                    EpochManager::new(
+                        arcon_conf.epoch_interval,
+                        snapshot_manager_ref,
+                        logger.clone(),
+                    )
+                });
                 ctrl_system
                     .start_notify(&epoch_manager)
                     .wait_timeout(timeout)
@@ -205,7 +219,7 @@ impl Pipeline {
             "Cannot use ArconTime::Event without specifying a timestamp extractor"
         );
 
-        let mut state_dir = self.arcon_conf().state_dir.clone();
+        let mut state_dir = self.arcon_conf().state_dir();
         state_dir.push("source_manager");
         let backend = Arc::new(DefaultBackend::create(&state_dir).unwrap());
         let time = builder.conf.time;

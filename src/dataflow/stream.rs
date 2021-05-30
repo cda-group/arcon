@@ -45,7 +45,7 @@ impl<IN: ArconType> Stream<IN> {
         OP: Operator<IN = IN> + 'static,
     {
         // Set up directory for the operator and create Backend
-        let mut state_dir = self.ctx.pipeline.arcon_conf().state_dir.clone();
+        let mut state_dir = self.ctx.pipeline.arcon_conf().state_dir();
         let state_id = builder.state_id();
         state_dir.push(state_id.clone());
         let backend = builder.create_backend(state_dir);
@@ -60,6 +60,7 @@ impl<IN: ArconType> Stream<IN> {
             self.ctx.pipeline.data_system.clone(),
             builder,
             backend,
+            self.ctx.pipeline.arcon_logger.clone(),
         );
 
         let prev_dfg_node = self.ctx.dfg.get_mut(&self.prev_dfg_id);

@@ -140,7 +140,7 @@ pub mod prelude {
     };
     */
     pub use crate::{
-        conf::ArconConf,
+        conf::{logger::LoggerType, ArconConf},
         data::{ArconElement, ArconNever, ArconType, StateID, VersionId},
         dataflow::conf::{
             OperatorBuilder, OperatorConf, ParallelismStrategy, SourceBuilder, SourceConf,

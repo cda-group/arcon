@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
+    conf::logger::ArconLogger,
     data::{ArconElement, ArconEvent, Epoch, Watermark},
     manager::source::{SourceManagerEvent, SourceManagerPort},
     prelude::SourceConf,
@@ -45,6 +46,7 @@ where
     channel_strategy: RefCell<ChannelStrategy<S::Item>>,
     conf: SourceConf<S::Item>,
     source: S,
+    logger: ArconLogger,
 }
 
 impl<S> SourceNode<S>
@@ -55,6 +57,7 @@ where
         source: S,
         conf: SourceConf<S::Item>,
         channel_strategy: ChannelStrategy<S::Item>,
+        logger: ArconLogger,
     ) -> Self {
         Self {
             ctx: ComponentContext::uninitialised(),
@@ -66,6 +69,7 @@ where
             watermark: 0,
             conf,
             source,
+            logger,
         }
     }
     pub fn process(&mut self) {
@@ -97,7 +101,7 @@ where
                     break;
                 }
                 Poll::Error(err) => {
-                    error!(self.ctx.log(), "{}", err);
+                    error!(self.logger, "{}", err);
                     counter += 1;
                 }
                 Poll::Done => {
