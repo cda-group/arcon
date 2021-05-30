@@ -9,7 +9,14 @@ use crate::{
         dfg::{ChannelKind, DFGNode, DFGNodeID, DFGNodeKind, DFG},
     },
     pipeline::{AssembledPipeline, Pipeline},
-    stream::{node::debug::DebugNode, operator::Operator},
+    stream::{
+        node::debug::DebugNode,
+        operator::{
+            function::{Filter, FlatMap, Map, MapInPlace},
+            Operator,
+        },
+    },
+    util::ArconFnBounds,
 };
 use std::{marker::PhantomData, sync::Arc};
 
@@ -39,7 +46,115 @@ pub struct Stream<IN: ArconType> {
 }
 
 impl<IN: ArconType> Stream<IN> {
+    /// Adds a stateless Map operator with default configuration to the pipeline
+    ///
+    /// If you need a stateful version or control over the configuration, use the operator function directly!
+    ///
+    /// Example
+    /// ```no_run
+    /// use arcon::prelude::*;
+    /// let stream: Stream<u64> = Pipeline::default()
+    ///     .collection((0..100).collect::<Vec<u64>>(), |conf| {
+    ///         conf.set_arcon_time(ArconTime::Process);
+    ///     })
+    ///     .map(|x| x + 10);
+    /// ```
+    pub fn map<F, OUT>(self, f: F) -> Stream<OUT>
+    where
+        OUT: ArconType,
+        F: Fn(IN) -> OUT + ArconFnBounds,
+    {
+        self.operator(OperatorBuilder {
+            constructor: Arc::new(move |_| Map::new(f.clone())),
+            conf: Default::default(),
+        })
+    }
+
+    /// Adds a stateless MapInPlace operator with default configuration to the pipeline
+    ///
+    /// If you need a stateful version or control over the configuration, use the operator function directly!
+    ///
+    /// Example
+    /// ```no_run
+    /// use arcon::prelude::*;
+    /// let stream: Stream<u64> = Pipeline::default()
+    ///     .collection((0..100).collect::<Vec<u64>>(), |conf| {
+    ///         conf.set_arcon_time(ArconTime::Process);
+    ///     })
+    ///     .map_in_place(|x| *x += 10);
+    /// ```
+    pub fn map_in_place<F>(self, f: F) -> Stream<IN>
+    where
+        F: Fn(&mut IN) + ArconFnBounds,
+    {
+        self.operator(OperatorBuilder {
+            constructor: Arc::new(move |_| MapInPlace::new(f.clone())),
+            conf: Default::default(),
+        })
+    }
+
+    /// Adds a stateless Filter operator with default configuration to the pipeline
+    ///
+    /// If you need a stateful version or control over the configuration, use the operator function directly!
+    ///
+    /// Example
+    /// ```no_run
+    /// use arcon::prelude::*;
+    /// let stream: Stream<u64> = Pipeline::default()
+    ///     .collection((0..100).collect::<Vec<u64>>(), |conf| {
+    ///         conf.set_arcon_time(ArconTime::Process);
+    ///     })
+    ///     .filter(|x| x < &50);
+    /// ```
+    pub fn filter<F>(self, f: F) -> Stream<IN>
+    where
+        F: Fn(&IN) -> bool + ArconFnBounds,
+    {
+        self.operator(OperatorBuilder {
+            constructor: Arc::new(move |_| Filter::new(f.clone())),
+            conf: Default::default(),
+        })
+    }
+
+    /// Adds a stateless Flatmap operator with default configuration to the pipeline
+    ///
+    /// If you need a stateful version or control over the configuration, use the operator function directly!
+    ///
+    /// Example
+    /// ```no_run
+    /// use arcon::prelude::*;
+    /// let stream: Stream<u64> = Pipeline::default()
+    ///     .collection((0..100).collect::<Vec<u64>>(), |conf| {
+    ///         conf.set_arcon_time(ArconTime::Process);
+    ///     })
+    ///     .flatmap(|x| (0..x));
+    /// ```
+    pub fn flatmap<F, OUTS>(self, f: F) -> Stream<OUTS::Item>
+    where
+        OUTS: IntoIterator + 'static,
+        OUTS::Item: ArconType,
+        F: Fn(IN) -> OUTS + ArconFnBounds,
+    {
+        self.operator(OperatorBuilder {
+            constructor: Arc::new(move |_| FlatMap::new(f.clone())),
+            conf: Default::default(),
+        })
+    }
+
     /// Add an [`Operator`] to the dataflow graph
+    ///
+    /// Example
+    /// ```no_run
+    /// use arcon::prelude::*;
+    /// let stream: Stream<u64> = Pipeline::default()
+    ///     .collection((0..100).collect::<Vec<u64>>(), |conf| {
+    ///         conf.set_arcon_time(ArconTime::Process);
+    ///     })
+    ///     .operator(OperatorBuilder {
+    ///         constructor: Arc::new(|_| Map::new(|x| x + 10)),
+    ///         conf: Default::default(),
+    ///     });
+    /// ```
     pub fn operator<OP>(mut self, builder: OperatorBuilder<OP>) -> Stream<OP::OUT>
     where
         OP: Operator<IN = IN> + 'static,

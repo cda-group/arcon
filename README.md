@@ -48,10 +48,7 @@ fn main() {
             conf.set_arcon_time(ArconTime::Event);
             conf.set_timestamp_extractor(|x: &u64| *x);
         })
-        .operator(OperatorBuilder {
-            constructor: Arc::new(|_| Filter::new(|x| *x > 50)),
-            conf: Default::default(),
-        })
+        .filter(|x| *x > 50)
         .to_console()
         .build();
 
