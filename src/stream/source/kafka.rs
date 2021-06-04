@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use super::{schema::SourceSchema, Poll, Source};
+use crate::error::source::{SourceError, SourceResult};
 use rdkafka::{
     config::{ClientConfig, FromClientConfig},
     consumer::{BaseConsumer, Consumer, DefaultConsumerContext},
@@ -99,19 +100,22 @@ where
 {
     type Item = S::Data;
 
-    fn poll_next(&mut self) -> Poll<Self::Item> {
+    fn poll_next(&mut self) -> SourceResult<Poll<Self::Item>> {
         match self
             .consumer
             .poll(Duration::from_millis(self.conf.poll_timeout()))
         {
             Some(Ok(msg)) => match msg.payload() {
-                Some(bytes) => Poll::Ready(self.schema.from_bytes(bytes).unwrap()),
-                None => Poll::Pending,
+                Some(bytes) => match self.schema.from_bytes(bytes) {
+                    Ok(data) => Ok(Ok(Poll::Ready(data))),
+                    Err(err) => Ok(Err(err)),
+                },
+                None => Ok(Ok(Poll::Pending)),
             },
-            Some(Err(err)) => Poll::Error(err.to_string()),
+            Some(Err(err)) => Ok(Err(SourceError::Kafka { error: err })),
             None => {
                 // Nothing to collect
-                Poll::Pending
+                Ok(Ok(Poll::Pending))
             }
         }
     }
