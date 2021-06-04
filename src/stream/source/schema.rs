@@ -1,10 +1,10 @@
-use crate::data::ArconType;
+use crate::{data::ArconType, error::source::SourceError};
 use arcon_state::backend::serialization::protobuf;
 
 pub trait SourceSchema: Send + Sync + Clone + 'static {
     type Data: ArconType;
 
-    fn from_bytes(&self, bytes: &[u8]) -> Option<Self::Data>;
+    fn from_bytes(&self, bytes: &[u8]) -> Result<Self::Data, SourceError>;
 }
 
 #[cfg(feature = "serde_json")]
@@ -45,10 +45,16 @@ where
 {
     type Data = IN;
 
-    fn from_bytes(&self, bytes: &[u8]) -> Option<Self::Data> {
-        match serde_json::from_str(std::str::from_utf8(&bytes).unwrap()) {
-            Ok(data) => Some(data),
-            Err(_) => None,
+    fn from_bytes(&self, bytes: &[u8]) -> Result<Self::Data, SourceError> {
+        let s = std::str::from_utf8(&bytes).map_err(|err| SourceError::Parse {
+            msg: err.to_string(),
+        })?;
+
+        match serde_json::from_str(s) {
+            Ok(data) => Ok(data),
+            Err(err) => Err(SourceError::Schema {
+                msg: err.to_string(),
+            }),
         }
     }
 }
@@ -87,10 +93,12 @@ where
 {
     type Data = IN;
 
-    fn from_bytes(&self, bytes: &[u8]) -> Option<Self::Data> {
+    fn from_bytes(&self, bytes: &[u8]) -> Result<Self::Data, SourceError> {
         match protobuf::deserialize(bytes) {
-            Ok(data) => Some(data),
-            Err(_) => None,
+            Ok(data) => Ok(data),
+            Err(err) => Err(SourceError::Schema {
+                msg: err.to_string(),
+            }),
         }
     }
 }

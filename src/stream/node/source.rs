@@ -4,6 +4,7 @@
 use crate::{
     conf::logger::ArconLogger,
     data::{ArconElement, ArconEvent, Epoch, Watermark},
+    error::{source::SourceError, ArconResult, Error},
     manager::source::{SourceManagerEvent, SourceManagerPort},
     prelude::SourceConf,
     stream::{
@@ -13,6 +14,8 @@ use crate::{
     },
 };
 use kompact::prelude::*;
+#[cfg(feature = "kafka")]
+use rdkafka::error::KafkaError;
 use std::cell::RefCell;
 
 /// A message type that Source components in Arcon must implement
@@ -72,16 +75,18 @@ where
             logger,
         }
     }
-    pub fn process(&mut self) {
+    pub fn process(&mut self) -> ArconResult<()> {
         let mut counter = 0;
 
         loop {
             if counter >= self.conf.batch_size {
-                break;
+                return Ok(());
             }
 
-            match self.source.poll_next() {
-                Poll::Ready(record) => {
+            let poll = self.source.poll_next()?;
+
+            match poll {
+                Ok(Poll::Ready(record)) => {
                     match self.conf.time {
                         ArconTime::Event => match &self.conf.extractor {
                             Some(extractor) => {
@@ -96,21 +101,40 @@ where
                     }
                     counter += 1;
                 }
-                Poll::Pending => {
+                Ok(Poll::Pending) => {
                     // nothing to collect, reschedule...
-                    break;
+                    return Ok(());
                 }
-                Poll::Error(err) => {
-                    error!(self.logger, "{}", err);
-                    counter += 1;
-                }
-                Poll::Done => {
+                Ok(Poll::Done) => {
                     // signal end..
                     self.ended = true;
-                    break;
+                    return Ok(());
+                }
+                Err(error) => {
+                    return self.handle_source_error(error);
                 }
             }
         }
+    }
+
+    fn handle_source_error(&self, source_error: SourceError) -> ArconResult<()> {
+        #[cfg(feature = "kafka")]
+        if let SourceError::Kafka { error } = &source_error {
+            match error {
+                // TODO: figure out which other kafka errors should cause a stop
+                KafkaError::Canceled | KafkaError::ConsumerCommit(_) => {
+                    return Err(Error::Unsupported {
+                        msg: error.to_string(),
+                    })
+                }
+                _ => (),
+            }
+        }
+
+        // if we reach here, it means the error was not that serious...
+        // but we log it
+        error!(self.logger, "{}", source_error);
+        Ok(())
     }
 
     #[inline]
@@ -179,7 +203,11 @@ where
     S: Source,
 {
     fn handle(&mut self, _event: ProcessSource) -> Handled {
-        self.process();
+        if let Err(error) = self.process() {
+            // fatal error, must shutdown..
+            // TODO: coordinate shutdown of pipeline..
+            error!(self.logger, "{}", error);
+        }
 
         if self.ended {
             self.manager_port.trigger(SourceManagerEvent::End);

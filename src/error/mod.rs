@@ -9,6 +9,7 @@ macro_rules! reportable_error {
     })
 }
 
+pub mod source;
 pub mod timer;
 
 use arcon_state::error::ArconStateError;
