@@ -48,6 +48,7 @@ where
     ended: bool,
     channel_strategy: RefCell<ChannelStrategy<S::Item>>,
     conf: SourceConf<S::Item>,
+    source_index: usize,
     source: S,
     logger: ArconLogger,
 }
@@ -57,6 +58,7 @@ where
     S: Source,
 {
     pub fn new(
+        source_index: usize,
         source: S,
         conf: SourceConf<S::Item>,
         channel_strategy: ChannelStrategy<S::Item>,
@@ -71,6 +73,7 @@ where
             ended: false,
             watermark: 0,
             conf,
+            source_index,
             source,
             logger,
         }
@@ -192,6 +195,10 @@ where
     S: Source,
 {
     fn on_start(&mut self) -> Handled {
+        info!(
+            self.logger,
+            "Starting up Source with Index {}", self.source_index
+        );
         let shared = self.loopback_receive.share();
         self.loopback_send.connect(shared);
         Handled::Ok

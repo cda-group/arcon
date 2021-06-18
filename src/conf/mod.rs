@@ -263,7 +263,7 @@ fn base_dir_default() -> PathBuf {
 
 fn epoch_interval_default() -> u64 {
     // in milliseconds
-    2000
+    25000
 }
 
 fn watermark_interval_default() -> u64 {

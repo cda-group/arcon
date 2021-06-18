@@ -2,13 +2,13 @@ use arcon::prelude::*;
 
 fn main() {
     let consumer_conf = KafkaConsumerConf::default()
-        .with_topics(&["test"])
+        .with_topic("test")
         .set("group.id", "test")
-        .set("bootstrap.servers", "127.0.0.1:9092")
+        .set("bootstrap.servers", "localhost:9092")
         .set("enable.auto.commit", "false");
 
     let mut pipeline = Pipeline::default()
-        .kafka(consumer_conf, JsonSchema::new(), |conf| {
+        .kafka(consumer_conf, JsonSchema::new(), 2, |conf| {
             conf.set_arcon_time(ArconTime::Event);
             conf.set_timestamp_extractor(|x: &u64| *x);
         })
