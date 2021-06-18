@@ -2,12 +2,16 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use super::{schema::SourceSchema, Poll, Source};
+use crate::index::{IndexOps, LazyValue, StateConstructor, ValueIndex};
+use arcon_macros::ArconState;
+use arcon_state::Backend;
 use rdkafka::{
     config::{ClientConfig, FromClientConfig},
     consumer::{BaseConsumer, Consumer, DefaultConsumerContext},
     message::*,
+    topic_partition_list::{Offset, TopicPartitionList},
 };
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 /// Default timeout duration for consumer polling
 const DEFAULT_POLL_TIMEOUT_MS: u64 = 250;
@@ -17,7 +21,7 @@ impl Default for KafkaConsumerConf {
         Self {
             client_config: ClientConfig::default(),
             poll_timeout_ms: DEFAULT_POLL_TIMEOUT_MS,
-            topics: Vec::new(),
+            topic: None,
         }
     }
 }
@@ -28,16 +32,14 @@ pub struct KafkaConsumerConf {
     client_config: ClientConfig,
     /// Timeout in milliseconds of how long to wait for during poll
     poll_timeout_ms: u64,
-    /// Vec of topics that are subscribed to
-    topics: Vec<String>,
+    /// Topic of interest
+    topic: Option<String>,
 }
 
 impl KafkaConsumerConf {
-    /// Set topics for the conf
-    pub fn with_topics(mut self, topics: &[&str]) -> Self {
-        for topic in topics {
-            self.topics.push(topic.to_string())
-        }
+    /// Set topic for the conf
+    pub fn with_topic(mut self, topic: &str) -> Self {
+        self.topic = Some(topic.to_string());
         self
     }
     /// Set poll timeout for the Kafka consumer
@@ -57,45 +59,100 @@ impl KafkaConsumerConf {
     pub fn client_config(&self) -> &ClientConfig {
         &self.client_config
     }
-    pub fn topics(&self) -> &[String] {
-        &self.topics
+    pub fn topic(&self) -> &str {
+        &self.topic.as_ref().unwrap()
     }
     pub fn poll_timeout(&self) -> u64 {
         self.poll_timeout_ms
     }
 }
 
-pub struct KafkaConsumer<S>
+#[derive(ArconState)]
+pub struct KafkaConsumerState<B: Backend> {
+    partition_offsets: LazyValue<i64, B>,
+    epoch_offsets: LazyValue<i64, B>,
+}
+
+impl<B: Backend> StateConstructor for KafkaConsumerState<B> {
+    type BackendType = B;
+    fn new(backend: Arc<B>) -> Self {
+        Self {
+            partition_offsets: LazyValue::new("_partition_offsets", backend.clone()),
+            epoch_offsets: LazyValue::new("_epoch_offsets", backend),
+        }
+    }
+}
+
+/// A Parallel Kafka Source
+///
+/// A single instance may be responsible for one or more partitions.
+pub struct KafkaConsumer<S, B>
 where
     S: SourceSchema,
+    B: Backend,
 {
     conf: KafkaConsumerConf,
     consumer: BaseConsumer<DefaultConsumerContext>,
+    state: KafkaConsumerState<B>,
     schema: S,
 }
 
-impl<S> KafkaConsumer<S>
+impl<S, B> KafkaConsumer<S, B>
 where
     S: SourceSchema,
+    B: Backend,
 {
-    pub fn new(conf: KafkaConsumerConf, schema: S) -> Self {
+    pub fn new(
+        conf: KafkaConsumerConf,
+        mut state: KafkaConsumerState<B>,
+        schema: S,
+        source_index: usize,
+        total_sources: usize,
+    ) -> Self {
         let consumer = BaseConsumer::from_config(&conf.client_config()).unwrap();
-        let topics: Vec<&str> = conf.topics().iter().map(|x| &**x).collect();
+
+        let metadata = consumer
+            .fetch_metadata(Some(conf.topic()), Duration::from_millis(6000))
+            .expect("Failed to fetch metadata");
+
+        let topic = metadata.topics().get(0).unwrap();
+        let partitions = topic.partitions().len();
+        // caclulate which partitions this instance should take care of
+        let start = (source_index * partitions + total_sources - 1) / total_sources;
+        let end = ((source_index + 1) * partitions - 1) / total_sources;
+        assert!(end > start, "End partition needs to exceed the Start");
+
+        let mut tpl = TopicPartitionList::new();
+        for partition in start..end {
+            state.partition_offsets().set_key(partition as u64);
+            let offset = match state.partition_offsets().get() {
+                Ok(Some(off)) => Offset::Offset(*off),
+                _ => Offset::Beginning,
+            };
+
+            tpl.add_partition_offset(conf.topic(), partition as i32, offset)
+                .unwrap();
+        }
+        consumer
+            .assign(&tpl)
+            .expect("failed to assign TopicParitionList");
 
         consumer
-            .subscribe(&topics)
-            .expect("failed to subscribe to topics");
+            .subscribe(&[conf.topic()])
+            .expect("failed to subscribe to topic");
         Self {
             conf,
             consumer,
+            state,
             schema,
         }
     }
 }
 
-impl<S> Source for KafkaConsumer<S>
+impl<S, B> Source for KafkaConsumer<S, B>
 where
     S: SourceSchema,
+    B: Backend,
 {
     type Item = S::Data;
 
@@ -105,7 +162,13 @@ where
             .poll(Duration::from_millis(self.conf.poll_timeout()))
         {
             Some(Ok(msg)) => match msg.payload() {
-                Some(bytes) => Poll::Ready(self.schema.from_bytes(bytes).unwrap()),
+                Some(bytes) => {
+                    let partition = msg.partition();
+                    let offset = msg.offset();
+                    self.state.partition_offsets.set_key(partition as u64);
+                    self.state.partition_offsets.put(offset).unwrap();
+                    Poll::Ready(self.schema.from_bytes(bytes).unwrap())
+                }
                 None => Poll::Pending,
             },
             Some(Err(err)) => Poll::Error(err.to_string()),

@@ -3,7 +3,7 @@
 
 #[cfg(feature = "kafka")]
 use crate::stream::source::{
-    kafka::{KafkaConsumer, KafkaConsumerConf},
+    kafka::{KafkaConsumer, KafkaConsumerConf, KafkaConsumerState},
     schema::SourceSchema,
 };
 use crate::{
@@ -11,7 +11,7 @@ use crate::{
     conf::{logger::ArconLogger, ArconConf, ExecutionMode},
     data::ArconMessage,
     dataflow::{
-        conf::{DefaultBackend, SourceBuilder, SourceConf},
+        conf::{ParallelSourceBuilder, SourceBuilder, SourceBuilderType, SourceConf},
         constructor::{source_manager_constructor, ErasedComponent},
         dfg::*,
         stream::Context,
@@ -206,6 +206,16 @@ impl Pipeline {
         (ctrl_system, data_system, snapshot_manager, epoch_manager)
     }
 
+    /// Create a parallel data source
+    ///
+    /// Returns a [`Stream`] object that users may execute transformations on.
+    pub fn parallel_source<S>(self, builder: ParallelSourceBuilder<S>) -> Stream<S::Item>
+    where
+        S: Source,
+    {
+        self.source_to_stream(SourceBuilderType::Parallel(builder))
+    }
+
     /// Create a non-parallel data source
     ///
     /// Returns a [`Stream`] object that users may execute transformations on.
@@ -213,19 +223,23 @@ impl Pipeline {
     where
         S: Source,
     {
-        assert_ne!(
-            builder.conf.time == ArconTime::Event,
-            builder.conf.extractor.is_none(),
-            "Cannot use ArconTime::Event without specifying a timestamp extractor"
-        );
+        self.source_to_stream(SourceBuilderType::Single(builder))
+    }
+
+    fn source_to_stream<S, B>(self, builder_type: SourceBuilderType<S, B>) -> Stream<S::Item>
+    where
+        S: Source,
+        B: Backend,
+    {
+        let parallelism = builder_type.parallelism();
 
         let mut state_dir = self.arcon_conf().state_dir();
         state_dir.push("source_manager");
-        let backend = Arc::new(DefaultBackend::create(&state_dir).unwrap());
-        let time = builder.conf.time;
-        let manager_constructor = source_manager_constructor::<S, _>(
+        let backend = Arc::new(B::create(&state_dir).unwrap());
+        let time = builder_type.time();
+        let manager_constructor = source_manager_constructor::<S, B>(
             String::from("source_manager"),
-            builder,
+            builder_type,
             backend,
             self.arcon_conf().watermark_interval,
             time,
@@ -233,7 +247,7 @@ impl Pipeline {
         let mut ctx = Context::new(self);
         let kind = DFGNodeKind::Source(Default::default(), manager_constructor);
         let incoming_channels = 0; // sources have 0 incoming channels..
-        let outgoing_channels = 1; // TODO
+        let outgoing_channels = parallelism;
         let dfg_node = DFGNode::new(kind, outgoing_channels, incoming_channels, vec![]);
         ctx.dfg.insert(dfg_node);
         Stream::new(ctx)
@@ -309,13 +323,13 @@ impl Pipeline {
     /// ```no_run
     /// use arcon::prelude::*;
     /// let consumer_conf = KafkaConsumerConf::default()
-    ///  .with_topics(&["test"])
+    ///  .with_topic("test")
     ///  .set("group.id", "test")
     ///  .set("bootstrap.servers", "127.0.0.1:9092")
     ///  .set("enable.auto.commit", "false");
     ///
     /// let stream: Stream<u64> = Pipeline::default()
-    ///  .kafka(consumer_conf, JsonSchema::new(), |conf| {
+    ///  .kafka(consumer_conf, JsonSchema::new(), 1, |conf| {
     ///     conf.set_arcon_time(ArconTime::Event);
     ///     conf.set_timestamp_extractor(|x: &u64| *x);
     ///  });
@@ -325,16 +339,26 @@ impl Pipeline {
         self,
         kafka_conf: KafkaConsumerConf,
         schema: S,
+        parallelism: usize,
         f: impl FnOnce(&mut SourceConf<S::Data>),
     ) -> Stream<S::Data> {
         let mut conf = SourceConf::default();
         f(&mut conf);
 
-        let builder = SourceBuilder {
-            constructor: Arc::new(move |_| KafkaConsumer::new(kafka_conf.clone(), schema.clone())),
+        let builder = ParallelSourceBuilder {
+            constructor: Arc::new(move |backend, index, total_sources| {
+                KafkaConsumer::new(
+                    kafka_conf.clone(),
+                    KafkaConsumerState::new(backend),
+                    schema.clone(),
+                    index,
+                    total_sources,
+                )
+            }),
             conf,
+            parallelism,
         };
-        self.source(builder)
+        self.parallel_source(builder)
     }
 
     /// Enable DebugNode for the Pipeline

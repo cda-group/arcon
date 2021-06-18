@@ -6,7 +6,7 @@ use crate::{
     conf::logger::ArconLogger,
     data::{ArconMessage, ArconType, NodeID},
     dataflow::{
-        conf::{OperatorBuilder, ParallelismStrategy, SourceBuilder},
+        conf::{OperatorBuilder, ParallelismStrategy, SourceBuilderType, SourceConf},
         dfg::ChannelKind,
     },
     manager::{
@@ -92,7 +92,7 @@ fn channel_strategy<OUT: ArconType>(
 
 pub(crate) fn source_manager_constructor<S: Source + 'static, B: Backend>(
     descriptor: String,
-    builder: SourceBuilder<S, B>,
+    builder_type: SourceBuilderType<S, B>,
     backend: Arc<B>,
     watermark_interval: u64,
     time: ArconTime,
@@ -103,56 +103,50 @@ pub(crate) fn source_manager_constructor<S: Source + 'static, B: Backend>(
               pipeline: &mut Pipeline| {
             let epoch_manager_ref = pipeline.epoch_manager();
 
-            // TODO: Clean up and handle multiple source components!
-            let source_cons = builder.constructor;
-            let source_conf = builder.conf;
-            let source = source_cons(backend.clone());
-            let pool_info = pipeline.get_pool_info();
-            let max_key = pipeline.conf.max_key;
-            let channel_strategy = channel_strategy(
-                components.clone(),
-                NodeID::new(0),
-                pool_info,
-                max_key,
-                channel_kind,
-            );
-            let source_node = SourceNode::new(
-                source,
-                source_conf,
-                channel_strategy,
-                pipeline.arcon_logger.clone(),
-            );
-            let source_node_comp = pipeline.data_system().create(|| source_node);
-
-            pipeline
-                .data_system()
-                .start_notify(&source_node_comp)
-                .wait_timeout(std::time::Duration::from_millis(2000))
-                .expect("");
-
             let manager = SourceManager::new(
                 descriptor,
                 time,
                 watermark_interval,
                 epoch_manager_ref,
-                backend,
+                backend.clone(),
                 pipeline.arcon_logger.clone(),
             );
             let source_manager_comp = pipeline.ctrl_system().create(|| manager);
 
-            biconnect_components::<SourceManagerPort, _, _>(
-                &source_manager_comp,
-                &source_node_comp,
-            )
-            .expect("failed to biconnect components");
-
-            let source_node_comp_dyn: Arc<dyn AbstractComponent<Message = SourceEvent>> =
-                source_node_comp;
-
-            source_manager_comp.on_definition(|cd| {
-                cd.add_source(source_node_comp_dyn);
-            });
-
+            match builder_type {
+                SourceBuilderType::Single(builder) => {
+                    let source_cons = builder.constructor;
+                    let source_conf = builder.conf;
+                    let source_index = 0;
+                    let source = source_cons(backend.clone());
+                    create_source_node(
+                        pipeline,
+                        source_index,
+                        components.clone(),
+                        channel_kind,
+                        source,
+                        source_conf,
+                        &source_manager_comp,
+                    );
+                }
+                SourceBuilderType::Parallel(builder) => {
+                    let source_cons = builder.constructor;
+                    let parallelism = builder.parallelism;
+                    for source_index in 0..builder.parallelism {
+                        let source_conf = builder.conf.clone();
+                        let source = source_cons(backend.clone(), source_index, parallelism); // todo
+                        create_source_node(
+                            pipeline,
+                            source_index,
+                            components.clone(),
+                            channel_kind,
+                            source,
+                            source_conf,
+                            &source_manager_comp,
+                        );
+                    }
+                }
+            }
             let source_ref: ActorRefStrong<SourceEvent> =
                 source_manager_comp.actor_ref().hold().expect("fail");
 
@@ -172,6 +166,53 @@ pub(crate) fn source_manager_constructor<S: Source + 'static, B: Backend>(
             source_manager_comp
         },
     )
+}
+
+// helper function to create source node..
+fn create_source_node<S, B>(
+    pipeline: &mut Pipeline,
+    source_index: usize,
+    components: Vec<Arc<dyn std::any::Any + Send + Sync>>,
+    channel_kind: ChannelKind,
+    source: S,
+    source_conf: SourceConf<S::Item>,
+    source_manager_comp: &Arc<Component<SourceManager<B>>>,
+) where
+    S: Source,
+    B: Backend,
+{
+    let pool_info = pipeline.get_pool_info();
+    let max_key = pipeline.conf.max_key;
+    let channel_strategy = channel_strategy(
+        components.clone(),
+        NodeID::new(source_index as u32),
+        pool_info,
+        max_key,
+        channel_kind,
+    );
+    let source_node = SourceNode::new(
+        source_index,
+        source,
+        source_conf,
+        channel_strategy,
+        pipeline.arcon_logger.clone(),
+    );
+    let source_node_comp = pipeline.data_system().create(|| source_node);
+
+    pipeline
+        .data_system()
+        .start_notify(&source_node_comp)
+        .wait_timeout(std::time::Duration::from_millis(2000))
+        .expect("Failed to start Source Node");
+
+    biconnect_components::<SourceManagerPort, _, _>(&source_manager_comp, &source_node_comp)
+        .expect("failed to biconnect components");
+
+    let source_node_comp_dyn: Arc<dyn AbstractComponent<Message = SourceEvent>> = source_node_comp;
+
+    source_manager_comp.on_definition(|cd| {
+        cd.add_source(source_node_comp_dyn);
+    });
 }
 
 pub(crate) fn node_manager_constructor<OP: Operator + 'static, B: Backend>(
