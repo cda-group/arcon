@@ -2,7 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use super::{schema::SourceSchema, Poll, Source};
-use crate::index::{IndexOps, LazyValue, StateConstructor, ValueIndex};
+use crate::{
+    error::source::{SourceError, SourceResult},
+    index::{IndexOps, LazyValue, StateConstructor, ValueIndex},
+};
 use arcon_macros::ArconState;
 use arcon_state::Backend;
 use rdkafka::{
@@ -156,25 +159,28 @@ where
 {
     type Item = S::Data;
 
-    fn poll_next(&mut self) -> Poll<Self::Item> {
+    fn poll_next(&mut self) -> SourceResult<Poll<Self::Item>> {
         match self
             .consumer
             .poll(Duration::from_millis(self.conf.poll_timeout()))
         {
             Some(Ok(msg)) => match msg.payload() {
-                Some(bytes) => {
-                    let partition = msg.partition();
-                    let offset = msg.offset();
-                    self.state.partition_offsets.set_key(partition as u64);
-                    self.state.partition_offsets.put(offset).unwrap();
-                    Poll::Ready(self.schema.from_bytes(bytes).unwrap())
-                }
-                None => Poll::Pending,
+                Some(bytes) => match self.schema.from_bytes(bytes) {
+                    Ok(data) => {
+                        let partition = msg.partition();
+                        let offset = msg.offset();
+                        self.state.partition_offsets.set_key(partition as u64);
+                        self.state.partition_offsets.put(offset)?;
+                        Ok(Ok(Poll::Ready(data)))
+                    }
+                    Err(err) => Ok(Err(err)),
+                },
+                None => Ok(Ok(Poll::Pending)),
             },
-            Some(Err(err)) => Poll::Error(err.to_string()),
+            Some(Err(err)) => Ok(Err(SourceError::Kafka { error: err })),
             None => {
                 // Nothing to collect
-                Poll::Pending
+                Ok(Ok(Poll::Pending))
             }
         }
     }

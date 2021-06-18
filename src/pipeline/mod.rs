@@ -268,7 +268,8 @@ impl Pipeline {
     pub fn file<I, A>(self, i: I, f: impl FnOnce(&mut SourceConf<A>)) -> Stream<A>
     where
         I: Into<String>,
-        A: ArconType + std::str::FromStr,
+        A: ArconType + std::str::FromStr + std::fmt::Display,
+        <A as std::str::FromStr>::Err: std::fmt::Display,
     {
         let path = i.into();
         assert_eq!(
