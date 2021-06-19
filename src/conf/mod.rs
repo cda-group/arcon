@@ -1,12 +1,14 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use arcon_error::*;
+pub mod logger;
+
 use hocon::HoconLoader;
 use kompact::{
     net::buffers::BufferConfig,
     prelude::{DeadletterBox, KompactConfig, NetworkConfig},
 };
+use logger::{file_logger, term_logger, ArconLogger, LoggerType};
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
@@ -27,12 +29,15 @@ pub struct ArconConf {
     /// Either a `Local` or `Distributed` Execution Mode
     #[serde(default = "execution_mode_default")]
     pub execution_mode: ExecutionMode,
-    /// Base directory for live state backend data
-    #[serde(default = "state_dir_default")]
-    pub state_dir: PathBuf,
-    /// Base directory for checkpoints
-    #[serde(default = "checkpoint_dir_default")]
-    pub checkpoint_dir: PathBuf,
+    /// Base directory for the pipeline
+    #[serde(default = "base_dir_default")]
+    pub base_dir: PathBuf,
+    /// [LoggerType] for arcon related logging
+    #[serde(default)]
+    pub arcon_logger_type: LoggerType,
+    /// [LoggerType] for kompact related logging
+    #[serde(default)]
+    pub kompact_logger_type: LoggerType,
     /// Generation interval in milliseconds for Epochs
     #[serde(default = "epoch_interval_default")]
     pub epoch_interval: u64,
@@ -88,8 +93,9 @@ impl Default for ArconConf {
     fn default() -> Self {
         ArconConf {
             execution_mode: execution_mode_default(),
-            state_dir: state_dir_default(),
-            checkpoint_dir: checkpoint_dir_default(),
+            base_dir: base_dir_default(),
+            arcon_logger_type: Default::default(),
+            kompact_logger_type: Default::default(),
             watermark_interval: watermark_interval_default(),
             epoch_interval: epoch_interval_default(),
             max_key: max_key_default(),
@@ -112,6 +118,46 @@ impl Default for ArconConf {
 }
 
 impl ArconConf {
+    pub fn state_dir(&self) -> PathBuf {
+        let mut buf = self.base_dir.clone();
+        buf.push("live_states");
+        buf
+    }
+    pub fn checkpoints_dir(&self) -> PathBuf {
+        let mut buf = self.base_dir.clone();
+        buf.push("checkpoints");
+        buf
+    }
+
+    pub fn arcon_logger(&self) -> ArconLogger {
+        match self.arcon_logger_type {
+            LoggerType::File => {
+                let base_dir = self.base_dir.clone();
+                let path = format!(
+                    "{}/{}",
+                    base_dir.as_path().to_string_lossy(),
+                    logger::ARCON_LOG_NAME
+                );
+                file_logger(&path)
+            }
+            LoggerType::Terminal => term_logger(),
+        }
+    }
+
+    fn kompact_logger(&self) -> Option<kompact::KompactLogger> {
+        match self.kompact_logger_type {
+            LoggerType::File => {
+                let base_dir = self.base_dir.clone();
+                let path = format!(
+                    "{}/{}",
+                    base_dir.as_path().to_string_lossy(),
+                    logger::KOMPACT_LOG_NAME,
+                );
+                Some(file_logger(&path))
+            }
+            LoggerType::Terminal => None,
+        }
+    }
     pub(crate) fn ctrl_system_conf(&self) -> KompactConfig {
         let mut cfg = KompactConfig::default();
 
@@ -123,8 +169,13 @@ impl ArconConf {
         // inject checkpoint_dir into Kompact
         let component_cfg = format!(
             "{{ checkpoint_dir = {:?}, node_metrics_interval = {} }}",
-            self.checkpoint_dir, self.node_metrics_interval
+            self.checkpoints_dir(),
+            self.node_metrics_interval
         );
+
+        if let Some(kompact_logger) = self.kompact_logger() {
+            cfg.logger(kompact_logger);
+        }
 
         cfg.load_config_str(component_cfg);
 
@@ -148,9 +199,13 @@ impl ArconConf {
         // inject checkpoint_dir into Kompact
         let component_cfg = format!(
             "{{ checkpoint_dir = {:?}, node_metrics_interval = {} }}",
-            self.checkpoint_dir, self.node_metrics_interval
+            self.checkpoints_dir(),
+            self.node_metrics_interval
         );
 
+        if let Some(kompact_logger) = self.kompact_logger() {
+            cfg.logger(kompact_logger);
+        }
         cfg.load_config_str(component_cfg);
         cfg.set_config_value(&kompact::config_keys::system::THREADS, self.kompact_threads);
         cfg.set_config_value(
@@ -182,18 +237,12 @@ impl ArconConf {
     }
 
     /// Loads ArconConf from a file
-    pub fn from_file(path: impl AsRef<Path>) -> ArconResult<ArconConf> {
-        let data = std::fs::read_to_string(path)
-            .map_err(|e| arcon_err_kind!("Failed to read config file with err {}", e))?;
+    pub fn from_file(path: impl AsRef<Path>) -> ArconConf {
+        let data = std::fs::read_to_string(path).unwrap();
 
-        let loader: HoconLoader = HoconLoader::new()
-            .load_str(&data)
-            .map_err(|e| arcon_err_kind!("Failed to load Hocon Loader with err {}", e))?;
+        let loader: HoconLoader = HoconLoader::new().load_str(&data).unwrap();
 
-        let conf = loader
-            .resolve()
-            .map_err(|e| arcon_err_kind!("Failed to resolve ArconConf with err {}", e))?;
-        Ok(conf)
+        loader.resolve().unwrap()
     }
 }
 
@@ -203,28 +252,18 @@ fn execution_mode_default() -> ExecutionMode {
     ExecutionMode::Local
 }
 
-fn state_dir_default() -> PathBuf {
+fn base_dir_default() -> PathBuf {
     #[cfg(test)]
-    let mut res = tempfile::tempdir().unwrap().into_path();
+    let res = tempfile::tempdir().unwrap().into_path();
     #[cfg(not(test))]
-    let mut res = std::env::temp_dir();
+    let res = std::env::temp_dir();
 
-    res.push("arcon/live_states");
     res
 }
 
-fn checkpoint_dir_default() -> PathBuf {
-    #[cfg(test)]
-    let mut res = tempfile::tempdir().unwrap().into_path();
-    #[cfg(not(test))]
-    let mut res = std::env::temp_dir();
-
-    res.push("arcon/checkpoints");
-    res
-}
 fn epoch_interval_default() -> u64 {
     // in milliseconds
-    2000
+    25000
 }
 
 fn watermark_interval_default() -> u64 {
@@ -305,14 +344,14 @@ mod tests {
         // Set up Config File
         let mut file = NamedTempFile::new().unwrap();
         let file_path = file.path().to_string_lossy().into_owned();
-        let config_str = r#"{checkpoint_dir: /dev/null, watermark_interval: 1000}"#;
+        let config_str = r#"{base_dir: /dev/null, watermark_interval: 1000}"#;
         file.write_all(config_str.as_bytes()).unwrap();
 
         // Load conf
-        let conf: ArconConf = ArconConf::from_file(&file_path).unwrap();
+        let conf: ArconConf = ArconConf::from_file(&file_path);
 
         // Check custom values
-        assert_eq!(conf.checkpoint_dir, PathBuf::from("/dev/null"));
+        assert_eq!(conf.base_dir, PathBuf::from("/dev/null"));
         assert_eq!(conf.watermark_interval, 1000);
         // Check defaults
         assert_eq!(conf.node_metrics_interval, node_metrics_interval_default());

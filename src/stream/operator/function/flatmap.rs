@@ -3,11 +3,11 @@
 
 use crate::{
     data::{ArconElement, ArconNever, ArconType},
+    error::*,
     index::ArconState,
     stream::operator::{Operator, OperatorContext},
     util::ArconFnBounds,
 };
-use arcon_error::*;
 use arcon_state::Backend;
 use kompact::prelude::ComponentDefinition;
 use std::marker::PhantomData;
@@ -17,15 +17,15 @@ where
     IN: ArconType,
     OUTS: IntoIterator,
     OUTS::Item: ArconType,
-    F: Fn(IN, &mut S) -> OperatorResult<OUTS> + ArconFnBounds,
+    F: Fn(IN, &mut S) -> ArconResult<OUTS> + ArconFnBounds,
     S: ArconState,
 {
     state: S,
     udf: F,
-    _marker: PhantomData<fn(IN) -> OperatorResult<OUTS>>,
+    _marker: PhantomData<fn(IN) -> ArconResult<OUTS>>,
 }
 
-impl<IN, OUTS> FlatMap<IN, OUTS, fn(IN, &mut ()) -> OperatorResult<OUTS>, ()>
+impl<IN, OUTS> FlatMap<IN, OUTS, fn(IN, &mut ()) -> ArconResult<OUTS>, ()>
 where
     IN: ArconType,
     OUTS: IntoIterator + 'static,
@@ -34,7 +34,7 @@ where
     #[allow(clippy::new_ret_no_self)]
     pub fn new(
         udf: impl Fn(IN) -> OUTS + ArconFnBounds,
-    ) -> FlatMap<IN, OUTS, impl Fn(IN, &mut ()) -> OperatorResult<OUTS> + ArconFnBounds, ()> {
+    ) -> FlatMap<IN, OUTS, impl Fn(IN, &mut ()) -> ArconResult<OUTS> + ArconFnBounds, ()> {
         let udf = move |input: IN, _: &mut ()| Ok(udf(input));
         FlatMap {
             state: (),
@@ -49,7 +49,7 @@ where
     IN: ArconType,
     OUTS: IntoIterator,
     OUTS::Item: ArconType,
-    F: Fn(IN, &mut S) -> OperatorResult<OUTS> + ArconFnBounds,
+    F: Fn(IN, &mut S) -> ArconResult<OUTS> + ArconFnBounds,
     S: ArconState,
 {
     pub fn stateful(state: S, udf: F) -> Self {
@@ -66,7 +66,7 @@ where
     IN: ArconType,
     OUTS: IntoIterator,
     OUTS::Item: ArconType,
-    F: Fn(IN, &mut S) -> OperatorResult<OUTS> + ArconFnBounds,
+    F: Fn(IN, &mut S) -> ArconResult<OUTS> + ArconFnBounds,
     S: ArconState,
 {
     type IN = IN;
@@ -78,7 +78,7 @@ where
         &mut self,
         element: ArconElement<IN>,
         mut ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> OperatorResult<()> {
+    ) -> ArconResult<()> {
         let result = (self.udf)(element.data, &mut self.state)?;
         for item in result {
             ctx.output(ArconElement {

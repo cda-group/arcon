@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
+    conf::logger::ArconLogger,
     data::{ArconMessage, Epoch, NodeID, StateID, Watermark},
+    error::*,
     index::{
         ArconState, HashTable, IndexOps, LocalValue, StateConstructor, ValueIndex, EMPTY_STATE_ID,
     },
@@ -11,9 +13,9 @@ use crate::{
         query::{QueryManagerMsg, QueryManagerPort, TableRegistration},
         snapshot::{Snapshot, SnapshotEvent, SnapshotManagerPort},
     },
+    reportable_error,
     stream::operator::Operator,
 };
-use arcon_error::*;
 use arcon_macros::ArconState;
 use arcon_state::Backend;
 use fxhash::FxHashMap;
@@ -157,6 +159,7 @@ where
     /// Internal manager state
     manager_state: NodeManagerState<B>,
     latest_snapshot: Option<Snapshot>,
+    logger: ArconLogger,
 }
 
 impl<OP, B> NodeManager<OP, B>
@@ -170,6 +173,7 @@ where
         epoch_manager: ActorRefStrong<EpochEvent>,
         in_channels: Vec<NodeID>,
         backend: Arc<B>,
+        logger: ArconLogger,
     ) -> Self {
         NodeManager {
             ctx: ComponentContext::uninitialised(),
@@ -187,6 +191,7 @@ where
             manager_state: NodeManagerState::new(backend.clone()),
             backend,
             latest_snapshot: None,
+            logger,
         }
     }
 
@@ -195,7 +200,7 @@ where
         if let Some(base_dir) = &self.ctx.config()["checkpoint_dir"].as_string() {
             let curr_epoch = match self.manager_state.current_epoch().get()? {
                 Some(v) => v.as_ref().epoch,
-                None => return arcon_err!("failed to fetch epoch"),
+                None => return reportable_error!("failed to fetch epoch"),
             };
 
             let checkpoint_dir = format!(
@@ -235,11 +240,11 @@ where
             })?;
 
             debug!(
-                self.ctx.log(),
+                self.logger,
                 "Completed a Checkpoint to path {}", checkpoint_dir
             );
         } else {
-            return arcon_err!("Failed to fetch checkpoint_dir from Config");
+            return reportable_error!("Failed to fetch checkpoint_dir from Config");
         }
 
         Ok(())
@@ -266,7 +271,7 @@ where
                 if self.nodes.contains_key(&request.id) {
                     let epoch = match self.manager_state.current_epoch().get()? {
                         Some(v) => v.into_owned(),
-                        None => return arcon_err!("failed to fetch epoch"),
+                        None => return reportable_error!("failed to fetch epoch"),
                     };
                     if request.epoch == epoch {
                         self.manager_state
@@ -315,7 +320,7 @@ where
     B: Backend,
 {
     fn on_start(&mut self) -> Handled {
-        info!(self.ctx.log(), "Started NodeManager for {}", self.state_id,);
+        info!(self.logger, "Started NodeManager for {}", self.state_id,);
 
         // Register state id
         if self.has_snapshot_state() {
@@ -367,8 +372,9 @@ where
     fn handle(&mut self, event: NodeManagerEvent) -> Handled {
         if let Err(err) = self.handle_node_event(event) {
             error!(
-                self.ctx.log(),
-                "Failed to handle NodeManagerEvent {:?}", err
+                self.logger,
+                "Failed to handle NodeManagerEvent {:?}",
+                err.to_string()
             );
         }
 

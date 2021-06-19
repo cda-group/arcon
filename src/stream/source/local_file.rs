@@ -1,11 +1,17 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
+use crate::error::{
+    source::{SourceError, SourceResult},
+    Error,
+};
+
 use crate::{
     data::ArconType,
     stream::source::{Poll, Source},
 };
 use std::{
+    fmt::Display,
     fs::File,
     io::{BufRead, BufReader},
     str::FromStr,
@@ -13,7 +19,8 @@ use std::{
 
 pub struct LocalFileSource<A>
 where
-    A: ArconType + FromStr,
+    A: ArconType + FromStr + Display,
+    <A as FromStr>::Err: Display,
 {
     lines: std::io::Lines<BufReader<std::fs::File>>,
     _marker: std::marker::PhantomData<A>,
@@ -21,7 +28,8 @@ where
 
 impl<A> LocalFileSource<A>
 where
-    A: ArconType + FromStr,
+    A: ArconType + FromStr + Display,
+    <A as FromStr>::Err: Display,
 {
     pub fn new(file_path: String) -> Self {
         let f = File::open(file_path).expect("failed to open file");
@@ -36,18 +44,21 @@ where
 
 impl<A> Source for LocalFileSource<A>
 where
-    A: ArconType + FromStr,
+    A: ArconType + FromStr + Display,
+    <A as FromStr>::Err: Display,
 {
     type Item = A;
 
-    fn poll_next(&mut self) -> Poll<Self::Item> {
+    fn poll_next(&mut self) -> SourceResult<Poll<Self::Item>> {
         match self.lines.next() {
             Some(Ok(line)) => match line.parse::<Self::Item>() {
-                Ok(record) => Poll::Ready(record),
-                Err(_) => Poll::Error("failed to parse line".to_string()), // todo
+                Ok(record) => Ok(Ok(Poll::Ready(record))),
+                Err(err) => Ok(Err(SourceError::Parse {
+                    msg: err.to_string(),
+                })),
             },
-            Some(Err(err)) => Poll::Error(err.to_string()),
-            None => Poll::Done,
+            Some(Err(err)) => Err(Error::Io { error: err }),
+            None => Ok(Ok(Poll::Done)),
         }
     }
     fn set_offset(&mut self, _: usize) {}

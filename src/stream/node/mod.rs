@@ -6,19 +6,22 @@ pub mod debug;
 
 pub mod source;
 
+use crate::conf::logger::ArconLogger;
 #[cfg(feature = "unsafe_flight")]
 use crate::data::flight_serde::unsafe_remote::UnsafeSerde;
-use crate::index::{ArconState, StateConstructor};
 use crate::{
     data::{flight_serde::reliable_remote::ReliableSerde, RawArconMessage, *},
-    index::{AppenderIndex, EagerAppender, IndexOps, Timer as ArconTimer},
+    error::{ArconResult, *},
+    index::{
+        AppenderIndex, ArconState, EagerAppender, IndexOps, StateConstructor, Timer as ArconTimer,
+    },
     manager::node::{NodeManagerEvent::Checkpoint, *},
+    reportable_error,
     stream::{
         channel::strategy::ChannelStrategy,
         operator::{Operator, OperatorContext},
     },
 }; // conflicts with Kompact Timer trait
-use arcon_error::{arcon_err, arcon_err_kind, ArconResult};
 use arcon_macros::ArconState;
 use arcon_state::Backend;
 use fxhash::*;
@@ -136,6 +139,7 @@ macro_rules! make_context {
             $sel,
             &mut (*$sel.timer.get()),
             &mut (*$sel.channel_strategy.get()),
+            &$sel.logger,
         )
     };
 }
@@ -164,6 +168,7 @@ where
     node_state: NodeState<OP, B>,
     /// Event time scheduler
     timer: UnsafeCell<ArconTimer<u64, OP::TimerState, B>>,
+    logger: ArconLogger,
 }
 
 impl<OP, B> Node<OP, B>
@@ -178,6 +183,7 @@ where
         operator: OP,
         node_state: NodeState<OP, B>,
         backend: Arc<B>,
+        logger: ArconLogger,
     ) -> Self {
         let timer_id = format!("_{}_timer", descriptor);
         let timer = ArconTimer::new(timer_id, backend);
@@ -192,6 +198,7 @@ where
             metrics: NodeMetrics::new(),
             node_state,
             timer: UnsafeCell::new(timer),
+            logger,
         }
     }
 
@@ -199,7 +206,12 @@ where
     #[inline]
     fn handle_message(&mut self, message: MessageContainer<OP::IN>) -> ArconResult<()> {
         if !self.node_state.in_channels.contains(message.sender()) {
-            return arcon_err!("Message from invalid sender");
+            error!(
+                self.logger,
+                "Message from invalid sender id {:?}",
+                message.sender()
+            );
+            return Ok(());
         }
 
         if self.sender_blocked(message.sender()) {
@@ -239,7 +251,7 @@ where
                 ArconEvent::Element(e) => {
                     let watermark = match self.node_state.watermarks().get(&sender) {
                         Some(wm) => wm,
-                        None => return arcon_err!("Uninitialised watermark"),
+                        None => return reportable_error!("Uninitialised watermark"),
                     };
 
                     if e.timestamp.unwrap_or(u64::max_value()) <= watermark.timestamp {
@@ -257,7 +269,7 @@ where
                 ArconEvent::Watermark(w) => {
                     let watermark = match self.node_state.watermarks().get(&sender) {
                         Some(wm) => wm,
-                        None => return arcon_err!("Uninitialised watermark"),
+                        None => return reportable_error!("Uninitialised watermark"),
                     };
                     if w <= *watermark {
                         continue 'event_loop;
@@ -304,7 +316,7 @@ where
                     }
                 }
                 ArconEvent::Epoch(e) => {
-                    debug!(self.ctx.log(), "Got Epoch {:?}", e);
+                    debug!(self.logger, "Got Epoch {:?}", e);
                     if e < self.node_state.current_epoch {
                         continue 'event_loop;
                     }
@@ -384,7 +396,7 @@ where
 {
     fn on_start(&mut self) -> Handled {
         debug!(
-            self.ctx.log(),
+            self.logger,
             "Started Arcon Node {} with Node ID {:?}", self.descriptor, self.node_state.id
         );
 
@@ -406,7 +418,7 @@ where
         unsafe {
             let operator = &mut (*self.operator.get());
             if operator.on_start(make_context!(self)).is_err() {
-                error!(self.ctx.log(), "Failed to run startup code");
+                error!(self.logger, "Failed to run startup code");
             }
         };
 
@@ -424,7 +436,7 @@ where
             NodeEvent::CheckpointResponse(_) => {
                 if let Err(error) = self.complete_epoch() {
                     error!(
-                        self.ctx.log(),
+                        self.logger,
                         "Failed to complete epoch with error {:?}", error
                     );
                 }
@@ -440,7 +452,7 @@ where
     B: Backend,
 {
     fn handle(&mut self, e: NodeManagerEvent) -> Handled {
-        trace!(self.log(), "Ignoring node event: {:?}", e);
+        trace!(self.logger, "Ignoring node event: {:?}", e);
         Handled::Ok
     }
 }
@@ -454,7 +466,7 @@ where
 
     fn receive_local(&mut self, msg: Self::Message) -> Handled {
         if let Err(err) = self.handle_message(MessageContainer::Local(msg)) {
-            error!(self.ctx.log(), "Failed to handle message: {}", err);
+            error!(self.logger, "Failed to handle message: {}", err);
         }
         Handled::Ok
     }
@@ -462,25 +474,25 @@ where
         let arcon_msg = match *msg.ser_id() {
             id if id == OP::IN::RELIABLE_SER_ID => msg
                 .try_deserialise::<RawArconMessage<OP::IN>, ReliableSerde<OP::IN>>()
-                .map_err(|e| {
-                    arcon_err_kind!("Failed to unpack reliable ArconMessage with err {:?}", e)
+                .map_err(|e| Error::Unsupported {
+                    msg: format!("Failed to unpack reliable ArconMessage with err {:?}", e),
                 }),
             #[cfg(feature = "unsafe_flight")]
             id if id == OP::IN::UNSAFE_SER_ID => msg
                 .try_deserialise::<RawArconMessage<OP::IN>, UnsafeSerde<OP::IN>>()
-                .map_err(|e| {
-                    arcon_err_kind!("Failed to unpack unreliable ArconMessage with err {:?}", e)
+                .map_err(|e| Error::Unsupported {
+                    msg: format!("Failed to unpack unreliable ArconMessage with err {:?}", e),
                 }),
-            _ => panic!("Unexpected deserialiser"),
+            id => reportable_error!("Unexpected deserialiser with id {}", id),
         };
 
         match arcon_msg {
             Ok(m) => {
                 if let Err(err) = self.handle_message(MessageContainer::Raw(m)) {
-                    error!(self.ctx.log(), "Failed to handle node message: {}", err);
+                    error!(self.logger, "Failed to handle node message: {}", err);
                 }
             }
-            Err(e) => error!(self.ctx.log(), "Error ArconNetworkMessage: {:?}", e),
+            Err(e) => error!(self.logger, "Error ArconNetworkMessage: {:?}", e),
         }
         Handled::Ok
     }
@@ -542,6 +554,7 @@ mod tests {
                 epoch_manager_ref,
                 in_channels.clone(),
                 backend.clone(),
+                pipeline.arcon_logger.clone(),
             );
             let node_manager_comp = pipeline.ctrl_system().create(|| nm);
 
@@ -557,6 +570,7 @@ mod tests {
                 op,
                 NodeState::new(NodeID::new(0), in_channels, backend.clone()),
                 backend,
+                pipeline.arcon_logger.clone(),
             );
 
             let filter_comp = pipeline.data_system().create(|| node);

@@ -3,6 +3,7 @@
 
 use super::epoch::EpochEvent;
 use crate::{
+    conf::logger::ArconLogger,
     data::StateID,
     stream::{node::source::SourceEvent, time::ArconTime},
 };
@@ -47,6 +48,8 @@ pub(crate) struct SourceManager<B: Backend> {
     _backend: Arc<B>,
     /// Reference to the EpochManager
     epoch_manager: ActorRefStrong<EpochEvent>,
+
+    logger: ArconLogger,
 }
 
 impl<B: Backend> SourceManager<B> {
@@ -56,6 +59,7 @@ impl<B: Backend> SourceManager<B> {
         watermark_interval: u64,
         epoch_manager: ActorRefStrong<EpochEvent>,
         backend: Arc<B>,
+        logger: ArconLogger,
     ) -> Self {
         Self {
             ctx: ComponentContext::uninitialised(),
@@ -68,6 +72,7 @@ impl<B: Backend> SourceManager<B> {
             source_refs: Vec::new(),
             _backend: backend,
             epoch_manager,
+            logger,
         }
     }
 
@@ -98,10 +103,7 @@ impl<B: Backend> SourceManager<B> {
 
 impl<B: Backend> ComponentLifecycle for SourceManager<B> {
     fn on_start(&mut self) -> Handled {
-        info!(
-            self.ctx.log(),
-            "Started SourceManager for {}", self.state_id,
-        );
+        info!(self.logger, "Started SourceManager for {}", self.state_id,);
         Handled::Ok
     }
     fn on_stop(&mut self) -> Handled {

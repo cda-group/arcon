@@ -6,6 +6,7 @@ use crate::{
     index::{ArconState, EMPTY_STATE_ID},
     stream::{operator::Operator, source::Source, time::ArconTime},
 };
+use arcon_state::Backend;
 use hocon::HoconLoader;
 use serde::Deserialize;
 use std::{path::Path, sync::Arc};
@@ -14,7 +15,10 @@ use std::{path::Path, sync::Arc};
 // custom-defined state but still need a backend defined for internal runtime state.
 cfg_if::cfg_if! {
     if #[cfg(feature = "rocksdb")]  {
+        #[cfg(not(test))]
         pub type DefaultBackend = arcon_state::Rocks;
+        #[cfg(test)]
+        pub type DefaultBackend = arcon_state::Sled;
     } else {
         pub type DefaultBackend = arcon_state::Sled;
     }
@@ -139,6 +143,37 @@ impl<S: ArconType> Default for SourceConf<S> {
     }
 }
 
+type SourceIndex = usize;
+type TotalSources = usize;
+
+pub enum SourceBuilderType<S, B>
+where
+    S: Source,
+    B: Backend,
+{
+    Single(SourceBuilder<S, B>),
+    Parallel(ParallelSourceBuilder<S, B>),
+}
+
+impl<S, B> SourceBuilderType<S, B>
+where
+    S: Source,
+    B: Backend,
+{
+    pub fn parallelism(&self) -> usize {
+        match self {
+            SourceBuilderType::Single(_) => 1,
+            SourceBuilderType::Parallel(builder) => builder.parallelism,
+        }
+    }
+    pub fn time(&self) -> ArconTime {
+        match self {
+            SourceBuilderType::Single(builder) => builder.conf.time,
+            SourceBuilderType::Parallel(builder) => builder.conf.time,
+        }
+    }
+}
+
 /// Source Builder
 ///
 /// Defines how Sources are constructed and managed during runtime.
@@ -148,4 +183,15 @@ pub struct SourceBuilder<S: Source, Backend = DefaultBackend> {
     pub constructor: Arc<dyn Fn(Arc<Backend>) -> S + Send + Sync + 'static>,
     /// Source Config
     pub conf: SourceConf<S::Item>,
+}
+
+#[derive(Clone)]
+pub struct ParallelSourceBuilder<S: Source, Backend = DefaultBackend> {
+    /// Source Constructor
+    pub constructor:
+        Arc<dyn Fn(Arc<Backend>, SourceIndex, TotalSources) -> S + Send + Sync + 'static>,
+    /// Source Config
+    pub conf: SourceConf<S::Item>,
+    /// Source Parallleism
+    pub parallelism: usize,
 }

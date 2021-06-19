@@ -1,12 +1,17 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
+#[cfg(feature = "kafka")]
+use crate::stream::source::{
+    kafka::{KafkaConsumer, KafkaConsumerConf, KafkaConsumerState},
+    schema::SourceSchema,
+};
 use crate::{
     buffer::event::PoolInfo,
-    conf::{ArconConf, ExecutionMode},
+    conf::{logger::ArconLogger, ArconConf, ExecutionMode},
     data::ArconMessage,
     dataflow::{
-        conf::{DefaultBackend, SourceBuilder, SourceConf},
+        conf::{ParallelSourceBuilder, SourceBuilder, SourceBuilderType, SourceConf},
         constructor::{source_manager_constructor, ErasedComponent},
         dfg::*,
         stream::Context,
@@ -81,6 +86,8 @@ pub struct Pipeline {
     pub(crate) debug_node: Option<ErasedComponent>,
     // Type erased Arc<dyn AbstractComponent<Message = ArconMessage<A>>>
     pub(crate) abstract_debug_node: Option<ErasedComponent>,
+    /// Configured Logger for the Pipeline
+    pub(crate) arcon_logger: ArconLogger,
 }
 
 impl Default for Pipeline {
@@ -94,7 +101,9 @@ impl Pipeline {
     /// Creates a new Pipeline using the given ArconConf
     fn new(conf: ArconConf) -> Self {
         let allocator = Arc::new(Mutex::new(Allocator::new(conf.allocator_capacity)));
-        let (ctrl_system, data_system, snapshot_manager, epoch_manager) = Self::setup(&conf);
+        let arcon_logger = conf.arcon_logger();
+        let (ctrl_system, data_system, snapshot_manager, epoch_manager) =
+            Self::setup(&conf, &arcon_logger);
         let endpoint_manager = ctrl_system.create(EndpointManager::new);
         let query_manager = ctrl_system.create(QueryManager::new);
 
@@ -136,6 +145,7 @@ impl Pipeline {
             debug_node_flag: false,
             debug_node: None,
             abstract_debug_node: None,
+            arcon_logger,
         }
     }
 
@@ -148,6 +158,7 @@ impl Pipeline {
     #[allow(clippy::type_complexity)]
     fn setup(
         arcon_conf: &ArconConf,
+        logger: &ArconLogger,
     ) -> (
         KompactSystem,
         KompactSystem,
@@ -170,8 +181,13 @@ impl Pipeline {
         let epoch_manager = match arcon_conf.execution_mode {
             ExecutionMode::Local => {
                 let snapshot_manager_ref = snapshot_manager.actor_ref().hold().expect("fail");
-                let epoch_manager = ctrl_system
-                    .create(|| EpochManager::new(arcon_conf.epoch_interval, snapshot_manager_ref));
+                let epoch_manager = ctrl_system.create(|| {
+                    EpochManager::new(
+                        arcon_conf.epoch_interval,
+                        snapshot_manager_ref,
+                        logger.clone(),
+                    )
+                });
                 ctrl_system
                     .start_notify(&epoch_manager)
                     .wait_timeout(timeout)
@@ -190,6 +206,16 @@ impl Pipeline {
         (ctrl_system, data_system, snapshot_manager, epoch_manager)
     }
 
+    /// Create a parallel data source
+    ///
+    /// Returns a [`Stream`] object that users may execute transformations on.
+    pub fn parallel_source<S>(self, builder: ParallelSourceBuilder<S>) -> Stream<S::Item>
+    where
+        S: Source,
+    {
+        self.source_to_stream(SourceBuilderType::Parallel(builder))
+    }
+
     /// Create a non-parallel data source
     ///
     /// Returns a [`Stream`] object that users may execute transformations on.
@@ -197,19 +223,23 @@ impl Pipeline {
     where
         S: Source,
     {
-        assert_ne!(
-            builder.conf.time == ArconTime::Event,
-            builder.conf.extractor.is_none(),
-            "Cannot use ArconTime::Event without specifying a timestamp extractor"
-        );
+        self.source_to_stream(SourceBuilderType::Single(builder))
+    }
 
-        let mut state_dir = self.arcon_conf().state_dir.clone();
+    fn source_to_stream<S, B>(self, builder_type: SourceBuilderType<S, B>) -> Stream<S::Item>
+    where
+        S: Source,
+        B: Backend,
+    {
+        let parallelism = builder_type.parallelism();
+
+        let mut state_dir = self.arcon_conf().state_dir();
         state_dir.push("source_manager");
-        let backend = Arc::new(DefaultBackend::create(&state_dir).unwrap());
-        let time = builder.conf.time;
-        let manager_constructor = source_manager_constructor::<S, _>(
+        let backend = Arc::new(B::create(&state_dir).unwrap());
+        let time = builder_type.time();
+        let manager_constructor = source_manager_constructor::<S, B>(
             String::from("source_manager"),
-            builder,
+            builder_type,
             backend,
             self.arcon_conf().watermark_interval,
             time,
@@ -217,7 +247,7 @@ impl Pipeline {
         let mut ctx = Context::new(self);
         let kind = DFGNodeKind::Source(Default::default(), manager_constructor);
         let incoming_channels = 0; // sources have 0 incoming channels..
-        let outgoing_channels = 1; // TODO
+        let outgoing_channels = parallelism;
         let dfg_node = DFGNode::new(kind, outgoing_channels, incoming_channels, vec![]);
         ctx.dfg.insert(dfg_node);
         Stream::new(ctx)
@@ -238,7 +268,8 @@ impl Pipeline {
     pub fn file<I, A>(self, i: I, f: impl FnOnce(&mut SourceConf<A>)) -> Stream<A>
     where
         I: Into<String>,
-        A: ArconType + std::str::FromStr,
+        A: ArconType + std::str::FromStr + std::fmt::Display,
+        <A as std::str::FromStr>::Err: std::fmt::Display,
     {
         let path = i.into();
         assert_eq!(
@@ -262,7 +293,7 @@ impl Pipeline {
     /// Returns a [`Stream`] object that users may execute transformations on.
     ///
     /// Example
-    /// ```
+    /// ```no_run
     /// use arcon::prelude::*;
     /// let stream: Stream<u64> = Pipeline::default()
     ///     .collection((0..100).collect::<Vec<u64>>(), |conf| {
@@ -285,7 +316,53 @@ impl Pipeline {
         self.source(builder)
     }
 
-    /// Enable [DebugNode] for the Pipeline
+    /// Creates an unbounded stream using Kafka
+    ///
+    /// Returns a [`Stream`] object that users may execute transformations on.
+    ///
+    /// Example
+    /// ```no_run
+    /// use arcon::prelude::*;
+    /// let consumer_conf = KafkaConsumerConf::default()
+    ///  .with_topic("test")
+    ///  .set("group.id", "test")
+    ///  .set("bootstrap.servers", "127.0.0.1:9092")
+    ///  .set("enable.auto.commit", "false");
+    ///
+    /// let stream: Stream<u64> = Pipeline::default()
+    ///  .kafka(consumer_conf, JsonSchema::new(), 1, |conf| {
+    ///     conf.set_arcon_time(ArconTime::Event);
+    ///     conf.set_timestamp_extractor(|x: &u64| *x);
+    ///  });
+    /// ```
+    #[cfg(feature = "kafka")]
+    pub fn kafka<S: SourceSchema>(
+        self,
+        kafka_conf: KafkaConsumerConf,
+        schema: S,
+        parallelism: usize,
+        f: impl FnOnce(&mut SourceConf<S::Data>),
+    ) -> Stream<S::Data> {
+        let mut conf = SourceConf::default();
+        f(&mut conf);
+
+        let builder = ParallelSourceBuilder {
+            constructor: Arc::new(move |backend, index, total_sources| {
+                KafkaConsumer::new(
+                    kafka_conf.clone(),
+                    KafkaConsumerState::new(backend),
+                    schema.clone(),
+                    index,
+                    total_sources,
+                )
+            }),
+            conf,
+            parallelism,
+        };
+        self.parallel_source(builder)
+    }
+
+    /// Enable DebugNode for the Pipeline
     ///
     ///
     /// The component can be accessed through [method](AssembledPipeline::get_debug_node).

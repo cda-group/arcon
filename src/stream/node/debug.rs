@@ -4,7 +4,6 @@
 #[cfg(feature = "unsafe_flight")]
 use crate::data::flight_serde::unsafe_remote::UnsafeSerde;
 use crate::data::{flight_serde::reliable_remote::ReliableSerde, *};
-use arcon_error::arcon_err_kind;
 use kompact::prelude::*;
 
 /// A DebugNode is a debug version of [Node]
@@ -93,26 +92,16 @@ where
         let arcon_msg = match *msg.ser_id() {
             id if id == IN::RELIABLE_SER_ID => msg
                 .try_deserialise::<RawArconMessage<IN>, ReliableSerde<IN>>()
-                .map_err(|e| {
-                    arcon_err_kind!("Failed to unpack reliable ArconMessage with err {:?}", e)
-                }),
+                .unwrap(),
             #[cfg(feature = "unsafe_flight")]
             id if id == IN::UNSAFE_SER_ID => msg
                 .try_deserialise::<RawArconMessage<IN>, UnsafeSerde<IN>>()
-                .map_err(|e| {
-                    arcon_err_kind!("Failed to unpack unreliable ArconMessage with err {:?}", e)
-                }),
+                .unwrap(),
             _ => {
                 panic!("Unexpected deserialiser")
             }
         };
-
-        match arcon_msg {
-            Ok(m) => {
-                self.handle_events(m.events);
-            }
-            Err(e) => error!(self.ctx.log(), "Error ArconNetworkMessage: {:?}", e),
-        }
+        self.handle_events(arcon_msg.events);
         Handled::Ok
     }
 }

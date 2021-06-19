@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use fxhash::FxHashMap;
+use snafu::Snafu;
 use std::alloc::{GlobalAlloc, Layout, System};
 
 /// Type alias for a unique Alloc identifier
@@ -9,21 +10,27 @@ pub type AllocId = (u32, u64);
 /// Type alias for alloc pointers
 pub type AllocPtr = *mut u8;
 
-/// An Enum containing all possible results from an alloc call
+pub type AllocResult = std::result::Result<Alloc, AllocError>;
+
 #[derive(Debug)]
-pub enum AllocResult {
-    /// A Successful allocation
-    Alloc(AllocId, AllocPtr),
+pub struct Alloc(pub AllocId, pub AllocPtr);
+
+/// An Enum containing all possible results from an alloc call
+#[derive(Debug, Snafu)]
+pub enum AllocError {
     /// The Allocator is Out-of-memory
     ///
     /// Returns how many bytes are currently available for allocation
-    ArconOOM(usize),
+    #[snafu(display("Arcon Allocator is out of memory, {} bytes remaining!", bytes,))]
+    ArconOOM { bytes: usize },
     /// System Allocator failed to allocate memory
     ///
     /// This is most likely an Out-of-memory issue
+    #[snafu(display("System Allocator failed to allocate memory"))]
     SystemOOM,
     /// A Capacity error
-    CapacityErr(String),
+    #[snafu(display("Capacity Error {}", msg))]
+    CapacityErr { msg: String },
 }
 
 /// An Allocator for arcon.
@@ -63,24 +70,32 @@ impl Allocator {
     /// It is up to the caller to ensure `dealloc` with the generated AllocId
     pub unsafe fn alloc<T>(&mut self, capacity: usize) -> AllocResult {
         if capacity == 0 {
-            return AllocResult::CapacityErr("Cannot alloc for 0 sized pointer".into());
+            return Err(AllocError::CapacityErr {
+                msg: "Cannot alloc for 0 sized pointer".into(),
+            });
         }
         let (size, align) = (std::mem::size_of::<T>(), std::mem::align_of::<T>());
 
         let required_bytes = match capacity.checked_mul(size) {
             Some(v) => v,
-            None => return AllocResult::CapacityErr("Capacity overflow".into()),
+            None => {
+                return Err(AllocError::CapacityErr {
+                    msg: "Capacity overflow".into(),
+                })
+            }
         };
 
         if self.curr_alloc + required_bytes > self.limit {
-            return AllocResult::ArconOOM(self.bytes_remaining());
+            return Err(AllocError::ArconOOM {
+                bytes: self.bytes_remaining(),
+            });
         }
 
         let layout = Layout::from_size_align_unchecked(required_bytes, align);
         let mem = System.alloc(layout);
 
         if mem.is_null() {
-            return AllocResult::SystemOOM;
+            return Err(AllocError::SystemOOM);
         }
 
         self.curr_alloc += layout.size();
@@ -95,7 +110,7 @@ impl Allocator {
         self.allocations
             .insert((self.alloc_epoch, id), (mem, layout));
 
-        AllocResult::Alloc((self.alloc_epoch, id), mem)
+        Ok(Alloc((self.alloc_epoch, id), mem))
     }
     /// Deallocate memory through the given AllocId
     ///
@@ -157,14 +172,14 @@ mod tests {
         assert_eq!(a.allocated_bytes(), 0);
 
         let id_one: AllocId = match unsafe { a.alloc::<u64>(100) } {
-            AllocResult::Alloc(id, _) => id,
+            Ok(Alloc(id, _)) => id,
             _ => panic!("not supposed to happen"),
         };
         // 100 * 8
         assert_eq!(a.allocated_bytes(), 800);
 
         let id_two: AllocId = match unsafe { a.alloc::<i32>(50) } {
-            AllocResult::Alloc(id, _) => id,
+            Ok(Alloc(id, _)) => id,
             _ => panic!("not supposed to happen"),
         };
         // 50 * 4
@@ -172,7 +187,7 @@ mod tests {
 
         // At this point, we will receive an out-of-memory error..
         match unsafe { a.alloc::<f32>(500) } {
-            AllocResult::ArconOOM(remaining_bytes) => assert_eq!(remaining_bytes, 24),
+            Err(AllocError::ArconOOM { bytes }) => assert_eq!(bytes, 24),
             _ => panic!("not supposed to happen"),
         };
 

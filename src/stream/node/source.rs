@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
+    conf::logger::ArconLogger,
     data::{ArconElement, ArconEvent, Epoch, Watermark},
+    error::{source::SourceError, ArconResult},
     manager::source::{SourceManagerEvent, SourceManagerPort},
     prelude::SourceConf,
     stream::{
@@ -12,6 +14,8 @@ use crate::{
     },
 };
 use kompact::prelude::*;
+#[cfg(feature = "kafka")]
+use rdkafka::error::KafkaError;
 use std::cell::RefCell;
 
 /// A message type that Source components in Arcon must implement
@@ -44,7 +48,9 @@ where
     ended: bool,
     channel_strategy: RefCell<ChannelStrategy<S::Item>>,
     conf: SourceConf<S::Item>,
+    source_index: usize,
     source: S,
+    logger: ArconLogger,
 }
 
 impl<S> SourceNode<S>
@@ -52,9 +58,11 @@ where
     S: Source,
 {
     pub fn new(
+        source_index: usize,
         source: S,
         conf: SourceConf<S::Item>,
         channel_strategy: ChannelStrategy<S::Item>,
+        logger: ArconLogger,
     ) -> Self {
         Self {
             ctx: ComponentContext::uninitialised(),
@@ -65,19 +73,23 @@ where
             ended: false,
             watermark: 0,
             conf,
+            source_index,
             source,
+            logger,
         }
     }
-    pub fn process(&mut self) {
+    pub fn process(&mut self) -> ArconResult<()> {
         let mut counter = 0;
 
         loop {
             if counter >= self.conf.batch_size {
-                break;
+                return Ok(());
             }
 
-            match self.source.poll_next() {
-                Poll::Ready(record) => {
+            let poll = self.source.poll_next()?;
+
+            match poll {
+                Ok(Poll::Ready(record)) => {
                     match self.conf.time {
                         ArconTime::Event => match &self.conf.extractor {
                             Some(extractor) => {
@@ -92,21 +104,40 @@ where
                     }
                     counter += 1;
                 }
-                Poll::Pending => {
+                Ok(Poll::Pending) => {
                     // nothing to collect, reschedule...
-                    break;
+                    return Ok(());
                 }
-                Poll::Error(err) => {
-                    error!(self.ctx.log(), "{}", err);
-                    counter += 1;
-                }
-                Poll::Done => {
+                Ok(Poll::Done) => {
                     // signal end..
                     self.ended = true;
-                    break;
+                    return Ok(());
+                }
+                Err(error) => {
+                    return self.handle_source_error(error);
                 }
             }
         }
+    }
+
+    fn handle_source_error(&self, source_error: SourceError) -> ArconResult<()> {
+        #[cfg(feature = "kafka")]
+        if let SourceError::Kafka { error } = &source_error {
+            match error {
+                // TODO: figure out which other kafka errors should cause a stop
+                KafkaError::Canceled | KafkaError::ConsumerCommit(_) => {
+                    return Err(crate::error::Error::Unsupported {
+                        msg: error.to_string(),
+                    })
+                }
+                _ => (),
+            }
+        }
+
+        // if we reach here, it means the error was not that serious...
+        // but we log it
+        error!(self.logger, "{}", source_error);
+        Ok(())
     }
 
     #[inline]
@@ -164,6 +195,10 @@ where
     S: Source,
 {
     fn on_start(&mut self) -> Handled {
+        info!(
+            self.logger,
+            "Starting up Source with Index {}", self.source_index
+        );
         let shared = self.loopback_receive.share();
         self.loopback_send.connect(shared);
         Handled::Ok
@@ -175,7 +210,11 @@ where
     S: Source,
 {
     fn handle(&mut self, _event: ProcessSource) -> Handled {
-        self.process();
+        if let Err(error) = self.process() {
+            // fatal error, must shutdown..
+            // TODO: coordinate shutdown of pipeline..
+            error!(self.logger, "{}", error);
+        }
 
         if self.ended {
             self.manager_port.trigger(SourceManagerEvent::End);

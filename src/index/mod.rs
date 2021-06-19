@@ -7,11 +7,10 @@ pub mod hash_table;
 pub mod timer;
 pub mod value;
 
-use crate::{
-    data::arrow::ToArrow, error::Result, manager::snapshot::Snapshot, table::ImmutableTable,
-};
+use crate::{data::arrow::ToArrow, manager::snapshot::Snapshot, table::ImmutableTable};
 use arcon_state::{
     data::{Key, Value},
+    error::Result,
     Backend,
 };
 use std::{borrow::Cow, sync::Arc};
@@ -110,7 +109,7 @@ impl StateConstructor for EmptyState {
 }
 
 impl IndexOps for EmptyState {
-    fn persist(&mut self) -> Result<(), crate::error::ArconStateError> {
+    fn persist(&mut self) -> Result<()> {
         Ok(())
     }
     fn set_key(&mut self, _: u64) {

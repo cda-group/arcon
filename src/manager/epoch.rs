@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
+    conf::logger::ArconLogger,
     data::{Epoch, StateID},
     manager::query::{QueryManagerMsg, QueryManagerPort},
     stream::node::source::SourceEvent,
@@ -42,10 +43,15 @@ pub struct EpochManager {
     /// Actor Reference to the SnapshotManager
     snapshot_manager: ActorRefStrong<EpochCommit>,
     query_manager_port: RequiredPort<QueryManagerPort>,
+    logger: ArconLogger,
 }
 
 impl EpochManager {
-    pub fn new(epoch_interval: u64, snapshot_manager: ActorRefStrong<EpochCommit>) -> Self {
+    pub fn new(
+        epoch_interval: u64,
+        snapshot_manager: ActorRefStrong<EpochCommit>,
+        logger: ArconLogger,
+    ) -> Self {
         Self {
             ctx: ComponentContext::uninitialised(),
             next_epoch: 0,
@@ -57,6 +63,7 @@ impl EpochManager {
             source_manager: None,
             epoch_timeout: None,
             query_manager_port: RequiredPort::uninitialised(),
+            logger,
         }
     }
     fn handle_timeout(&mut self, timeout_id: ScheduledTimer) -> Handled {
@@ -67,13 +74,13 @@ impl EpochManager {
                     self.next_epoch += 1;
                 } else {
                     #[cfg(not(test))]
-                    error!(self.ctx.log(), "SourceManager was never set");
+                    error!(self.logger, "SourceManager was never set");
                 }
                 Handled::Ok
             }
             Some(_) => Handled::Ok, // just ignore outdated timeouts
             None => {
-                warn!(self.log(), "Got unexpected timeout: {:?}", timeout_id);
+                warn!(self.logger, "Got unexpected timeout: {:?}", timeout_id);
                 Handled::Ok
             } // can happen during restart or teardown
         }
@@ -96,7 +103,7 @@ impl EpochManager {
                     }
                 } else {
                     info!(
-                        self.ctx.log(),
+                        self.logger,
                         "Ignoring EpochEvent from unknown StateID {}", state_id
                     );
                 }
@@ -113,7 +120,7 @@ impl EpochManager {
                 if let Some(source_manager) = &self.source_manager {
                     // Send a final epoch marker before revoking the timer
                     info!(
-                        self.ctx.log(),
+                        self.logger,
                         "EpochManager sending final epoch marker {:?}", self.next_epoch
                     );
                     source_manager.tell(SourceEvent::Epoch(Epoch::new(self.next_epoch)));
@@ -121,7 +128,7 @@ impl EpochManager {
                         self.cancel_timer(timeout);
                     }
                 } else {
-                    error!(self.ctx.log(), "SourceManager was never set");
+                    error!(self.logger, "SourceManager was never set");
                 }
             }
         }

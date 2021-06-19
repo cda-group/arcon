@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::prelude::*;
-use arcon_error::*;
 use arcon_macros::ArconState;
 use arcon_state::Backend;
 use std::sync::Arc;

@@ -4,16 +4,16 @@
 use super::{Window, WindowContext};
 use crate::{
     data::{ArconElement, ArconType},
+    error::*,
     index::{ArconState, EagerHashTable, IndexOps, StateConstructor},
     stream::{
         operator::{Operator, OperatorContext},
         time::Time,
     },
 };
-use arcon_error::*;
 use arcon_macros::ArconState;
 use arcon_state::Backend;
-use kompact::prelude::ComponentDefinition;
+use kompact::prelude::{error, ComponentDefinition};
 use prost::Message;
 use std::{marker::PhantomData, sync::Arc};
 
@@ -155,20 +155,25 @@ where
         let window_start = match self.state.window_start().get(&window_ctx.key)? {
             Some(start) => start,
             None => {
-                return arcon_err!(
+                return crate::reportable_error!(
                     "Unexpected failure, could not find window start for existing key"
-                )
+                );
             }
         };
 
         let ts = window_start + (window_ctx.index * self.window_slide) + self.window_length;
 
-        ctx.schedule_at(
+        let request = ctx.schedule_at(
             window_ctx,
             ts + self.late_arrival_time,
             WindowEvent::new(window_ctx.key, window_ctx.index, ts),
-        )
-        .map_err(|_| arcon_err_kind!("Attempted to schedule an expired timer"))
+        )?;
+
+        if let Err(expired) = request {
+            // For now just log the error..
+            error!(ctx.log(), "{}", expired);
+        }
+        Ok(())
     }
 
     #[inline]
@@ -196,7 +201,7 @@ where
         &mut self,
         element: ArconElement<IN>,
         mut ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> OperatorResult<()> {
+    ) -> ArconResult<()> {
         let ts = element.timestamp.unwrap_or(1);
 
         let time = ctx.current_time()?;
@@ -253,7 +258,7 @@ where
         &mut self,
         timeout: Self::TimerState,
         mut ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> OperatorResult<()> {
+    ) -> ArconResult<()> {
         let WindowEvent {
             key,
             index,
@@ -270,8 +275,7 @@ where
         ctx.output(ArconElement::with_timestamp(result, timestamp));
         Ok(())
     }
-
-    fn persist(&mut self) -> OperatorResult<()> {
+    fn persist(&mut self) -> StateResult<()> {
         self.state.persist()?;
         self.window.persist()
     }
@@ -348,6 +352,7 @@ mod tests {
             epoch_manager_ref,
             in_channels.clone(),
             backend.clone(),
+            pipeline.arcon_logger.clone(),
         );
 
         let node_manager_comp = pipeline.ctrl_system().create(|| nm);
@@ -379,6 +384,7 @@ mod tests {
             window_assigner,
             NodeState::new(NodeID::new(0), in_channels, backend.clone()),
             backend,
+            pipeline.arcon_logger.clone(),
         );
 
         let window_comp = pipeline.data_system().create(|| node);

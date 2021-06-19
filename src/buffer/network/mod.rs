@@ -1,8 +1,8 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use arcon_allocator::{AllocId, AllocResult, Allocator};
-use arcon_error::*;
+use crate::error::*;
+use arcon_allocator::{Alloc, AllocId, Allocator};
 use kompact::net::buffers::Chunk;
 use std::sync::{Arc, Mutex};
 
@@ -29,15 +29,16 @@ impl NetworkBuffer {
     pub fn new(capacity: usize, allocator: Arc<Mutex<Allocator>>) -> ArconResult<NetworkBuffer> {
         let mut a = allocator.lock().unwrap();
 
-        if let AllocResult::Alloc(id, ptr) = unsafe { a.alloc::<u8>(capacity) } {
-            Ok(NetworkBuffer {
+        match unsafe { a.alloc::<u8>(capacity) } {
+            Ok(Alloc(id, ptr)) => Ok(NetworkBuffer {
                 ptr,
                 allocator: allocator.clone(),
                 id,
                 capacity,
-            })
-        } else {
-            arcon_err!("NetworkBuffer Alloc err")
+            }),
+            Err(err) => Err(Error::Unsupported {
+                msg: err.to_string(),
+            }),
         }
     }
 

@@ -1,8 +1,7 @@
 use arcon::prelude::*;
 use tokio::runtime::Runtime;
 
-
-fn arrow_udf(schema: Arc<Schema>, batches: Vec<RecordBatch>) -> OperatorResult<u64> {
+fn arrow_udf(schema: Arc<Schema>, batches: Vec<RecordBatch>) -> ArconResult<u64> {
     let mut ctx = ExecutionContext::new();
     let provider = MemTable::try_new(schema, vec![batches]).unwrap();
     ctx.register_table("t", Arc::new(provider)).unwrap();
@@ -10,13 +9,16 @@ fn arrow_udf(schema: Arc<Schema>, batches: Vec<RecordBatch>) -> OperatorResult<u
     let group_expr = vec![col("data")];
     let aggr_expr = vec![sum(col("data"))];
 
-    let runtime = Runtime::new()
-    .expect("Failed to create Tokio runtime");
+    let runtime = Runtime::new().expect("Failed to create Tokio runtime");
 
     let df = df.aggregate(group_expr, aggr_expr).unwrap();
     let mut results = runtime.block_on(df.collect()).unwrap();
     let batch = results.remove(0);
-    let sum = batch.column(0).as_any().downcast_ref::<arcon::UInt64Array>().unwrap();
+    let sum = batch
+        .column(0)
+        .as_any()
+        .downcast_ref::<arcon::UInt64Array>()
+        .unwrap();
 
     Ok(sum.value(0))
 }

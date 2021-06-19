@@ -1,11 +1,13 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use crate::data::ArconType;
-
+#[cfg(feature = "kafka")]
+pub mod kafka;
 pub mod local_file;
-//#[cfg(feature = "kafka")]
-//pub mod kafka;
+pub mod schema;
+
+use crate::{data::ArconType, error::source::SourceResult};
+
 //#[cfg(feature = "socket")]
 //pub mod socket;
 
@@ -18,15 +20,13 @@ pub enum Poll<A> {
     Pending,
     /// Indicates that the source is finished
     Done,
-    /// An error occured while polling
-    Error(String),
 }
 
 /// Defines an Arcon Source and the methods it must implement
 pub trait Source: Send + 'static {
     type Item: ArconType;
     /// Poll Source for an Item
-    fn poll_next(&mut self) -> Poll<Self::Item>;
+    fn poll_next(&mut self) -> SourceResult<Poll<Self::Item>>;
     /// Set offset for the source
     ///
     /// May be used by replayable sources to set a certain offset..
@@ -41,10 +41,10 @@ where
 {
     type Item = D;
 
-    fn poll_next(&mut self) -> Poll<Self::Item> {
+    fn poll_next(&mut self) -> SourceResult<Poll<Self::Item>> {
         match self.next() {
-            Some(item) => Poll::Ready(item),
-            None => Poll::Done,
+            Some(item) => Ok(Ok(Poll::Ready(item))),
+            None => Ok(Ok(Poll::Done)),
         }
     }
     fn set_offset(&mut self, _: usize) {}
@@ -58,7 +58,7 @@ mod tests {
     fn iterator_source_test() {
         fn sum(mut s: impl Source<Item = u32>) -> u32 {
             let mut sum = 0;
-            while let Poll::Ready(v) = s.poll_next() {
+            while let Poll::Ready(v) = s.poll_next().unwrap().unwrap() {
                 sum += v;
             }
             sum

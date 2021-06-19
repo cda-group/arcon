@@ -29,10 +29,9 @@ exclude = [
 default = ["serde"]
 arcon_serde = ["serde_json", "bincode", "serde", "uuid/serde"]
 unsafe_flight = ["abomonation", "abomonation_derive", "arcon_macros/unsafe_flight"]
-#kafka = ["rdkafka", "futures", "serde_json", "serde"]
+kafka = ["rdkafka", "futures", "serde_json", "serde"]
 thread_pinning = ["kompact/thread_pinning"]
 socket = ["tokio-util", "futures", "serde_json", "serde"]
-quiet = ["slog"]
 metrics = []
 
 # state features
@@ -40,7 +39,6 @@ rocksdb = ["arcon_state/rocks"]
 
 [dependencies]
 arcon_macros = { version = "0.1", path = "arcon_macros" }
-arcon_error = { version = "0.1", path = "arcon_error" }
 arcon_state = { version = "0.1", path = "arcon_state" }
 arcon_allocator = { version = "0.1", path = "arcon_allocator" }
 
@@ -51,6 +49,12 @@ crossbeam-utils = "0.7"
 num_cpus = "1.0"
 hierarchical_hash_wheel_timer = "1.0"
 hocon = {version = "0.3", default-features = false, features = ["serde-support"]}
+snafu = "0.6"
+
+# Logging
+slog = "2"
+slog-async = "2"
+slog-term = "2"
 
 # Hashing
 fxhash = "0.2.1"
@@ -62,18 +66,17 @@ prost-types = "0.7"
 bytes = "1.0"
 
 
-arrow = { git = "https://github.com/Max-Meldrum/arrow-rs", branch = "array_builder_send" }
-datafusion = { git = "https://github.com/Max-Meldrum/arrow-datafusion", branch = "array_builder_send" }
+arrow = "4.3"
+datafusion = "4.0"
 
 # Optional
-#rdkafka = { version = "0.23", optional = true }
+rdkafka = { version = "0.26", optional = true }
 tokio = { version = "1.0", features = ["full"] } # TODO: figure out which are truly needed
 tokio-util = { version = "0.6", optional = true, features = ["full"] }
 futures = { version = "0.3", optional = true }
 serde_json = { version = "1.0.44", optional = true }
 serde = { version = "1.0.104", features = ["derive"], optional = true }
 bincode = { version = "1.2.1", optional = true }
-slog = { version = "2.2", features = ["release_max_level_off"], optional = true }
 rayon = { version = "1.3.0", optional = true }
 abomonation = { version = "0.7.3", optional = true }
 abomonation_derive = { version = "0.5.0", optional = true }

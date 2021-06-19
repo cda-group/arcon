@@ -11,15 +11,16 @@ use crate::{
     table::{to_record_batches, RawRecordBatch},
     util::{prost_helpers::ProstOption, ArconFnBounds, SafelySendableFn},
 };
-use arcon_error::OperatorResult;
-use arcon_state::{backend::handles::ActiveHandle, Aggregator, AggregatorState, Backend, VecState};
+use arcon_state::{
+    backend::handles::ActiveHandle, error::*, Aggregator, AggregatorState, Backend, VecState,
+};
 use fxhash::FxHasher;
 use std::{
     hash::{Hash, Hasher},
     marker::PhantomData,
 };
 
-#[derive(prost::Message, Hash, Copy, Clone)]
+#[derive(prost::Message, Hash, PartialEq, Eq, Copy, Clone)]
 pub struct WindowContext {
     #[prost(uint64)]
     key: u64,
@@ -32,12 +33,14 @@ impl WindowContext {
         WindowContext { key, index }
     }
 }
+/*
 impl PartialEq for WindowContext {
     fn eq(&self, other: &Self) -> bool {
         self.key == other.key && self.index == other.index
     }
 }
 impl Eq for WindowContext {}
+*/
 
 impl From<WindowContext> for u64 {
     fn from(ctx: WindowContext) -> Self {
@@ -57,28 +60,27 @@ where
     OUT: ArconType,
 {
     /// The `on_element` function is called per received window element
-    fn on_element(&mut self, element: IN, ctx: WindowContext) -> OperatorResult<()>;
+    fn on_element(&mut self, element: IN, ctx: WindowContext) -> ArconResult<()>;
     /// The `result` function is called at the end of a window's lifetime
-    fn result(&mut self, ctx: WindowContext) -> OperatorResult<OUT>;
+    fn result(&mut self, ctx: WindowContext) -> ArconResult<OUT>;
     /// Clears the window state for the passed context
-    fn clear(&mut self, ctx: WindowContext) -> OperatorResult<()>;
+    fn clear(&mut self, ctx: WindowContext) -> ArconResult<()>;
     /// Method to persist windows to the state backend
     ///
     /// Mainly used by windows that are lazy.
-    fn persist(&mut self) -> OperatorResult<()>;
+    fn persist(&mut self) -> Result<()>;
 }
 
 pub struct ArrowWindow<IN, OUT, F, B>
 where
     IN: ArconType + ToArrow,
     OUT: ArconType,
-    F: Fn(Arc<Schema>, Vec<RecordBatch>) -> OperatorResult<OUT> + ArconFnBounds,
+    F: Fn(Arc<Schema>, Vec<RecordBatch>) -> ArconResult<OUT> + ArconFnBounds,
     B: Backend,
 {
     handle: ActiveHandle<B, VecState<RawRecordBatch>, u64, u64>,
     map: std::collections::HashMap<WindowContext, MutableTable>,
     udf: F,
-    //materializer: &'static dyn SafelySendableFn(Arc<Schema>, Vec<RecordBatch>) -> OUT,
     _marker: std::marker::PhantomData<IN>,
 }
 
@@ -86,7 +88,7 @@ impl<IN, OUT, F, B> ArrowWindow<IN, OUT, F, B>
 where
     IN: ArconType + ToArrow,
     OUT: ArconType,
-    F: Fn(Arc<Schema>, Vec<RecordBatch>) -> OperatorResult<OUT> + ArconFnBounds,
+    F: Fn(Arc<Schema>, Vec<RecordBatch>) -> ArconResult<OUT> + ArconFnBounds,
     B: Backend,
 {
     pub fn new(backend: Arc<B>, udf: F) -> Self {
@@ -111,19 +113,19 @@ impl<IN, OUT, F, B> Window<IN, OUT> for ArrowWindow<IN, OUT, F, B>
 where
     IN: ArconType + ToArrow,
     OUT: ArconType,
-    F: Fn(Arc<Schema>, Vec<RecordBatch>) -> OperatorResult<OUT> + ArconFnBounds,
+    F: Fn(Arc<Schema>, Vec<RecordBatch>) -> ArconResult<OUT> + ArconFnBounds,
     B: Backend,
 {
-    fn on_element(&mut self, element: IN, ctx: WindowContext) -> OperatorResult<()> {
-        let table = self.map.entry(ctx).or_insert(IN::table());
+    fn on_element(&mut self, element: IN, ctx: WindowContext) -> ArconResult<()> {
+        let table = self.map.entry(ctx).or_insert_with(IN::table);
         table.append(element).unwrap();
 
         Ok(())
     }
 
-    fn result(&mut self, ctx: WindowContext) -> OperatorResult<OUT> {
+    fn result(&mut self, ctx: WindowContext) -> ArconResult<OUT> {
         // first make sure everything in memory is drained
-        let table = self.map.entry(ctx).or_insert(IN::table());
+        let table = self.map.entry(ctx).or_insert_with(IN::table);
         self.handle.set_item_key(ctx.key);
         self.handle.set_namespace(ctx.index);
 
@@ -137,7 +139,7 @@ where
         (self.udf)(Arc::new(IN::schema()), batches)
     }
 
-    fn clear(&mut self, ctx: WindowContext) -> OperatorResult<()> {
+    fn clear(&mut self, ctx: WindowContext) -> ArconResult<()> {
         // clear from memory layer
         let _ = self.map.remove(&ctx);
 
@@ -150,7 +152,7 @@ where
         Ok(())
     }
 
-    fn persist(&mut self) -> OperatorResult<()> {
+    fn persist(&mut self) -> Result<()> {
         for (ctx, table) in self.map.iter_mut() {
             self.handle.set_item_key(ctx.key);
             self.handle.set_namespace(ctx.index);
@@ -205,7 +207,7 @@ where
     OUT: ArconType,
     B: Backend,
 {
-    fn on_element(&mut self, element: IN, ctx: WindowContext) -> OperatorResult<()> {
+    fn on_element(&mut self, element: IN, ctx: WindowContext) -> ArconResult<()> {
         self.handle.set_item_key(ctx.key);
         self.handle.set_namespace(ctx.index);
 
@@ -213,7 +215,7 @@ where
         Ok(())
     }
 
-    fn result(&mut self, ctx: WindowContext) -> OperatorResult<OUT> {
+    fn result(&mut self, ctx: WindowContext) -> ArconResult<OUT> {
         self.handle.set_item_key(ctx.key);
         self.handle.set_namespace(ctx.index);
 
@@ -221,14 +223,14 @@ where
         Ok((self.materializer)(&buf))
     }
 
-    fn clear(&mut self, ctx: WindowContext) -> OperatorResult<()> {
+    fn clear(&mut self, ctx: WindowContext) -> ArconResult<()> {
         self.handle.set_item_key(ctx.key);
         self.handle.set_namespace(ctx.index);
 
         self.handle.clear()?;
         Ok(())
     }
-    fn persist(&mut self) -> OperatorResult<()> {
+    fn persist(&mut self) -> Result<()> {
         Ok(())
     }
 }
@@ -312,7 +314,7 @@ where
     OUT: ArconType,
     B: Backend,
 {
-    fn on_element(&mut self, element: IN, ctx: WindowContext) -> OperatorResult<()> {
+    fn on_element(&mut self, element: IN, ctx: WindowContext) -> ArconResult<()> {
         self.aggregator.set_item_key(ctx.key);
         self.aggregator.set_namespace(ctx.index);
 
@@ -321,20 +323,22 @@ where
         Ok(())
     }
 
-    fn result(&mut self, ctx: WindowContext) -> OperatorResult<OUT> {
+    fn result(&mut self, ctx: WindowContext) -> ArconResult<OUT> {
         self.aggregator.set_item_key(ctx.key);
         self.aggregator.set_namespace(ctx.index);
 
-        self.aggregator.get()
+        let result = self.aggregator.get()?;
+        Ok(result)
     }
 
-    fn clear(&mut self, ctx: WindowContext) -> OperatorResult<()> {
+    fn clear(&mut self, ctx: WindowContext) -> ArconResult<()> {
         self.aggregator.set_item_key(ctx.key);
         self.aggregator.set_namespace(ctx.index);
 
-        self.aggregator.clear()
+        let _ = self.aggregator.clear()?;
+        Ok(())
     }
-    fn persist(&mut self) -> OperatorResult<()> {
+    fn persist(&mut self) -> Result<()> {
         Ok(())
     }
 }

@@ -1,7 +1,7 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use arcon_allocator::{AllocResult, Allocator};
+use arcon_allocator::{Alloc, Allocator};
 use criterion::{black_box, criterion_group, criterion_main, Bencher, Criterion};
 
 const ALLOC_SIZE: usize = 1024;
@@ -17,7 +17,7 @@ fn arcon_allocator(c: &mut Criterion) {
 fn arcon_alloc(b: &mut Bencher) {
     let mut a = Allocator::new(81920);
     b.iter(|| {
-        if let AllocResult::Alloc(id, _) = unsafe { a.alloc::<u64>(ALLOC_SIZE) } {
+        if let Ok(Alloc(id, _)) = unsafe { a.alloc::<u64>(ALLOC_SIZE) } {
             unsafe { a.dealloc(id) };
         }
     });
