@@ -79,9 +79,19 @@ impl MutableTable {
         })
     }
 
+    #[inline]
+    pub fn batches(&mut self) -> Result<Vec<RecordBatch>, ArrowError> {
+        self.finish()?;
+        let mut batches = Vec::new();
+        std::mem::swap(&mut batches, &mut self.batches);
+        Ok(batches)
+    }
+
+    #[inline]
     pub fn raw_batches(&mut self) -> Result<Vec<RawRecordBatch>, ArrowError> {
         self.finish()?;
-        to_raw_batches(self.batches.drain(..))
+        let batches = self.batches()?;
+        to_raw_batches(batches)
     }
 }
 
@@ -189,16 +199,13 @@ pub fn to_record_batches(
 }
 
 #[inline]
-pub fn to_raw_batches(
-    batches: impl IntoIterator<Item = RecordBatch>,
-) -> Result<Vec<RawRecordBatch>, ArrowError> {
-    //let mut raw_batches = Vec::with_capacity(batches.into_iter().len());
-    let mut raw_batches = Vec::new();
+pub fn to_raw_batches(batches: Vec<RecordBatch>) -> Result<Vec<RawRecordBatch>, ArrowError> {
+    let mut raw_batches = Vec::with_capacity(batches.len());
     let ipc = IpcDataGenerator::default();
     let write_options = IpcWriteOptions::default();
     let mut tracker = DictionaryTracker::new(false);
 
-    for batch in batches.into_iter() {
+    for batch in batches {
         let (_, encoded_data) = ipc
             .encoded_batch(&batch, &mut tracker, &write_options)
             .map_err(|e| ArrowError::IoError(e.to_string()))?;

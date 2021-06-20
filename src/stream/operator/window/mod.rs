@@ -114,18 +114,16 @@ where
     }
 
     fn result(&mut self, ctx: WindowContext) -> ArconResult<OUT> {
-        // first make sure everything in memory is drained
         let table = self.map.entry(ctx).or_insert_with(IN::table);
         self.handle.set_item_key(ctx.key);
         self.handle.set_namespace(ctx.index);
 
-        for batch in table.raw_batches()? {
-            self.handle.append(batch)?;
-        }
-
-        // fetch all batches from the backend
+        // fetch in-memory batches
+        let mut batches = table.batches()?;
+        // fetch if any raw batches and append to the vector...
         let raw_batches = self.handle.get()?;
-        let batches = to_record_batches(Arc::new(IN::schema()), raw_batches)?;
+        batches.append(&mut to_record_batches(Arc::new(IN::schema()), raw_batches)?);
+
         (self.udf)(Arc::new(IN::schema()), batches)
     }
 
