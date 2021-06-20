@@ -53,7 +53,7 @@ pub trait Operator: Send + Sized {
     ) -> ArconResult<()>;
 
     /// Determines how the `Operator` persists its state
-    fn persist(&mut self) -> StateResult<()>;
+    fn persist(&mut self) -> ArconResult<()>;
 
     /// A get function to the operator's state.
     ///
@@ -79,7 +79,7 @@ macro_rules! ignore_timeout {
 #[macro_export]
 macro_rules! ignore_persist {
     () => {
-        fn persist(&mut self) -> StateResult<()> {
+        fn persist(&mut self) -> ArconResult<()> {
             Ok(())
         }
     };

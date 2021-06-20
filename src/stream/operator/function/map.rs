@@ -89,8 +89,9 @@ where
 
     crate::ignore_timeout!();
 
-    fn persist(&mut self) -> Result<(), arcon_state::error::ArconStateError> {
-        self.state.persist()
+    fn persist(&mut self) -> ArconResult<()> {
+        self.state.persist()?;
+        Ok(())
     }
     fn state(&mut self) -> &mut Self::OperatorState {
         &mut self.state

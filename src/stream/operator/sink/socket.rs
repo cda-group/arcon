@@ -3,7 +3,7 @@
 
 use crate::{
     data::{ArconElement, ArconNever, ArconType},
-    error::{ArconResult, StateResult},
+    error::ArconResult,
     stream::operator::{Operator, OperatorContext},
 };
 use ::serde::Serialize;

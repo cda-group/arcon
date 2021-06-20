@@ -11,9 +11,7 @@ use crate::{
     table::{to_record_batches, RawRecordBatch},
     util::{prost_helpers::ProstOption, ArconFnBounds, SafelySendableFn},
 };
-use arcon_state::{
-    backend::handles::ActiveHandle, error::*, Aggregator, AggregatorState, Backend, VecState,
-};
+use arcon_state::{backend::handles::ActiveHandle, Aggregator, AggregatorState, Backend, VecState};
 use fxhash::FxHasher;
 use std::{
     hash::{Hash, Hasher},
@@ -33,14 +31,6 @@ impl WindowContext {
         WindowContext { key, index }
     }
 }
-/*
-impl PartialEq for WindowContext {
-    fn eq(&self, other: &Self) -> bool {
-        self.key == other.key && self.index == other.index
-    }
-}
-impl Eq for WindowContext {}
-*/
 
 impl From<WindowContext> for u64 {
     fn from(ctx: WindowContext) -> Self {
@@ -68,7 +58,7 @@ where
     /// Method to persist windows to the state backend
     ///
     /// Mainly used by windows that are lazy.
-    fn persist(&mut self) -> Result<()>;
+    fn persist(&mut self) -> ArconResult<()>;
 }
 
 pub struct ArrowWindow<IN, OUT, F, B>
@@ -118,7 +108,7 @@ where
 {
     fn on_element(&mut self, element: IN, ctx: WindowContext) -> ArconResult<()> {
         let table = self.map.entry(ctx).or_insert_with(IN::table);
-        table.append(element).unwrap();
+        table.append(element)?;
 
         Ok(())
     }
@@ -129,13 +119,13 @@ where
         self.handle.set_item_key(ctx.key);
         self.handle.set_namespace(ctx.index);
 
-        for batch in table.raw_batches().unwrap() {
+        for batch in table.raw_batches()? {
             self.handle.append(batch)?;
         }
 
         // fetch all batches from the backend
         let raw_batches = self.handle.get()?;
-        let batches = to_record_batches(Arc::new(IN::schema()), raw_batches).unwrap();
+        let batches = to_record_batches(Arc::new(IN::schema()), raw_batches)?;
         (self.udf)(Arc::new(IN::schema()), batches)
     }
 
@@ -152,12 +142,12 @@ where
         Ok(())
     }
 
-    fn persist(&mut self) -> Result<()> {
+    fn persist(&mut self) -> ArconResult<()> {
         for (ctx, table) in self.map.iter_mut() {
             self.handle.set_item_key(ctx.key);
             self.handle.set_namespace(ctx.index);
 
-            let batches = table.raw_batches().unwrap();
+            let batches = table.raw_batches()?;
             for batch in batches {
                 self.handle.append(batch)?;
             }
@@ -230,7 +220,7 @@ where
         self.handle.clear()?;
         Ok(())
     }
-    fn persist(&mut self) -> Result<()> {
+    fn persist(&mut self) -> ArconResult<()> {
         Ok(())
     }
 }
@@ -338,7 +328,7 @@ where
         let _ = self.aggregator.clear()?;
         Ok(())
     }
-    fn persist(&mut self) -> Result<()> {
+    fn persist(&mut self) -> ArconResult<()> {
         Ok(())
     }
 }
