@@ -127,7 +127,6 @@ where
         // caclulate which partitions this instance should take care of
         let start = (source_index * partitions + total_sources - 1) / total_sources;
         let end = ((source_index + 1) * partitions - 1) / total_sources;
-        assert!(end > start, "End partition needs to exceed the Start");
 
         let mut tpl = TopicPartitionList::new();
         for partition in start..end + 1 {
