@@ -275,9 +275,9 @@ where
         ctx.output(ArconElement::with_timestamp(result, timestamp));
         Ok(())
     }
-
-    fn persist(&mut self) -> StateResult<()> {
-        self.state.persist()
+    fn persist(&mut self) -> ArconResult<()> {
+        self.state.persist()?;
+        self.window.persist()
     }
     fn state(&mut self) -> &mut Self::OperatorState {
         &mut self.op_state

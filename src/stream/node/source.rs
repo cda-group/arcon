@@ -4,7 +4,7 @@
 use crate::{
     conf::logger::ArconLogger,
     data::{ArconElement, ArconEvent, Epoch, Watermark},
-    error::{source::SourceError, ArconResult, Error},
+    error::{source::SourceError, ArconResult},
     manager::source::{SourceManagerEvent, SourceManagerPort},
     prelude::SourceConf,
     stream::{
@@ -126,7 +126,7 @@ where
             match error {
                 // TODO: figure out which other kafka errors should cause a stop
                 KafkaError::Canceled | KafkaError::ConsumerCommit(_) => {
-                    return Err(Error::Unsupported {
+                    return Err(crate::error::Error::Unsupported {
                         msg: error.to_string(),
                     })
                 }

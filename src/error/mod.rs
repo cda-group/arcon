@@ -13,8 +13,9 @@ pub mod source;
 pub mod timer;
 
 use arcon_state::error::ArconStateError;
+use arrow::error::ArrowError;
 use snafu::{Backtrace, Snafu};
-use std::io;
+use std::{io, io::ErrorKind};
 
 // Inspired by Sled's error management approach.
 // http://sled.rs/errors.html
@@ -56,7 +57,6 @@ impl From<io::Error> for Error {
 impl From<Error> for io::Error {
     fn from(error: Error) -> io::Error {
         use self::Error::*;
-        use std::io::ErrorKind;
         match error {
             Io { error } => error,
             Unsupported { ref msg } => io::Error::new(
@@ -99,6 +99,19 @@ impl From<ArconStateError> for Error {
             #[cfg(feature = "rocksdb")]
             ArconStateError::RocksError { .. } => Error::ReportableBug { msg },
             ArconStateError::SledError { .. } => Error::ReportableBug { msg },
+            // Transform rest of errors as unsupported
+            _ => Error::Unsupported { msg },
+        }
+    }
+}
+
+impl From<ArrowError> for Error {
+    fn from(error: ArrowError) -> Self {
+        let msg = error.to_string();
+        match error {
+            ArrowError::IoError(err) => Error::Io {
+                error: io::Error::new(ErrorKind::Other, err),
+            },
             // Transform rest of errors as unsupported
             _ => Error::Unsupported { msg },
         }

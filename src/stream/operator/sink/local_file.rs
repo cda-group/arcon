@@ -3,7 +3,7 @@
 
 use crate::{
     data::{ArconElement, ArconNever, ArconType},
-    error::{ArconResult, StateResult},
+    error::ArconResult,
     stream::operator::{Operator, OperatorContext},
 };
 use arcon_state::Backend;
@@ -87,7 +87,6 @@ mod tests {
         let file_path = file.path().to_string_lossy().into_owned();
 
         let mut pipeline = Pipeline::default()
-            .with_debug_node()
             .collection(vec![6i32, 2i32, 15i32, 30i32], |conf| {
                 conf.set_arcon_time(ArconTime::Process);
             })

@@ -66,8 +66,8 @@ prost-types = "0.7"
 bytes = "1.0"
 
 
-arrow = "4.0.0"
-datafusion = "4.0.0"
+arrow = "4.3"
+datafusion = "4.0"
 
 # Optional
 rdkafka = { version = "0.26", optional = true }
