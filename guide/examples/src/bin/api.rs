@@ -10,7 +10,7 @@ fn main() {
         })
         // ANCHOR: operator
         .operator(OperatorBuilder {
-            constructor: Arc::new(|_| Filter::new(|x| *x > 50)),
+            constructor: Arc::new(|_: Arc<Sled>| Filter::new(|x| *x > 50)),
             conf: OperatorConf {
                 parallelism_strategy: ParallelismStrategy::Static(1),
                 ..Default::default()

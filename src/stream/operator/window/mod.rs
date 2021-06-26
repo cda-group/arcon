@@ -44,15 +44,14 @@ impl From<WindowContext> for u64 {
 ///
 /// IN: Element type sent to the Window
 /// OUT: Expected output type of the Window
-pub trait Window<IN, OUT>: Send
-where
-    IN: ArconType,
-    OUT: ArconType,
-{
+pub trait WindowFunction: Send + Sized {
+    type IN: ArconType;
+    type OUT: ArconType;
+
     /// The `on_element` function is called per received window element
-    fn on_element(&mut self, element: IN, ctx: WindowContext) -> ArconResult<()>;
+    fn on_element(&mut self, element: Self::IN, ctx: WindowContext) -> ArconResult<()>;
     /// The `result` function is called at the end of a window's lifetime
-    fn result(&mut self, ctx: WindowContext) -> ArconResult<OUT>;
+    fn result(&mut self, ctx: WindowContext) -> ArconResult<Self::OUT>;
     /// Clears the window state for the passed context
     fn clear(&mut self, ctx: WindowContext) -> ArconResult<()>;
     /// Method to persist windows to the state backend
@@ -99,21 +98,24 @@ where
     }
 }
 
-impl<IN, OUT, F, B> Window<IN, OUT> for ArrowWindow<IN, OUT, F, B>
+impl<IN, OUT, F, B> WindowFunction for ArrowWindow<IN, OUT, F, B>
 where
     IN: ArconType + ToArrow,
     OUT: ArconType,
     F: Fn(Arc<Schema>, Vec<RecordBatch>) -> ArconResult<OUT> + ArconFnBounds,
     B: Backend,
 {
-    fn on_element(&mut self, element: IN, ctx: WindowContext) -> ArconResult<()> {
+    type IN = IN;
+    type OUT = OUT;
+
+    fn on_element(&mut self, element: Self::IN, ctx: WindowContext) -> ArconResult<()> {
         let table = self.map.entry(ctx).or_insert_with(IN::table);
         table.append(element)?;
 
         Ok(())
     }
 
-    fn result(&mut self, ctx: WindowContext) -> ArconResult<OUT> {
+    fn result(&mut self, ctx: WindowContext) -> ArconResult<Self::OUT> {
         let table = self.map.entry(ctx).or_insert_with(IN::table);
         self.handle.set_item_key(ctx.key);
         self.handle.set_namespace(ctx.index);
@@ -189,13 +191,15 @@ where
     }
 }
 
-impl<IN, OUT, B> Window<IN, OUT> for AppenderWindow<IN, OUT, B>
+impl<IN, OUT, B> WindowFunction for AppenderWindow<IN, OUT, B>
 where
     IN: ArconType,
     OUT: ArconType,
     B: Backend,
 {
-    fn on_element(&mut self, element: IN, ctx: WindowContext) -> ArconResult<()> {
+    type IN = IN;
+    type OUT = OUT;
+    fn on_element(&mut self, element: Self::IN, ctx: WindowContext) -> ArconResult<()> {
         self.handle.set_item_key(ctx.key);
         self.handle.set_namespace(ctx.index);
 
@@ -203,7 +207,7 @@ where
         Ok(())
     }
 
-    fn result(&mut self, ctx: WindowContext) -> ArconResult<OUT> {
+    fn result(&mut self, ctx: WindowContext) -> ArconResult<Self::OUT> {
         self.handle.set_item_key(ctx.key);
         self.handle.set_namespace(ctx.index);
 
@@ -296,13 +300,15 @@ where
     }
 }
 
-impl<IN, OUT, B> Window<IN, OUT> for IncrementalWindow<IN, OUT, B>
+impl<IN, OUT, B> WindowFunction for IncrementalWindow<IN, OUT, B>
 where
     IN: ArconType,
     OUT: ArconType,
     B: Backend,
 {
-    fn on_element(&mut self, element: IN, ctx: WindowContext) -> ArconResult<()> {
+    type IN = IN;
+    type OUT = OUT;
+    fn on_element(&mut self, element: Self::IN, ctx: WindowContext) -> ArconResult<()> {
         self.aggregator.set_item_key(ctx.key);
         self.aggregator.set_namespace(ctx.index);
 
@@ -311,7 +317,7 @@ where
         Ok(())
     }
 
-    fn result(&mut self, ctx: WindowContext) -> ArconResult<OUT> {
+    fn result(&mut self, ctx: WindowContext) -> ArconResult<Self::OUT> {
         self.aggregator.set_item_key(ctx.key);
         self.aggregator.set_namespace(ctx.index);
 

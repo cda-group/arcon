@@ -12,10 +12,7 @@
 //!     .collection((0..100).collect::<Vec<u64>>(), |conf| {
 //!         conf.set_arcon_time(ArconTime::Process);
 //!     })
-//!     .operator(OperatorBuilder {
-//!         constructor: Arc::new(|_| Filter::new(|x| *x > 50)),
-//!         conf: Default::default(),
-//!      })
+//!     .filter(|x| *x > 50)
 //!     .to_console()
 //!     .build();
 //!
@@ -142,9 +139,9 @@ pub mod prelude {
     pub use crate::{
         conf::{logger::LoggerType, ArconConf},
         data::{ArconElement, ArconNever, ArconType, StateID, VersionId},
-        dataflow::conf::{
-            OperatorBuilder, OperatorConf, ParallelismStrategy, SourceBuilder, SourceConf,
-            StreamKind,
+        dataflow::{
+            api::{Assigner, OperatorBuilder, SourceBuilder, WindowBuilder},
+            conf::{OperatorConf, ParallelismStrategy, SourceConf, StreamKind},
         },
         manager::snapshot::Snapshot,
         pipeline::{AssembledPipeline, Pipeline, Stream},
@@ -186,6 +183,8 @@ pub mod prelude {
 
     pub use arcon_state as state;
 
+    #[cfg(feature = "rocksdb")]
+    pub use arcon_state::Rocks;
     pub use arcon_state::{
         Aggregator, AggregatorState, Backend, BackendType, Handle, MapState, ReducerState, Sled,
         ValueState, VecState,

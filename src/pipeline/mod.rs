@@ -11,7 +11,8 @@ use crate::{
     conf::{logger::ArconLogger, ArconConf, ExecutionMode},
     data::ArconMessage,
     dataflow::{
-        conf::{ParallelSourceBuilder, SourceBuilder, SourceBuilderType, SourceConf},
+        api::{ParallelSourceBuilder, SourceBuilder, SourceBuilderType},
+        conf::SourceConf,
         constructor::{source_manager_constructor, ErasedComponent},
         dfg::*,
         stream::Context,

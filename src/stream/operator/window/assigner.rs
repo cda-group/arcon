@@ -1,7 +1,7 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use super::{Window, WindowContext};
+use super::{WindowContext, WindowFunction};
 use crate::{
     data::{ArconElement, ArconType},
     error::*,
@@ -66,7 +66,7 @@ pub struct WindowAssigner<IN, OUT, W, B>
 where
     IN: ArconType,
     OUT: ArconType,
-    W: Window<IN, OUT>,
+    W: WindowFunction + Sized,
     B: Backend,
 {
     // effectively immutable, so no reason to persist
@@ -87,7 +87,7 @@ impl<IN, OUT, W, B> WindowAssigner<IN, OUT, W, B>
 where
     IN: ArconType,
     OUT: ArconType,
-    W: Window<IN, OUT>,
+    W: WindowFunction<IN = IN, OUT = OUT>,
     B: Backend,
 {
     /// Create a WindowAssigner for tumbling windows
@@ -189,7 +189,7 @@ impl<IN, OUT, W, B> Operator for WindowAssigner<IN, OUT, W, B>
 where
     IN: ArconType,
     OUT: ArconType,
-    W: Window<IN, OUT>,
+    W: WindowFunction<IN = IN, OUT = OUT>,
     B: Backend,
 {
     type IN = IN;

@@ -12,10 +12,7 @@ fn main() {
             conf.set_arcon_time(ArconTime::Event);
             conf.set_timestamp_extractor(|x: &u64| *x);
         })
-        .operator(OperatorBuilder {
-            constructor: Arc::new(|_| Map::new(|x| x + 10)),
-            conf: Default::default(),
-        })
+        .map(|x| x + 10)
         .to_console()
         .build();
 

@@ -43,21 +43,13 @@ fn main() {
                 conf.set_arcon_time(ArconTime::Process);
             },
         )
-        .operator(OperatorBuilder {
-            constructor: Arc::new(|backend| {
-                let function = ArrowWindow::new(backend.clone(), &arrow_udf);
-                WindowAssigner::tumbling(
-                    function,
-                    backend,
-                    Time::seconds(2000),
-                    Time::seconds(0),
-                    false,
-                )
-            }),
-            conf: OperatorConf {
-                parallelism_strategy: ParallelismStrategy::Static(1),
-                ..Default::default()
+        .window(WindowBuilder {
+            assigner: Assigner::Tumbling {
+                length: Time::seconds(2000),
+                late_arrival: Time::seconds(0),
             },
+            function: Arc::new(|backend: Arc<Sled>| ArrowWindow::new(backend, &arrow_udf)),
+            conf: Default::default(),
         })
         .to_console()
         .build();
