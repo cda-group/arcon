@@ -116,7 +116,10 @@ where
     W: WindowFunction + 'static,
     B: Backend,
 {
+    /// Type of Window Assigner
     pub assigner: Assigner,
+    /// Define how the WindowFunction is created
     pub function: Arc<dyn Fn(Arc<B>) -> W + Send + Sync + 'static>,
+    /// Operator Conf used by the Window Operator
     pub conf: OperatorConf,
 }

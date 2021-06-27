@@ -297,7 +297,7 @@ mod tests {
                 Channel,
             },
             node::{debug::DebugNode, Node, NodeState},
-            operator::window::AppenderWindow,
+            operator::window::AppenderWindowFn,
         },
     };
     use kompact::prelude::{biconnect_components, ActorRefFactory, ActorRefStrong, Component};
@@ -342,7 +342,7 @@ mod tests {
             WindowAssigner<
                 u64,
                 u64,
-                AppenderWindow<u64, u64, arcon_state::Sled>,
+                AppenderWindowFn<u64, u64, arcon_state::Sled>,
                 arcon_state::Sled,
             >,
             _,
@@ -367,7 +367,7 @@ mod tests {
             u.len() as u64
         }
 
-        let window = AppenderWindow::new(backend.clone(), &appender_fn);
+        let window = AppenderWindowFn::new(backend.clone(), &appender_fn);
 
         let window_assigner = WindowAssigner::sliding(
             window,

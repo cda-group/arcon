@@ -149,7 +149,7 @@ pub mod prelude {
             operator::{
                 function::{Filter, FlatMap, Map, MapInPlace},
                 sink::local_file::LocalFileSink,
-                window::{AppenderWindow, ArrowWindow, IncrementalWindow, WindowAssigner},
+                window::{AppenderWindowFn, ArrowWindowFn, IncrementalWindowFn, WindowAssigner},
                 Operator, OperatorContext,
             },
             source::{schema::ProtoSchema, Source},

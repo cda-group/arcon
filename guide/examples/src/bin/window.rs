@@ -23,7 +23,7 @@ fn main() {
                 fn aggregation(i: u64, agg: &u64) -> u64 {
                     agg + i
                 }
-                IncrementalWindow::new(backend, &init, &aggregation)
+                IncrementalWindowFn::new(backend, &init, &aggregation)
             }),
             conf: Default::default(),
         })
@@ -32,7 +32,7 @@ fn main() {
                 length: Time::seconds(2000),
                 late_arrival: Time::seconds(0),
             },
-            function: Arc::new(|backend: Arc<Sled>| AppenderWindow::new(backend, &window_sum)),
+            function: Arc::new(|backend: Arc<Sled>| AppenderWindowFn::new(backend, &window_sum)),
             conf: Default::default(),
         })
         .to_console()

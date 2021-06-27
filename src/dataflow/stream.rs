@@ -5,7 +5,7 @@ use crate::{
     data::{ArconType, NodeID},
     dataflow::{
         api::{Assigner, OperatorBuilder, WindowBuilder},
-        conf::{DefaultBackend, ParallelismStrategy},
+        conf::{DefaultBackend, ParallelismStrategy, StreamKind},
         constructor::*,
         dfg::{ChannelKind, DFGNode, DFGNodeID, DFGNodeKind, DFG},
     },
@@ -144,6 +144,29 @@ impl<IN: ArconType> Stream<IN> {
         })
     }
 
+    /// Adds a Window Operator to the pipeline
+    ///
+    /// Example
+    /// ```no_run
+    /// use arcon::prelude::*;
+    /// let stream: Stream<u64> = Pipeline::default()
+    ///     .collection((0..100).collect::<Vec<u64>>(), |conf| {
+    ///         conf.set_arcon_time(ArconTime::Process);
+    ///     })
+    ///     .window(WindowBuilder {
+    ///         assigner: Assigner::Tumbling {
+    ///            length: Time::seconds(2000),
+    ///            late_arrival: Time::seconds(0),
+    ///          },
+    ///         function: Arc::new(|backend: Arc<Sled>| {
+    ///            fn window_sum(buffer: &[u64]) -> u64 {
+    ///               buffer.iter().sum()
+    ///            }
+    ///            AppenderWindowFn::new(backend, &window_sum)
+    ///         }),
+    ///         conf: Default::default(),
+    ///      });
+    /// ```
     pub fn window<OUT, W, B>(self, builder: WindowBuilder<W, B>) -> Stream<OUT>
     where
         OUT: ArconType,
@@ -151,7 +174,11 @@ impl<IN: ArconType> Stream<IN> {
         B: Backend,
     {
         let assigner = builder.assigner;
-        let f = builder.function.clone();
+        let fn_constructor = builder.function.clone();
+        let keyed = match builder.conf.stream_kind {
+            StreamKind::Keyed => true,
+            StreamKind::Local => false,
+        };
         self.operator(OperatorBuilder::<_, B> {
             constructor: Arc::new(move |backend| match &assigner {
                 Assigner::Sliding {
@@ -159,22 +186,22 @@ impl<IN: ArconType> Stream<IN> {
                     slide,
                     late_arrival,
                 } => WindowAssigner::sliding(
-                    f(backend.clone()),
+                    fn_constructor(backend.clone()),
                     backend,
                     *length,
                     *slide,
                     *late_arrival,
-                    false,
+                    keyed,
                 ),
                 Assigner::Tumbling {
                     length,
                     late_arrival,
                 } => WindowAssigner::tumbling(
-                    f(backend.clone()),
+                    fn_constructor(backend.clone()),
                     backend,
                     *length,
                     *late_arrival,
-                    false,
+                    keyed,
                 ),
             }),
             conf: builder.conf,
