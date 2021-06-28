@@ -7,6 +7,10 @@ pub mod debug;
 pub mod source;
 
 use crate::conf::logger::ArconLogger;
+use metrics::{
+    counter, decrement_gauge, gauge, histogram, increment_counter, increment_gauge,
+    register_counter, register_gauge, register_histogram, GaugeValue, Key, Recorder, Unit,
+};
 #[cfg(feature = "unsafe_flight")]
 use crate::data::flight_serde::unsafe_remote::UnsafeSerde;
 use crate::{
@@ -28,8 +32,45 @@ use fxhash::*;
 use kompact::prelude::*;
 use std::{cell::UnsafeCell, sync::Arc};
 
+
+
 #[cfg(feature = "metrics")]
 use crate::metrics::{counter::Counter, gauge::Gauge, meter::Meter};
+
+use log::info;
+use metrics::SetRecorderError;
+
+struct LogRecorder;
+
+impl Recorder for LogRecorder {
+    fn register_counter(&self, key: &Key, _unit: Option<Unit>, _description: Option<&'static str>) {}
+
+    fn register_gauge(&self, key: &Key, _unit: Option<Unit>, _description: Option<&'static str>) {}
+
+    fn register_histogram(&self, key: &Key, _unit: Option<Unit>, _description: Option<&'static str>) {}
+
+    fn increment_counter(&self, key: &Key, value: u64) {
+        println!("counter '{:?}' -> {}", key, value);
+    }
+
+    fn update_gauge(&self, key: &Key, value: GaugeValue) {
+        println!("gauge '{:?}' -> {:?}", key, value);
+    }
+
+    fn record_histogram(&self, key: &Key, value: f64) {
+         println!("histogram '{:?}' -> {}", key, value);
+    }
+}
+
+// Recorders are installed by calling the [`set_recorder`] function.  Recorders should provide a
+// function that wraps the creation and installation of the recorder:
+
+static RECORDER: LogRecorder = LogRecorder;
+
+pub fn init_metrics_logger() -> Result<(), SetRecorderError> {
+    metrics::set_recorder(&RECORDER)
+}
+
 
 /// Type alias for a Node description
 pub type NodeDescriptor = String;
@@ -188,6 +229,9 @@ where
         let timer_id = format!("_{}_timer", descriptor);
         let timer = ArconTimer::new(timer_id, backend);
 
+        init_metrics_logger();
+
+        register_counter!(descriptor.clone());
         Node {
             ctx: ComponentContext::uninitialised(),
             node_manager_port: RequiredPort::uninitialised(),
@@ -211,6 +255,7 @@ where
                 "Message from invalid sender id {:?}",
                 message.sender()
             );
+
             return Ok(());
         }
 
@@ -221,6 +266,7 @@ where
 
         #[cfg(feature = "metrics")]
         self.record_incoming_events(message.total_events());
+        increment_counter!(self.descriptor.clone());
 
         match message {
             MessageContainer::Raw(r) => self.handle_events(r.sender, r.events),
