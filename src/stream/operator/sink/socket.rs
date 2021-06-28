@@ -138,7 +138,7 @@ mod tests {
                         conf.set_arcon_time(ArconTime::Process);
                     })
                     .operator(OperatorBuilder {
-                        constructor: Arc::new(move |_| SocketSink::udp(addr)),
+                        constructor: Arc::new(move |_: Arc<Sled>| SocketSink::udp(addr)),
                         conf: OperatorConf {
                             parallelism_strategy: ParallelismStrategy::Static(1),
                             ..Default::default()

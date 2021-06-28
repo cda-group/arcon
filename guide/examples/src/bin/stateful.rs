@@ -51,7 +51,7 @@ fn main() {
             },
         )
         .operator(OperatorBuilder {
-            constructor: Arc::new(|backend| {
+            constructor: Arc::new(|backend: Arc<Sled>| {
                 Map::stateful(MyState::new(backend), |event, state| {
                     state.events().put(event)?;
                     Ok(event)

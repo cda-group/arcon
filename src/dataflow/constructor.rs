@@ -6,7 +6,8 @@ use crate::{
     conf::logger::ArconLogger,
     data::{ArconMessage, ArconType, NodeID},
     dataflow::{
-        conf::{OperatorBuilder, ParallelismStrategy, SourceBuilderType, SourceConf},
+        api::{OperatorBuilder, SourceBuilderType},
+        conf::{ParallelismStrategy, SourceConf},
         dfg::ChannelKind,
     },
     manager::{

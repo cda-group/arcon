@@ -97,11 +97,11 @@ fn main() {
             conf.set_timestamp_extractor(|x: &u64| *x);
         })
         .operator(OperatorBuilder {
-            constructor: Arc::new(|_| MyOperator::default()),
+            constructor: Arc::new(|_: Arc<Sled>| MyOperator::default()),
             conf: Default::default(),
         })
         .operator(OperatorBuilder {
-            constructor: Arc::new(|_| TimerOperator::default()),
+            constructor: Arc::new(|_: Arc<Sled>| TimerOperator::default()),
             conf: Default::default(),
         })
         .build();

@@ -40,19 +40,17 @@ impl From<WindowContext> for u64 {
     }
 }
 
-/// `Window` consists of the methods required by each window implementation
-///
-/// IN: Element type sent to the Window
-/// OUT: Expected output type of the Window
-pub trait Window<IN, OUT>: Send
-where
-    IN: ArconType,
-    OUT: ArconType,
-{
+/// A WindowFunction that is executed once a window is triggered
+pub trait WindowFunction: Send + Sized {
+    /// Input type of the function
+    type IN: ArconType;
+    /// Output type of the function
+    type OUT: ArconType;
+
     /// The `on_element` function is called per received window element
-    fn on_element(&mut self, element: IN, ctx: WindowContext) -> ArconResult<()>;
+    fn on_element(&mut self, element: Self::IN, ctx: WindowContext) -> ArconResult<()>;
     /// The `result` function is called at the end of a window's lifetime
-    fn result(&mut self, ctx: WindowContext) -> ArconResult<OUT>;
+    fn result(&mut self, ctx: WindowContext) -> ArconResult<Self::OUT>;
     /// Clears the window state for the passed context
     fn clear(&mut self, ctx: WindowContext) -> ArconResult<()>;
     /// Method to persist windows to the state backend
@@ -61,7 +59,34 @@ where
     fn persist(&mut self) -> ArconResult<()>;
 }
 
-pub struct ArrowWindow<IN, OUT, F, B>
+/// A window function for Arrow Data
+///
+/// Elements are appended into RecordBatches and once a window is triggered,
+/// the underlying Arrow Schema and Vec<RecordBatch> is exposed.
+///
+/// Example
+/// ```no_run
+/// use arcon::prelude::*;
+/// let stream: Stream<u64> = Pipeline::default()
+///     .collection((0..100).collect::<Vec<u64>>(), |conf| {
+///         conf.set_arcon_time(ArconTime::Process);
+///     })
+///     .window(WindowBuilder {
+///         assigner: Assigner::Tumbling {
+///            length: Time::seconds(2000),
+///            late_arrival: Time::seconds(0),
+///          },
+///         function: Arc::new(|backend: Arc<Sled>| {
+///            fn arrow_udf(schema: Arc<Schema>, batches: Vec<RecordBatch>) -> ArconResult<u64> {
+///               // NOTE: custom logic should be implemented here to produce in this case Ok(u64)
+///               unimplemented!();
+///            }
+///            ArrowWindowFn::new(backend, &arrow_udf)
+///         }),
+///         conf: Default::default(),
+///      });
+/// ```
+pub struct ArrowWindowFn<IN, OUT, F, B>
 where
     IN: ArconType + ToArrow,
     OUT: ArconType,
@@ -74,7 +99,7 @@ where
     _marker: std::marker::PhantomData<IN>,
 }
 
-impl<IN, OUT, F, B> ArrowWindow<IN, OUT, F, B>
+impl<IN, OUT, F, B> ArrowWindowFn<IN, OUT, F, B>
 where
     IN: ArconType + ToArrow,
     OUT: ArconType,
@@ -99,21 +124,24 @@ where
     }
 }
 
-impl<IN, OUT, F, B> Window<IN, OUT> for ArrowWindow<IN, OUT, F, B>
+impl<IN, OUT, F, B> WindowFunction for ArrowWindowFn<IN, OUT, F, B>
 where
     IN: ArconType + ToArrow,
     OUT: ArconType,
     F: Fn(Arc<Schema>, Vec<RecordBatch>) -> ArconResult<OUT> + ArconFnBounds,
     B: Backend,
 {
-    fn on_element(&mut self, element: IN, ctx: WindowContext) -> ArconResult<()> {
+    type IN = IN;
+    type OUT = OUT;
+
+    fn on_element(&mut self, element: Self::IN, ctx: WindowContext) -> ArconResult<()> {
         let table = self.map.entry(ctx).or_insert_with(IN::table);
         table.append(element)?;
 
         Ok(())
     }
 
-    fn result(&mut self, ctx: WindowContext) -> ArconResult<OUT> {
+    fn result(&mut self, ctx: WindowContext) -> ArconResult<Self::OUT> {
         let table = self.map.entry(ctx).or_insert_with(IN::table);
         self.handle.set_item_key(ctx.key);
         self.handle.set_namespace(ctx.index);
@@ -153,8 +181,32 @@ where
         Ok(())
     }
 }
-
-pub struct AppenderWindow<IN, OUT, B>
+/// A window function that batches elements and executes once a window is triggered
+///
+/// In most cases it is recommended to use an [IncrementalWindowFn] instead.
+///
+/// Example
+/// ```no_run
+/// use arcon::prelude::*;
+/// let stream: Stream<u64> = Pipeline::default()
+///     .collection((0..100).collect::<Vec<u64>>(), |conf| {
+///         conf.set_arcon_time(ArconTime::Process);
+///     })
+///     .window(WindowBuilder {
+///         assigner: Assigner::Tumbling {
+///            length: Time::seconds(2000),
+///            late_arrival: Time::seconds(0),
+///          },
+///         function: Arc::new(|backend: Arc<Sled>| {
+///            fn window_sum(buffer: &[u64]) -> u64 {
+///               buffer.iter().sum()
+///            }
+///            AppenderWindowFn::new(backend, &window_sum)
+///         }),
+///         conf: Default::default(),
+///      });
+/// ```
+pub struct AppenderWindowFn<IN, OUT, B>
 where
     IN: ArconType,
     OUT: ArconType,
@@ -164,7 +216,7 @@ where
     materializer: &'static dyn SafelySendableFn(&[IN]) -> OUT,
 }
 
-impl<IN, OUT, B> AppenderWindow<IN, OUT, B>
+impl<IN, OUT, B> AppenderWindowFn<IN, OUT, B>
 where
     IN: ArconType,
     OUT: ArconType,
@@ -173,7 +225,7 @@ where
     pub fn new(
         backend: Arc<B>,
         materializer: &'static dyn SafelySendableFn(&[IN]) -> OUT,
-    ) -> AppenderWindow<IN, OUT, B> {
+    ) -> AppenderWindowFn<IN, OUT, B> {
         let mut handle = Handle::vec("window_handle")
             .with_item_key(0)
             .with_namespace(0);
@@ -182,20 +234,22 @@ where
 
         let handle = handle.activate(backend);
 
-        AppenderWindow {
+        Self {
             handle,
             materializer,
         }
     }
 }
 
-impl<IN, OUT, B> Window<IN, OUT> for AppenderWindow<IN, OUT, B>
+impl<IN, OUT, B> WindowFunction for AppenderWindowFn<IN, OUT, B>
 where
     IN: ArconType,
     OUT: ArconType,
     B: Backend,
 {
-    fn on_element(&mut self, element: IN, ctx: WindowContext) -> ArconResult<()> {
+    type IN = IN;
+    type OUT = OUT;
+    fn on_element(&mut self, element: Self::IN, ctx: WindowContext) -> ArconResult<()> {
         self.handle.set_item_key(ctx.key);
         self.handle.set_namespace(ctx.index);
 
@@ -203,7 +257,7 @@ where
         Ok(())
     }
 
-    fn result(&mut self, ctx: WindowContext) -> ArconResult<OUT> {
+    fn result(&mut self, ctx: WindowContext) -> ArconResult<Self::OUT> {
         self.handle.set_item_key(ctx.key);
         self.handle.set_namespace(ctx.index);
 
@@ -261,7 +315,35 @@ impl<IN: ArconType, OUT: ArconType> Aggregator for IncrementalWindowAggregator<I
     }
 }
 
-pub struct IncrementalWindow<IN, OUT, B>
+/// A window function that incrementally aggregates elements
+///
+/// Used for associative and commutative
+///
+/// Example
+/// ```no_run
+/// use arcon::prelude::*;
+/// let stream: Stream<u64> = Pipeline::default()
+///     .collection((0..100).collect::<Vec<u64>>(), |conf| {
+///         conf.set_arcon_time(ArconTime::Process);
+///     })
+///     .window(WindowBuilder {
+///         assigner: Assigner::Tumbling {
+///            length: Time::seconds(2000),
+///            late_arrival: Time::seconds(0),
+///          },
+///         function: Arc::new(|backend: Arc<Sled>| {
+///            fn init(i: u64) -> u64 {
+///               i
+///            }
+///            fn aggregation(i: u64, agg: &u64) -> u64 {
+///               agg + i
+///            }
+///            IncrementalWindowFn::new(backend, &init, &aggregation)
+///         }),
+///         conf: Default::default(),
+///      });
+/// ```
+pub struct IncrementalWindowFn<IN, OUT, B>
 where
     IN: ArconType,
     OUT: ArconType,
@@ -270,7 +352,7 @@ where
     aggregator: ActiveHandle<B, AggregatorState<IncrementalWindowAggregator<IN, OUT>>, u64, u64>,
 }
 
-impl<IN, OUT, B> IncrementalWindow<IN, OUT, B>
+impl<IN, OUT, B> IncrementalWindowFn<IN, OUT, B>
 where
     IN: ArconType,
     OUT: ArconType,
@@ -280,7 +362,7 @@ where
         backend: Arc<B>,
         init: &'static dyn SafelySendableFn(IN) -> OUT,
         agg: &'static dyn SafelySendableFn(IN, &OUT) -> OUT,
-    ) -> IncrementalWindow<IN, OUT, B> {
+    ) -> IncrementalWindowFn<IN, OUT, B> {
         let mut aggregator = Handle::aggregator(
             "incremental_window_aggregating_state",
             IncrementalWindowAggregator(init, agg),
@@ -292,17 +374,19 @@ where
 
         let aggregator = aggregator.activate(backend);
 
-        IncrementalWindow { aggregator }
+        Self { aggregator }
     }
 }
 
-impl<IN, OUT, B> Window<IN, OUT> for IncrementalWindow<IN, OUT, B>
+impl<IN, OUT, B> WindowFunction for IncrementalWindowFn<IN, OUT, B>
 where
     IN: ArconType,
     OUT: ArconType,
     B: Backend,
 {
-    fn on_element(&mut self, element: IN, ctx: WindowContext) -> ArconResult<()> {
+    type IN = IN;
+    type OUT = OUT;
+    fn on_element(&mut self, element: Self::IN, ctx: WindowContext) -> ArconResult<()> {
         self.aggregator.set_item_key(ctx.key);
         self.aggregator.set_namespace(ctx.index);
 
@@ -311,7 +395,7 @@ where
         Ok(())
     }
 
-    fn result(&mut self, ctx: WindowContext) -> ArconResult<OUT> {
+    fn result(&mut self, ctx: WindowContext) -> ArconResult<Self::OUT> {
         self.aggregator.set_item_key(ctx.key);
         self.aggregator.set_namespace(ctx.index);
 
@@ -345,7 +429,7 @@ mod tests {
             buffer.iter().sum()
         }
 
-        let mut window = AppenderWindow::new(backend, &materializer);
+        let mut window = AppenderWindowFn::new(backend, &materializer);
 
         for i in 0..10 {
             let _ = window.on_element(i, WindowContext::new(0, 0));
@@ -368,7 +452,7 @@ mod tests {
             agg + i as u64
         }
 
-        let mut window = IncrementalWindow::new(backend, &init, &aggregation);
+        let mut window = IncrementalWindowFn::new(backend, &init, &aggregation);
 
         for i in 0..10 {
             let _ = window.on_element(i, WindowContext::new(0, 0));

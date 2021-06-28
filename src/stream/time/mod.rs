@@ -13,6 +13,7 @@ impl Default for ArconTime {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct Time(pub u64);
 
 impl Time {
