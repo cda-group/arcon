@@ -1,12 +1,9 @@
 use arcon::prelude::*;
-use metrics_exporter_prometheus::PrometheusBuilder;
-use perf_event::{Builder, Group};
-use perf_event::events::Hardware;
 
 fn main() {
     let mut pipeline = Pipeline::default()
         .with_debug_node()
-        .collection((0..100000).collect::<Vec<u64>>(), |conf| {
+        .collection((0..100).collect::<Vec<u64>>(), |conf| {
             conf.set_arcon_time(ArconTime::Event);
             conf.set_timestamp_extractor(|x: &u64| *x);
         })
