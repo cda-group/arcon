@@ -101,8 +101,6 @@ impl Default for Pipeline {
 impl Pipeline {
     /// Creates a new Pipeline using the given ArconConf
     fn new(conf: ArconConf) -> Self {
-        // let key = Key::from_name("basic_counter");
-        // recorder.increment_counter(&key, 42);
 
         let builder = PrometheusBuilder::new();
         builder
