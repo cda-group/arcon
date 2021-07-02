@@ -24,6 +24,6 @@ fn main() {
 
     debug_node.on_definition(|cd| {
         let sum: u64 = cd.data.iter().map(|elem| elem.data).sum();
-        // assert_eq!(sum, 4165);
+        assert_eq!(sum, 4165);
     });
 }

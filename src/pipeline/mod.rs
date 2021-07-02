@@ -37,8 +37,6 @@ mod assembled;
 pub use crate::dataflow::stream::Stream;
 pub use assembled::AssembledPipeline;
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusRecorder};
-use perf_event::{Builder, Group};
-use perf_event::events::Hardware;
 
 /// A Pipeline is the starting point of all Arcon applications.
 /// It contains all necessary runtime components, configuration,

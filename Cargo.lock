@@ -111,7 +111,6 @@ dependencies = [
  "hierarchical_hash_wheel_timer",
  "hocon",
  "kompact",
- "log",
  "lz4-compression",
  "metrics",
  "metrics-exporter-prometheus",
