@@ -8,7 +8,7 @@ fn main() {
         .set("enable.auto.commit", "false");
 
     let mut pipeline = Pipeline::default()
-        .kafka(consumer_conf, JsonSchema::new(), 2, |conf| {
+        .kafka(consumer_conf, JsonSchema::new(), 1, |conf| {
             conf.set_arcon_time(ArconTime::Event);
             conf.set_timestamp_extractor(|x: &u64| *x);
         })

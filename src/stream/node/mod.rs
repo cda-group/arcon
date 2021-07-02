@@ -39,6 +39,7 @@ use crate::metrics::{counter::Counter, gauge::Gauge, meter::Meter};
 
 use log::info;
 use metrics::SetRecorderError;
+use metrics_exporter_prometheus::{PrometheusRecorder, PrometheusBuilder};
 
 struct LogRecorder;
 
@@ -228,10 +229,11 @@ where
     ) -> Self {
         let timer_id = format!("_{}_timer", descriptor);
         let timer = ArconTimer::new(timer_id, backend);
+        let gauge_name = String::from(descriptor.clone());
+        register_gauge!(gauge_name);
 
-        init_metrics_logger();
 
-        register_counter!(descriptor.clone());
+
         Node {
             ctx: ComponentContext::uninitialised(),
             node_manager_port: RequiredPort::uninitialised(),
@@ -266,7 +268,7 @@ where
 
         #[cfg(feature = "metrics")]
         self.record_incoming_events(message.total_events());
-        increment_counter!(self.descriptor.clone());
+        increment_gauge!(self.descriptor.clone(),1.0);
 
         match message {
             MessageContainer::Raw(r) => self.handle_events(r.sender, r.events),

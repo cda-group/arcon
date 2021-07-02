@@ -293,6 +293,7 @@ pub(crate) fn node_manager_constructor<OP: Operator + 'static, B: Backend>(
                     NodeState::new(node_id, in_channels.clone(), backend.clone()),
                     backend.clone(),
                     pipeline.arcon_logger.clone(),
+                    // pipeline.recorder.clone()
                 );
 
                 let node_comp = pipeline.data_system().create(|| node);
