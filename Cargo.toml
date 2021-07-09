@@ -70,6 +70,7 @@ metrics-util = "0.9.1"
 
 arrow = "4.3"
 datafusion = "4.0"
+perf-event = "0.4.7"
 
 # Optional
 rdkafka = { version = "0.26", optional = true }

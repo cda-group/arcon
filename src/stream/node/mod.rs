@@ -11,6 +11,9 @@ use metrics::{
     counter, decrement_gauge, gauge, histogram, increment_counter, increment_gauge,
     register_counter, register_gauge, register_histogram, GaugeValue, Key, Recorder, Unit,
 };
+use perf_event::{Builder, Group, Counter};
+use perf_event::events::Hardware;
+
 #[cfg(feature = "unsafe_flight")]
 use crate::data::flight_serde::unsafe_remote::UnsafeSerde;
 use crate::{
@@ -88,6 +91,23 @@ impl NodeMetrics {
     }
 }
 
+pub struct PerformanceMetric {
+    pub performance_metrics_group: Group,
+    pub cycles: Counter,
+    pub insns: Counter
+}
+
+impl PerformanceMetric{
+    fn register_gauge_enable_group(&mut self, gauge_name: String) -> std::io::Result<()>{
+        register_gauge!(gauge_name);
+        self.performance_metrics_group.enable()
+    }
+
+    fn update_gauge(&self, gauge_name:String, value: f64) {
+        gauge!(gauge_name, value);
+    }
+}
+
 #[derive(ArconState)]
 pub struct NodeState<OP: Operator + 'static, B: Backend> {
     /// Durable message buffer used for blocked channels
@@ -112,6 +132,7 @@ pub struct NodeState<OP: Operator + 'static, B: Backend> {
     /// Identifier for the Node
     #[ephemeral]
     id: NodeID,
+    // perf_metrics_group: Group,
 }
 
 impl<OP: Operator + 'static, B: Backend> StateConstructor for NodeState<OP, B> {
@@ -180,6 +201,7 @@ where
     /// Event time scheduler
     timer: UnsafeCell<ArconTimer<u64, OP::TimerState, B>>,
     logger: ArconLogger,
+    performance_metric: PerformanceMetric,
 }
 
 impl<OP, B> Node<OP, B>
@@ -198,10 +220,16 @@ where
     ) -> Self {
         let timer_id = format!("_{}_timer", descriptor);
         let timer = ArconTimer::new(timer_id, backend);
-        let gauge_name = String::from(descriptor.clone());
-        register_gauge!(gauge_name);
-
-
+        let performance_gauge_name = String::from(descriptor.clone());
+        let mut group = Group::new().unwrap();
+        let mut cycles = Builder::new().group(&mut group).kind(Hardware::CPU_CYCLES).build().unwrap();
+        let mut instructions= Builder::new().group(&mut group).kind(Hardware::INSTRUCTIONS).build().unwrap();
+        let mut performance_metric = PerformanceMetric {
+            performance_metrics_group: group,
+            cycles,
+            insns: instructions
+        };
+        performance_metric.register_gauge_enable_group(performance_gauge_name);
 
         Node {
             ctx: ComponentContext::uninitialised(),
@@ -214,6 +242,7 @@ where
             node_state,
             timer: UnsafeCell::new(timer),
             logger,
+            performance_metric
         }
     }
 
@@ -226,7 +255,6 @@ where
                 "Message from invalid sender id {:?}",
                 message.sender()
             );
-
             return Ok(());
         }
 
@@ -234,14 +262,15 @@ where
             self.node_state.message_buffer().append(message.raw())?;
             return Ok(());
         }
-        #[cfg(feature = "metrics")]
-        // self.record_incoming_events(message.total_events());
-        increment_gauge!(self.descriptor.clone(),1.0);
 
         match message {
-            MessageContainer::Raw(r) => self.handle_events(r.sender, r.events),
-            MessageContainer::Local(l) => self.handle_events(l.sender, l.events),
+            MessageContainer::Raw(r) => self.handle_events(r.sender, r.events)?,
+            MessageContainer::Local(l) => self.handle_events(l.sender, l.events)?,
         }
+
+        let counts = self.performance_metric.performance_metrics_group.read()?;
+        self.performance_metric.update_gauge(self.descriptor.clone(),counts[&self.performance_metric.cycles] as f64 / counts[&self.performance_metric.insns] as f64);
+        Ok(())
     }
 
     #[inline(always)]
@@ -504,6 +533,7 @@ where
 
         match arcon_msg {
             Ok(m) => {
+
                 if let Err(err) = self.handle_message(MessageContainer::Raw(m)) {
                     error!(self.logger, "Failed to handle node message: {}", err);
                 }
