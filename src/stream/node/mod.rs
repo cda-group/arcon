@@ -108,6 +108,20 @@ impl PerformanceMetric{
     }
 }
 
+pub struct EventRate {
+    start_time: u64,
+    number_of_events: u64
+}
+
+impl EventRate {
+    fn get_gauge_name(&mut self, node_name: String) -> String {
+        let mut owned_string: String = node_name.to_owned();
+        let borrowed_string: &str = "_event_rate";
+        owned_string.push_str(borrowed_string);
+        owned_string
+    }
+}
+
 #[derive(ArconState)]
 pub struct NodeState<OP: Operator + 'static, B: Backend> {
     /// Durable message buffer used for blocked channels
@@ -202,6 +216,8 @@ where
     timer: UnsafeCell<ArconTimer<u64, OP::TimerState, B>>,
     logger: ArconLogger,
     performance_metric: PerformanceMetric,
+    event_rate: EventRate
+
 }
 
 impl<OP, B> Node<OP, B>
@@ -231,6 +247,17 @@ where
         };
         performance_metric.register_gauge_enable_group(performance_gauge_name);
 
+
+
+        let start_time = crate::util::get_system_time();
+        let number_of_events = 0;
+        let mut event_rate= EventRate{
+            start_time,
+            number_of_events
+        };
+        register_gauge!(event_rate.get_gauge_name(descriptor.clone()));
+
+
         Node {
             ctx: ComponentContext::uninitialised(),
             node_manager_port: RequiredPort::uninitialised(),
@@ -242,13 +269,15 @@ where
             node_state,
             timer: UnsafeCell::new(timer),
             logger,
-            performance_metric
+            performance_metric,
+            event_rate
         }
     }
 
     /// Message handler for both locally and remote sent messages
     #[inline]
     fn handle_message(&mut self, message: MessageContainer<OP::IN>) -> ArconResult<()> {
+        self.event_rate.number_of_events += 1;
         if !self.node_state.in_channels.contains(message.sender()) {
             error!(
                 self.logger,
@@ -267,6 +296,12 @@ where
             MessageContainer::Raw(r) => self.handle_events(r.sender, r.events)?,
             MessageContainer::Local(l) => self.handle_events(l.sender, l.events)?,
         }
+
+
+        let current_time=crate::util::get_system_time();
+        let number_of_messages_per_second = 1000*self.event_rate.number_of_events/(current_time-self.event_rate.start_time);
+        gauge!(self.event_rate.get_gauge_name(self.descriptor.clone()), number_of_messages_per_second as f64);
+
 
         let counts = self.performance_metric.performance_metrics_group.read()?;
         self.performance_metric.update_gauge(self.descriptor.clone(),counts[&self.performance_metric.cycles] as f64 / counts[&self.performance_metric.insns] as f64);
