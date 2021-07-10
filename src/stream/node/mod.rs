@@ -93,15 +93,30 @@ impl NodeMetrics {
 
 pub struct PerformanceMetric {
     pub performance_metrics_group: Group,
-    pub cycles: Counter,
-    pub insns: Counter
+    pub cache_misses: Counter,
+    pub branch_misses: Counter,
+    pub instructions: Counter,
+    pub cpu_cycles: Counter
 }
 
 impl PerformanceMetric{
-    fn register_gauge_enable_group(&mut self, gauge_name: String) -> std::io::Result<()>{
-        register_gauge!(gauge_name);
+    fn register_performance_metric_gauges(&mut self, node_name: String) -> std::io::Result<()>{
+        register_gauge!(self.get_field_gauge_name(node_name.clone(), String::from("cache_misses")));
+        register_gauge!(self.get_field_gauge_name(node_name.clone(), String::from("branch_misses")));
+        register_gauge!(self.get_field_gauge_name(node_name.clone(), String::from("instructions")));
+        register_gauge!(self.get_field_gauge_name(node_name.clone(), String::from("cpu_cycles")));
         self.performance_metrics_group.enable()
+
     }
+
+    pub fn get_field_gauge_name (&mut self, field_name: String, node_name: String) -> String{
+        let mut owned_string: String = node_name.to_owned();
+        let borrowed_string: String = field_name.to_owned();
+        let together = format!("{}{}", owned_string, borrowed_string);
+        together
+    }
+
+
 
     fn update_gauge(&self, gauge_name:String, value: f64) {
         gauge!(gauge_name, value);
@@ -119,6 +134,10 @@ impl EventRate {
         let borrowed_string: &str = "_event_rate";
         owned_string.push_str(borrowed_string);
         owned_string
+    }
+
+    fn register_event_rate_gauge (&mut self, node_name: String){
+        register_gauge!(self.get_gauge_name(node_name));
     }
 }
 
@@ -236,26 +255,27 @@ where
     ) -> Self {
         let timer_id = format!("_{}_timer", descriptor);
         let timer = ArconTimer::new(timer_id, backend);
-        let performance_gauge_name = String::from(descriptor.clone());
-        let mut group = Group::new().unwrap();
-        let mut cycles = Builder::new().group(&mut group).kind(Hardware::CPU_CYCLES).build().unwrap();
-        let mut instructions= Builder::new().group(&mut group).kind(Hardware::INSTRUCTIONS).build().unwrap();
+        let mut performance_metrics_group = Group::new().unwrap();
+        let mut cpu_cycles = Builder::new().group(&mut performance_metrics_group).kind(Hardware::CPU_CYCLES).build().unwrap();
+        let mut instructions= Builder::new().group(&mut performance_metrics_group).kind(Hardware::INSTRUCTIONS).build().unwrap();
+        let mut cache_misses= Builder::new().group(&mut performance_metrics_group).kind(Hardware::CACHE_MISSES).build().unwrap();
+        let mut branch_misses= Builder::new().group(&mut performance_metrics_group).kind(Hardware::BRANCH_MISSES).build().unwrap();
+
         let mut performance_metric = PerformanceMetric {
-            performance_metrics_group: group,
-            cycles,
-            insns: instructions
+            performance_metrics_group,
+            cache_misses,
+            branch_misses,
+            instructions,
+            cpu_cycles
         };
-        performance_metric.register_gauge_enable_group(performance_gauge_name);
+        performance_metric.register_performance_metric_gauges(descriptor.clone());
 
 
-
-        let start_time = crate::util::get_system_time();
-        let number_of_events = 0;
         let mut event_rate= EventRate{
-            start_time,
-            number_of_events
+            start_time: crate::util::get_system_time(),
+            number_of_events: 0
         };
-        register_gauge!(event_rate.get_gauge_name(descriptor.clone()));
+        event_rate.register_event_rate_gauge(descriptor.clone());
 
 
         Node {
@@ -304,7 +324,8 @@ where
 
 
         let counts = self.performance_metric.performance_metrics_group.read()?;
-        self.performance_metric.update_gauge(self.descriptor.clone(),counts[&self.performance_metric.cycles] as f64 / counts[&self.performance_metric.insns] as f64);
+        // self.performance_metric.update_gauge(self.descriptor.clone(),counts[&self.performance_metric.cycles] as f64 / counts[&self.performance_metric.insns] as f64);
+
         Ok(())
     }
 
