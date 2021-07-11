@@ -297,7 +297,7 @@ where
     /// Message handler for both locally and remote sent messages
     #[inline]
     fn handle_message(&mut self, message: MessageContainer<OP::IN>) -> ArconResult<()> {
-        self.event_rate.number_of_events += 1;
+        self.event_rate.number_of_events +=message.total_events();
         if !self.node_state.in_channels.contains(message.sender()) {
             error!(
                 self.logger,
@@ -311,7 +311,6 @@ where
             self.node_state.message_buffer().append(message.raw())?;
             return Ok(());
         }
-
         match message {
             MessageContainer::Raw(r) => self.handle_events(r.sender, r.events)?,
             MessageContainer::Local(l) => self.handle_events(l.sender, l.events)?,
