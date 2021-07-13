@@ -202,4 +202,6 @@ pub mod prelude {
     pub use rayon::prelude::*;
 
     pub use std::sync::Arc;
+   pub  use crate::stream::node::{PerfEvents, HardwareCounter};
+
 }

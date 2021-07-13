@@ -11,8 +11,8 @@ use metrics::{
     counter, decrement_gauge, gauge, histogram, increment_counter, increment_gauge,
     register_counter, register_gauge, register_histogram, GaugeValue, Key, Recorder, Unit,
 };
-use perf_event::{Builder, Group, Counter};
-use perf_event::events::Hardware;
+use perf_event::{events::Hardware, Builder, Counter, Group};
+use serde::Deserialize;
 
 #[cfg(feature = "unsafe_flight")]
 use crate::data::flight_serde::unsafe_remote::UnsafeSerde;
@@ -35,15 +35,11 @@ use fxhash::*;
 use kompact::prelude::*;
 use std::{cell::UnsafeCell, sync::Arc};
 
-
-
 #[cfg(feature = "metrics")]
 use crate::metrics::{counter::Counter, gauge::Gauge, meter::Meter};
 
 use metrics::SetRecorderError;
-use metrics_exporter_prometheus::{PrometheusRecorder, PrometheusBuilder};
-
-
+use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusRecorder};
 
 /// Type alias for a Node description
 pub type NodeDescriptor = String;
@@ -91,41 +87,95 @@ impl NodeMetrics {
     }
 }
 
-pub struct PerformanceMetric {
-    pub performance_metrics_group: Group,
-    pub cache_misses: Counter,
-    pub branch_misses: Counter,
-    pub instructions: Counter,
-    pub cpu_cycles: Counter
+#[derive(Deserialize, Clone, Debug)]
+pub enum HardwareCounter {
+    CPU_CYCLES,
+    BRANCH_MISSES,
+    INSTRUCTIONS,
+    CACHE_REFERENCES,
+    CACHE_MISSES,
+    BRANCH_INSTRUCTIONS,
+    BUS_CYCLES,
+    STALLED_CYCLES_FRONTEND,
+    STALLED_CYCLES_BACKEND,
+    REF_CPU_CYCLES,
 }
 
-impl PerformanceMetric{
-    fn register_performance_metric_gauges(&mut self, node_name: String) -> std::io::Result<()>{
-        register_gauge!(self.get_field_gauge_name(node_name.clone(), String::from("cache_misses")));
-        register_gauge!(self.get_field_gauge_name(node_name.clone(), String::from("branch_misses")));
-        register_gauge!(self.get_field_gauge_name(node_name.clone(), String::from("instructions")));
-        register_gauge!(self.get_field_gauge_name(node_name.clone(), String::from("cpu_cycles")));
+impl HardwareCounter {
+    fn get_hardware_kind(&self) -> Hardware {
+        match self {
+            HardwareCounter::CPU_CYCLES => Hardware::CPU_CYCLES,
+            HardwareCounter::INSTRUCTIONS => Hardware::INSTRUCTIONS,
+            HardwareCounter::CACHE_REFERENCES => Hardware::CACHE_REFERENCES,
+            HardwareCounter::CACHE_MISSES => Hardware::CACHE_MISSES,
+            HardwareCounter::BRANCH_INSTRUCTIONS => Hardware::BRANCH_INSTRUCTIONS,
+            HardwareCounter::BRANCH_MISSES => Hardware::BRANCH_MISSES,
+            HardwareCounter::BUS_CYCLES => Hardware::BUS_CYCLES,
+            HardwareCounter::STALLED_CYCLES_FRONTEND => Hardware::STALLED_CYCLES_FRONTEND,
+            HardwareCounter::STALLED_CYCLES_BACKEND => Hardware::STALLED_CYCLES_BACKEND,
+            HardwareCounter::REF_CPU_CYCLES => Hardware::REF_CPU_CYCLES,
+        }
+    }
+
+    fn get_counter_as_string(&self) -> &str {
+        match self {
+            HardwareCounter::CPU_CYCLES => "CPU_CYCLES",
+            HardwareCounter::INSTRUCTIONS => "INSTRUCTIONS",
+            HardwareCounter::CACHE_REFERENCES => "CACHE_REFERENCES",
+            HardwareCounter::CACHE_MISSES => "CACHE_MISSES",
+            HardwareCounter::BRANCH_INSTRUCTIONS => "BRANCH_INSTRUCTIONS",
+            HardwareCounter::BRANCH_MISSES => "BRANCH_MISSES",
+            HardwareCounter::BUS_CYCLES => "BUS_CYCLES",
+            HardwareCounter::STALLED_CYCLES_FRONTEND => "STALLED_CYCLES_FRONTEND",
+            HardwareCounter::STALLED_CYCLES_BACKEND => "STALLED_CYCLES_BACKEND",
+            HardwareCounter::REF_CPU_CYCLES => "REF_CPU_CYCLES",
+        }
+    }
+}
+
+#[derive(Default, Deserialize, Debug, Clone)]
+pub struct PerfEvents {
+    pub hardware_metric_kind_vector: Vec<HardwareCounter>,
+}
+
+impl PerfEvents {
+    pub fn new() -> PerfEvents {
+        PerfEvents {
+            hardware_metric_kind_vector: vec![],
+        }
+    }
+
+    pub fn add(&mut self, hardware_metric_kind: HardwareCounter) {
+        self.hardware_metric_kind_vector.push(hardware_metric_kind);
+    }
+}
+
+pub struct PerformanceMetric {
+    pub performance_metrics_group: Group,
+    pub hardware_metric_counters: Vec<(String, Counter)>,
+}
+
+impl PerformanceMetric {
+    fn register_performance_metric_gauges(
+        &mut self,
+        node_name: String,
+        perf_events: PerfEvents,
+    ) -> std::io::Result<()> {
+        let iterator = perf_events.hardware_metric_kind_vector.iter();
+        for value in iterator {
+            register_gauge!(self.get_field_gauge_name(&node_name, value.get_counter_as_string()));
+        }
         self.performance_metrics_group.enable()
-
     }
 
-    pub fn get_field_gauge_name (&mut self, field_name: String, node_name: String) -> String{
-        let mut owned_string: String = node_name.to_owned();
-        let borrowed_string: String = field_name.to_owned();
-        let together = format!("{}{}", owned_string, borrowed_string);
-        together
-    }
-
-
-
-    fn update_gauge(&self, gauge_name:String, value: f64) {
-        gauge!(gauge_name, value);
+    pub fn get_field_gauge_name(&self, field_name: &str, node_name: &str) -> String {
+        [node_name, field_name].join("\n")
     }
 }
 
 pub struct EventRate {
     start_time: u64,
-    number_of_events: u64
+    number_of_events: u64,
 }
 
 impl EventRate {
@@ -136,8 +186,8 @@ impl EventRate {
         owned_string
     }
 
-    fn register_event_rate_gauge (&mut self, node_name: String){
-        register_gauge!(self.get_gauge_name(node_name));
+    fn register_event_rate_gauge(&mut self, node_name: String) {
+        // register_gauge!(self.get_gauge_name(node_name));
     }
 }
 
@@ -235,8 +285,7 @@ where
     timer: UnsafeCell<ArconTimer<u64, OP::TimerState, B>>,
     logger: ArconLogger,
     performance_metric: PerformanceMetric,
-    event_rate: EventRate
-
+    event_rate: EventRate,
 }
 
 impl<OP, B> Node<OP, B>
@@ -252,31 +301,36 @@ where
         node_state: NodeState<OP, B>,
         backend: Arc<B>,
         logger: ArconLogger,
+        perf_events: PerfEvents,
     ) -> Self {
         let timer_id = format!("_{}_timer", descriptor);
         let timer = ArconTimer::new(timer_id, backend);
         let mut performance_metrics_group = Group::new().unwrap();
-        let mut cpu_cycles = Builder::new().group(&mut performance_metrics_group).kind(Hardware::CPU_CYCLES).build().unwrap();
-        let mut instructions= Builder::new().group(&mut performance_metrics_group).kind(Hardware::INSTRUCTIONS).build().unwrap();
-        let mut cache_misses= Builder::new().group(&mut performance_metrics_group).kind(Hardware::CACHE_MISSES).build().unwrap();
-        let mut branch_misses= Builder::new().group(&mut performance_metrics_group).kind(Hardware::BRANCH_MISSES).build().unwrap();
 
         let mut performance_metric = PerformanceMetric {
             performance_metrics_group,
-            cache_misses,
-            branch_misses,
-            instructions,
-            cpu_cycles
+            hardware_metric_counters: vec![],
         };
-        performance_metric.register_performance_metric_gauges(descriptor.clone());
 
+        let iterator = perf_events.hardware_metric_kind_vector.iter();
+        for val in iterator {
+            performance_metric.hardware_metric_counters.push((
+                String::from(val.get_counter_as_string()),
+                Builder::new()
+                    .group(&mut performance_metric.performance_metrics_group)
+                    .kind(val.get_hardware_kind())
+                    .build()
+                    .unwrap(),
+            ));
+        }
+        performance_metric.register_performance_metric_gauges(descriptor.clone(), perf_events);
 
-        let mut event_rate= EventRate{
+        let mut event_rate = EventRate {
             start_time: crate::util::get_system_time(),
-            number_of_events: 0
+            number_of_events: 0,
         };
-        event_rate.register_event_rate_gauge(descriptor.clone());
 
+        // event_rate.register_event_rate_gauge(descriptor.clone());
 
         Node {
             ctx: ComponentContext::uninitialised(),
@@ -290,14 +344,14 @@ where
             timer: UnsafeCell::new(timer),
             logger,
             performance_metric,
-            event_rate
+            event_rate,
         }
     }
 
     /// Message handler for both locally and remote sent messages
     #[inline]
     fn handle_message(&mut self, message: MessageContainer<OP::IN>) -> ArconResult<()> {
-        self.event_rate.number_of_events +=message.total_events();
+        self.event_rate.number_of_events += message.total_events();
         if !self.node_state.in_channels.contains(message.sender()) {
             error!(
                 self.logger,
@@ -316,15 +370,20 @@ where
             MessageContainer::Local(l) => self.handle_events(l.sender, l.events)?,
         }
 
-
-        let current_time=crate::util::get_system_time();
-        let number_of_messages_per_second = 1000*self.event_rate.number_of_events/(current_time-self.event_rate.start_time);
-        gauge!(self.event_rate.get_gauge_name(self.descriptor.clone()), number_of_messages_per_second as f64);
-
+        let current_time = crate::util::get_system_time();
+        let number_of_messages_per_second =
+            1000 * self.event_rate.number_of_events / (current_time - self.event_rate.start_time);
+        // gauge!(self.event_rate.get_gauge_name(self.descriptor.clone()), number_of_messages_per_second as f64);
 
         let counts = self.performance_metric.performance_metrics_group.read()?;
-        // self.performance_metric.update_gauge(self.descriptor.clone(),counts[&self.performance_metric.cycles] as f64 / counts[&self.performance_metric.insns] as f64);
-
+        let counter_iterator = self.performance_metric.hardware_metric_counters.iter();
+        for (metric_name, counter) in counter_iterator {
+            gauge!(
+                self.performance_metric
+                    .get_field_gauge_name(metric_name, &self.descriptor),
+                counts[&counter] as f64
+            );
+        }
         Ok(())
     }
 
@@ -588,7 +647,6 @@ where
 
         match arcon_msg {
             Ok(m) => {
-
                 if let Err(err) = self.handle_message(MessageContainer::Raw(m)) {
                     error!(self.logger, "Failed to handle node message: {}", err);
                 }
