@@ -48,7 +48,7 @@ fn timer_inserts(backend: BackendType, b: &mut Bencher) {
         let mut index: ArconTimer<u64, u64, B> = ArconTimer::new("_timer", backend);
         b.iter(|| {
             for id in RANDOM_KEYS.iter() {
-                assert_eq!(index.schedule_at(*id, 10, 1000).is_ok(), true);
+                assert!(index.schedule_at(*id, 10, 1000).is_ok());
             }
             //index.persist().unwrap()
         });

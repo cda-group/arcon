@@ -110,7 +110,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     loop {
         match repl.readline(">> ") {
             Ok(input) if input == "sql" => {
-                let _ = sql::repl(&repl_dir, query_sender_ref.clone());
+                let _ = sql::repl(repl_dir, query_sender_ref.clone());
             }
             Ok(input) if input == "help" => {
                 print_help();

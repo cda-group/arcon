@@ -285,7 +285,7 @@ where
                             for (_, port_ref) in self.nodes.values() {
                                 self.data_system.trigger_i(
                                     NodeEvent::CheckpointResponse(CheckpointResponse::NoAction),
-                                    &port_ref,
+                                    port_ref,
                                 );
                             }
 

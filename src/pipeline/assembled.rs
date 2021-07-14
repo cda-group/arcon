@@ -57,7 +57,7 @@ impl AssembledPipeline {
         if let Some(epoch_manager) = &self.pipeline.epoch_manager {
             self.pipeline
                 .ctrl_system
-                .start_notify(&epoch_manager)
+                .start_notify(epoch_manager)
                 .wait_timeout(std::time::Duration::from_millis(500))
                 .expect("Failed to start EpochManager");
         }

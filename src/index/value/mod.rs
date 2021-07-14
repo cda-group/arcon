@@ -133,12 +133,12 @@ mod tests {
     fn lazy_value_index_test() {
         let backend = Arc::new(temp_backend());
         let index: LazyValue<u64, _> = LazyValue::new("myvalue", backend);
-        assert_eq!(index_test(index).is_ok(), true);
+        assert!(index_test(index).is_ok());
     }
     #[test]
     fn eager_value_index_test() {
         let backend = Arc::new(temp_backend());
         let index: EagerValue<u64, _> = EagerValue::new("myvalue", backend);
-        assert_eq!(index_test(index).is_ok(), true);
+        assert!(index_test(index).is_ok());
     }
 }
