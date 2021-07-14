@@ -35,7 +35,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     state.counter().put(10)?;
 
-    assert_eq!(state.counter().rmw(|v| *v += 10).is_ok(), true);
+    assert!(state.counter().rmw(|v| *v += 10).is_ok());
 
     let counter = state.counter().get()?;
     assert_eq!(counter.unwrap().as_ref(), &20);

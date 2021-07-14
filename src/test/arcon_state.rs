@@ -51,6 +51,6 @@ fn streaming_state_test() -> ArconResult<()> {
     assert_eq!(state.counters().get(&10).unwrap(), Some(&1));
     assert_eq!(state.counters().get(&12).unwrap(), Some(&2));
     assert_eq!(state.emph(), &0);
-    assert_eq!(state.persist().is_ok(), true);
+    assert!(state.persist().is_ok());
     Ok(())
 }

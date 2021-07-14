@@ -63,7 +63,7 @@ impl KafkaConsumerConf {
         &self.client_config
     }
     pub fn topic(&self) -> &str {
-        &self.topic.as_ref().unwrap()
+        self.topic.as_ref().unwrap()
     }
     pub fn poll_timeout(&self) -> u64 {
         self.poll_timeout_ms
@@ -112,7 +112,7 @@ where
         source_index: usize,
         total_sources: usize,
     ) -> Self {
-        let consumer = BaseConsumer::from_config(&conf.client_config()).unwrap();
+        let consumer = BaseConsumer::from_config(conf.client_config()).unwrap();
 
         let metadata = consumer
             .fetch_metadata(Some(conf.topic()), Duration::from_millis(6000))

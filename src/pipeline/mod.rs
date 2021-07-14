@@ -273,9 +273,8 @@ impl Pipeline {
         <A as std::str::FromStr>::Err: std::fmt::Display,
     {
         let path = i.into();
-        assert_eq!(
+        assert!(
             std::path::Path::new(&path).exists(),
-            true,
             "File {} does not exist",
             path
         );

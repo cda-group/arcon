@@ -206,7 +206,7 @@ fn create_source_node<S, B>(
         .wait_timeout(std::time::Duration::from_millis(2000))
         .expect("Failed to start Source Node");
 
-    biconnect_components::<SourceManagerPort, _, _>(&source_manager_comp, &source_node_comp)
+    biconnect_components::<SourceManagerPort, _, _>(source_manager_comp, &source_node_comp)
         .expect("failed to biconnect components");
 
     let source_node_comp_dyn: Arc<dyn AbstractComponent<Message = SourceEvent>> = source_node_comp;

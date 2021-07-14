@@ -25,7 +25,7 @@ pub fn derive_state(input: TokenStream) -> TokenStream {
                 for attr in field.attrs.iter() {
                     ephemeral = is_ephemeral(attr);
                     {
-                        match get_table(attr, &ident) {
+                        match get_table(attr, ident) {
                             Ok(Some(quote)) => {
                                 assert_ne!(
                                     ephemeral, true,

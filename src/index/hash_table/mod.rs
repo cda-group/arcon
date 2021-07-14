@@ -146,7 +146,7 @@ where
         let table = self.raw_table_mut();
 
         // If the key exists in the mod lane already, we simply update the value..
-        if let Some(item) = table.find_mod_lane_mut(hash, |x| k.eq(&x.0)) {
+        if let Some(item) = table.find_mod_lane_mut(hash, |x| k.eq(x.0)) {
             *item = v;
         } else if let Some((mod_iter, (k, v))) = table.insert_mod_lane(hash, (k, v)) {
             self.drain_modified(mod_iter)?;
@@ -396,7 +396,7 @@ mod tests {
             let key: u64 = i as u64;
             assert_eq!(hash_index.get(&key).unwrap(), Some(&(key + 1)));
         }
-        assert_eq!(hash_index.persist().is_ok(), true);
+        assert!(hash_index.persist().is_ok());
     }
 
     #[test]
@@ -419,11 +419,11 @@ mod tests {
         // returned from our modified_iterator.
         let rmw_keys = vec![0, 1, 2];
         for key in &rmw_keys {
-            assert!(hash_index.rmw(&key, || 0, |v| *v += 1).is_ok());
+            assert!(hash_index.rmw(key, || 0, |v| *v += 1).is_ok());
         }
 
         for (key, value) in hash_index.modified_iterator() {
-            assert_eq!(rmw_keys.contains(&key), true);
+            assert!(rmw_keys.contains(key));
             assert_eq!(value, &(key + 1));
         }
     }

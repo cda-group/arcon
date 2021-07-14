@@ -46,7 +46,7 @@ where
     type Data = IN;
 
     fn from_bytes(&self, bytes: &[u8]) -> Result<Self::Data, SourceError> {
-        let s = std::str::from_utf8(&bytes).map_err(|err| SourceError::Parse {
+        let s = std::str::from_utf8(bytes).map_err(|err| SourceError::Parse {
             msg: err.to_string(),
         })?;
 

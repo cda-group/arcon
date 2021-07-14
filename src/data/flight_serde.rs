@@ -88,7 +88,7 @@ pub mod unsafe_remote {
             // But might need a BufMut rather than a Buf...
             let bytes = buf.chunk();
             let mut tmp_buf: Vec<u8> = Vec::with_capacity(bytes.len());
-            tmp_buf.put_slice(&bytes);
+            tmp_buf.put_slice(bytes);
             if let Some((msg, _)) =
                 unsafe { abomonation::decode::<RawArconMessage<A>>(&mut tmp_buf) }
             {
