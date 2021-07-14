@@ -91,7 +91,7 @@ pub mod error;
 mod index;
 /// Module containing different runtime managers
 mod manager;
-#[cfg(feature = "metrics")]
+#[cfg(feature = "arcon_metrics")]
 #[allow(dead_code)]
 /// Arcon metrics
 mod metrics;
@@ -202,6 +202,7 @@ pub mod prelude {
     pub use rayon::prelude::*;
 
     pub use std::sync::Arc;
-   pub  use crate::stream::node::{PerfEvents, HardwareCounter};
 
+    #[cfg(feature = "hardware_counters")]
+    pub use crate::metrics::perf_event::{HardwareCounter, PerfEvents};
 }

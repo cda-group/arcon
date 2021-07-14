@@ -36,142 +36,14 @@ use kompact::prelude::*;
 use std::{cell::UnsafeCell, sync::Arc};
 
 #[cfg(feature = "metrics")]
-use crate::metrics::{counter::Counter, gauge::Gauge, meter::Meter};
-
 use metrics::SetRecorderError;
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusRecorder};
 
 /// Type alias for a Node description
 pub type NodeDescriptor = String;
 
-#[cfg(feature = "metrics")]
-/// Metrics reported by an Arcon Node
-#[derive(Debug, Clone)]
-pub struct NodeMetrics {
-    /// Meter reporting inbound throughput
-    pub inbound_throughput: Meter,
-    /// Counter for total epochs processed
-    pub epoch_counter: Counter,
-    /// Counter for total watermarks processed
-    pub watermark_counter: Counter,
-    /// Current watermark
-    pub watermark: Watermark,
-    /// Current epoch
-    pub epoch: Epoch,
-    /// Gauge Metric representing number of outbound channels
-    pub outbound_channels: Gauge,
-    /// Gauge Metric representing number of inbound channels
-    pub inbound_channels: Gauge,
-}
-
-#[cfg(feature = "metrics")]
-impl Default for NodeMetrics {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-#[cfg(feature = "metrics")]
-impl NodeMetrics {
-    /// Creates a NodeMetrics struct
-    pub fn new() -> NodeMetrics {
-        NodeMetrics {
-            inbound_throughput: Meter::new(),
-            epoch_counter: Counter::new(),
-            watermark_counter: Counter::new(),
-            watermark: Watermark::new(0),
-            epoch: Epoch::new(0),
-            outbound_channels: Gauge::new(),
-            inbound_channels: Gauge::new(),
-        }
-    }
-}
-
-#[derive(Deserialize, Clone, Debug)]
-pub enum HardwareCounter {
-    CPU_CYCLES,
-    BRANCH_MISSES,
-    INSTRUCTIONS,
-    CACHE_REFERENCES,
-    CACHE_MISSES,
-    BRANCH_INSTRUCTIONS,
-    BUS_CYCLES,
-    STALLED_CYCLES_FRONTEND,
-    STALLED_CYCLES_BACKEND,
-    REF_CPU_CYCLES,
-}
-
-impl HardwareCounter {
-    fn get_hardware_kind(&self) -> Hardware {
-        match self {
-            HardwareCounter::CPU_CYCLES => Hardware::CPU_CYCLES,
-            HardwareCounter::INSTRUCTIONS => Hardware::INSTRUCTIONS,
-            HardwareCounter::CACHE_REFERENCES => Hardware::CACHE_REFERENCES,
-            HardwareCounter::CACHE_MISSES => Hardware::CACHE_MISSES,
-            HardwareCounter::BRANCH_INSTRUCTIONS => Hardware::BRANCH_INSTRUCTIONS,
-            HardwareCounter::BRANCH_MISSES => Hardware::BRANCH_MISSES,
-            HardwareCounter::BUS_CYCLES => Hardware::BUS_CYCLES,
-            HardwareCounter::STALLED_CYCLES_FRONTEND => Hardware::STALLED_CYCLES_FRONTEND,
-            HardwareCounter::STALLED_CYCLES_BACKEND => Hardware::STALLED_CYCLES_BACKEND,
-            HardwareCounter::REF_CPU_CYCLES => Hardware::REF_CPU_CYCLES,
-        }
-    }
-
-    fn get_counter_as_string(&self) -> &str {
-        match self {
-            HardwareCounter::CPU_CYCLES => "CPU_CYCLES",
-            HardwareCounter::INSTRUCTIONS => "INSTRUCTIONS",
-            HardwareCounter::CACHE_REFERENCES => "CACHE_REFERENCES",
-            HardwareCounter::CACHE_MISSES => "CACHE_MISSES",
-            HardwareCounter::BRANCH_INSTRUCTIONS => "BRANCH_INSTRUCTIONS",
-            HardwareCounter::BRANCH_MISSES => "BRANCH_MISSES",
-            HardwareCounter::BUS_CYCLES => "BUS_CYCLES",
-            HardwareCounter::STALLED_CYCLES_FRONTEND => "STALLED_CYCLES_FRONTEND",
-            HardwareCounter::STALLED_CYCLES_BACKEND => "STALLED_CYCLES_BACKEND",
-            HardwareCounter::REF_CPU_CYCLES => "REF_CPU_CYCLES",
-        }
-    }
-}
-
-#[derive(Default, Deserialize, Debug, Clone)]
-pub struct PerfEvents {
-    pub hardware_metric_kind_vector: Vec<HardwareCounter>,
-}
-
-impl PerfEvents {
-    pub fn new() -> PerfEvents {
-        PerfEvents {
-            hardware_metric_kind_vector: vec![],
-        }
-    }
-
-    pub fn add(&mut self, hardware_metric_kind: HardwareCounter) {
-        self.hardware_metric_kind_vector.push(hardware_metric_kind);
-    }
-}
-
-pub struct PerformanceMetric {
-    pub performance_metrics_group: Group,
-    pub hardware_metric_counters: Vec<(String, Counter)>,
-}
-
-impl PerformanceMetric {
-    fn register_performance_metric_gauges(
-        &mut self,
-        node_name: String,
-        perf_events: PerfEvents,
-    ) -> std::io::Result<()> {
-        let iterator = perf_events.hardware_metric_kind_vector.iter();
-        for value in iterator {
-            register_gauge!(self.get_field_gauge_name(&node_name, value.get_counter_as_string()));
-        }
-        self.performance_metrics_group.enable()
-    }
-
-    pub fn get_field_gauge_name(&self, field_name: &str, node_name: &str) -> String {
-        [node_name, field_name].join("\n")
-    }
-}
+#[cfg(feature = "hardware_counters")]
+use crate::metrics::perf_event::{PerfEvents, PerformanceMetric};
 
 pub struct EventRate {
     start_time: u64,
@@ -276,14 +148,14 @@ where
     channel_strategy: UnsafeCell<ChannelStrategy<OP::OUT>>,
     /// User-defined Operator
     operator: UnsafeCell<OP>,
-    #[cfg(feature = "metrics")]
-    /// Metrics collected by the Node
-    metrics: NodeMetrics,
+
     /// Internal Node State
     node_state: NodeState<OP, B>,
     /// Event time scheduler
     timer: UnsafeCell<ArconTimer<u64, OP::TimerState, B>>,
     logger: ArconLogger,
+
+    #[cfg(feature = "hardware_counters")]
     performance_metric: PerformanceMetric,
     event_rate: EventRate,
 }
@@ -301,29 +173,34 @@ where
         node_state: NodeState<OP, B>,
         backend: Arc<B>,
         logger: ArconLogger,
-        perf_events: PerfEvents,
+
+        #[cfg(feature = "hardware_counters")] perf_events: PerfEvents,
     ) -> Self {
         let timer_id = format!("_{}_timer", descriptor);
         let timer = ArconTimer::new(timer_id, backend);
-        let mut performance_metrics_group = Group::new().unwrap();
 
-        let mut performance_metric = PerformanceMetric {
-            performance_metrics_group,
-            hardware_metric_counters: vec![],
+        #[cfg(feature = "hardware_counters")]
+        let performance_metric = {
+            let mut performance_metrics_group = Group::new().unwrap();
+            let mut performance_metric = PerformanceMetric {
+                performance_metrics_group,
+                hardware_metric_counters: vec![],
+            };
+
+            let iterator = perf_events.hardware_metric_kind_vector.iter();
+            for val in iterator {
+                performance_metric.hardware_metric_counters.push((
+                    String::from(val.get_counter_as_string()),
+                    Builder::new()
+                        .group(&mut performance_metric.performance_metrics_group)
+                        .kind(val.get_hardware_kind())
+                        .build()
+                        .unwrap(),
+                ));
+            }
+            performance_metric.register_performance_metric_gauges(descriptor.clone(), perf_events);
+            performance_metric
         };
-
-        let iterator = perf_events.hardware_metric_kind_vector.iter();
-        for val in iterator {
-            performance_metric.hardware_metric_counters.push((
-                String::from(val.get_counter_as_string()),
-                Builder::new()
-                    .group(&mut performance_metric.performance_metrics_group)
-                    .kind(val.get_hardware_kind())
-                    .build()
-                    .unwrap(),
-            ));
-        }
-        performance_metric.register_performance_metric_gauges(descriptor.clone(), perf_events);
 
         let mut event_rate = EventRate {
             start_time: crate::util::get_system_time(),
@@ -338,12 +215,14 @@ where
             descriptor,
             channel_strategy: UnsafeCell::new(channel_strategy),
             operator: UnsafeCell::new(operator),
-            #[cfg(feature = "metrics")]
-            metrics: NodeMetrics::new(),
+
             node_state,
             timer: UnsafeCell::new(timer),
             logger,
+
+            #[cfg(feature = "hardware_counters")]
             performance_metric,
+
             event_rate,
         }
     }
@@ -375,28 +254,25 @@ where
             1000 * self.event_rate.number_of_events / (current_time - self.event_rate.start_time);
         // gauge!(self.event_rate.get_gauge_name(self.descriptor.clone()), number_of_messages_per_second as f64);
 
-        let counts = self.performance_metric.performance_metrics_group.read()?;
-        let counter_iterator = self.performance_metric.hardware_metric_counters.iter();
-        for (metric_name, counter) in counter_iterator {
-            gauge!(
-                self.performance_metric
-                    .get_field_gauge_name(metric_name, &self.descriptor),
-                counts[&counter] as f64
-            );
+        #[cfg(feature = "hardware_counters")]
+        {
+            let counts = self.performance_metric.performance_metrics_group.read()?;
+            let counter_iterator = self.performance_metric.hardware_metric_counters.iter();
+            for (metric_name, counter) in counter_iterator {
+                gauge!(
+                    self.performance_metric
+                        .get_field_gauge_name(metric_name, &self.descriptor),
+                    counts[&counter] as f64
+                );
+            }
         }
+
         Ok(())
     }
 
     #[inline(always)]
     fn sender_blocked(&mut self, sender: &NodeID) -> bool {
         self.node_state.blocked_channels().contains(sender)
-    }
-
-    #[cfg(feature = "metrics")]
-    /// Mark amount of inbound events
-    #[inline(always)]
-    fn record_incoming_events(&mut self, total: u64) {
-        self.metrics.inbound_throughput.mark_n(total);
     }
 
     /// Iterate over a batch of ArconEvent's
@@ -459,13 +335,6 @@ where
                                     .handle_timeout(timeout, make_context!(self))?;
                             }
                         };
-
-                        // Set current watermark
-                        #[cfg(feature = "metrics")]
-                        {
-                            self.metrics.watermark = new_watermark;
-                            self.metrics.watermark_counter.inc();
-                        }
 
                         // Forward the watermark
                         unsafe {
@@ -533,12 +402,6 @@ where
         // flush the blocked_channels list
         self.node_state.blocked_channels().clear();
 
-        #[cfg(feature = "metrics")]
-        {
-            self.metrics.epoch = self.node_state.current_epoch;
-            self.metrics.epoch_counter.inc();
-        }
-
         // Iterate over the message-buffer until empty
         for message in self.node_state.message_buffer().consume()? {
             self.handle_events(message.sender, message.events)?;
@@ -558,21 +421,6 @@ where
             self.logger,
             "Started Arcon Node {} with Node ID {:?}", self.descriptor, self.node_state.id
         );
-
-        #[cfg(feature = "metrics")]
-        {
-            // Start periodic timer reporting Node metrics
-            if let Some(interval) = &self.ctx().config()["node_metrics_interval"].as_i64() {
-                let time_dur = std::time::Duration::from_millis(*interval as u64);
-                self.schedule_periodic(time_dur, time_dur, |c_self, _id| {
-                    c_self.node_manager_port.trigger(NodeManagerEvent::Metrics(
-                        c_self.node_state.id,
-                        c_self.metrics.clone(),
-                    ));
-                    Handled::Ok
-                });
-            }
-        }
 
         unsafe {
             let operator = &mut (*self.operator.get());

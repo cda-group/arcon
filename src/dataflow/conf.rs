@@ -10,7 +10,9 @@ use arcon_state::Backend;
 use hocon::HoconLoader;
 use serde::Deserialize;
 use std::{path::Path, sync::Arc};
-use crate::stream::node::{PerfEvents, HardwareCounter};
+
+#[cfg(feature = "hardware_counters")]
+use crate::metrics::perf_event::PerfEvents;
 
 // Defines a Default State Backend for high-level operators that do not use any
 // custom-defined state but still need a backend defined for internal runtime state.
@@ -66,10 +68,8 @@ pub struct OperatorConf {
     pub parallelism_strategy: ParallelismStrategy,
     /// Defines the type of Stream, by default streams are Keyed in Arcon.
     pub stream_kind: StreamKind,
-
+    #[cfg(feature = "hardware_counters")]
     pub perf_events: PerfEvents,
-    // pub test : PerfEvents
-
 }
 
 impl OperatorConf {

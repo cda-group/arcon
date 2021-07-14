@@ -3,13 +3,5 @@
 
 #![allow(clippy::all)]
 
-/// Counter implementation
-pub mod counter;
-/// Exponentially Weighted Moving Average Measurement
-pub mod ewma;
-/// Gauge implementation
-pub mod gauge;
-/// Histogram implementation
-pub mod histogram;
-/// Meter implementation
-pub mod meter;
+#[cfg(feature = "hardware_counters")]
+pub mod perf_event;
