@@ -12,7 +12,7 @@ Arcon is in development and should be considered experimental until further noti
 
 #### Rust Version
 
-Arcon currently requires Rust nightly (See current toolchain [here](rust-toolchain)).
+Arcon builds against the latest stable release and the current MSRV is 1.53.0.
 
 #### User Guide
 

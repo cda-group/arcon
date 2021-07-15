@@ -9,7 +9,7 @@ pub use assigner::WindowAssigner;
 use crate::{
     prelude::*,
     table::{to_record_batches, RawRecordBatch},
-    util::{prost_helpers::ProstOption, ArconFnBounds, SafelySendableFn},
+    util::{prost_helpers::ProstOption, ArconFnBounds},
 };
 use arcon_state::{backend::handles::ActiveHandle, Aggregator, AggregatorState, Backend, VecState};
 use fxhash::FxHasher;
@@ -206,26 +206,25 @@ where
 ///         conf: Default::default(),
 ///      });
 /// ```
-pub struct AppenderWindowFn<IN, OUT, B>
+pub struct AppenderWindowFn<IN, OUT, F, B>
 where
     IN: ArconType,
     OUT: ArconType,
+    F: Fn(&[IN]) -> OUT + ArconFnBounds,
     B: Backend,
 {
     handle: ActiveHandle<B, VecState<IN>, u64, u64>,
-    materializer: &'static dyn SafelySendableFn(&[IN]) -> OUT,
+    materializer: F,
 }
 
-impl<IN, OUT, B> AppenderWindowFn<IN, OUT, B>
+impl<IN, OUT, F, B> AppenderWindowFn<IN, OUT, F, B>
 where
     IN: ArconType,
     OUT: ArconType,
+    F: Fn(&[IN]) -> OUT + ArconFnBounds,
     B: Backend,
 {
-    pub fn new(
-        backend: Arc<B>,
-        materializer: &'static dyn SafelySendableFn(&[IN]) -> OUT,
-    ) -> AppenderWindowFn<IN, OUT, B> {
+    pub fn new(backend: Arc<B>, materializer: F) -> Self {
         let mut handle = Handle::vec("window_handle")
             .with_item_key(0)
             .with_namespace(0);
@@ -241,10 +240,11 @@ where
     }
 }
 
-impl<IN, OUT, B> WindowFunction for AppenderWindowFn<IN, OUT, B>
+impl<IN, OUT, F, B> WindowFunction for AppenderWindowFn<IN, OUT, F, B>
 where
     IN: ArconType,
     OUT: ArconType,
+    F: Fn(&[IN]) -> OUT + ArconFnBounds,
     B: Backend,
 {
     type IN = IN;
@@ -278,12 +278,25 @@ where
 }
 
 #[derive(Clone)]
-pub struct IncrementalWindowAggregator<IN: ArconType, OUT: ArconType>(
-    &'static dyn SafelySendableFn(IN) -> OUT,
-    &'static dyn SafelySendableFn(IN, &OUT) -> OUT,
-);
+pub struct IncrementalWindowAggregator<IN, OUT, INIT, AGG>
+where
+    IN: ArconType,
+    OUT: ArconType,
+    INIT: Fn(IN) -> OUT + ArconFnBounds,
+    AGG: Fn(IN, &OUT) -> OUT + ArconFnBounds,
+{
+    init: INIT,
+    agg: AGG,
+    _marker: std::marker::PhantomData<(IN, OUT)>,
+}
 
-impl<IN: ArconType, OUT: ArconType> Aggregator for IncrementalWindowAggregator<IN, OUT> {
+impl<IN, OUT, INIT, AGG> Aggregator for IncrementalWindowAggregator<IN, OUT, INIT, AGG>
+where
+    IN: ArconType,
+    OUT: ArconType,
+    INIT: Fn(IN) -> OUT + ArconFnBounds,
+    AGG: Fn(IN, &OUT) -> OUT + ArconFnBounds,
+{
     type Input = IN;
     type Accumulator = ProstOption<OUT>; // this should be an option, but prost
     type Result = OUT;
@@ -295,9 +308,9 @@ impl<IN: ArconType, OUT: ArconType> Aggregator for IncrementalWindowAggregator<I
     fn add(&self, acc: &mut Self::Accumulator, value: IN) {
         match &mut acc.inner {
             None => {
-                *acc = Some((self.0)(value)).into();
+                *acc = Some((self.init)(value)).into();
             }
-            Some(inner) => *acc = Some((self.1)(value, inner)).into(),
+            Some(inner) => *acc = Some((self.agg)(value, inner)).into(),
         }
     }
 
@@ -314,6 +327,10 @@ impl<IN: ArconType, OUT: ArconType> Aggregator for IncrementalWindowAggregator<I
         opt.expect("uninitialized incremental window")
     }
 }
+
+// Alias around AggregatorState for IncrementalWindowFn
+type AggState<IN, OUT, INIT, AGG> =
+    AggregatorState<IncrementalWindowAggregator<IN, OUT, INIT, AGG>>;
 
 /// A window function that incrementally aggregates elements
 ///
@@ -343,29 +360,33 @@ impl<IN: ArconType, OUT: ArconType> Aggregator for IncrementalWindowAggregator<I
 ///         conf: Default::default(),
 ///      });
 /// ```
-pub struct IncrementalWindowFn<IN, OUT, B>
+pub struct IncrementalWindowFn<IN, OUT, INIT, AGG, B>
 where
     IN: ArconType,
     OUT: ArconType,
+    INIT: Fn(IN) -> OUT + ArconFnBounds,
+    AGG: Fn(IN, &OUT) -> OUT + ArconFnBounds,
     B: Backend,
 {
-    aggregator: ActiveHandle<B, AggregatorState<IncrementalWindowAggregator<IN, OUT>>, u64, u64>,
+    aggregator: ActiveHandle<B, AggState<IN, OUT, INIT, AGG>, u64, u64>,
 }
 
-impl<IN, OUT, B> IncrementalWindowFn<IN, OUT, B>
+impl<IN, OUT, INIT, AGG, B> IncrementalWindowFn<IN, OUT, INIT, AGG, B>
 where
     IN: ArconType,
     OUT: ArconType,
+    INIT: Fn(IN) -> OUT + ArconFnBounds,
+    AGG: Fn(IN, &OUT) -> OUT + ArconFnBounds,
     B: Backend,
 {
-    pub fn new(
-        backend: Arc<B>,
-        init: &'static dyn SafelySendableFn(IN) -> OUT,
-        agg: &'static dyn SafelySendableFn(IN, &OUT) -> OUT,
-    ) -> IncrementalWindowFn<IN, OUT, B> {
+    pub fn new(backend: Arc<B>, init: INIT, agg: AGG) -> Self {
         let mut aggregator = Handle::aggregator(
             "incremental_window_aggregating_state",
-            IncrementalWindowAggregator(init, agg),
+            IncrementalWindowAggregator {
+                init,
+                agg,
+                _marker: std::marker::PhantomData,
+            },
         )
         .with_item_key(0)
         .with_namespace(0);
@@ -378,10 +399,12 @@ where
     }
 }
 
-impl<IN, OUT, B> WindowFunction for IncrementalWindowFn<IN, OUT, B>
+impl<IN, OUT, INIT, AGG, B> WindowFunction for IncrementalWindowFn<IN, OUT, INIT, AGG, B>
 where
     IN: ArconType,
     OUT: ArconType,
+    INIT: Fn(IN) -> OUT + ArconFnBounds,
+    AGG: Fn(IN, &OUT) -> OUT + ArconFnBounds,
     B: Backend,
 {
     type IN = IN;

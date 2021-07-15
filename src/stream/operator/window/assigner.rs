@@ -338,11 +338,15 @@ mod tests {
         let descriptor = String::from("node_");
         let in_channels = vec![0.into()];
 
+        fn appender_fn(u: &[u64]) -> u64 {
+            u.len() as u64
+        }
+
         let nm = NodeManager::<
             WindowAssigner<
                 u64,
                 u64,
-                AppenderWindowFn<u64, u64, arcon_state::Sled>,
+                AppenderWindowFn<u64, u64, fn(&[u64]) -> u64, arcon_state::Sled>,
                 arcon_state::Sled,
             >,
             _,
@@ -362,10 +366,6 @@ mod tests {
             .start_notify(&node_manager_comp)
             .wait_timeout(std::time::Duration::from_millis(100))
             .expect("started");
-
-        fn appender_fn(u: &[u64]) -> u64 {
-            u.len() as u64
-        }
 
         let window = AppenderWindowFn::new(backend.clone(), &appender_fn);
 

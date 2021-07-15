@@ -3,8 +3,6 @@
 
 //! `arcon_state` contains all state management related functionality for the arcon system.
 
-#![feature(associated_type_defaults)]
-
 /// State Backend Implementations
 pub mod backend;
 /// State Trait types

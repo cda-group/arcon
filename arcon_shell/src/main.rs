@@ -83,9 +83,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let system = cfg.build().expect("fail");
 
-    let query_manager: ActorPath = NamedPath::with_socket(Transport::Tcp, arcon_sock_addr, vec![
-        QUERY_MANAGER_NAME.into(),
-    ])
+    let query_manager: ActorPath = NamedPath::with_socket(
+        Transport::Tcp,
+        arcon_sock_addr,
+        vec![QUERY_MANAGER_NAME.into()],
+    )
     .into();
 
     let query_sender_path: ActorPath =
