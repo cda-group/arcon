@@ -1,4 +1,4 @@
-// Copyright (c) 2020, KTH Royal Institute of Technology.
+// Copyright (c) 2021, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! A runtime for writing streaming applications in the Rust programming language.
@@ -28,8 +28,6 @@
 //!     - Adds serde support for Arcon Types
 
 #![feature(unboxed_closures)]
-#![feature(unsized_fn_params)]
-#![feature(core_intrinsics)]
 
 // Enable use of arcon_macros within this crate
 #[cfg_attr(test, macro_use)]
@@ -84,7 +82,9 @@ mod conf;
 mod data;
 /// Dataflow API
 mod dataflow;
+/// Arcon Error types
 pub mod error;
+/// Arcon State Indexes
 mod index;
 /// Module containing different runtime managers
 mod manager;
@@ -94,7 +94,6 @@ mod manager;
 mod metrics;
 /// Utilities for creating an Arcon pipeline
 mod pipeline;
-//pub mod result;
 /// Contains the core stream logic
 mod stream;
 /// Table implementations

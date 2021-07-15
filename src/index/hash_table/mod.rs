@@ -18,7 +18,6 @@ use arcon_state::{
     data::{Key, Value},
     error::*,
 };
-use core::intrinsics::likely;
 use std::sync::Arc;
 
 cfg_if::cfg_if! {
@@ -254,7 +253,7 @@ where
         let entry = self.table_get(key, hash);
 
         // Return early if we have a match
-        if likely(entry.is_some()) {
+        if entry.is_some() {
             return Ok(entry);
         }
 
