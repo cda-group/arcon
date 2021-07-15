@@ -87,9 +87,12 @@ pub trait Backend:
                 .ok()
                 .with_context(invalid_path)?;
 
-            ensure!(dir_name_parts.next().is_none(), InvalidPath {
-                path: directory.path(),
-            });
+            ensure!(
+                dir_name_parts.next().is_none(),
+                InvalidPath {
+                    path: directory.path(),
+                }
+            );
 
             let checkpoints_for_id = checkpoints.get_mut(id).with_context(|| UnknownNode {
                 unknown_node: id.to_string(),

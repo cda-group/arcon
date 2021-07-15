@@ -378,10 +378,12 @@ impl<B: Backend, K: Key, V: Value, IK: Metakey, N: Metakey> ActiveHandle<B, MapS
     }
 
     #[inline]
+    #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> Result<usize> {
         self.backend.map_len(&self.inner)
     }
     #[inline]
+    #[allow(clippy::len_without_is_empty)]
     pub fn is_empty(&self) -> Result<bool> {
         self.backend.map_is_empty(&self.inner)
     }
@@ -413,10 +415,12 @@ impl<B: Backend, T: Value, IK: Metakey, N: Metakey> ActiveHandle<B, VecState<T>,
         self.backend.vec_add_all(&self.inner, values)
     }
     #[inline]
+    #[allow(clippy::len_without_is_empty)]
     pub fn is_empty(&self) -> Result<bool> {
         self.backend.vec_is_empty(&self.inner)
     }
     #[inline]
+    #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> Result<usize> {
         self.backend.vec_len(&self.inner)
     }

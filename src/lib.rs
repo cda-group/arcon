@@ -27,8 +27,6 @@
 //! - `arcon_serde`
 //!     - Adds serde support for Arcon Types
 
-#![feature(unboxed_closures)]
-
 // Enable use of arcon_macros within this crate
 #[cfg_attr(test, macro_use)]
 extern crate arcon_macros;
