@@ -377,6 +377,11 @@ where
 
     #[inline]
     fn complete_epoch(&mut self) -> ArconResult<()> {
+        self.node_runtime_metrics.epoch_counter.update_value(1);
+        increment_gauge!(
+            [&self.descriptor, "_epoch_counter"].join("\n"),
+            self.node_runtime_metrics.epoch_counter.get_value()
+        );
         // flush the blocked_channels list
         self.node_state.blocked_channels().clear();
 

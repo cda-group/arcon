@@ -8,12 +8,14 @@ use serde::Deserialize;
 #[derive(Deserialize, Clone, Debug, Default)]
 pub struct NodeRuntimeMetrics {
     pub inbound_throughput: InboundThroughput,
+    pub epoch_counter: EpochCounter,
 }
 
 impl NodeRuntimeMetrics {
     pub fn new(node_name: &str) -> NodeRuntimeMetrics {
         NodeRuntimeMetrics {
             inbound_throughput: InboundThroughput::new(node_name),
+            epoch_counter: EpochCounter::new(node_name),
         }
     }
 }
@@ -44,5 +46,27 @@ impl InboundThroughput {
         InboundThroughput {
             meter: Meter::new(),
         }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, Default)]
+pub struct EpochCounter {
+    counter_value: u64,
+}
+
+impl EpochCounter {
+    pub fn new(node_name: &str) -> EpochCounter {
+        register_gauge!([node_name, "_epoch_counter"].join("\n"));
+        EpochCounter { counter_value: 0 }
+    }
+}
+
+impl MetricValue for EpochCounter {
+    fn get_value(&mut self) -> f64 {
+        self.counter_value as f64
+    }
+
+    fn update_value(&mut self, value: u64) {
+        self.counter_value += value
     }
 }
