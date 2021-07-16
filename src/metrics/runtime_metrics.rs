@@ -9,6 +9,7 @@ use serde::Deserialize;
 pub struct NodeRuntimeMetrics {
     pub inbound_throughput: InboundThroughput,
     pub epoch_counter: EpochCounter,
+    pub watermark_counter: WatermarkCounter,
 }
 
 impl NodeRuntimeMetrics {
@@ -16,6 +17,7 @@ impl NodeRuntimeMetrics {
         NodeRuntimeMetrics {
             inbound_throughput: InboundThroughput::new(node_name),
             epoch_counter: EpochCounter::new(node_name),
+            watermark_counter: WatermarkCounter::new(node_name),
         }
     }
 }
@@ -62,6 +64,28 @@ impl EpochCounter {
 }
 
 impl MetricValue for EpochCounter {
+    fn get_value(&mut self) -> f64 {
+        self.counter_value as f64
+    }
+
+    fn update_value(&mut self, value: u64) {
+        self.counter_value += value
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, Default)]
+pub struct WatermarkCounter {
+    counter_value: u64,
+}
+
+impl WatermarkCounter {
+    pub fn new(node_name: &str) -> WatermarkCounter {
+        register_gauge!([node_name, "_watermark_counter"].join("\n"));
+        WatermarkCounter { counter_value: 0 }
+    }
+}
+
+impl MetricValue for WatermarkCounter {
     fn get_value(&mut self) -> f64 {
         self.counter_value as f64
     }

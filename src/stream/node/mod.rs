@@ -313,6 +313,11 @@ where
                                     .handle_timeout(timeout, make_context!(self))?;
                             }
                         };
+                        self.node_runtime_metrics.watermark_counter.update_value(1);
+                        gauge!(
+                            [&self.descriptor, "_watermark_counter"].join("\n"),
+                            self.node_runtime_metrics.watermark_counter.get_value()
+                        );
 
                         // Forward the watermark
                         unsafe {
