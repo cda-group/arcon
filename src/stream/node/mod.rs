@@ -161,7 +161,7 @@ where
     ) -> Self {
         let timer_id = format!("_{}_timer", descriptor);
         let timer = ArconTimer::new(timer_id, backend);
-        let stuff: &str = &descriptor.clone();
+        let borrowed_descriptor: &str = &descriptor.clone();
 
         #[cfg(feature = "hardware_counters")]
         let performance_metric = {
@@ -200,7 +200,7 @@ where
             #[cfg(feature = "hardware_counters")]
             performance_metric,
 
-            node_runtime_metrics: NodeRuntimeMetrics::new(stuff),
+            node_runtime_metrics: NodeRuntimeMetrics::new(borrowed_descriptor),
         }
     }
 
