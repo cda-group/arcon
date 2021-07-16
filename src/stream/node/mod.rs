@@ -44,24 +44,7 @@ pub type NodeDescriptor = String;
 
 #[cfg(feature = "hardware_counters")]
 use crate::metrics::perf_event::{PerfEvents, PerformanceMetric};
-
-pub struct EventRate {
-    start_time: u64,
-    number_of_events: u64,
-}
-
-impl EventRate {
-    fn get_gauge_name(&mut self, node_name: String) -> String {
-        let mut owned_string: String = node_name.to_owned();
-        let borrowed_string: &str = "_event_rate";
-        owned_string.push_str(borrowed_string);
-        owned_string
-    }
-
-    fn register_event_rate_gauge(&mut self, node_name: String) {
-        // register_gauge!(self.get_gauge_name(node_name));
-    }
-}
+use crate::metrics::runtime_metrics::{InboundThroughput, MetricValue, NodeRuntimeMetrics};
 
 #[derive(ArconState)]
 pub struct NodeState<OP: Operator + 'static, B: Backend> {
@@ -157,7 +140,7 @@ where
 
     #[cfg(feature = "hardware_counters")]
     performance_metric: PerformanceMetric,
-    event_rate: EventRate,
+    node_runtime_metrics: NodeRuntimeMetrics,
 }
 
 impl<OP, B> Node<OP, B>
@@ -178,6 +161,7 @@ where
     ) -> Self {
         let timer_id = format!("_{}_timer", descriptor);
         let timer = ArconTimer::new(timer_id, backend);
+        let stuff: &str = &descriptor.clone();
 
         #[cfg(feature = "hardware_counters")]
         let performance_metric = {
@@ -202,13 +186,6 @@ where
             performance_metric
         };
 
-        let mut event_rate = EventRate {
-            start_time: crate::util::get_system_time(),
-            number_of_events: 0,
-        };
-
-        // event_rate.register_event_rate_gauge(descriptor.clone());
-
         Node {
             ctx: ComponentContext::uninitialised(),
             node_manager_port: RequiredPort::uninitialised(),
@@ -223,14 +200,16 @@ where
             #[cfg(feature = "hardware_counters")]
             performance_metric,
 
-            event_rate,
+            node_runtime_metrics: NodeRuntimeMetrics::new(stuff),
         }
     }
 
     /// Message handler for both locally and remote sent messages
     #[inline]
     fn handle_message(&mut self, message: MessageContainer<OP::IN>) -> ArconResult<()> {
-        self.event_rate.number_of_events += message.total_events();
+        self.node_runtime_metrics
+            .inbound_throughput
+            .update_value(message.total_events());
         if !self.node_state.in_channels.contains(message.sender()) {
             error!(
                 self.logger,
@@ -248,11 +227,10 @@ where
             MessageContainer::Raw(r) => self.handle_events(r.sender, r.events)?,
             MessageContainer::Local(l) => self.handle_events(l.sender, l.events)?,
         }
-
-        let current_time = crate::util::get_system_time();
-        let number_of_messages_per_second =
-            1000 * self.event_rate.number_of_events / (current_time - self.event_rate.start_time);
-        // gauge!(self.event_rate.get_gauge_name(self.descriptor.clone()), number_of_messages_per_second as f64);
+        gauge!(
+            [&self.descriptor, "_inbound_throughput"].join("\n"),
+            self.node_runtime_metrics.inbound_throughput.get_value()
+        );
 
         #[cfg(feature = "hardware_counters")]
         {

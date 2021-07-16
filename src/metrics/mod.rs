@@ -3,5 +3,8 @@
 
 #![allow(clippy::all)]
 
+mod ewma;
+mod meter;
 #[cfg(feature = "hardware_counters")]
 pub mod perf_event;
+pub mod runtime_metrics;
