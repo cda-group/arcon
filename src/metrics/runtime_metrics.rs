@@ -127,10 +127,6 @@ impl MetricValue for IncomingMessageRate {
 
     fn update_value(&mut self, value: u64) {
         self.meter.mark_n(value);
-        gauge!(
-            ["test_string", "_incoming_message_rate"].join("\n"),
-            self.get_value()
-        );
     }
 }
 
@@ -152,9 +148,5 @@ impl MetricValue for ErrorCounter {
 
     fn update_value(&mut self, value: u64) {
         self.counter_value += value;
-        gauge!(
-            ["test_string", "_error_counter"].join("\n"),
-            self.get_value()
-        );
     }
 }

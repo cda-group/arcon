@@ -1,5 +1,9 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
+use metrics::{
+    counter, decrement_gauge, gauge, histogram, increment_counter, increment_gauge,
+    register_counter, register_gauge, register_histogram, GaugeValue, Key, Recorder, Unit,
+};
 
 use crate::{
     conf::logger::ArconLogger,
@@ -53,6 +57,7 @@ where
     source: S,
     logger: ArconLogger,
     source_node_runtime_metrics: SourceNodeRuntimeMetrics,
+    source_node_descriptor: String,
 }
 
 impl<S> SourceNode<S>
@@ -66,6 +71,7 @@ where
         channel_strategy: ChannelStrategy<S::Item>,
         logger: ArconLogger,
     ) -> Self {
+        let borrowed_source_name: &str = &conf.source_name.clone();
         Self {
             ctx: ComponentContext::uninitialised(),
             manager_port: RequiredPort::uninitialised(),
@@ -78,7 +84,8 @@ where
             source_index,
             source,
             logger,
-            source_node_runtime_metrics: SourceNodeRuntimeMetrics::new("test_string"),
+            source_node_runtime_metrics: SourceNodeRuntimeMetrics::new(borrowed_source_name),
+            source_node_descriptor: String::from(borrowed_source_name),
         }
     }
     pub fn process(&mut self) -> ArconResult<()> {
@@ -87,7 +94,13 @@ where
         loop {
             self.source_node_runtime_metrics
                 .incoming_message_rate
-                .update_value(counter as u64);
+                .update_value(1);
+            gauge!(
+                [&self.source_node_descriptor, "_incoming_message_rate"].join("\n"),
+                self.source_node_runtime_metrics
+                    .incoming_message_rate
+                    .get_value()
+            );
             if counter >= self.conf.batch_size {
                 return Ok(());
             }
@@ -123,6 +136,12 @@ where
                     self.source_node_runtime_metrics
                         .error_counter
                         .update_value(1);
+                    gauge!(
+                        [&self.source_node_descriptor, "_error_counter"].join("\n"),
+                        self.source_node_runtime_metrics
+                            .incoming_message_rate
+                            .get_value()
+                    );
                     return self.handle_source_error(error);
                 }
             }

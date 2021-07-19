@@ -88,6 +88,7 @@ pub struct SourceConf<S: ArconType> {
     pub extractor: Option<TimestampExtractor<S>>,
     pub time: ArconTime,
     pub batch_size: usize,
+    pub source_name: String,
 }
 
 impl<S: ArconType> SourceConf<S> {
@@ -103,6 +104,10 @@ impl<S: ArconType> SourceConf<S> {
     pub fn set_batch_size(&mut self, size: usize) {
         self.batch_size = size;
     }
+
+    pub fn set_source_name(&mut self, name: String) {
+        self.source_name = name;
+    }
 }
 
 impl<S: ArconType> Default for SourceConf<S> {
@@ -111,6 +116,7 @@ impl<S: ArconType> Default for SourceConf<S> {
             extractor: None,
             time: Default::default(),
             batch_size: 1024,
+            source_name: format!("source_{}", uuid::Uuid::new_v4().to_string()),
         }
     }
 }
