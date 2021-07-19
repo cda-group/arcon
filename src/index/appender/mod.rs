@@ -140,6 +140,6 @@ mod tests {
     fn eager_appender_test() {
         let backend = Arc::new(temp_backend());
         let index = EagerAppender::new("appender", backend);
-        assert_eq!(index_test(index).is_ok(), true);
+        assert!(index_test(index).is_ok());
     }
 }

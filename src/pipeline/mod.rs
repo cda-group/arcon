@@ -11,7 +11,8 @@ use crate::{
     conf::{logger::ArconLogger, ArconConf, ExecutionMode},
     data::ArconMessage,
     dataflow::{
-        conf::{ParallelSourceBuilder, SourceBuilder, SourceBuilderType, SourceConf},
+        api::{ParallelSourceBuilder, SourceBuilder, SourceBuilderType},
+        conf::SourceConf,
         constructor::{source_manager_constructor, ErasedComponent},
         dfg::*,
         stream::Context,
@@ -281,9 +282,8 @@ impl Pipeline {
         <A as std::str::FromStr>::Err: std::fmt::Display,
     {
         let path = i.into();
-        assert_eq!(
+        assert!(
             std::path::Path::new(&path).exists(),
-            true,
             "File {} does not exist",
             path
         );

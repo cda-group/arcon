@@ -87,9 +87,12 @@ pub trait Backend:
                 .ok()
                 .with_context(invalid_path)?;
 
-            ensure!(dir_name_parts.next().is_none(), InvalidPath {
-                path: directory.path(),
-            });
+            ensure!(
+                dir_name_parts.next().is_none(),
+                InvalidPath {
+                    path: directory.path(),
+                }
+            );
 
             let checkpoints_for_id = checkpoints.get_mut(id).with_context(|| UnknownNode {
                 unknown_node: id.to_string(),
@@ -177,12 +180,14 @@ pub trait Backend:
 }
 
 pub trait StateType: Default {
-    type ExtraData = ();
+    type ExtraData;
 }
 
 #[derive(Debug)]
 pub struct ValueState<T: Value>(PhantomData<T>);
-impl<T: Value> StateType for ValueState<T> {}
+impl<T: Value> StateType for ValueState<T> {
+    type ExtraData = ();
+}
 impl<T: Value> Default for ValueState<T> {
     fn default() -> Self {
         ValueState(Default::default())
@@ -191,7 +196,9 @@ impl<T: Value> Default for ValueState<T> {
 
 #[derive(Debug)]
 pub struct MapState<K: Key, V: Value>(PhantomData<(K, V)>);
-impl<K: Key, V: Value> StateType for MapState<K, V> {}
+impl<K: Key, V: Value> StateType for MapState<K, V> {
+    type ExtraData = ();
+}
 impl<K: Key, V: Value> Default for MapState<K, V> {
     fn default() -> Self {
         MapState(Default::default())
@@ -200,7 +207,9 @@ impl<K: Key, V: Value> Default for MapState<K, V> {
 
 #[derive(Debug)]
 pub struct VecState<T: Value>(PhantomData<T>);
-impl<T: Value> StateType for VecState<T> {}
+impl<T: Value> StateType for VecState<T> {
+    type ExtraData = ();
+}
 impl<T: Value> Default for VecState<T> {
     fn default() -> Self {
         VecState(Default::default())

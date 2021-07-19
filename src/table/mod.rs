@@ -262,7 +262,7 @@ impl TryFrom<ImmutableTable> for RawTable {
 
         for batch in table.batches.iter() {
             let (_, encoded_data) = ipc
-                .encoded_batch(&batch, &mut tracker, &write_options)
+                .encoded_batch(batch, &mut tracker, &write_options)
                 .map_err(|e| ArrowError::IoError(e.to_string()))?;
 
             raw_batches.push(RawRecordBatch {

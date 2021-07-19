@@ -245,7 +245,7 @@ fn hash_fields_stream(
     let keys: Vec<proc_macro2::TokenStream> = keys
         .into_iter()
         .map(|k| {
-            let struct_field = Ident::new(&k.trim(), Span::call_site());
+            let struct_field = Ident::new(k.trim(), Span::call_site());
             quote! { self.#struct_field.hash(&mut state); }
         })
         .collect();

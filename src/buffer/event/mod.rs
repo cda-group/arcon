@@ -491,11 +491,11 @@ mod tests {
             assert_eq!(data.len(), 0);
 
             // No available buffers at this point
-            assert_eq!(pool.try_get().is_none(), true);
+            assert!(pool.try_get().is_none());
         }
         // reader_two is dropped at this point.
         // its underlying buffer should be returned to the pool
 
-        assert_eq!(pool.try_get().is_some(), true);
+        assert!(pool.try_get().is_some());
     }
 }

@@ -1,4 +1,4 @@
-// Copyright (c) 2020, KTH Royal Institute of Technology.
+// Copyright (c) 2021, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! A runtime for writing streaming applications in the Rust programming language.
@@ -12,10 +12,7 @@
 //!     .collection((0..100).collect::<Vec<u64>>(), |conf| {
 //!         conf.set_arcon_time(ArconTime::Process);
 //!     })
-//!     .operator(OperatorBuilder {
-//!         constructor: Arc::new(|_| Filter::new(|x| *x > 50)),
-//!         conf: Default::default(),
-//!      })
+//!     .filter(|x| *x > 50)
 //!     .to_console()
 //!     .build();
 //!
@@ -29,10 +26,6 @@
 //!     - Enables RocksDB to be used as a Backend
 //! - `arcon_serde`
 //!     - Adds serde support for Arcon Types
-
-#![feature(unboxed_closures)]
-#![feature(unsized_fn_params)]
-#![feature(core_intrinsics)]
 
 // Enable use of arcon_macros within this crate
 #[cfg_attr(test, macro_use)]
@@ -87,7 +80,9 @@ mod conf;
 mod data;
 /// Dataflow API
 mod dataflow;
+/// Arcon Error types
 pub mod error;
+/// Arcon State Indexes
 mod index;
 /// Module containing different runtime managers
 mod manager;
@@ -97,7 +92,6 @@ mod manager;
 mod metrics;
 /// Utilities for creating an Arcon pipeline
 mod pipeline;
-//pub mod result;
 /// Contains the core stream logic
 mod stream;
 /// Table implementations
@@ -142,9 +136,9 @@ pub mod prelude {
     pub use crate::{
         conf::{logger::LoggerType, ArconConf},
         data::{ArconElement, ArconNever, ArconType, StateID, VersionId},
-        dataflow::conf::{
-            OperatorBuilder, OperatorConf, ParallelismStrategy, SourceBuilder, SourceConf,
-            StreamKind,
+        dataflow::{
+            api::{Assigner, OperatorBuilder, SourceBuilder, WindowBuilder},
+            conf::{OperatorConf, ParallelismStrategy, SourceConf, StreamKind},
         },
         manager::snapshot::Snapshot,
         pipeline::{AssembledPipeline, Pipeline, Stream},
@@ -152,7 +146,7 @@ pub mod prelude {
             operator::{
                 function::{Filter, FlatMap, Map, MapInPlace},
                 sink::local_file::LocalFileSink,
-                window::{AppenderWindow, ArrowWindow, IncrementalWindow, WindowAssigner},
+                window::{AppenderWindowFn, ArrowWindowFn, IncrementalWindowFn, WindowAssigner},
                 Operator, OperatorContext,
             },
             source::{schema::ProtoSchema, Source},
@@ -186,6 +180,8 @@ pub mod prelude {
 
     pub use arcon_state as state;
 
+    #[cfg(feature = "rocksdb")]
+    pub use arcon_state::Rocks;
     pub use arcon_state::{
         Aggregator, AggregatorState, Backend, BackendType, Handle, MapState, ReducerState, Sled,
         ValueState, VecState,

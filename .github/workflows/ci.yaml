@@ -5,6 +5,10 @@ on:
   pull_request:
     branches: ["master"]
 
+env:
+  CARGO_TERM_COLOR: always
+  msrv: 1.53.0
+
 jobs:
   rustfmt:
     runs-on: ubuntu-latest
@@ -14,6 +18,7 @@ jobs:
       - name: install toolchain
         uses: actions-rs/toolchain@v1
         with:
+            toolchain: stable
             default: true
             profile: minimal
             components: rustfmt
@@ -30,6 +35,7 @@ jobs:
       - name: install toolchain
         uses: actions-rs/toolchain@v1
         with:
+            toolchain: stable
             default: true
             profile: minimal
             components: clippy
@@ -63,7 +69,7 @@ jobs:
       - name: install toolchain
         uses: actions-rs/toolchain@v1
         with:
-            toolchain: ${{ matrix.toolchain }}
+            toolchain: ${{ env.msrv }}
             default: true
             profile: minimal
       - name: Remove msys64 # taken from rust-rocksdb

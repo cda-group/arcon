@@ -392,7 +392,7 @@ pub mod tests {
         let mut restore_dir_path = restore_dir.path().to_path_buf();
         restore_dir_path.push("chkp0");
 
-        let db = Rocks::create(&dir_path).unwrap();
+        let db = Rocks::create(dir_path).unwrap();
 
         let key: &[u8] = b"key";
         let initial_value: &[u8] = b"value";

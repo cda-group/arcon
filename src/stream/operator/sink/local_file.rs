@@ -91,7 +91,7 @@ mod tests {
                 conf.set_arcon_time(ArconTime::Process);
             })
             .operator(OperatorBuilder {
-                constructor: Arc::new(move |_| LocalFileSink::new(&file_path)),
+                constructor: Arc::new(move |_: Arc<Sled>| LocalFileSink::new(&file_path)),
                 conf: OperatorConf {
                     parallelism_strategy: ParallelismStrategy::Static(1),
                     ..Default::default()

@@ -3,7 +3,6 @@
 A runtime for writing streaming applications with the Rust programming language.
 
 ![ci](https://github.com/cda-group/arcon/workflows/ci/badge.svg)
-[![Cargo](https://img.shields.io/badge/crates.io-v0.1.3-orange)](https://crates.io/crates/arcon)
 [![License](https://img.shields.io/badge/License-AGPL--3.0--only-blue)](https://github.com/cda-group/arcon)
 
 #### Project Status
@@ -12,15 +11,11 @@ Arcon is in development and should be considered experimental until further noti
 
 #### Rust Version
 
-Arcon currently requires Rust nightly (See current toolchain [here](rust-toolchain)).
-
-#### User Guide
-
-More detailed information about Arcon can be found [here](https://cda-group.github.io/arcon)
+Arcon builds against the latest stable release and the current MSRV is 1.53.0.
 
 ### Roadmap
 
-See the roadmap [here](https://cda-group.github.io/arcon/roadmap.html)
+See the roadmap [here](https://github.com/cda-group/arcon/projects/1)
 
 ## Highlights
 

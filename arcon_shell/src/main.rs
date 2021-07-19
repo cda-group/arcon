@@ -83,9 +83,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let system = cfg.build().expect("fail");
 
-    let query_manager: ActorPath = NamedPath::with_socket(Transport::Tcp, arcon_sock_addr, vec![
-        QUERY_MANAGER_NAME.into(),
-    ])
+    let query_manager: ActorPath = NamedPath::with_socket(
+        Transport::Tcp,
+        arcon_sock_addr,
+        vec![QUERY_MANAGER_NAME.into()],
+    )
     .into();
 
     let query_sender_path: ActorPath =
@@ -110,7 +112,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     loop {
         match repl.readline(">> ") {
             Ok(input) if input == "sql" => {
-                let _ = sql::repl(&repl_dir, query_sender_ref.clone());
+                let _ = sql::repl(repl_dir, query_sender_ref.clone());
             }
             Ok(input) if input == "help" => {
                 print_help();

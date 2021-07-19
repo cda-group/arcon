@@ -1,6 +1,8 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/// Builder types used in the API
+pub mod api;
 /// Dataflow configurations for Operators and Sources
 pub mod conf;
 /// Runtime constructors

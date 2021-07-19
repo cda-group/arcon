@@ -4,7 +4,8 @@
 use crate::{
     data::{ArconType, NodeID},
     dataflow::{
-        conf::{OperatorBuilder, ParallelismStrategy},
+        api::{Assigner, OperatorBuilder, WindowBuilder},
+        conf::{DefaultBackend, ParallelismStrategy, StreamKind},
         constructor::*,
         dfg::{ChannelKind, DFGNode, DFGNodeID, DFGNodeKind, DFG},
     },
@@ -13,11 +14,13 @@ use crate::{
         node::debug::DebugNode,
         operator::{
             function::{Filter, FlatMap, Map, MapInPlace},
+            window::{WindowAssigner, WindowFunction},
             Operator,
         },
     },
     util::ArconFnBounds,
 };
+use arcon_state::Backend;
 use std::{marker::PhantomData, sync::Arc};
 
 #[derive(Default)]
@@ -65,7 +68,7 @@ impl<IN: ArconType> Stream<IN> {
         F: Fn(IN) -> OUT + ArconFnBounds,
     {
         self.operator(OperatorBuilder {
-            constructor: Arc::new(move |_| Map::new(f.clone())),
+            constructor: Arc::new(move |_: Arc<DefaultBackend>| Map::new(f.clone())),
             conf: Default::default(),
         })
     }
@@ -88,7 +91,7 @@ impl<IN: ArconType> Stream<IN> {
         F: Fn(&mut IN) + ArconFnBounds,
     {
         self.operator(OperatorBuilder {
-            constructor: Arc::new(move |_| MapInPlace::new(f.clone())),
+            constructor: Arc::new(move |_: Arc<DefaultBackend>| MapInPlace::new(f.clone())),
             conf: Default::default(),
         })
     }
@@ -111,7 +114,7 @@ impl<IN: ArconType> Stream<IN> {
         F: Fn(&IN) -> bool + ArconFnBounds,
     {
         self.operator(OperatorBuilder {
-            constructor: Arc::new(move |_| Filter::new(f.clone())),
+            constructor: Arc::new(move |_: Arc<DefaultBackend>| Filter::new(f.clone())),
             conf: Default::default(),
         })
     }
@@ -136,8 +139,72 @@ impl<IN: ArconType> Stream<IN> {
         F: Fn(IN) -> OUTS + ArconFnBounds,
     {
         self.operator(OperatorBuilder {
-            constructor: Arc::new(move |_| FlatMap::new(f.clone())),
+            constructor: Arc::new(move |_: Arc<DefaultBackend>| FlatMap::new(f.clone())),
             conf: Default::default(),
+        })
+    }
+
+    /// Adds a Window Operator to the pipeline
+    ///
+    /// Example
+    /// ```no_run
+    /// use arcon::prelude::*;
+    /// let stream: Stream<u64> = Pipeline::default()
+    ///     .collection((0..100).collect::<Vec<u64>>(), |conf| {
+    ///         conf.set_arcon_time(ArconTime::Process);
+    ///     })
+    ///     .window(WindowBuilder {
+    ///         assigner: Assigner::Tumbling {
+    ///            length: Time::seconds(2000),
+    ///            late_arrival: Time::seconds(0),
+    ///          },
+    ///         function: Arc::new(|backend: Arc<Sled>| {
+    ///            fn window_sum(buffer: &[u64]) -> u64 {
+    ///               buffer.iter().sum()
+    ///            }
+    ///            AppenderWindowFn::new(backend, &window_sum)
+    ///         }),
+    ///         conf: Default::default(),
+    ///      });
+    /// ```
+    pub fn window<OUT, W, B>(self, builder: WindowBuilder<W, B>) -> Stream<OUT>
+    where
+        OUT: ArconType,
+        W: WindowFunction<IN = IN, OUT = OUT>,
+        B: Backend,
+    {
+        let assigner = builder.assigner;
+        let fn_constructor = builder.function.clone();
+        let keyed = match builder.conf.stream_kind {
+            StreamKind::Keyed => true,
+            StreamKind::Local => false,
+        };
+        self.operator(OperatorBuilder::<_, B> {
+            constructor: Arc::new(move |backend| match &assigner {
+                Assigner::Sliding {
+                    length,
+                    slide,
+                    late_arrival,
+                } => WindowAssigner::sliding(
+                    fn_constructor(backend.clone()),
+                    backend,
+                    *length,
+                    *slide,
+                    *late_arrival,
+                    keyed,
+                ),
+                Assigner::Tumbling {
+                    length,
+                    late_arrival,
+                } => WindowAssigner::tumbling(
+                    fn_constructor(backend.clone()),
+                    backend,
+                    *length,
+                    *late_arrival,
+                    keyed,
+                ),
+            }),
+            conf: builder.conf,
         })
     }
 
@@ -151,13 +218,14 @@ impl<IN: ArconType> Stream<IN> {
     ///         conf.set_arcon_time(ArconTime::Process);
     ///     })
     ///     .operator(OperatorBuilder {
-    ///         constructor: Arc::new(|_| Map::new(|x| x + 10)),
+    ///         constructor: Arc::new(|_: Arc<Sled>| Map::new(|x| x + 10)),
     ///         conf: Default::default(),
     ///     });
     /// ```
-    pub fn operator<OP>(mut self, builder: OperatorBuilder<OP>) -> Stream<OP::OUT>
+    pub fn operator<OP, B>(mut self, builder: OperatorBuilder<OP, B>) -> Stream<OP::OUT>
     where
         OP: Operator<IN = IN> + 'static,
+        B: arcon_state::Backend,
     {
         // Set up directory for the operator and create Backend
         let mut state_dir = self.ctx.pipeline.arcon_conf().state_dir();

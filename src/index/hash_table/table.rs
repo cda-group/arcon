@@ -4,15 +4,7 @@
 // Modifications Copyright (c) KTH Royal Institute of Technology
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use core::{
-    alloc::Layout,
-    hint,
-    intrinsics::{likely, unlikely},
-    iter::FusedIterator,
-    marker::PhantomData,
-    mem,
-    ptr::NonNull,
-};
+use core::{alloc::Layout, hint, iter::FusedIterator, marker::PhantomData, mem, ptr::NonNull};
 use std::alloc::{alloc, dealloc, handle_alloc_error};
 
 use crate::index::hash_table::{
@@ -605,7 +597,7 @@ where
                     let index = (pos + bit) & self.mod_mask;
                     let bucket = self.mod_bucket(index);
                     let &(ref key, ref value, _) = bucket.as_ref();
-                    if likely(eq((key, value))) {
+                    if eq((key, value)) {
                         // take ownership
                         let (key, value, _) = bucket.read();
                         // clear lane bytes
@@ -633,7 +625,7 @@ where
                     let index = (pos + bit) & self.mod_mask;
                     let bucket = self.mod_bucket(index);
                     let &mut (ref key, ref mut value, _) = bucket.as_mut();
-                    if likely(eq((key, value))) {
+                    if eq((key, value)) {
                         // If the meta byte is safe, then increase modification
                         // counter as we are setting the meta to MODIFIED_TOUCHED.
                         if is_safe(*self.meta(index)) {
@@ -665,7 +657,7 @@ where
                     let index = (pos + bit) & self.read_mask;
                     let bucket = self.read_bucket(index);
                     let &(ref key, ref value) = bucket.as_ref();
-                    if likely(eq((key, value))) {
+                    if eq((key, value)) {
                         self.set_read_ctrl(index, EMPTY);
                         return Some(bucket.read());
                     }
@@ -686,7 +678,7 @@ where
                     let index = (pos + bit) & self.mod_mask;
                     let bucket = self.mod_bucket(index);
                     let &(ref key, ref value, _) = bucket.as_ref();
-                    if likely(eq((key, value))) {
+                    if eq((key, value)) {
                         if is_safe(*self.meta(index)) {
                             self.set_meta(index, SAFE_TOUCHED);
                         }
@@ -702,7 +694,7 @@ where
                     let index = (pos + bit) & self.read_mask;
                     let bucket = self.read_bucket(index);
                     let &(ref key, ref value) = bucket.as_ref();
-                    if likely(eq((key, value))) {
+                    if eq((key, value)) {
                         return Some((key, value));
                     }
                 }
@@ -861,14 +853,14 @@ where
             // were MODIFIED_TOUCHED and were thus converted into SAFE_TOUCHED.
             // If this is the case, we need to iterate over a few SAFE_TOUCHED buckets
             // and erase them from the table.
-            if unlikely(self.iter.erased_buckets == 0) {
+            if self.iter.erased_buckets == 0 {
                 let mut cleared_groups = 0;
                 let raw_table = &mut self.iter.table;
                 for pos in raw_table.probe_mod(self.hash) {
                     unsafe {
                         let group = Group::load(raw_table.meta(pos));
                         let bitmask = group.match_byte(SAFE_TOUCHED);
-                        if likely(bitmask.any_bit_set()) {
+                        if bitmask.any_bit_set() {
                             cleared_groups += 1;
                         }
 

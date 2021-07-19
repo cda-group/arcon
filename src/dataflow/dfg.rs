@@ -2,6 +2,7 @@ use super::constructor::*;
 
 /// A logical dataflow-graph.
 #[allow(dead_code)]
+#[allow(clippy::upper_case_acronyms)]
 #[derive(Default)]
 pub struct DFG {
     /// The graph is represented as a Vec for maximum space-efficiency.

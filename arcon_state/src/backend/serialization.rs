@@ -59,10 +59,10 @@ pub mod fixed_bytes {
     pub fn serialize_bytes_into(target: &mut impl BufMut, payload: &[u8]) -> Result<()> {
         let dest_len = target.remaining_mut();
         let needed = usize::SIZE + payload.len();
-        ensure!(dest_len >= needed, FixedBytesSerializationError {
-            dest_len,
-            needed
-        });
+        ensure!(
+            dest_len >= needed,
+            FixedBytesSerializationError { dest_len, needed }
+        );
         serialize_into(target, &payload.len())?;
         target.put_slice(payload);
         Ok(())
@@ -86,10 +86,13 @@ pub mod fixed_bytes {
         let len: usize = deserialize_from(source)?;
 
         let source_len = source.remaining();
-        ensure!(source_len >= len, FixedBytesDeserializationError {
-            needed: len,
-            source_len
-        });
+        ensure!(
+            source_len >= len,
+            FixedBytesDeserializationError {
+                needed: len,
+                source_len
+            }
+        );
 
         let mut res = vec![0; len];
         source.copy_to_slice(&mut res);
@@ -319,9 +322,10 @@ mod test {
         type X = (u8, u64, i16);
         let payload = (255, 0xDEAD_BEEF_CAFE_BABE, -128);
         let bytes = fixed_bytes::serialize(&payload).unwrap();
-        assert_eq!(bytes, vec![
-            255, 0xBE, 0xBA, 0xFE, 0xCA, 0xEF, 0xBE, 0xAD, 0xDE, 128, 255
-        ]);
+        assert_eq!(
+            bytes,
+            vec![255, 0xBE, 0xBA, 0xFE, 0xCA, 0xEF, 0xBE, 0xAD, 0xDE, 128, 255]
+        );
         let deserialized = fixed_bytes::deserialize::<X>(&bytes).unwrap();
         assert_eq!(deserialized, payload);
 

@@ -13,7 +13,6 @@ pub use map_in_place::MapInPlace;
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::prelude::*;
 
     fn wait(millis: u64) {
@@ -27,10 +26,7 @@ mod tests {
             .collection((0..10).collect::<Vec<u64>>(), |conf| {
                 conf.set_arcon_time(ArconTime::Process);
             })
-            .operator(OperatorBuilder {
-                constructor: Arc::new(|_| Map::new(|x| x + 10)),
-                conf: Default::default(),
-            })
+            .map(|x| x + 10)
             .build();
         check_map_result(pipeline);
     }
@@ -42,10 +38,7 @@ mod tests {
             .collection((0..10).collect::<Vec<u64>>(), |conf| {
                 conf.set_arcon_time(ArconTime::Process);
             })
-            .operator(OperatorBuilder {
-                constructor: Arc::new(|_| MapInPlace::new(|x| *x += 10)),
-                conf: Default::default(),
-            })
+            .map_in_place(|x| *x += 10)
             .build();
 
         check_map_result(pipeline);
@@ -71,10 +64,7 @@ mod tests {
             .collection((0..10).collect::<Vec<u64>>(), |conf| {
                 conf.set_arcon_time(ArconTime::Process);
             })
-            .operator(OperatorBuilder {
-                constructor: Arc::new(|_| Filter::new(|x| *x < 5)),
-                conf: Default::default(),
-            })
+            .filter(|x| *x < 5)
             .build();
 
         pipeline.start();
@@ -95,10 +85,7 @@ mod tests {
             .collection((0..5).collect::<Vec<u64>>(), |conf| {
                 conf.set_arcon_time(ArconTime::Process);
             })
-            .operator(OperatorBuilder {
-                constructor: Arc::new(|_| FlatMap::new(|x| (0..x))),
-                conf: Default::default(),
-            })
+            .flatmap(|x| (0..x))
             .build();
 
         pipeline.start();
