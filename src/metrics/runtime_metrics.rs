@@ -21,6 +21,18 @@ impl NodeRuntimeMetrics {
         }
     }
 }
+pub struct SourceNodeRuntimeMetrics {
+    pub incoming_message_rate: IncomingMessageRate,
+    pub error_counter: ErrorCounter,
+}
+impl SourceNodeRuntimeMetrics {
+    pub fn new(source_node_name: &str) -> SourceNodeRuntimeMetrics {
+        SourceNodeRuntimeMetrics {
+            incoming_message_rate: IncomingMessageRate::new(source_node_name),
+            error_counter: ErrorCounter::new(source_node_name),
+        }
+    }
+}
 
 pub trait MetricValue {
     fn get_value(&mut self) -> f64;
@@ -92,5 +104,57 @@ impl MetricValue for WatermarkCounter {
 
     fn update_value(&mut self, value: u64) {
         self.counter_value += value
+    }
+}
+
+pub struct IncomingMessageRate {
+    meter: Meter,
+}
+
+impl IncomingMessageRate {
+    pub fn new(node_name: &str) -> IncomingMessageRate {
+        register_gauge!([node_name, "_incoming_message_rate"].join("\n"));
+        IncomingMessageRate {
+            meter: Meter::new(),
+        }
+    }
+}
+
+impl MetricValue for IncomingMessageRate {
+    fn get_value(&mut self) -> f64 {
+        self.meter.get_one_min_rate()
+    }
+
+    fn update_value(&mut self, value: u64) {
+        self.meter.mark_n(value);
+        gauge!(
+            ["test_string", "_incoming_message_rate"].join("\n"),
+            self.get_value()
+        );
+    }
+}
+
+pub struct ErrorCounter {
+    counter_value: u64,
+}
+
+impl ErrorCounter {
+    pub fn new(source_node_name: &str) -> ErrorCounter {
+        register_gauge!([source_node_name, "_error_counter"].join("\n"));
+        ErrorCounter { counter_value: 0 }
+    }
+}
+
+impl MetricValue for ErrorCounter {
+    fn get_value(&mut self) -> f64 {
+        self.counter_value as f64
+    }
+
+    fn update_value(&mut self, value: u64) {
+        self.counter_value += value;
+        gauge!(
+            ["test_string", "_error_counter"].join("\n"),
+            self.get_value()
+        );
     }
 }

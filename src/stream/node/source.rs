@@ -6,6 +6,7 @@ use crate::{
     data::{ArconElement, ArconEvent, Epoch, Watermark},
     error::{source::SourceError, ArconResult},
     manager::source::{SourceManagerEvent, SourceManagerPort},
+    metrics::runtime_metrics::{MetricValue, SourceNodeRuntimeMetrics},
     prelude::SourceConf,
     stream::{
         channel::strategy::ChannelStrategy,
@@ -51,6 +52,7 @@ where
     source_index: usize,
     source: S,
     logger: ArconLogger,
+    source_node_runtime_metrics: SourceNodeRuntimeMetrics,
 }
 
 impl<S> SourceNode<S>
@@ -76,12 +78,16 @@ where
             source_index,
             source,
             logger,
+            source_node_runtime_metrics: SourceNodeRuntimeMetrics::new("test_string"),
         }
     }
     pub fn process(&mut self) -> ArconResult<()> {
         let mut counter = 0;
 
         loop {
+            self.source_node_runtime_metrics
+                .incoming_message_rate
+                .update_value(counter as u64);
             if counter >= self.conf.batch_size {
                 return Ok(());
             }
@@ -114,6 +120,9 @@ where
                     return Ok(());
                 }
                 Err(error) => {
+                    self.source_node_runtime_metrics
+                        .error_counter
+                        .update_value(1);
                     return self.handle_source_error(error);
                 }
             }
