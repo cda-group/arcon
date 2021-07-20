@@ -92,15 +92,6 @@ where
         let mut counter = 0;
 
         loop {
-            self.source_node_runtime_metrics
-                .incoming_message_rate
-                .update_value(1);
-            gauge!(
-                [&self.source_node_descriptor, "_incoming_message_rate"].join("\n"),
-                self.source_node_runtime_metrics
-                    .incoming_message_rate
-                    .get_value()
-            );
             if counter >= self.conf.batch_size {
                 return Ok(());
             }
@@ -109,6 +100,15 @@ where
 
             match poll {
                 Ok(Poll::Ready(record)) => {
+                    self.source_node_runtime_metrics
+                        .incoming_message_rate
+                        .update_value(1);
+                    gauge!(
+                        [&self.source_node_descriptor, "_incoming_message_rate"].join("\n"),
+                        self.source_node_runtime_metrics
+                            .incoming_message_rate
+                            .get_value()
+                    );
                     match self.conf.time {
                         ArconTime::Event => match &self.conf.extractor {
                             Some(extractor) => {
