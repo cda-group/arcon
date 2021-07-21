@@ -1,0 +1,66 @@
+---
+title: About
+section: Arcon
+slug: /learn/about/
+order: 1
+---
+
+import {
+  FeatureSection,
+  FeatureList,
+  Feature,
+  FeatureImage,
+  FeatureTitle,
+  FeatureText,
+} from 'smooth-doc/components'
+import rustLogoUrl from '../../images/rust_logo.png'
+import arrowLogoUrl from '../../images/icons8-crafting-table-100.png'
+import stateLogoUrl from '../../images/icons8-big-data-100.png'
+import middlewareLogoUrl from '../../images/icons8-data-transfer-100.png'
+
+# Overview
+
+Arcon is a runtime for writing real-time analytics applications with the Rust programming language. 
+At the core, Arcon aims to enable users to build scalable stateful streaming applications with event-time semantics.
+
+## Highlights 
+<FeatureSection>
+<FeatureList>
+<Feature>
+<FeatureImage src={rustLogoUrl} />
+<FeatureTitle>Rust</FeatureTitle>
+<FeatureText>
+Arcon is written entirely in 
+Rust for high performance, 
+memory safety, 
+and no garbage collection.
+</FeatureText>
+</Feature>
+<Feature>
+<FeatureImage src={arrowLogoUrl} />
+<FeatureTitle>Hybrid Columnar/Row</FeatureTitle>
+<FeatureText>
+Arcon supports Protobuf and has first-class integration with Apache Arrow™.
+</FeatureText>
+</Feature>
+<Feature>
+<FeatureImage src={middlewareLogoUrl} />
+<FeatureTitle>Middleware</FeatureTitle>
+<FeatureText>
+Arcon utilises Kompact, a state-of-the-art message passing framework.
+</FeatureText>
+</Feature>
+<Feature>
+<FeatureImage src={stateLogoUrl} />
+<FeatureTitle>State Querying</FeatureTitle>
+<FeatureText>
+Work-in-Progress State Querying model with support for time-semantics.
+</FeatureText>
+</Feature>
+</FeatureList>
+</FeatureSection>
+
+
+## Background
+
+Arcon is a research project developed at KTH Royal Institute of Technology and RISE Research Institutes of Sweden in Stockholm, Sweden.
