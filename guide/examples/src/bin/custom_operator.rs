@@ -27,10 +27,11 @@ impl Operator for MyOperator {
         mut ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
     ) -> ArconResult<()> {
         #[cfg(feature = "metrics")]
-        {
-            ctx.register_gauge("custom_gauge");
-            ctx.register_gauge("custom_counter");
-        }
+        ctx.register_gauge("custom_gauge");
+
+        #[cfg(feature = "metrics")]
+        ctx.register_gauge("custom_counter");
+
         Ok(())
         // within the function it would actually do the register_gauge!("operator_name_id_my_cool_gauge");
     }
@@ -42,10 +43,10 @@ impl Operator for MyOperator {
         let custom_event = CustomEvent { id: element.data };
 
         #[cfg(feature = "metrics")]
-        {
-            ctx.update_gauge("custom_gauge", 1.0);
-            ctx.increment_counter("custom_counter");
-        }
+        ctx.update_gauge("custom_gauge", 1.0);
+
+        #[cfg(feature = "metrics")]
+        ctx.increment_counter("custom_counter");
 
         ctx.output(ArconElement {
             data: custom_event,

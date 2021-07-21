@@ -176,18 +176,18 @@ where
     }
 
     pub fn register_gauge(&mut self, name: &'static str) {
-        register_gauge!([self.name, name].join("\n"));
+        register_gauge!(format!("{}_{}", self.name, name));
     }
 
     pub fn update_gauge(&self, name: &'static str, value: f64) {
-        gauge!([self.name, name].join("\n"), value);
+        gauge!(format!("{}_{}", self.name, name), value);
     }
 
     pub fn register_counter(&self, name: &'static str) {
-        register_counter!([self.name, name].join("\n"));
+        register_counter!(format!("{}_{}", self.name, name));
     }
 
     pub fn increment_counter(&self, name: &'static str) {
-        increment_counter!([self.name, name].join("\n"));
+        increment_counter!(format!("{}_{}", self.name, name));
     }
 }
