@@ -35,15 +35,13 @@ use fxhash::*;
 use kompact::prelude::*;
 use std::{cell::UnsafeCell, sync::Arc};
 
-#[cfg(feature = "metrics")]
-use metrics::SetRecorderError;
-use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusRecorder};
-
 /// Type alias for a Node description
 pub type NodeDescriptor = String;
 
 #[cfg(feature = "hardware_counters")]
 use crate::metrics::perf_event::{PerfEvents, PerformanceMetric};
+
+#[cfg(feature = "metrics")]
 use crate::metrics::runtime_metrics::{InboundThroughput, MetricValue, NodeRuntimeMetrics};
 
 #[derive(ArconState)]
@@ -141,6 +139,8 @@ where
 
     #[cfg(feature = "hardware_counters")]
     performance_metric: PerformanceMetric,
+
+    #[cfg(feature = "metrics")]
     node_runtime_metrics: NodeRuntimeMetrics,
 }
 
@@ -201,6 +201,7 @@ where
             #[cfg(feature = "hardware_counters")]
             performance_metric,
 
+            #[cfg(feature = "metrics")]
             node_runtime_metrics: NodeRuntimeMetrics::new(borrowed_descriptor),
         }
     }
@@ -208,9 +209,11 @@ where
     /// Message handler for both locally and remote sent messages
     #[inline]
     fn handle_message(&mut self, message: MessageContainer<OP::IN>) -> ArconResult<()> {
+        #[cfg(feature = "metrics")]
         self.node_runtime_metrics
             .inbound_throughput
             .update_value(message.total_events());
+
         if !self.node_state.in_channels.contains(message.sender()) {
             error!(
                 self.logger,
@@ -228,6 +231,8 @@ where
             MessageContainer::Raw(r) => self.handle_events(r.sender, r.events)?,
             MessageContainer::Local(l) => self.handle_events(l.sender, l.events)?,
         }
+
+        #[cfg(feature = "metrics")]
         gauge!(
             [&self.descriptor, "_inbound_throughput"].join("\n"),
             self.node_runtime_metrics.inbound_throughput.get_value()

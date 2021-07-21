@@ -7,6 +7,7 @@ pub mod function;
 pub mod sink;
 /// Available window operators
 pub mod window;
+#[cfg(feature = "metrics")]
 use metrics::{gauge, increment_counter, register_counter, register_gauge};
 
 use crate::{
@@ -111,6 +112,8 @@ where
     source: &'a CD,
     /// Reference to logger
     logger: &'d ArconLogger,
+
+    name: &'a str,
 }
 
 impl<'a, 'c, 'b, 'd, OP, B, CD> OperatorContext<'a, 'c, 'b, 'd, OP, B, CD>
@@ -125,12 +128,14 @@ where
         timer: &'b mut Timer<u64, OP::TimerState, B>,
         channel_strategy: &'c mut ChannelStrategy<OP::OUT>,
         logger: &'d ArconLogger,
+        name: &'a str,
     ) -> Self {
         OperatorContext {
             channel_strategy,
             timer,
             source,
             logger,
+            name,
         }
     }
 
@@ -182,7 +187,7 @@ where
         register_counter!([self.name, name].join("\n"));
     }
 
-    pub fn increment_counter(&self, name: &'static str, value: f64) {
-        increment_counter!([self.name, name].join("\n"), value);
+    pub fn increment_counter(&self, name: &'static str) {
+        increment_counter!([self.name, name].join("\n"));
     }
 }
