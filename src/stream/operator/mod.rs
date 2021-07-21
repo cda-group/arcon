@@ -7,6 +7,7 @@ pub mod function;
 pub mod sink;
 /// Available window operators
 pub mod window;
+use metrics::{gauge, increment_counter, register_counter, register_gauge};
 
 use crate::{
     conf::logger::ArconLogger,
@@ -167,5 +168,21 @@ where
         //) -> Result<(), OP::TimerState> {
     ) -> TimerResult<OP::TimerState> {
         self.timer.schedule_at(key.into(), time, entry)
+    }
+
+    pub fn register_gauge(&mut self, name: &'static str) {
+        register_gauge!([self.name, name].join("\n"));
+    }
+
+    pub fn update_gauge(&self, name: &'static str, value: f64) {
+        gauge!([self.name, name].join("\n"), value);
+    }
+
+    pub fn register_counter(&self, name: &'static str) {
+        register_counter!([self.name, name].join("\n"));
+    }
+
+    pub fn increment_counter(&self, name: &'static str, value: f64) {
+        increment_counter!([self.name, name].join("\n"), value);
     }
 }

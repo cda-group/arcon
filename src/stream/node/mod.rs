@@ -110,6 +110,7 @@ macro_rules! make_context {
             &mut (*$sel.timer.get()),
             &mut (*$sel.channel_strategy.get()),
             &$sel.logger,
+            &$sel.descriptor,
         )
     };
 }
