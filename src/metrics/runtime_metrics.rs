@@ -56,7 +56,7 @@ impl MetricValue for InboundThroughput {
 
 impl InboundThroughput {
     pub fn new(node_name: &str) -> InboundThroughput {
-        register_gauge!([node_name, "_inbound_throughput"].join("\n"));
+        register_gauge!(format!("{}_{}", node_name, "inbound_throughput"));
         InboundThroughput {
             meter: Meter::new(),
         }
@@ -70,7 +70,7 @@ pub struct EpochCounter {
 
 impl EpochCounter {
     pub fn new(node_name: &str) -> EpochCounter {
-        register_gauge!([node_name, "_epoch_counter"].join("\n"));
+        register_gauge!(format!("{}_{}", node_name, "epoch_counter"));
         EpochCounter { counter_value: 0 }
     }
 }
@@ -92,7 +92,7 @@ pub struct WatermarkCounter {
 
 impl WatermarkCounter {
     pub fn new(node_name: &str) -> WatermarkCounter {
-        register_gauge!([node_name, "_watermark_counter"].join("\n"));
+        register_gauge!(format!("{}_{}", node_name, "watermark_counter"));
         WatermarkCounter { counter_value: 0 }
     }
 }
@@ -113,7 +113,7 @@ pub struct IncomingMessageRate {
 
 impl IncomingMessageRate {
     pub fn new(node_name: &str) -> IncomingMessageRate {
-        register_gauge!([node_name, "_incoming_message_rate"].join("\n"));
+        register_gauge!(format!("{}_{}", node_name, "incoming_message_rate"));
         IncomingMessageRate {
             meter: Meter::new(),
         }
@@ -136,7 +136,7 @@ pub struct ErrorCounter {
 
 impl ErrorCounter {
     pub fn new(source_node_name: &str) -> ErrorCounter {
-        register_gauge!([source_node_name, "_error_counter"].join("\n"));
+        register_gauge!(format!("{}_{}", source_node_name, "error_counter"));
         ErrorCounter { counter_value: 0 }
     }
 }

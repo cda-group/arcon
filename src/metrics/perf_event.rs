@@ -87,6 +87,6 @@ impl PerformanceMetric {
     }
 
     pub fn get_field_gauge_name(&self, field_name: &str, node_name: &str) -> String {
-        [node_name, field_name].join("\n")
+        format!("{}_{}", node_name, field_name)
     }
 }

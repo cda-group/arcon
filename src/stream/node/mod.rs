@@ -7,10 +7,7 @@ pub mod debug;
 pub mod source;
 
 use crate::conf::logger::ArconLogger;
-use metrics::{
-    counter, decrement_gauge, gauge, histogram, increment_counter, increment_gauge,
-    register_counter, register_gauge, register_histogram, GaugeValue, Key, Recorder, Unit,
-};
+use metrics::{counter, decrement_gauge, gauge, increment_counter, increment_gauge};
 use perf_event::{events::Hardware, Builder, Counter, Group};
 use serde::Deserialize;
 
@@ -234,7 +231,7 @@ where
 
         #[cfg(feature = "metrics")]
         gauge!(
-            [&self.descriptor, "_inbound_throughput"].join("\n"),
+            format!("{}_{}", &self.descriptor, "inbound_throughput"),
             self.node_runtime_metrics.inbound_throughput.get_value()
         );
 
@@ -320,8 +317,10 @@ where
                             }
                         };
                         self.node_runtime_metrics.watermark_counter.update_value(1);
-                        gauge!(
-                            [&self.descriptor, "_watermark_counter"].join("\n"),
+
+                        #[cfg(feature = "metrics")]
+                        increment_gauge!(
+                            format!("{}_{}", &self.descriptor, "watermark_counter"),
                             self.node_runtime_metrics.watermark_counter.get_value()
                         );
 
@@ -389,8 +388,10 @@ where
     #[inline]
     fn complete_epoch(&mut self) -> ArconResult<()> {
         self.node_runtime_metrics.epoch_counter.update_value(1);
+
+        #[cfg(feature = "metrics")]
         increment_gauge!(
-            [&self.descriptor, "_epoch_counter"].join("\n"),
+            format!("{}_{}", &self.descriptor, "epoch_counter"),
             self.node_runtime_metrics.epoch_counter.get_value()
         );
         // flush the blocked_channels list
