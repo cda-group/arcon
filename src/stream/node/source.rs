@@ -1,6 +1,6 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
-use metrics::{gauge, increment_counter};
+use metrics::{counter, gauge};
 
 use crate::{
     conf::logger::ArconLogger,
@@ -136,12 +136,9 @@ where
                     self.source_node_runtime_metrics
                         .error_counter
                         .update_value(1);
-                    increment_counter!(
-                        [&self.source_node_descriptor, "_error_counter"].join("\n"),
+                    counter!(
                         format!("{}_{}", &self.source_node_descriptor, "error_counter"),
-                        self.source_node_runtime_metrics
-                            .incoming_message_rate
-                            .get_value()
+                        self.source_node_runtime_metrics.error_counter.get_value() as u64
                     );
                     return self.handle_source_error(error);
                 }

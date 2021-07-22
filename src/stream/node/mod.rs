@@ -320,7 +320,7 @@ where
                         self.node_runtime_metrics.watermark_counter.update_value(1);
 
                         #[cfg(feature = "metrics")]
-                        increment_gauge!(
+                        counter!(
                             format!("{}_{}", &self.descriptor, "watermark_counter"),
                             self.node_runtime_metrics.watermark_counter.get_value()
                         );
@@ -391,7 +391,7 @@ where
         self.node_runtime_metrics.epoch_counter.update_value(1);
 
         #[cfg(feature = "metrics")]
-        increment_gauge!(
+        counter!(
             format!("{}_{}", &self.descriptor, "epoch_counter"),
             self.node_runtime_metrics.epoch_counter.get_value()
         );
