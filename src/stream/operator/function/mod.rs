@@ -23,7 +23,7 @@ mod tests {
     fn map_test() {
         let app = Application::default()
             .with_debug_node()
-            .collection((0..10).collect::<Vec<u64>>(), |conf| {
+            .iterator(0..10, |conf| {
                 conf.set_arcon_time(ArconTime::Process);
             })
             .map(|x| x + 10)
@@ -35,7 +35,7 @@ mod tests {
     fn map_in_place_test() {
         let app = Application::default()
             .with_debug_node()
-            .collection((0..10).collect::<Vec<u64>>(), |conf| {
+            .iterator(0..10, |conf| {
                 conf.set_arcon_time(ArconTime::Process);
             })
             .map_in_place(|x| *x += 10)
@@ -49,10 +49,10 @@ mod tests {
         app.start();
         wait(250);
 
-        let debug_node = app.get_debug_node::<u64>().unwrap();
+        let debug_node = app.get_debug_node::<i32>().unwrap();
 
         debug_node.on_definition(|cd| {
-            let sum: u64 = cd.data.iter().map(|elem| elem.data).sum();
+            let sum: i32 = cd.data.iter().map(|elem| elem.data).sum();
             assert_eq!(sum, 145);
         });
     }
@@ -61,7 +61,7 @@ mod tests {
     fn filter_test() {
         let mut app = Application::default()
             .with_debug_node()
-            .collection((0..10).collect::<Vec<u64>>(), |conf| {
+            .iterator(0..10, |conf| {
                 conf.set_arcon_time(ArconTime::Process);
             })
             .filter(|x| *x < 5)
@@ -71,7 +71,7 @@ mod tests {
 
         wait(250);
 
-        let debug_node = app.get_debug_node::<u64>().unwrap();
+        let debug_node = app.get_debug_node::<i32>().unwrap();
 
         debug_node.on_definition(|cd| {
             assert_eq!(cd.data.len(), 5);
@@ -82,7 +82,7 @@ mod tests {
     fn flatmap_test() {
         let mut app = Application::default()
             .with_debug_node()
-            .collection((0..5).collect::<Vec<u64>>(), |conf| {
+            .iterator(0..5, |conf| {
                 conf.set_arcon_time(ArconTime::Process);
             })
             .flatmap(|x| (0..x))
@@ -92,11 +92,11 @@ mod tests {
 
         wait(250);
 
-        let debug_node = app.get_debug_node::<u64>().unwrap();
+        let debug_node = app.get_debug_node::<i32>().unwrap();
 
         debug_node.on_definition(|cd| {
             assert_eq!(cd.data.len(), 10);
-            let sum: u64 = cd.data.iter().map(|elem| elem.data).sum();
+            let sum: i32 = cd.data.iter().map(|elem| elem.data).sum();
             assert_eq!(sum, 10);
         });
     }

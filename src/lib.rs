@@ -9,7 +9,7 @@
 //! use arcon::prelude::*;
 //!
 //! let mut app = Application::default()
-//!     .collection((0..100).collect::<Vec<u64>>(), |conf| {
+//!     .iterator(0..100, |conf| {
 //!         conf.set_arcon_time(ArconTime::Process);
 //!     })
 //!     .filter(|x| *x > 50)

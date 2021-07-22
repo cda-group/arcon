@@ -134,7 +134,7 @@ mod tests {
             .block_on(async {
                 let addr: SocketAddr = "127.0.0.1:9999".parse().unwrap();
                 let mut app = Application::default()
-                    .collection(vec![10], |conf| {
+                    .iterator(vec![10], |conf| {
                         conf.set_arcon_time(ArconTime::Process);
                     })
                     .operator(OperatorBuilder {

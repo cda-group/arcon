@@ -58,7 +58,7 @@ impl<IN: ArconType> Stream<IN> {
     /// ```no_run
     /// use arcon::prelude::*;
     /// let stream: Stream<u64> = Application::default()
-    ///     .collection((0..100).collect::<Vec<u64>>(), |conf| {
+    ///     .iterator(0..100, |conf| {
     ///         conf.set_arcon_time(ArconTime::Process);
     ///     })
     ///     .map(|x| x + 10);
@@ -82,7 +82,7 @@ impl<IN: ArconType> Stream<IN> {
     /// ```no_run
     /// use arcon::prelude::*;
     /// let stream: Stream<u64> = Application::default()
-    ///     .collection((0..100).collect::<Vec<u64>>(), |conf| {
+    ///     .iterator(0..100, |conf| {
     ///         conf.set_arcon_time(ArconTime::Process);
     ///     })
     ///     .map_in_place(|x| *x += 10);
@@ -105,7 +105,7 @@ impl<IN: ArconType> Stream<IN> {
     /// ```no_run
     /// use arcon::prelude::*;
     /// let stream: Stream<u64> = Application::default()
-    ///     .collection((0..100).collect::<Vec<u64>>(), |conf| {
+    ///     .iterator(0..100, |conf| {
     ///         conf.set_arcon_time(ArconTime::Process);
     ///     })
     ///     .filter(|x| x < &50);
@@ -128,7 +128,7 @@ impl<IN: ArconType> Stream<IN> {
     /// ```no_run
     /// use arcon::prelude::*;
     /// let stream: Stream<u64> = Application::default()
-    ///     .collection((0..100).collect::<Vec<u64>>(), |conf| {
+    ///     .iterator(0..100, |conf| {
     ///         conf.set_arcon_time(ArconTime::Process);
     ///     })
     ///     .flatmap(|x| (0..x));
@@ -151,7 +151,7 @@ impl<IN: ArconType> Stream<IN> {
     /// ```no_run
     /// use arcon::prelude::*;
     /// let stream: Stream<u64> = Application::default()
-    ///     .collection((0..100).collect::<Vec<u64>>(), |conf| {
+    ///     .iterator(0..100, |conf| {
     ///         conf.set_arcon_time(ArconTime::Process);
     ///     })
     ///     .window(WindowBuilder {
@@ -215,7 +215,7 @@ impl<IN: ArconType> Stream<IN> {
     /// ```no_run
     /// use arcon::prelude::*;
     /// let stream: Stream<u64> = Application::default()
-    ///     .collection((0..100).collect::<Vec<u64>>(), |conf| {
+    ///     .iterator(0u64..100, |conf| {
     ///         conf.set_arcon_time(ArconTime::Process);
     ///     })
     ///     .operator(OperatorBuilder {
