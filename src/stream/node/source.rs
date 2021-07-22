@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
-    conf::logger::ArconLogger,
+    application::conf::logger::ArconLogger,
     data::{ArconElement, ArconEvent, Epoch, Watermark},
     error::{source::SourceError, ArconResult},
     manager::source::{SourceManagerEvent, SourceManagerPort},
@@ -212,7 +212,7 @@ where
     fn handle(&mut self, _event: ProcessSource) -> Handled {
         if let Err(error) = self.process() {
             // fatal error, must shutdown..
-            // TODO: coordinate shutdown of pipeline..
+            // TODO: coordinate shutdown of the application..
             error!(self.logger, "{}", error);
         }
 

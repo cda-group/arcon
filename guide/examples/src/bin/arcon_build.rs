@@ -4,7 +4,7 @@ use arcon::prelude::*;
 include!(concat!(env!("OUT_DIR"), "/event.rs"));
 
 fn main() {
-    let mut pipeline = Pipeline::default()
+    let mut app = Application::default()
         .collection(
             (0..10000000)
                 .map(|x| Event { id: x })
@@ -16,6 +16,6 @@ fn main() {
         .filter(|event| event.id > 50)
         .build();
 
-    pipeline.start();
-    pipeline.await_termination();
+    app.start();
+    app.await_termination();
 }

@@ -7,7 +7,7 @@ fn main() {
         .set("bootstrap.servers", "localhost:9092")
         .set("enable.auto.commit", "false");
 
-    let mut pipeline = Pipeline::default()
+    let mut app = Application::default()
         .kafka(consumer_conf, JsonSchema::new(), 2, |conf| {
             conf.set_arcon_time(ArconTime::Event);
             conf.set_timestamp_extractor(|x: &u64| *x);
@@ -16,6 +16,6 @@ fn main() {
         .to_console()
         .build();
 
-    pipeline.start();
-    pipeline.await_termination();
+    app.start();
+    app.await_termination();
 }

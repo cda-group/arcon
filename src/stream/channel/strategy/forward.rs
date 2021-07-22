@@ -102,8 +102,8 @@ where
 mod tests {
     use super::{Channel, *};
     use crate::{
+        application::Application,
         data::{ArconElement, ArconEvent},
-        pipeline::Pipeline,
         stream::{
             channel::strategy::{forward::Forward, tests::*, ChannelStrategy},
             node::debug::DebugNode,
@@ -113,9 +113,9 @@ mod tests {
 
     #[test]
     fn forward_test() {
-        let mut pipeline = Pipeline::default();
-        let pool_info = pipeline.get_pool_info();
-        let system = pipeline.data_system();
+        let mut app = Application::default();
+        let pool_info = app.get_pool_info();
+        let system = app.data_system();
 
         let total_msgs = 10;
         let comp = system.create(DebugNode::<Input>::new);
@@ -137,6 +137,6 @@ mod tests {
         comp.on_definition(|cd| {
             assert_eq!(cd.data.len() as u64, total_msgs);
         });
-        let _ = pipeline.shutdown();
+        let _ = app.shutdown();
     }
 }

@@ -1,7 +1,7 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use super::Pipeline;
+use super::Application;
 use crate::{
     data::ArconType,
     index::ArconState,
@@ -18,44 +18,44 @@ use std::sync::{
     Arc,
 };
 
-/// A [`Pipeline`] that has been fully assembled
-pub struct AssembledPipeline {
-    pipeline: Pipeline,
+/// An [`Application`] that has been fully assembled
+pub struct AssembledApplication {
+    app: Application,
     start_flag: bool,
 }
 
-impl AssembledPipeline {
-    pub(crate) fn new(pipeline: Pipeline) -> Self {
+impl AssembledApplication {
+    pub(crate) fn new(app: Application) -> Self {
         Self {
-            pipeline,
+            app,
             start_flag: false,
         }
     }
 }
 
-impl AssembledPipeline {
-    /// Instructs the SourceManager of the pipeline
+impl AssembledApplication {
+    /// Instructs the SourceManager of the application
     /// to inject a start message to the source components
-    /// of the pipeline.
+    /// of the application.
     ///
     /// The function will panic if no sources have been created
     pub fn start(&mut self) {
         assert_ne!(
             self.start_flag, true,
-            "The AssembledPipeline has already been started"
+            "The AssembledApplication has already been started"
         );
 
         // Send start message to manager component
-        match &self.pipeline.source_manager {
+        match &self.app.source_manager {
             Some(source_manager) => {
                 source_manager.actor_ref().tell(SourceEvent::Start);
             }
             None => panic!("Something went wrong, no source manager has been created!"),
         }
 
-        // Start epoch manager to begin the injection of epochs into the pipeline.
-        if let Some(epoch_manager) = &self.pipeline.epoch_manager {
-            self.pipeline
+        // Start epoch manager to begin the injection of epochs into the application.
+        if let Some(epoch_manager) = &self.app.epoch_manager {
+            self.app
                 .ctrl_system
                 .start_notify(epoch_manager)
                 .wait_timeout(std::time::Duration::from_millis(500))
@@ -65,29 +65,29 @@ impl AssembledPipeline {
         self.start_flag = true;
     }
 
-    /// Fetch DebugNode component of the [Pipeline]
+    /// Fetch DebugNode component of the [Application]
     ///
-    /// Returns `None` if the [Pipeline] was not configured with a DebugNode.
+    /// Returns `None` if the [Application] was not configured with a DebugNode.
     /// Note that it is up to the user to make sure `A` is of correct type.
     pub fn get_debug_node<A>(&self) -> Option<Arc<Component<DebugNode<A>>>>
     where
         A: ArconType,
     {
-        self.pipeline.get_debug_node()
+        self.app.get_debug_node()
     }
 
-    /// Awaits termination from the pipeline
+    /// Awaits termination from the application
     ///
     /// Note that this blocks the current thread
     pub fn await_termination(self) {
-        self.pipeline.data_system.await_termination();
-        self.pipeline.ctrl_system.await_termination();
+        self.app.data_system.await_termination();
+        self.app.ctrl_system.await_termination();
     }
 
-    /// Shuts the pipeline down and consumes the struct
+    /// Shuts the application down and consumes the struct
     pub fn shutdown(self) {
-        let _ = self.pipeline.data_system.shutdown();
-        let _ = self.pipeline.ctrl_system.shutdown();
+        let _ = self.app.data_system.shutdown();
+        let _ = self.app.ctrl_system.shutdown();
     }
 
     /// Spawns a new thread to run the function `F` on the ArconState `S` per epoch.
@@ -104,7 +104,7 @@ impl AssembledPipeline {
             f(epoch, state);
         });
 
-        self.pipeline.snapshot_manager.on_definition(|cd| {
+        self.app.snapshot_manager.on_definition(|cd| {
             let state_id = S::STATE_ID.to_owned();
             if !cd.registered_state_ids.contains(&state_id) {
                 panic!(
@@ -121,7 +121,7 @@ impl AssembledPipeline {
     /// Note that it is up to the target component to convert the [`Snapshot`]
     /// into some meaningful state.
     pub fn watch_with<S: ArconState>(&mut self, c: Arc<dyn AbstractComponent<Message = Snapshot>>) {
-        self.pipeline.snapshot_manager.on_definition(|cd| {
+        self.app.snapshot_manager.on_definition(|cd| {
             let state_id = S::STATE_ID.to_owned();
 
             if !cd.registered_state_ids.contains(&state_id) {
