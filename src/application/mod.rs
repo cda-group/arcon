@@ -297,21 +297,21 @@ impl Application {
     /// ```no_run
     /// use arcon::prelude::*;
     /// let stream: Stream<u64> = Application::default()
-    ///     .collection((0..100).collect::<Vec<u64>>(), |conf| {
+    ///     .iterator((0..100).collect::<Vec<u64>>(), |conf| {
     ///         conf.set_arcon_time(ArconTime::Process);
     ///     });
     /// ```
-    pub fn collection<I, A>(self, i: I, f: impl FnOnce(&mut SourceConf<A>)) -> Stream<A>
+    pub fn iterator<I>(self, i: I, f: impl FnOnce(&mut SourceConf<I::Item>)) -> Stream<I::Item>
     where
-        A: ArconType,
-        I: Into<Vec<A>> + Send + Sync,
+        I: IntoIterator + 'static + Clone + Send + Sync,
+        I::IntoIter: Send,
+        I::Item: ArconType,
     {
-        let collection = i.into();
         let mut conf = SourceConf::default();
         f(&mut conf);
 
         let builder = SourceBuilder {
-            constructor: Arc::new(move |_| collection.clone().into_iter()), // TODO: avoid clone?
+            constructor: Arc::new(move |_| i.clone().into_iter()),
             conf,
         };
         self.source(builder)

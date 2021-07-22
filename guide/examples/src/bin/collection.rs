@@ -3,7 +3,7 @@ use arcon::prelude::*;
 fn main() {
     let mut app = Application::default()
         .with_debug_node()
-        .collection((0..100).collect::<Vec<u64>>(), |conf| {
+        .iterator(0u64..100, |conf| {
             conf.set_arcon_time(ArconTime::Event);
             conf.set_timestamp_extractor(|x: &u64| *x);
         })
