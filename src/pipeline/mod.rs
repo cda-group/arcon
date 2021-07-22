@@ -37,7 +37,7 @@ mod assembled;
 
 pub use crate::dataflow::stream::Stream;
 pub use assembled::AssembledPipeline;
-use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusRecorder};
+use metrics_exporter_prometheus::PrometheusBuilder;
 
 /// A Pipeline is the starting point of all Arcon applications.
 /// It contains all necessary runtime components, configuration,
@@ -102,13 +102,10 @@ impl Default for Pipeline {
 impl Pipeline {
     /// Creates a new Pipeline using the given ArconConf
     fn new(conf: ArconConf) -> Self {
-
         let builder = PrometheusBuilder::new();
         builder
             .install()
             .expect("failed to install Prometheus recorder");
-
-
 
         let allocator = Arc::new(Mutex::new(Allocator::new(conf.allocator_capacity)));
         let arcon_logger = conf.arcon_logger();

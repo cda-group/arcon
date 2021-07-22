@@ -1,9 +1,6 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
-use metrics::{
-    counter, decrement_gauge, gauge, histogram, increment_counter, increment_gauge,
-    register_counter, register_gauge, register_histogram, GaugeValue, Key, Recorder, Unit,
-};
+use metrics::{gauge, increment_counter};
 
 use crate::{
     conf::logger::ArconLogger,
@@ -104,7 +101,10 @@ where
                         .incoming_message_rate
                         .update_value(1);
                     gauge!(
-                        [&self.source_node_descriptor, "_incoming_message_rate"].join("\n"),
+                        format!(
+                            "{}_{}",
+                            &self.source_node_descriptor, "incoming_message_rate"
+                        ),
                         self.source_node_runtime_metrics
                             .incoming_message_rate
                             .get_value()
@@ -136,8 +136,9 @@ where
                     self.source_node_runtime_metrics
                         .error_counter
                         .update_value(1);
-                    gauge!(
+                    increment_counter!(
                         [&self.source_node_descriptor, "_error_counter"].join("\n"),
+                        format!("{}_{}", &self.source_node_descriptor, "error_counter"),
                         self.source_node_runtime_metrics
                             .incoming_message_rate
                             .get_value()

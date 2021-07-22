@@ -7,9 +7,8 @@ pub mod debug;
 pub mod source;
 
 use crate::conf::logger::ArconLogger;
-use metrics::{counter, decrement_gauge, gauge, increment_counter, increment_gauge};
-use perf_event::{events::Hardware, Builder, Counter, Group};
-use serde::Deserialize;
+use metrics::{gauge, increment_gauge};
+use perf_event::{Builder, Group};
 
 #[cfg(feature = "unsafe_flight")]
 use crate::data::flight_serde::unsafe_remote::UnsafeSerde;
@@ -39,7 +38,7 @@ pub type NodeDescriptor = String;
 use crate::metrics::perf_event::{PerfEvents, PerformanceMetric};
 
 #[cfg(feature = "metrics")]
-use crate::metrics::runtime_metrics::{InboundThroughput, MetricValue, NodeRuntimeMetrics};
+use crate::metrics::runtime_metrics::{MetricValue, NodeRuntimeMetrics};
 
 #[derive(ArconState)]
 pub struct NodeState<OP: Operator + 'static, B: Backend> {
@@ -163,7 +162,7 @@ where
 
         #[cfg(feature = "hardware_counters")]
         let performance_metric = {
-            let mut performance_metrics_group = Group::new().unwrap();
+            let performance_metrics_group = Group::new().unwrap();
             let mut performance_metric = PerformanceMetric {
                 performance_metrics_group,
                 hardware_metric_counters: vec![],
@@ -180,7 +179,9 @@ where
                         .unwrap(),
                 ));
             }
-            performance_metric.register_performance_metric_gauges(descriptor.clone(), perf_events);
+            performance_metric
+                .register_performance_metric_gauges(descriptor.clone(), perf_events)
+                .ok();
             performance_metric
         };
 

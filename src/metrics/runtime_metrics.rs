@@ -1,8 +1,5 @@
 use crate::metrics::meter::Meter;
-use metrics::{
-    counter, decrement_gauge, gauge, histogram, increment_counter, increment_gauge,
-    register_counter, register_gauge, register_histogram, GaugeValue, Key, Recorder, Unit,
-};
+use metrics::{register_counter, register_gauge};
 use serde::Deserialize;
 
 #[derive(Deserialize, Clone, Debug, Default)]
@@ -70,7 +67,7 @@ pub struct EpochCounter {
 
 impl EpochCounter {
     pub fn new(node_name: &str) -> EpochCounter {
-        register_gauge!(format!("{}_{}", node_name, "epoch_counter"));
+        register_counter!(format!("{}_{}", node_name, "epoch_counter"));
         EpochCounter { counter_value: 0 }
     }
 }
@@ -92,7 +89,7 @@ pub struct WatermarkCounter {
 
 impl WatermarkCounter {
     pub fn new(node_name: &str) -> WatermarkCounter {
-        register_gauge!(format!("{}_{}", node_name, "watermark_counter"));
+        register_counter!(format!("{}_{}", node_name, "watermark_counter"));
         WatermarkCounter { counter_value: 0 }
     }
 }
@@ -136,7 +133,7 @@ pub struct ErrorCounter {
 
 impl ErrorCounter {
     pub fn new(source_node_name: &str) -> ErrorCounter {
-        register_gauge!(format!("{}_{}", source_node_name, "error_counter"));
+        register_counter!(format!("{}_{}", source_node_name, "error_counter"));
         ErrorCounter { counter_value: 0 }
     }
 }
