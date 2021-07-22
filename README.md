@@ -3,7 +3,6 @@
 A runtime for writing streaming applications with the Rust programming language.
 
 ![ci](https://github.com/cda-group/arcon/workflows/ci/badge.svg)
-[![Cargo](https://img.shields.io/badge/crates.io-v0.1.3-orange)](https://crates.io/crates/arcon)
 [![License](https://img.shields.io/badge/License-AGPL--3.0--only-blue)](https://github.com/cda-group/arcon)
 
 #### Project Status
@@ -14,13 +13,9 @@ Arcon is in development and should be considered experimental until further noti
 
 Arcon builds against the latest stable release and the current MSRV is 1.53.0.
 
-#### User Guide
-
-More detailed information about Arcon can be found [here](https://cda-group.github.io/arcon)
-
 ### Roadmap
 
-See the roadmap [here](https://cda-group.github.io/arcon/roadmap.html)
+See the roadmap [here](https://github.com/cda-group/arcon/projects/1)
 
 ## Highlights
 
@@ -43,8 +38,8 @@ See the roadmap [here](https://cda-group.github.io/arcon/roadmap.html)
 use arcon::prelude::*;
 
 fn main() {
-    let mut pipeline = Pipeline::default()
-        .collection((0..100).collect::<Vec<u64>>(), |conf| {
+    let mut app = Application::default()
+        .iterator(0u64..100, |conf| {
             conf.set_arcon_time(ArconTime::Event);
             conf.set_timestamp_extractor(|x: &u64| *x);
         })
@@ -52,8 +47,8 @@ fn main() {
         .to_console()
         .build();
 
-    pipeline.start();
-    pipeline.await_termination();
+    app.start();
+    app.await_termination();
 }
 ```
 

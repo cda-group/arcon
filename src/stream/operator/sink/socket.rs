@@ -133,8 +133,8 @@ mod tests {
             .expect("couln't create tokio runtime")
             .block_on(async {
                 let addr: SocketAddr = "127.0.0.1:9999".parse().unwrap();
-                let mut pipeline = Pipeline::default()
-                    .collection(vec![10], |conf| {
+                let mut app = Application::default()
+                    .iterator(vec![10], |conf| {
                         conf.set_arcon_time(ArconTime::Process);
                     })
                     .operator(OperatorBuilder {
@@ -147,7 +147,7 @@ mod tests {
                     .build();
 
                 let socket = UdpSocket::bind(&addr).await.unwrap();
-                pipeline.start();
+                app.start();
                 let (len, _) = socket.recv_from(&mut buf).await.expect("did not receive");
                 len
             });

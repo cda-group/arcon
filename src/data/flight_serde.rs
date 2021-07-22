@@ -130,8 +130,8 @@ pub mod unsafe_remote {
 mod test {
     use super::*;
     use crate::{
+        application::Application,
         data::{ArconElement, ArconEvent, ArconType},
-        pipeline::Pipeline,
         stream::{
             channel::{
                 strategy::{forward::Forward, ChannelStrategy},
@@ -150,7 +150,7 @@ mod test {
     const PRICE: u32 = 10;
     const ID: u32 = 1;
 
-    // The flight_serde pipeline will always send data of ArconDataTest
+    // The flight_serde application will always send data of ArconDataTest
     #[cfg_attr(feature = "arcon_serde", derive(serde::Serialize, serde::Deserialize))]
     #[cfg_attr(feature = "unsafe_flight", derive(Abomonation))]
     #[derive(Arcon, prost::Message, Clone)]
@@ -315,8 +315,8 @@ mod test {
     where
         ReceivingType: ArconType,
     {
-        let pipeline = Pipeline::default();
-        let pool_info = pipeline.get_pool_info();
+        let app = Application::default();
+        let pool_info = app.get_pool_info();
         let (local, remote) = get_systems();
         let timeout = Duration::from_millis(150);
         let comp = remote.create(DebugNode::<ReceivingType>::new);

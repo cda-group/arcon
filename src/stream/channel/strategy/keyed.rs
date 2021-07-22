@@ -172,8 +172,8 @@ where
 mod tests {
     use super::{Channel, *};
     use crate::{
+        application::Application,
         data::{ArconElement, ArconEvent, NodeID},
-        pipeline::Pipeline,
         stream::{
             channel::strategy::{tests::*, ChannelStrategy},
             node::debug::DebugNode,
@@ -185,9 +185,9 @@ mod tests {
 
     #[test]
     fn keyby_test() {
-        let mut pipeline = Pipeline::default();
-        let pool_info = pipeline.get_pool_info();
-        let system = pipeline.data_system();
+        let mut app = Application::default();
+        let pool_info = app.get_pool_info();
+        let system = app.data_system();
 
         let parallelism: u32 = 8;
         let total_msgs = 1000;
@@ -237,6 +237,6 @@ mod tests {
                 assert!(!cd.data.is_empty());
             });
         }
-        pipeline.shutdown();
+        app.shutdown();
     }
 }

@@ -7,8 +7,8 @@ use crate::stream::source::{
     schema::SourceSchema,
 };
 use crate::{
+    application::conf::{logger::ArconLogger, ApplicationConf, ExecutionMode},
     buffer::event::PoolInfo,
-    conf::{logger::ArconLogger, ArconConf, ExecutionMode},
     data::ArconMessage,
     dataflow::{
         api::{ParallelSourceBuilder, SourceBuilder, SourceBuilderType},
@@ -34,73 +34,74 @@ use kompact::{component::AbstractComponent, prelude::KompactSystem};
 use std::sync::{Arc, Mutex};
 
 mod assembled;
+pub mod conf;
 
 pub use crate::dataflow::stream::Stream;
-pub use assembled::AssembledPipeline;
+pub use assembled::AssembledApplication;
 
-/// A Pipeline is the starting point of all Arcon applications.
+/// An Application is the starting point of all Arcon applications.
 /// It contains all necessary runtime components, configuration,
 /// and a custom allocator.
 ///
-/// # Creating a Pipeline
+/// # Creating a Application
 ///
-/// See [Configuration](ArconConf)
+/// See [Configuration](ApplicationConf)
 ///
 /// With the default configuration
 /// ```
-/// use arcon::prelude::Pipeline;
+/// use arcon::prelude::Application;
 ///
-/// let pipeline = Pipeline::default();
+/// let app = Application::default();
 /// ```
 ///
 /// With configuration
 /// ```
-/// use arcon::prelude::{Pipeline, ArconConf};
+/// use arcon::prelude::{Application, ApplicationConf};
 ///
-/// let conf = ArconConf {
+/// let conf = ApplicationConf {
 ///     watermark_interval: 2000,
 ///     ..Default::default()
 /// };
-/// let pipeline = Pipeline::with_conf(conf);
+/// let app = Application::with_conf(conf);
 /// ```
 #[derive(Clone)]
-pub struct Pipeline {
+pub struct Application {
     /// [`KompactSystem`] for Control Components
     pub(crate) ctrl_system: KompactSystem,
     /// [`KompactSystem`] for Data Processing Components
     pub(crate) data_system: KompactSystem,
-    /// Arcon configuration for this pipeline
-    pub(crate) conf: ArconConf,
-    /// Arcon allocator for this pipeline
+    /// Configuration for this application
+    pub(crate) conf: ApplicationConf,
+    /// Arcon allocator for this application
     pub(crate) allocator: Arc<Mutex<Allocator>>,
-    /// SourceManager component for this pipeline
+    /// SourceManager component for this application
     pub(crate) source_manager: Option<Arc<dyn AbstractComponent<Message = SourceEvent>>>,
-    /// EpochManager component for this pipeline
+    /// EpochManager component for this application
     pub(crate) epoch_manager: Option<Arc<Component<EpochManager>>>,
-    /// SnapshotManager component for this pipeline
+    /// SnapshotManager component for this application
     pub(crate) snapshot_manager: Arc<Component<SnapshotManager>>,
     endpoint_manager: Arc<Component<EndpointManager>>,
     pub(crate) query_manager: Arc<Component<QueryManager>>,
-    /// Flag indicating whether to spawn a debug node for the Pipeline
+    /// Flag indicating whether to spawn a debug node for the Application
     debug_node_flag: bool,
     // Type erased Arc<Component<DebugNode<A>>>
     pub(crate) debug_node: Option<ErasedComponent>,
     // Type erased Arc<dyn AbstractComponent<Message = ArconMessage<A>>>
     pub(crate) abstract_debug_node: Option<ErasedComponent>,
-    /// Configured Logger for the Pipeline
+    /// Configured Logger for the Application
     pub(crate) arcon_logger: ArconLogger,
 }
 
-impl Default for Pipeline {
+impl Default for Application {
     fn default() -> Self {
-        let conf: ArconConf = Default::default();
+        let conf: ApplicationConf = Default::default();
         Self::new(conf)
     }
 }
 
-impl Pipeline {
-    /// Creates a new Pipeline using the given ArconConf
-    fn new(conf: ArconConf) -> Self {
+impl Application {
+    /// Creates a new Application using the given ApplicationConf
+    fn new(conf: ApplicationConf) -> Self {
         let allocator = Arc::new(Mutex::new(Allocator::new(conf.allocator_capacity)));
         let arcon_logger = conf.arcon_logger();
         let (ctrl_system, data_system, snapshot_manager, epoch_manager) =
@@ -150,15 +151,15 @@ impl Pipeline {
         }
     }
 
-    /// Creates a new Pipeline using the given ArconConf
-    pub fn with_conf(conf: ArconConf) -> Self {
+    /// Creates a new Application using the given ApplicationConf
+    pub fn with_conf(conf: ApplicationConf) -> Self {
         Self::new(conf)
     }
 
-    /// Helper function to set up internals of the pipeline
+    /// Helper function to set up internals of the application
     #[allow(clippy::type_complexity)]
     fn setup(
-        arcon_conf: &ArconConf,
+        arcon_conf: &ApplicationConf,
         logger: &ArconLogger,
     ) -> (
         KompactSystem,
@@ -261,7 +262,7 @@ impl Pipeline {
     /// Example
     /// ```no_run
     /// use arcon::prelude::*;
-    /// let stream: Stream<u64> = Pipeline::default()
+    /// let stream: Stream<u64> = Application::default()
     ///     .file("/tmp/source_file", |conf| {
     ///         conf.set_arcon_time(ArconTime::Process);
     ///     });
@@ -295,22 +296,22 @@ impl Pipeline {
     /// Example
     /// ```no_run
     /// use arcon::prelude::*;
-    /// let stream: Stream<u64> = Pipeline::default()
-    ///     .collection((0..100).collect::<Vec<u64>>(), |conf| {
+    /// let stream: Stream<u64> = Application::default()
+    ///     .iterator(0u64..100, |conf| {
     ///         conf.set_arcon_time(ArconTime::Process);
     ///     });
     /// ```
-    pub fn collection<I, A>(self, i: I, f: impl FnOnce(&mut SourceConf<A>)) -> Stream<A>
+    pub fn iterator<I>(self, i: I, f: impl FnOnce(&mut SourceConf<I::Item>)) -> Stream<I::Item>
     where
-        A: ArconType,
-        I: Into<Vec<A>> + Send + Sync,
+        I: IntoIterator + 'static + Clone + Send + Sync,
+        I::IntoIter: Send,
+        I::Item: ArconType,
     {
-        let collection = i.into();
         let mut conf = SourceConf::default();
         f(&mut conf);
 
         let builder = SourceBuilder {
-            constructor: Arc::new(move |_| collection.clone().into_iter()), // TODO: avoid clone?
+            constructor: Arc::new(move |_| i.clone().into_iter()),
             conf,
         };
         self.source(builder)
@@ -329,7 +330,7 @@ impl Pipeline {
     ///  .set("bootstrap.servers", "127.0.0.1:9092")
     ///  .set("enable.auto.commit", "false");
     ///
-    /// let stream: Stream<u64> = Pipeline::default()
+    /// let stream: Stream<u64> = Application::default()
     ///  .kafka(consumer_conf, JsonSchema::new(), 1, |conf| {
     ///     conf.set_arcon_time(ArconTime::Event);
     ///     conf.set_timestamp_extractor(|x: &u64| *x);
@@ -362,10 +363,10 @@ impl Pipeline {
         self.parallel_source(builder)
     }
 
-    /// Enable DebugNode for the Pipeline
+    /// Enable DebugNode for the Application
     ///
     ///
-    /// The component can be accessed through [method](AssembledPipeline::get_debug_node).
+    /// The component can be accessed through [method](AssembledApplication::get_debug_node).
     pub fn with_debug_node(mut self) -> Self {
         self.debug_node_flag = true;
         self
@@ -395,8 +396,8 @@ impl Pipeline {
         &mut self.ctrl_system
     }
 
-    /// Give out a reference to the ArconConf of the pipeline
-    pub(crate) fn arcon_conf(&self) -> &ArconConf {
+    /// Give out a reference to the ApplicationConf of the application
+    pub(crate) fn arcon_conf(&self) -> &ApplicationConf {
         &self.conf
     }
 
@@ -439,7 +440,7 @@ impl Pipeline {
         self.abstract_debug_node = Some(Arc::new(comp) as ErasedComponent);
     }
 
-    // internal helper to help fetch DebugNode from an AssembledPipeline
+    // internal helper to help fetch DebugNode from an AssembledApplication
     pub(crate) fn get_debug_node<A: ArconType>(&self) -> Option<Arc<Component<DebugNode<A>>>> {
         self.debug_node.as_ref().map(|erased_comp| {
             erased_comp

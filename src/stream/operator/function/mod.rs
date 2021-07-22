@@ -21,57 +21,57 @@ mod tests {
 
     #[test]
     fn map_test() {
-        let pipeline = Pipeline::default()
+        let app = Application::default()
             .with_debug_node()
-            .collection((0..10).collect::<Vec<u64>>(), |conf| {
+            .iterator(0..10, |conf| {
                 conf.set_arcon_time(ArconTime::Process);
             })
             .map(|x| x + 10)
             .build();
-        check_map_result(pipeline);
+        check_map_result(app);
     }
 
     #[test]
     fn map_in_place_test() {
-        let pipeline = Pipeline::default()
+        let app = Application::default()
             .with_debug_node()
-            .collection((0..10).collect::<Vec<u64>>(), |conf| {
+            .iterator(0..10, |conf| {
                 conf.set_arcon_time(ArconTime::Process);
             })
             .map_in_place(|x| *x += 10)
             .build();
 
-        check_map_result(pipeline);
+        check_map_result(app);
     }
 
     // helper to check common result between Map/MapInPlace
-    fn check_map_result(mut pipeline: AssembledPipeline) {
-        pipeline.start();
+    fn check_map_result(mut app: AssembledApplication) {
+        app.start();
         wait(250);
 
-        let debug_node = pipeline.get_debug_node::<u64>().unwrap();
+        let debug_node = app.get_debug_node::<i32>().unwrap();
 
         debug_node.on_definition(|cd| {
-            let sum: u64 = cd.data.iter().map(|elem| elem.data).sum();
+            let sum: i32 = cd.data.iter().map(|elem| elem.data).sum();
             assert_eq!(sum, 145);
         });
     }
 
     #[test]
     fn filter_test() {
-        let mut pipeline = Pipeline::default()
+        let mut app = Application::default()
             .with_debug_node()
-            .collection((0..10).collect::<Vec<u64>>(), |conf| {
+            .iterator(0..10, |conf| {
                 conf.set_arcon_time(ArconTime::Process);
             })
             .filter(|x| *x < 5)
             .build();
 
-        pipeline.start();
+        app.start();
 
         wait(250);
 
-        let debug_node = pipeline.get_debug_node::<u64>().unwrap();
+        let debug_node = app.get_debug_node::<i32>().unwrap();
 
         debug_node.on_definition(|cd| {
             assert_eq!(cd.data.len(), 5);
@@ -80,23 +80,23 @@ mod tests {
 
     #[test]
     fn flatmap_test() {
-        let mut pipeline = Pipeline::default()
+        let mut app = Application::default()
             .with_debug_node()
-            .collection((0..5).collect::<Vec<u64>>(), |conf| {
+            .iterator(0..5, |conf| {
                 conf.set_arcon_time(ArconTime::Process);
             })
             .flatmap(|x| (0..x))
             .build();
 
-        pipeline.start();
+        app.start();
 
         wait(250);
 
-        let debug_node = pipeline.get_debug_node::<u64>().unwrap();
+        let debug_node = app.get_debug_node::<i32>().unwrap();
 
         debug_node.on_definition(|cd| {
             assert_eq!(cd.data.len(), 10);
-            let sum: u64 = cd.data.iter().map(|elem| elem.data).sum();
+            let sum: i32 = cd.data.iter().map(|elem| elem.data).sum();
             assert_eq!(sum, 10);
         });
     }

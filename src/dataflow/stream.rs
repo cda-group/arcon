@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
+    application::Application,
     data::{ArconType, NodeID},
     dataflow::{
         api::{Assigner, OperatorBuilder, WindowBuilder},
@@ -9,7 +10,7 @@ use crate::{
         constructor::*,
         dfg::{ChannelKind, DFGNode, DFGNodeID, DFGNodeKind, DFG},
     },
-    pipeline::{AssembledPipeline, Pipeline},
+    prelude::AssembledApplication,
     stream::{
         node::debug::DebugNode,
         operator::{
@@ -26,15 +27,15 @@ use std::{marker::PhantomData, sync::Arc};
 #[derive(Default)]
 pub struct Context {
     pub(crate) dfg: DFG,
-    pipeline: Pipeline,
+    app: Application,
     console_output: bool,
 }
 
 impl Context {
-    pub fn new(pipeline: Pipeline) -> Self {
+    pub fn new(app: Application) -> Self {
         Self {
             dfg: Default::default(),
-            pipeline,
+            app,
             console_output: false,
         }
     }
@@ -49,15 +50,15 @@ pub struct Stream<IN: ArconType> {
 }
 
 impl<IN: ArconType> Stream<IN> {
-    /// Adds a stateless Map operator with default configuration to the pipeline
+    /// Adds a stateless Map operator with default configuration to the application
     ///
     /// If you need a stateful version or control over the configuration, use the operator function directly!
     ///
     /// Example
     /// ```no_run
     /// use arcon::prelude::*;
-    /// let stream: Stream<u64> = Pipeline::default()
-    ///     .collection((0..100).collect::<Vec<u64>>(), |conf| {
+    /// let stream: Stream<u64> = Application::default()
+    ///     .iterator(0..100, |conf| {
     ///         conf.set_arcon_time(ArconTime::Process);
     ///     })
     ///     .map(|x| x + 10);
@@ -73,15 +74,15 @@ impl<IN: ArconType> Stream<IN> {
         })
     }
 
-    /// Adds a stateless MapInPlace operator with default configuration to the pipeline
+    /// Adds a stateless MapInPlace operator with default configuration to the application
     ///
     /// If you need a stateful version or control over the configuration, use the operator function directly!
     ///
     /// Example
     /// ```no_run
     /// use arcon::prelude::*;
-    /// let stream: Stream<u64> = Pipeline::default()
-    ///     .collection((0..100).collect::<Vec<u64>>(), |conf| {
+    /// let stream: Stream<u64> = Application::default()
+    ///     .iterator(0..100, |conf| {
     ///         conf.set_arcon_time(ArconTime::Process);
     ///     })
     ///     .map_in_place(|x| *x += 10);
@@ -96,15 +97,15 @@ impl<IN: ArconType> Stream<IN> {
         })
     }
 
-    /// Adds a stateless Filter operator with default configuration to the pipeline
+    /// Adds a stateless Filter operator with default configuration to the application
     ///
     /// If you need a stateful version or control over the configuration, use the operator function directly!
     ///
     /// Example
     /// ```no_run
     /// use arcon::prelude::*;
-    /// let stream: Stream<u64> = Pipeline::default()
-    ///     .collection((0..100).collect::<Vec<u64>>(), |conf| {
+    /// let stream: Stream<u64> = Application::default()
+    ///     .iterator(0..100, |conf| {
     ///         conf.set_arcon_time(ArconTime::Process);
     ///     })
     ///     .filter(|x| x < &50);
@@ -119,15 +120,15 @@ impl<IN: ArconType> Stream<IN> {
         })
     }
 
-    /// Adds a stateless Flatmap operator with default configuration to the pipeline
+    /// Adds a stateless Flatmap operator with default configuration to the application
     ///
     /// If you need a stateful version or control over the configuration, use the operator function directly!
     ///
     /// Example
     /// ```no_run
     /// use arcon::prelude::*;
-    /// let stream: Stream<u64> = Pipeline::default()
-    ///     .collection((0..100).collect::<Vec<u64>>(), |conf| {
+    /// let stream: Stream<u64> = Application::default()
+    ///     .iterator(0..100, |conf| {
     ///         conf.set_arcon_time(ArconTime::Process);
     ///     })
     ///     .flatmap(|x| (0..x));
@@ -144,13 +145,13 @@ impl<IN: ArconType> Stream<IN> {
         })
     }
 
-    /// Adds a Window Operator to the pipeline
+    /// Adds a Window Operator to the application
     ///
     /// Example
     /// ```no_run
     /// use arcon::prelude::*;
-    /// let stream: Stream<u64> = Pipeline::default()
-    ///     .collection((0..100).collect::<Vec<u64>>(), |conf| {
+    /// let stream: Stream<u64> = Application::default()
+    ///     .iterator(0..100, |conf| {
     ///         conf.set_arcon_time(ArconTime::Process);
     ///     })
     ///     .window(WindowBuilder {
@@ -213,8 +214,8 @@ impl<IN: ArconType> Stream<IN> {
     /// Example
     /// ```no_run
     /// use arcon::prelude::*;
-    /// let stream: Stream<u64> = Pipeline::default()
-    ///     .collection((0..100).collect::<Vec<u64>>(), |conf| {
+    /// let stream: Stream<u64> = Application::default()
+    ///     .iterator(0u64..100, |conf| {
     ///         conf.set_arcon_time(ArconTime::Process);
     ///     })
     ///     .operator(OperatorBuilder {
@@ -228,7 +229,7 @@ impl<IN: ArconType> Stream<IN> {
         B: arcon_state::Backend,
     {
         // Set up directory for the operator and create Backend
-        let mut state_dir = self.ctx.pipeline.arcon_conf().state_dir();
+        let mut state_dir = self.ctx.app.arcon_conf().state_dir();
         let state_id = builder.state_id();
         state_dir.push(state_id.clone());
         let backend = builder.create_backend(state_dir);
@@ -240,10 +241,10 @@ impl<IN: ArconType> Stream<IN> {
 
         let manager_constructor = node_manager_constructor::<OP, _>(
             state_id,
-            self.ctx.pipeline.data_system.clone(),
+            self.ctx.app.data_system.clone(),
             builder,
             backend,
-            self.ctx.pipeline.arcon_logger.clone(),
+            self.ctx.app.arcon_logger.clone(),
         );
 
         let prev_dfg_node = self.ctx.dfg.get_mut(&self.prev_dfg_id);
@@ -266,7 +267,7 @@ impl<IN: ArconType> Stream<IN> {
 
     /// Will make sure the most downstream Node will print its result to the console
     ///
-    /// Note that if the Pipeline has been configured with a debug node, it will take precedence.
+    /// Note that if the Application has been configured with a debug node, it will take precedence.
     #[allow(clippy::wrong_self_convention)]
     pub fn to_console(mut self) -> Stream<IN> {
         self.ctx.console_output = true;
@@ -280,12 +281,12 @@ impl<IN: ArconType> Stream<IN> {
 
     /// Builds the Dataflow graph
     ///
-    /// Returns a [`AssembledPipeline`] where all runtime components
+    /// Returns a [`AssembledApplication`] where all runtime components
     /// have been conneted and started.
     ///
-    /// Note that this method only builds the pipeline. In order
-    /// to start it, see the following [method](AssembledPipeline::start).
-    pub fn build(mut self) -> AssembledPipeline {
+    /// Note that this method only builds the application. In order
+    /// to start it, see the following [method](AssembledApplication::start).
+    pub fn build(mut self) -> AssembledApplication {
         let mut target_nodes: Option<Vec<Arc<dyn std::any::Any + Send + Sync>>> = None;
 
         for dfg_node in self.ctx.dfg.graph.into_iter().rev() {
@@ -293,9 +294,9 @@ impl<IN: ArconType> Stream<IN> {
                 DFGNodeKind::Source(channel_kind, source_manager_cons) => {
                     let nodes = target_nodes.take().unwrap();
                     let source_manager =
-                        source_manager_cons(nodes, channel_kind, &mut self.ctx.pipeline);
+                        source_manager_cons(nodes, channel_kind, &mut self.ctx.app);
 
-                    self.ctx.pipeline.source_manager = Some(source_manager);
+                    self.ctx.app.source_manager = Some(source_manager);
                 }
                 DFGNodeKind::Node(manager_cons) => {
                     let (channel_kind, components) = {
@@ -303,12 +304,12 @@ impl<IN: ArconType> Stream<IN> {
                             Some(comps) => (dfg_node.channel_kind, comps),
                             None => {
                                 // At the end of the graph....
-                                if self.ctx.pipeline.debug_node_enabled() {
+                                if self.ctx.app.debug_node_enabled() {
                                     let node: DebugNode<IN> = DebugNode::new();
-                                    self.ctx.pipeline.create_debug_node(node);
+                                    self.ctx.app.create_debug_node(node);
                                 }
 
-                                match self.ctx.pipeline.abstract_debug_node {
+                                match self.ctx.app.abstract_debug_node {
                                     Some(ref debug_node) => {
                                         (ChannelKind::Forward, vec![debug_node.clone()])
                                     }
@@ -330,18 +331,14 @@ impl<IN: ArconType> Stream<IN> {
                         .map(|i| NodeID::new(i as u32))
                         .collect();
 
-                    let nodes = manager_cons(
-                        in_channels,
-                        components,
-                        channel_kind,
-                        &mut self.ctx.pipeline,
-                    );
+                    let nodes =
+                        manager_cons(in_channels, components, channel_kind, &mut self.ctx.app);
 
                     target_nodes = Some(nodes);
                 }
             }
         }
-        AssembledPipeline::new(self.ctx.pipeline)
+        AssembledApplication::new(self.ctx.app)
     }
 
     pub(crate) fn new(ctx: Context) -> Self {

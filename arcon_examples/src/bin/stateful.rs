@@ -29,21 +29,16 @@ impl<B: Backend> StateConstructor for MyState<B> {
 }
 
 fn main() {
-    let conf = ArconConf {
+    let conf = ApplicationConf {
         epoch_interval: 2500,
         ctrl_system_host: Some("127.0.0.1:2000".to_string()),
         ..Default::default()
     };
 
-    let mut pipeline = Pipeline::with_conf(conf)
-        .collection(
-            (0..1000000)
-                .map(|x| Event { id: x, data: 1.5 })
-                .collect::<Vec<Event>>(),
-            |conf| {
-                conf.set_timestamp_extractor(|x: &Event| x.id);
-            },
-        )
+    let mut app = Application::with_conf(conf)
+        .iterator((0..1000000).map(|x| Event { id: x, data: 1.5 }), |conf| {
+            conf.set_timestamp_extractor(|x: &Event| x.id);
+        })
         .operator(OperatorBuilder {
             constructor: Arc::new(|backend: Arc<Sled>| {
                 Map::stateful(MyState::new(backend), |event, state| {
@@ -55,6 +50,6 @@ fn main() {
         })
         .build();
 
-    pipeline.start();
-    pipeline.await_termination();
+    app.start();
+    app.await_termination();
 }

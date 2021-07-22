@@ -8,16 +8,16 @@
 //! ```no_run
 //! use arcon::prelude::*;
 //!
-//! let mut pipeline = Pipeline::default()
-//!     .collection((0..100).collect::<Vec<u64>>(), |conf| {
+//! let mut app = Application::default()
+//!     .iterator(0..100, |conf| {
 //!         conf.set_arcon_time(ArconTime::Process);
 //!     })
 //!     .filter(|x| *x > 50)
 //!     .to_console()
 //!     .build();
 //!
-//! pipeline.start();
-//! pipeline.await_termination();
+//! app.start();
+//! app.await_termination();
 //! ```
 //!
 //! # Feature Flags
@@ -72,10 +72,10 @@ pub mod bench_utils {
     pub use crate::buffer::event::{BufferPool, BufferReader};
 }
 
+/// Utilities for creating an Arcon Application
+mod application;
 /// Arcon buffer implementations
 mod buffer;
-/// Arcon Configuration
-mod conf;
 /// Arcon data types, serialisers/deserialisers
 mod data;
 /// Dataflow API
@@ -90,8 +90,6 @@ mod manager;
 #[allow(dead_code)]
 /// Arcon metrics
 mod metrics;
-/// Utilities for creating an Arcon pipeline
-mod pipeline;
 /// Contains the core stream logic
 mod stream;
 /// Table implementations
@@ -134,14 +132,14 @@ pub mod prelude {
     };
     */
     pub use crate::{
-        conf::{logger::LoggerType, ArconConf},
+        application::conf::{logger::LoggerType, ApplicationConf},
+        application::{Application, AssembledApplication, Stream},
         data::{ArconElement, ArconNever, ArconType, StateID, VersionId},
         dataflow::{
             api::{Assigner, OperatorBuilder, SourceBuilder, WindowBuilder},
             conf::{OperatorConf, ParallelismStrategy, SourceConf, StreamKind},
         },
         manager::snapshot::Snapshot,
-        pipeline::{AssembledPipeline, Pipeline, Stream},
         stream::{
             operator::{
                 function::{Filter, FlatMap, Map, MapInPlace},
