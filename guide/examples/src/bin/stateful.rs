@@ -35,13 +35,13 @@ impl<B: Backend> StateConstructor for MyState<B> {
 // ANCHOR_END: state
 
 fn main() {
-    let conf = ArconConf {
+    let conf = ApplicationConf {
         epoch_interval: 2500,
         ctrl_system_host: Some("127.0.0.1:2000".to_string()),
         ..Default::default()
     };
 
-    let mut pipeline = Pipeline::with_conf(conf)
+    let mut app = Application::with_conf(conf)
         .collection(
             (0..1000000)
                 .map(|x| Event { id: x, data: 1.5 })
@@ -62,7 +62,7 @@ fn main() {
         .build();
 
     // ANCHOR: watch_thread
-    pipeline.watch(|epoch: u64, _: MyState<Sled>| {
+    app.watch(|epoch: u64, _: MyState<Sled>| {
         println!("Got state object for epoch {}", epoch);
     });
     // ANCHOR_END: watch_thread
@@ -77,9 +77,9 @@ fn main() {
         .wait_timeout(std::time::Duration::from_millis(200))
         .expect("Failed to start component");
 
-    pipeline.watch_with::<MyState<Sled>>(snapshot_comp);
+    app.watch_with::<MyState<Sled>>(snapshot_comp);
     // ANCHOR_END: watch_component
 
-    pipeline.start();
-    pipeline.await_termination();
+    app.start();
+    app.await_termination();
 }

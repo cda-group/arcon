@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
-    conf::logger::ArconLogger,
+    application::conf::logger::ArconLogger,
     data::{ArconMessage, Epoch, NodeID, StateID, Watermark},
     error::*,
     index::{
@@ -109,10 +109,10 @@ impl<B: Backend> StateConstructor for NodeManagerState<B> {
 
 /// A [kompact] component responsible for coordinating a set of Arcon nodes
 ///
-/// The following illustrates the role of a NodeManager in the context of a Pipeline
+/// The following illustrates the role of a NodeManager in the context of a Application
 ///
 /// ```text
-///                    Pipeline
+///                  Application
 ///                /             \
 ///         NodeManager <----> NodeManager
 ///             |                  |

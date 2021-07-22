@@ -1,7 +1,7 @@
 use arcon::prelude::*;
 
 fn main() {
-    let mut pipeline = Pipeline::default()
+    let mut app = Application::default()
         .file("file_source_data", |cfg| {
             cfg.set_arcon_time(ArconTime::Process);
         })
@@ -9,6 +9,6 @@ fn main() {
         .to_console()
         .build();
 
-    pipeline.start();
-    pipeline.await_termination();
+    app.start();
+    app.await_termination();
 }

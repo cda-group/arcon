@@ -23,13 +23,13 @@ pub struct DistributedConf {
     peers: Vec<String>, // ["192.168.1.1:2000",  "192.168.1.2:2000"]
 }
 
-/// Configuration for an Arcon Pipeline
+/// Configuration for an Arcon Application
 #[derive(Deserialize, Clone, Debug)]
-pub struct ArconConf {
+pub struct ApplicationConf {
     /// Either a `Local` or `Distributed` Execution Mode
     #[serde(default = "execution_mode_default")]
     pub execution_mode: ExecutionMode,
-    /// Base directory for the pipeline
+    /// Base directory for the application
     #[serde(default = "base_dir_default")]
     pub base_dir: PathBuf,
     /// [LoggerType] for arcon related logging
@@ -89,9 +89,9 @@ pub struct ArconConf {
     #[serde(default = "kompact_encode_buf_min_free_space_default")]
     pub kompact_encode_buf_min_free_space: usize,
 }
-impl Default for ArconConf {
+impl Default for ApplicationConf {
     fn default() -> Self {
-        ArconConf {
+        ApplicationConf {
             execution_mode: execution_mode_default(),
             base_dir: base_dir_default(),
             arcon_logger_type: Default::default(),
@@ -117,7 +117,7 @@ impl Default for ArconConf {
     }
 }
 
-impl ArconConf {
+impl ApplicationConf {
     pub fn state_dir(&self) -> PathBuf {
         let mut buf = self.base_dir.clone();
         buf.push("live_states");
@@ -187,7 +187,7 @@ impl ArconConf {
         cfg
     }
 
-    /// Returns a KompactConfig based on loaded ArconConf
+    /// Returns a KompactConfig based on loaded ApplicationConf
     pub fn data_system_conf(&self) -> KompactConfig {
         let mut cfg = KompactConfig::default();
 
@@ -236,8 +236,8 @@ impl ArconConf {
         cfg
     }
 
-    /// Loads ArconConf from a file
-    pub fn from_file(path: impl AsRef<Path>) -> ArconConf {
+    /// Loads ApplicationConf from a file
+    pub fn from_file(path: impl AsRef<Path>) -> ApplicationConf {
         let data = std::fs::read_to_string(path).unwrap();
 
         let loader: HoconLoader = HoconLoader::new().load_str(&data).unwrap();
@@ -348,7 +348,7 @@ mod tests {
         file.write_all(config_str.as_bytes()).unwrap();
 
         // Load conf
-        let conf: ArconConf = ArconConf::from_file(&file_path);
+        let conf: ApplicationConf = ApplicationConf::from_file(&file_path);
 
         // Check custom values
         assert_eq!(conf.base_dir, PathBuf::from("/dev/null"));

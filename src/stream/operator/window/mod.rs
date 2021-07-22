@@ -67,7 +67,7 @@ pub trait WindowFunction: Send + Sized {
 /// Example
 /// ```no_run
 /// use arcon::prelude::*;
-/// let stream: Stream<u64> = Pipeline::default()
+/// let stream: Stream<u64> = Application::default()
 ///     .collection((0..100).collect::<Vec<u64>>(), |conf| {
 ///         conf.set_arcon_time(ArconTime::Process);
 ///     })
@@ -188,7 +188,7 @@ where
 /// Example
 /// ```no_run
 /// use arcon::prelude::*;
-/// let stream: Stream<u64> = Pipeline::default()
+/// let stream: Stream<u64> = Application::default()
 ///     .collection((0..100).collect::<Vec<u64>>(), |conf| {
 ///         conf.set_arcon_time(ArconTime::Process);
 ///     })
@@ -339,7 +339,7 @@ type AggState<IN, OUT, INIT, AGG> =
 /// Example
 /// ```no_run
 /// use arcon::prelude::*;
-/// let stream: Stream<u64> = Pipeline::default()
+/// let stream: Stream<u64> = Application::default()
 ///     .collection((0..100).collect::<Vec<u64>>(), |conf| {
 ///         conf.set_arcon_time(ArconTime::Process);
 ///     })

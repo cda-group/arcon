@@ -92,7 +92,7 @@ impl Operator for TimerOperator {
 
 fn main() {
     // ANCHOR: pipeline
-    let mut pipeline = Pipeline::default()
+    let mut app = Application::default()
         .collection((0..10000000).collect::<Vec<u64>>(), |conf| {
             conf.set_timestamp_extractor(|x: &u64| *x);
         })
@@ -107,6 +107,6 @@ fn main() {
         .build();
     // ANCHOR_END: pipeline
 
-    pipeline.start();
-    pipeline.await_termination();
+    app.start();
+    app.await_termination();
 }

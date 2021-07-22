@@ -5,7 +5,7 @@ fn window_sum(buffer: &[u64]) -> u64 {
 }
 
 fn main() {
-    let mut pipeline = Pipeline::default()
+    let mut app = Application::default()
         .collection((0..100000).collect::<Vec<u64>>(), |conf| {
             conf.set_arcon_time(ArconTime::Event);
             conf.set_timestamp_extractor(|x: &u64| *x);
@@ -38,6 +38,6 @@ fn main() {
         .to_console()
         .build();
 
-    pipeline.start();
-    pipeline.await_termination();
+    app.start();
+    app.await_termination();
 }

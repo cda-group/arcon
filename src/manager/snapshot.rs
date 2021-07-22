@@ -38,7 +38,7 @@ impl Port for SnapshotManagerPort {
     type Request = SnapshotEvent;
 }
 
-/// Component that keeps a catalog of snapshots of a given pipeline
+/// Component that keeps a catalog of snapshots of a given application
 #[derive(ComponentDefinition)]
 pub struct SnapshotManager {
     /// Component Context

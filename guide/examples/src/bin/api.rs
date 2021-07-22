@@ -1,7 +1,7 @@
 use arcon::prelude::*;
 
 fn main() {
-    let mut pipeline = Pipeline::default()
+    let mut app = Application::default()
         .collection((0..100).collect::<Vec<u64>>(), |conf| {
             // ANCHOR: source_conf
             conf.set_arcon_time(ArconTime::Event);
@@ -20,6 +20,6 @@ fn main() {
         .to_console()
         .build();
 
-    pipeline.start();
-    pipeline.await_termination();
+    app.start();
+    app.await_termination();
 }

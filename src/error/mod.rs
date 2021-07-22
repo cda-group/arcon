@@ -25,7 +25,7 @@ pub type ArconResult<T> = std::result::Result<T, Error>;
 /// Alias for State Error
 pub type StateResult<T> = std::result::Result<T, ArconStateError>;
 
-/// A top level Error type holding Arcon pipeline errors that cause a total system halt
+/// A top level Error type holding Arcon application errors that cause a total system halt
 #[derive(Debug, Snafu)]
 pub enum Error {
     /// The system has been used in an unsupported way.
