@@ -3,16 +3,13 @@ use std::sync::Arc;
 
 #[cfg_attr(feature = "arcon_serde", derive(serde::Deserialize, serde::Serialize))]
 #[cfg_attr(feature = "unsafe_flight", derive(abomonation_derive::Abomonation))]
-// ANCHOR: data
 #[derive(Arcon, prost::Message, Copy, Clone)]
 #[arcon(unsafe_ser_id = 12, reliable_ser_id = 13, version = 1)]
 pub struct CustomEvent {
     #[prost(uint64, tag = "1")]
     pub id: u64,
 }
-// ANCHOR_END: data
 
-// ANCHOR: operator
 #[derive(Default)]
 pub struct MyOperator(EmptyState);
 
@@ -43,9 +40,7 @@ impl Operator for MyOperator {
         &mut self.0
     }
 }
-// ANCHOR_END: operator
 
-// ANCHOR: timer_operator
 #[derive(Default)]
 pub struct TimerOperator(EmptyState);
 
@@ -88,10 +83,8 @@ impl Operator for TimerOperator {
         &mut self.0
     }
 }
-// ANCHOR_END: timer_operator
 
 fn main() {
-    // ANCHOR: pipeline
     let mut pipeline = Pipeline::default()
         .collection((0..10000000).collect::<Vec<u64>>(), |conf| {
             conf.set_timestamp_extractor(|x: &u64| *x);
@@ -105,7 +98,6 @@ fn main() {
             conf: Default::default(),
         })
         .build();
-    // ANCHOR_END: pipeline
 
     pipeline.start();
     pipeline.await_termination();

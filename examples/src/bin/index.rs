@@ -1,7 +1,6 @@
 use arcon::prelude::*;
 use std::sync::Arc;
 
-// ANCHOR: state
 #[derive(ArconState)]
 pub struct StreamState<B: Backend> {
     counter: LazyValue<u64, B>,
@@ -21,8 +20,6 @@ impl<B: Backend> StateConstructor for StreamState<B> {
     }
 }
 
-// ANCHOR_END: state
-
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let test_dir = tempfile::tempdir().unwrap();
     let path = test_dir.path();
@@ -30,7 +27,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut state = StreamState::new(backend);
 
-    // ANCHOR: value
     // PUT, GET, RMW, and CLEAR
 
     state.counter().put(10)?;
@@ -45,9 +41,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let counter = state.counter().get()?;
     assert_eq!(counter, None);
 
-    // ANCHOR_END: value
-
-    // ANCHOR: hash_table
     // PUT, GET, RMW, and REMOVE
 
     state.counters_map().put(1, String::from("hello"))?;
@@ -68,9 +61,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some(String::from("hello world"))
     );
 
-    // ANCHOR_END: hash_table
-
-    // ANCHOR: appender
     // APPEND, CONSUME
 
     state.counters().append(1)?;
@@ -78,8 +68,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     state.counters().append(3)?;
 
     assert_eq!(state.counters().consume().unwrap(), vec![1, 2, 3]);
-
-    // ANCHOR_END: appender
 
     Ok(())
 }

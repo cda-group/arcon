@@ -11,7 +11,7 @@ module.exports = {
         siteUrl: "https://example.com",
         github: 'https://github.com/cda-group/arcon',
         githubRepositoryURL: 'https://github.com/cda-group/arcon',
-        navItems: [{ title: 'Learn', url: '/learn/' }],
+        navItems: [{ title: 'Learn', url: '/learn/about' }],
         sections: ['Arcon', 'Guide', 'Advanced'],
       },
     },

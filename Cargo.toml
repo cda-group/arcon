@@ -16,7 +16,7 @@ members = [
   "arcon_build",
   "arcon_tests",
   "arcon_shell",
-  "guide/examples"
+  "examples"
 ]
 
 # TODO fix these later again

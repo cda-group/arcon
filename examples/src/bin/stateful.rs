@@ -1,10 +1,8 @@
 use arcon::prelude::*;
-use examples::SnapshotComponent;
 use std::sync::Arc;
 
 #[cfg_attr(feature = "arcon_serde", derive(serde::Deserialize, serde::Serialize))]
 #[cfg_attr(feature = "unsafe_flight", derive(abomonation_derive::Abomonation))]
-// ANCHOR: data
 #[derive(Arcon, Arrow, prost::Message, Copy, Clone)]
 #[arcon(unsafe_ser_id = 12, reliable_ser_id = 13, version = 1, keys = "id")]
 pub struct Event {
@@ -13,9 +11,7 @@ pub struct Event {
     #[prost(float)]
     pub data: f32,
 }
-// ANCHOR_END: data
 
-// ANCHOR: state
 #[derive(ArconState)]
 pub struct MyState<B: Backend> {
     #[table = "events"]
@@ -31,8 +27,6 @@ impl<B: Backend> StateConstructor for MyState<B> {
         }
     }
 }
-
-// ANCHOR_END: state
 
 fn main() {
     let conf = ArconConf {
@@ -60,25 +54,6 @@ fn main() {
             conf: Default::default(),
         })
         .build();
-
-    // ANCHOR: watch_thread
-    pipeline.watch(|epoch: u64, _: MyState<Sled>| {
-        println!("Got state object for epoch {}", epoch);
-    });
-    // ANCHOR_END: watch_thread
-
-    // ANCHOR: watch_component
-    let kompact_system = KompactConfig::default().build().expect("KompactSystem");
-    // Create Kompact component to receive snapshots
-    let snapshot_comp = kompact_system.create(SnapshotComponent::new);
-
-    kompact_system
-        .start_notify(&snapshot_comp)
-        .wait_timeout(std::time::Duration::from_millis(200))
-        .expect("Failed to start component");
-
-    pipeline.watch_with::<MyState<Sled>>(snapshot_comp);
-    // ANCHOR_END: watch_component
 
     pipeline.start();
     pipeline.await_termination();
