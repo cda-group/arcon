@@ -7,7 +7,10 @@ pub mod debug;
 pub mod source;
 
 use crate::conf::logger::ArconLogger;
-use metrics::{gauge, increment_gauge};
+use metrics::{counter, gauge};
+
+#[cfg(feature = "hardware_counters")]
+#[cfg(not(test))]
 use perf_event::{Builder, Group};
 
 #[cfg(feature = "unsafe_flight")]
@@ -35,6 +38,7 @@ use std::{cell::UnsafeCell, sync::Arc};
 pub type NodeDescriptor = String;
 
 #[cfg(feature = "hardware_counters")]
+#[cfg(not(test))]
 use crate::metrics::perf_event::{PerfEvents, PerformanceMetric};
 
 #[cfg(feature = "metrics")]
@@ -134,6 +138,7 @@ where
     logger: ArconLogger,
 
     #[cfg(feature = "hardware_counters")]
+    #[cfg(not(test))]
     performance_metric: PerformanceMetric,
 
     #[cfg(feature = "metrics")]
@@ -154,13 +159,16 @@ where
         backend: Arc<B>,
         logger: ArconLogger,
 
-        #[cfg(feature = "hardware_counters")] perf_events: PerfEvents,
+        #[cfg(feature = "hardware_counters")]
+        #[cfg(not(test))]
+        perf_events: PerfEvents,
     ) -> Self {
         let timer_id = format!("_{}_timer", descriptor);
         let timer = ArconTimer::new(timer_id, backend);
         let borrowed_descriptor: &str = &descriptor.clone();
 
         #[cfg(feature = "hardware_counters")]
+        #[cfg(not(test))]
         let performance_metric = {
             let performance_metrics_group = Group::new().unwrap();
             let mut performance_metric = PerformanceMetric {
@@ -197,6 +205,7 @@ where
             logger,
 
             #[cfg(feature = "hardware_counters")]
+            #[cfg(not(test))]
             performance_metric,
 
             #[cfg(feature = "metrics")]
@@ -237,6 +246,7 @@ where
         );
 
         #[cfg(feature = "hardware_counters")]
+        #[cfg(not(test))]
         {
             let counts = self.performance_metric.performance_metrics_group.read()?;
             let counter_iterator = self.performance_metric.hardware_metric_counters.iter();
@@ -322,7 +332,7 @@ where
                         #[cfg(feature = "metrics")]
                         counter!(
                             format!("{}_{}", &self.descriptor, "watermark_counter"),
-                            self.node_runtime_metrics.watermark_counter.get_value()
+                            self.node_runtime_metrics.watermark_counter.get_value() as u64
                         );
 
                         // Forward the watermark
@@ -393,7 +403,7 @@ where
         #[cfg(feature = "metrics")]
         counter!(
             format!("{}_{}", &self.descriptor, "epoch_counter"),
-            self.node_runtime_metrics.epoch_counter.get_value()
+            self.node_runtime_metrics.epoch_counter.get_value() as u64
         );
         // flush the blocked_channels list
         self.node_state.blocked_channels().clear();
@@ -505,6 +515,10 @@ where
 mod tests {
     // Tests the message logic of Node.
     use super::*;
+
+    #[cfg(feature = "hardware_counters")]
+    #[cfg(not(test))]
+    use crate::metrics::perf_event::HardwareCounter;
     use crate::{
         pipeline::*,
         stream::{
@@ -551,6 +565,9 @@ mod tests {
             let descriptor = String::from("node_");
             let in_channels = vec![1.into(), 2.into(), 3.into()];
 
+            #[cfg(not(test))]
+            let mut perf_events = PerfEvents::new();
+
             let nm = NodeManager::<OP, _>::new(
                 descriptor.clone(),
                 pipeline.data_system.clone(),
@@ -574,6 +591,8 @@ mod tests {
                 NodeState::new(NodeID::new(0), in_channels, backend.clone()),
                 backend,
                 pipeline.arcon_logger.clone(),
+                #[cfg(not(test))]
+                perf_events,
             );
 
             let filter_comp = pipeline.data_system().create(|| node);

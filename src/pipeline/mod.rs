@@ -102,10 +102,14 @@ impl Default for Pipeline {
 impl Pipeline {
     /// Creates a new Pipeline using the given ArconConf
     fn new(conf: ArconConf) -> Self {
-        let builder = PrometheusBuilder::new();
-        builder
-            .install()
-            .expect("failed to install Prometheus recorder");
+        #[cfg(feature = "metrics")]
+        {
+            let _builder = PrometheusBuilder::new();
+            #[cfg(not(test))]
+            _builder
+                .install()
+                .expect("failed to install Prometheus recorder")
+        }
 
         let allocator = Arc::new(Mutex::new(Allocator::new(conf.allocator_capacity)));
         let arcon_logger = conf.arcon_logger();

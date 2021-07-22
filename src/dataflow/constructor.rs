@@ -294,6 +294,8 @@ pub(crate) fn node_manager_constructor<OP: Operator + 'static, B: Backend>(
                     NodeState::new(node_id, in_channels.clone(), backend.clone()),
                     backend.clone(),
                     pipeline.arcon_logger.clone(),
+                    #[cfg(feature = "hardware_counters")]
+                    #[cfg(not(test))]
                     builder.conf.perf_events.clone(),
                 );
 
