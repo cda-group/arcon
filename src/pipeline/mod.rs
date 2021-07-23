@@ -37,6 +37,8 @@ mod assembled;
 
 pub use crate::dataflow::stream::Stream;
 pub use assembled::AssembledPipeline;
+
+#[cfg(feature = "metrics")]
 use metrics_exporter_prometheus::PrometheusBuilder;
 
 /// A Pipeline is the starting point of all Arcon applications.

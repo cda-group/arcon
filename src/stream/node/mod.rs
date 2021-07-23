@@ -7,6 +7,8 @@ pub mod debug;
 pub mod source;
 
 use crate::conf::logger::ArconLogger;
+
+#[cfg(feature = "metrics")]
 use metrics::{counter, gauge};
 
 #[cfg(feature = "hardware_counters")]
@@ -165,6 +167,8 @@ where
     ) -> Self {
         let timer_id = format!("_{}_timer", descriptor);
         let timer = ArconTimer::new(timer_id, backend);
+
+        #[cfg(feature = "metrics")]
         let borrowed_descriptor: &str = &descriptor.clone();
 
         #[cfg(feature = "hardware_counters")]
@@ -327,6 +331,7 @@ where
                                     .handle_timeout(timeout, make_context!(self))?;
                             }
                         };
+                        #[cfg(feature = "metrics")]
                         self.node_runtime_metrics.watermark_counter.update_value(1);
 
                         #[cfg(feature = "metrics")]
@@ -398,6 +403,7 @@ where
 
     #[inline]
     fn complete_epoch(&mut self) -> ArconResult<()> {
+        #[cfg(feature = "metrics")]
         self.node_runtime_metrics.epoch_counter.update_value(1);
 
         #[cfg(feature = "metrics")]

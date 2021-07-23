@@ -113,9 +113,11 @@ where
     /// Reference to logger
     logger: &'d ArconLogger,
 
+    #[cfg(feature = "metrics")]
     name: &'a str,
 }
 
+//Note the _ prefixed name field, this is due to the presence of feature flag .Therefore this var might not be used.
 impl<'a, 'c, 'b, 'd, OP, B, CD> OperatorContext<'a, 'c, 'b, 'd, OP, B, CD>
 where
     OP: Operator + 'static,
@@ -128,14 +130,16 @@ where
         timer: &'b mut Timer<u64, OP::TimerState, B>,
         channel_strategy: &'c mut ChannelStrategy<OP::OUT>,
         logger: &'d ArconLogger,
-        name: &'a str,
+        _name: &'a str,
     ) -> Self {
         OperatorContext {
             channel_strategy,
             timer,
             source,
             logger,
-            name,
+
+            #[cfg(feature = "metrics")]
+            name: _name,
         }
     }
 
@@ -175,18 +179,22 @@ where
         self.timer.schedule_at(key.into(), time, entry)
     }
 
+    #[cfg(feature = "metrics")]
     pub fn register_gauge(&mut self, name: &'static str) {
         register_gauge!(format!("{}_{}", self.name, name));
     }
 
+    #[cfg(feature = "metrics")]
     pub fn update_gauge(&self, name: &'static str, value: f64) {
         gauge!(format!("{}_{}", self.name, name), value);
     }
 
+    #[cfg(feature = "metrics")]
     pub fn register_counter(&self, name: &'static str) {
         register_counter!(format!("{}_{}", self.name, name));
     }
 
+    #[cfg(feature = "metrics")]
     pub fn increment_counter(&self, name: &'static str) {
         increment_counter!(format!("{}_{}", self.name, name));
     }

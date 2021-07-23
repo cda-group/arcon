@@ -1,13 +1,16 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
+#[cfg(feature = "metrics")]
 use metrics::{counter, gauge};
+
+#[cfg(feature = "metrics")]
+use crate::metrics::runtime_metrics::{MetricValue, SourceNodeRuntimeMetrics};
 
 use crate::{
     conf::logger::ArconLogger,
     data::{ArconElement, ArconEvent, Epoch, Watermark},
     error::{source::SourceError, ArconResult},
     manager::source::{SourceManagerEvent, SourceManagerPort},
-    metrics::runtime_metrics::{MetricValue, SourceNodeRuntimeMetrics},
     prelude::SourceConf,
     stream::{
         channel::strategy::ChannelStrategy,
@@ -53,6 +56,8 @@ where
     source_index: usize,
     source: S,
     logger: ArconLogger,
+
+    #[cfg(feature = "metrics")]
     source_node_runtime_metrics: SourceNodeRuntimeMetrics,
     source_node_descriptor: String,
 }
@@ -81,7 +86,10 @@ where
             source_index,
             source,
             logger,
+
+            #[cfg(feature = "metrics")]
             source_node_runtime_metrics: SourceNodeRuntimeMetrics::new(borrowed_source_name),
+
             source_node_descriptor: String::from(borrowed_source_name),
         }
     }
@@ -97,9 +105,12 @@ where
 
             match poll {
                 Ok(Poll::Ready(record)) => {
+                    #[cfg(feature = "metrics")]
                     self.source_node_runtime_metrics
                         .incoming_message_rate
                         .update_value(1);
+
+                    #[cfg(feature = "metrics")]
                     gauge!(
                         format!(
                             "{}_{}",
@@ -133,9 +144,12 @@ where
                     return Ok(());
                 }
                 Err(error) => {
+                    #[cfg(feature = "metrics")]
                     self.source_node_runtime_metrics
                         .error_counter
                         .update_value(1);
+
+                    #[cfg(feature = "metrics")]
                     counter!(
                         format!("{}_{}", &self.source_node_descriptor, "error_counter"),
                         self.source_node_runtime_metrics.error_counter.get_value() as u64
@@ -223,7 +237,7 @@ where
     fn on_start(&mut self) -> Handled {
         info!(
             self.logger,
-            "Starting up Source with Index {}", self.source_index
+            "Starting up Source {} with Index {}", self.source_node_descriptor, self.source_index
         );
         let shared = self.loopback_receive.share();
         self.loopback_send.connect(shared);
