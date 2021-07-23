@@ -141,10 +141,10 @@ where
 
     #[cfg(feature = "hardware_counters")]
     #[cfg(not(test))]
-    performance_metric: HardwareMetricGroup,
+    hardware_metric_group: HardwareMetricGroup,
 
     #[cfg(feature = "metrics")]
-    node_runtime_metrics: NodeMetrics,
+    node_metrics: NodeMetrics,
 }
 
 impl<OP, B> Node<OP, B>
@@ -210,10 +210,10 @@ where
 
             #[cfg(feature = "hardware_counters")]
             #[cfg(not(test))]
-            performance_metric,
+            hardware_metric_group: performance_metric,
 
             #[cfg(feature = "metrics")]
-            node_runtime_metrics: NodeMetrics::new(borrowed_descriptor),
+            node_metrics: NodeMetrics::new(borrowed_descriptor),
         }
     }
 
@@ -221,7 +221,7 @@ where
     #[inline]
     fn handle_message(&mut self, message: MessageContainer<OP::IN>) -> ArconResult<()> {
         #[cfg(feature = "metrics")]
-        self.node_runtime_metrics
+        self.node_metrics
             .inbound_throughput
             .update_value(message.total_events());
 
@@ -252,8 +252,8 @@ where
         #[cfg(feature = "hardware_counters")]
         #[cfg(not(test))]
         {
-            let counts = self.performance_metric.group.read()?;
-            let counter_iterator = self.performance_metric.counters.iter();
+            let counts = self.hardware_metric_group.group.read()?;
+            let counter_iterator = self.hardware_metric_group.counters.iter();
             for (metric_name, counter) in counter_iterator {
                 gauge!(
                     self.performance_metric
@@ -332,7 +332,7 @@ where
                             }
                         };
                         #[cfg(feature = "metrics")]
-                        self.node_runtime_metrics.watermark_counter.update_value(1);
+                        self.node_metrics.watermark_counter.update_value(1);
 
                         #[cfg(feature = "metrics")]
                         counter!(
@@ -404,7 +404,7 @@ where
     #[inline]
     fn complete_epoch(&mut self) -> ArconResult<()> {
         #[cfg(feature = "metrics")]
-        self.node_runtime_metrics.epoch_counter.update_value(1);
+        self.node_metrics.epoch_counter.update_value(1);
 
         #[cfg(feature = "metrics")]
         counter!(

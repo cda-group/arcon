@@ -37,7 +37,18 @@ impl HardwareCounter {
 
 impl fmt::Display for HardwareCounter {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        match self {
+            HardwareCounter::CpuCycles => write!(f, "cpu_cycles"),
+            HardwareCounter::Instructions => write!(f, "instructions"),
+            HardwareCounter::CacheReferences => write!(f, "cache_references"),
+            HardwareCounter::CacheMisses => write!(f, "cache_misses"),
+            HardwareCounter::BranchInstructions => write!(f, "branch_instructions"),
+            HardwareCounter::BranchMisses => write!(f, "branch_misses"),
+            HardwareCounter::BusCycles => write!(f, "bus_cycles"),
+            HardwareCounter::StalledCyclesFrontend => write!(f, "stalled_cycles_frontend"),
+            HardwareCounter::StalledCyclesBackend => write!(f, "stalled_cycles_backend"),
+            HardwareCounter::RefCpuCycles => write!(f, "ref_cpu_cycles"),
+        }
     }
 }
 

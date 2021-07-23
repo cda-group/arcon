@@ -2,7 +2,7 @@ use crate::metrics::meter::Meter;
 use metrics::{register_counter, register_gauge};
 use serde::Deserialize;
 
-#[derive(Deserialize, Clone, Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct NodeMetrics {
     pub inbound_throughput: InboundThroughput,
     pub epoch_counter: EpochCounter,
@@ -36,7 +36,7 @@ pub trait MetricValue {
     fn update_value(&mut self, value: u64);
 }
 
-#[derive(Deserialize, Clone, Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct InboundThroughput {
     meter: Meter,
 }
@@ -60,7 +60,7 @@ impl InboundThroughput {
     }
 }
 
-#[derive(Deserialize, Clone, Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct EpochCounter {
     counter_value: u64,
 }
@@ -82,7 +82,7 @@ impl MetricValue for EpochCounter {
     }
 }
 
-#[derive(Deserialize, Clone, Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct WatermarkCounter {
     counter_value: u64,
 }

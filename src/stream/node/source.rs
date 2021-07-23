@@ -58,8 +58,8 @@ where
     logger: ArconLogger,
 
     #[cfg(feature = "metrics")]
-    source_node_runtime_metrics: SourceMetrics,
-    source_node_descriptor: String,
+    source_metrics: SourceMetrics,
+    descriptor: String,
 }
 
 impl<S> SourceNode<S>
@@ -88,9 +88,9 @@ where
             logger,
 
             #[cfg(feature = "metrics")]
-            source_node_runtime_metrics: SourceMetrics::new(borrowed_source_name),
+            source_metrics: SourceMetrics::new(borrowed_source_name),
 
-            source_node_descriptor: String::from(borrowed_source_name),
+            descriptor: String::from(borrowed_source_name),
         }
     }
     pub fn process(&mut self) -> ArconResult<()> {
@@ -106,9 +106,7 @@ where
             match poll {
                 Ok(Poll::Ready(record)) => {
                     #[cfg(feature = "metrics")]
-                    self.source_node_runtime_metrics
-                        .incoming_message_rate
-                        .update_value(1);
+                    self.source_metrics.incoming_message_rate.update_value(1);
 
                     #[cfg(feature = "metrics")]
                     gauge!(
@@ -145,9 +143,7 @@ where
                 }
                 Err(error) => {
                     #[cfg(feature = "metrics")]
-                    self.source_node_runtime_metrics
-                        .error_counter
-                        .update_value(1);
+                    self.source_metrics.error_counter.update_value(1);
 
                     #[cfg(feature = "metrics")]
                     counter!(
@@ -237,7 +233,7 @@ where
     fn on_start(&mut self) -> Handled {
         info!(
             self.logger,
-            "Starting up Source {} with Index {}", self.source_node_descriptor, self.source_index
+            "Starting up Source {} with Index {}", self.descriptor, self.source_index
         );
         let shared = self.loopback_receive.share();
         self.loopback_send.connect(shared);
