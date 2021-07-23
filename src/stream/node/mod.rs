@@ -173,28 +173,28 @@ where
 
         #[cfg(feature = "hardware_counters")]
         #[cfg(not(test))]
-        let performance_metric = {
-            let performance_metrics_group = Group::new().unwrap();
-            let mut performance_metric = HardwareMetricGroup {
-                group: performance_metrics_group,
+        let hardware_metric_group = {
+            let hardware_metrics_group = Group::new().unwrap();
+            let mut hardware_metric_group = HardwareMetricGroup {
+                group: hardware_metrics_group,
                 counters: vec![],
             };
 
             let iterator = perf_events.counters.iter();
             for val in iterator {
-                performance_metric.counters.push((
+                hardware_metric_group.counters.push((
                     val.to_string(),
                     Builder::new()
-                        .group(&mut performance_metric.group)
+                        .group(&mut hardware_metric_group.group)
                         .kind(val.get_hardware_kind())
                         .build()
                         .unwrap(),
                 ));
             }
-            performance_metric
-                .register_performance_metric_gauges(descriptor.clone(), perf_events)
+            hardware_metric_group
+                .register_hardware_metric_gauges(descriptor.clone(), perf_events)
                 .ok();
-            performance_metric
+            hardware_metric_group
         };
 
         Node {
@@ -210,7 +210,7 @@ where
 
             #[cfg(feature = "hardware_counters")]
             #[cfg(not(test))]
-            hardware_metric_group: performance_metric,
+            hardware_metric_group,
 
             #[cfg(feature = "metrics")]
             node_metrics: NodeMetrics::new(borrowed_descriptor),

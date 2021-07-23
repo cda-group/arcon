@@ -73,7 +73,7 @@ pub struct HardwareMetricGroup {
 }
 
 impl HardwareMetricGroup {
-    pub(crate) fn register_performance_metric_gauges(
+    pub(crate) fn register_hardware_metric_gauges(
         &mut self,
         node_name: String,
         perf_events: PerfEvents,
