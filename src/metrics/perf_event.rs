@@ -1,6 +1,8 @@
+use crate::prelude::alloc::fmt::Formatter;
 use metrics::register_gauge;
 use perf_event::{events::Hardware, Counter, Group};
 use serde::Deserialize;
+use std::fmt;
 
 #[derive(Deserialize, Clone, Debug)]
 pub enum HardwareCounter {
@@ -31,56 +33,45 @@ impl HardwareCounter {
             HardwareCounter::RefCpuCycles => Hardware::REF_CPU_CYCLES,
         }
     }
+}
 
-    pub(crate) fn get_counter_as_string(&self) -> &str {
-        match self {
-            HardwareCounter::CpuCycles => "CpuCycles",
-            HardwareCounter::Instructions => "Instructions",
-            HardwareCounter::CacheReferences => "CacheReferences",
-            HardwareCounter::CacheMisses => "CacheMisses",
-            HardwareCounter::BranchInstructions => "BranchInstructions",
-            HardwareCounter::BranchMisses => "BranchMisses",
-            HardwareCounter::BusCycles => "BusCycles",
-            HardwareCounter::StalledCyclesFrontend => "StalledCyclesFrontend",
-            HardwareCounter::StalledCyclesBackend => "StalledCyclesBackend",
-            HardwareCounter::RefCpuCycles => "RefCpuCycles",
-        }
+impl fmt::Display for HardwareCounter {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
     }
 }
 
 #[derive(Deserialize, Clone, Debug, Default)]
 pub struct PerfEvents {
-    pub hardware_metric_kind_vector: Vec<HardwareCounter>,
+    pub counters: Vec<HardwareCounter>,
 }
 
 impl PerfEvents {
     pub fn new() -> PerfEvents {
-        PerfEvents {
-            hardware_metric_kind_vector: vec![],
-        }
+        PerfEvents { counters: vec![] }
     }
 
     pub fn add(&mut self, hardware_metric_kind: HardwareCounter) {
-        self.hardware_metric_kind_vector.push(hardware_metric_kind);
+        self.counters.push(hardware_metric_kind);
     }
 }
 
-pub struct PerformanceMetric {
-    pub performance_metrics_group: Group,
-    pub hardware_metric_counters: Vec<(String, Counter)>,
+pub struct HardwareMetricGroup {
+    pub group: Group,
+    pub counters: Vec<(String, Counter)>,
 }
 
-impl PerformanceMetric {
+impl HardwareMetricGroup {
     pub(crate) fn register_performance_metric_gauges(
         &mut self,
         node_name: String,
         perf_events: PerfEvents,
     ) -> std::io::Result<()> {
-        let iterator = perf_events.hardware_metric_kind_vector.iter();
+        let iterator = perf_events.counters.iter();
         for value in iterator {
-            register_gauge!(self.get_field_gauge_name(&node_name, value.get_counter_as_string()));
+            register_gauge!(self.get_field_gauge_name(&node_name, &value.to_string()));
         }
-        self.performance_metrics_group.enable()
+        self.group.enable()
     }
 
     pub fn get_field_gauge_name(&self, field_name: &str, node_name: &str) -> String {

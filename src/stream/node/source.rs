@@ -4,7 +4,7 @@
 use metrics::{counter, gauge};
 
 #[cfg(feature = "metrics")]
-use crate::metrics::runtime_metrics::{MetricValue, SourceNodeRuntimeMetrics};
+use crate::metrics::runtime_metrics::{MetricValue, SourceMetrics};
 
 use crate::{
     conf::logger::ArconLogger,
@@ -58,7 +58,7 @@ where
     logger: ArconLogger,
 
     #[cfg(feature = "metrics")]
-    source_node_runtime_metrics: SourceNodeRuntimeMetrics,
+    source_node_runtime_metrics: SourceMetrics,
     source_node_descriptor: String,
 }
 
@@ -88,7 +88,7 @@ where
             logger,
 
             #[cfg(feature = "metrics")]
-            source_node_runtime_metrics: SourceNodeRuntimeMetrics::new(borrowed_source_name),
+            source_node_runtime_metrics: SourceMetrics::new(borrowed_source_name),
 
             source_node_descriptor: String::from(borrowed_source_name),
         }

@@ -3,28 +3,28 @@ use metrics::{register_counter, register_gauge};
 use serde::Deserialize;
 
 #[derive(Deserialize, Clone, Debug, Default)]
-pub struct NodeRuntimeMetrics {
+pub struct NodeMetrics {
     pub inbound_throughput: InboundThroughput,
     pub epoch_counter: EpochCounter,
     pub watermark_counter: WatermarkCounter,
 }
 
-impl NodeRuntimeMetrics {
-    pub fn new(node_name: &str) -> NodeRuntimeMetrics {
-        NodeRuntimeMetrics {
+impl NodeMetrics {
+    pub fn new(node_name: &str) -> NodeMetrics {
+        NodeMetrics {
             inbound_throughput: InboundThroughput::new(node_name),
             epoch_counter: EpochCounter::new(node_name),
             watermark_counter: WatermarkCounter::new(node_name),
         }
     }
 }
-pub struct SourceNodeRuntimeMetrics {
+pub struct SourceMetrics {
     pub incoming_message_rate: IncomingMessageRate,
     pub error_counter: ErrorCounter,
 }
-impl SourceNodeRuntimeMetrics {
-    pub fn new(source_node_name: &str) -> SourceNodeRuntimeMetrics {
-        SourceNodeRuntimeMetrics {
+impl SourceMetrics {
+    pub fn new(source_node_name: &str) -> SourceMetrics {
+        SourceMetrics {
             incoming_message_rate: IncomingMessageRate::new(source_node_name),
             error_counter: ErrorCounter::new(source_node_name),
         }

@@ -41,10 +41,10 @@ pub type NodeDescriptor = String;
 
 #[cfg(feature = "hardware_counters")]
 #[cfg(not(test))]
-use crate::metrics::perf_event::{PerfEvents, PerformanceMetric};
+use crate::metrics::perf_event::{HardwareMetricGroup, PerfEvents};
 
 #[cfg(feature = "metrics")]
-use crate::metrics::runtime_metrics::{MetricValue, NodeRuntimeMetrics};
+use crate::metrics::runtime_metrics::{MetricValue, NodeMetrics};
 
 #[derive(ArconState)]
 pub struct NodeState<OP: Operator + 'static, B: Backend> {
@@ -141,10 +141,10 @@ where
 
     #[cfg(feature = "hardware_counters")]
     #[cfg(not(test))]
-    performance_metric: PerformanceMetric,
+    performance_metric: HardwareMetricGroup,
 
     #[cfg(feature = "metrics")]
-    node_runtime_metrics: NodeRuntimeMetrics,
+    node_runtime_metrics: NodeMetrics,
 }
 
 impl<OP, B> Node<OP, B>
@@ -175,17 +175,17 @@ where
         #[cfg(not(test))]
         let performance_metric = {
             let performance_metrics_group = Group::new().unwrap();
-            let mut performance_metric = PerformanceMetric {
-                performance_metrics_group,
-                hardware_metric_counters: vec![],
+            let mut performance_metric = HardwareMetricGroup {
+                group: performance_metrics_group,
+                counters: vec![],
             };
 
-            let iterator = perf_events.hardware_metric_kind_vector.iter();
+            let iterator = perf_events.counters.iter();
             for val in iterator {
-                performance_metric.hardware_metric_counters.push((
-                    String::from(val.get_counter_as_string()),
+                performance_metric.counters.push((
+                    val.to_string(),
                     Builder::new()
-                        .group(&mut performance_metric.performance_metrics_group)
+                        .group(&mut performance_metric.group)
                         .kind(val.get_hardware_kind())
                         .build()
                         .unwrap(),
@@ -213,7 +213,7 @@ where
             performance_metric,
 
             #[cfg(feature = "metrics")]
-            node_runtime_metrics: NodeRuntimeMetrics::new(borrowed_descriptor),
+            node_runtime_metrics: NodeMetrics::new(borrowed_descriptor),
         }
     }
 
@@ -252,8 +252,8 @@ where
         #[cfg(feature = "hardware_counters")]
         #[cfg(not(test))]
         {
-            let counts = self.performance_metric.performance_metrics_group.read()?;
-            let counter_iterator = self.performance_metric.hardware_metric_counters.iter();
+            let counts = self.performance_metric.group.read()?;
+            let counter_iterator = self.performance_metric.counters.iter();
             for (metric_name, counter) in counter_iterator {
                 gauge!(
                     self.performance_metric
