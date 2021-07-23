@@ -1,0 +1,16 @@
+{
+  "name": "smooth-doc-starter",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "develop": "gatsby develop",
+    "build": "gatsby build",
+    "serve": "gatsby serve"
+  },
+  "dependencies": {
+    "gatsby": "^2.15.18",
+    "react": "^16.10.1",
+    "react-dom": "^16.10.1",
+    "smooth-doc": "^5.0.4"
+  }
+}
