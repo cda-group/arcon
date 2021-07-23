@@ -6,7 +6,7 @@ use hocon::HoconLoader;
 use serde::Deserialize;
 use std::{path::Path, sync::Arc};
 
-#[cfg(feature = "hardware_counters")]
+#[cfg(all(feature = "hardware_counters", target_os = "linux"))]
 use crate::metrics::perf_event::PerfEvents;
 
 // Defines a Default State Backend for high-level operators that do not use any
@@ -63,7 +63,7 @@ pub struct OperatorConf {
     pub parallelism_strategy: ParallelismStrategy,
     /// Defines the type of Stream, by default streams are Keyed in Arcon.
     pub stream_kind: StreamKind,
-    #[cfg(feature = "hardware_counters")]
+    #[cfg(all(feature = "hardware_counters", target_os = "linux"))]
     pub perf_events: PerfEvents,
 }
 

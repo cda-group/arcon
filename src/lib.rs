@@ -207,6 +207,6 @@ pub mod prelude {
 
     pub use std::sync::Arc;
 
-    #[cfg(feature = "hardware_counters")]
+    #[cfg(all(feature = "hardware_counters", target_os = "linux"))]
     pub use crate::metrics::perf_event::{HardwareCounter, PerfEvents};
 }

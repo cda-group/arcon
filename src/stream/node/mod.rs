@@ -9,7 +9,7 @@ pub mod source;
 #[cfg(feature = "metrics")]
 use metrics::{counter, gauge};
 
-#[cfg(feature = "hardware_counters")]
+#[cfg(all(feature = "hardware_counters", target_os = "linux"))]
 #[cfg(not(test))]
 use perf_event::{Builder, Group};
 
@@ -38,7 +38,7 @@ use std::{cell::UnsafeCell, sync::Arc};
 /// Type alias for a Node description
 pub type NodeDescriptor = String;
 
-#[cfg(feature = "hardware_counters")]
+#[cfg(all(feature = "hardware_counters", target_os = "linux"))]
 #[cfg(not(test))]
 use crate::metrics::perf_event::{HardwareMetricGroup, PerfEvents};
 
@@ -138,7 +138,7 @@ where
     timer: UnsafeCell<ArconTimer<u64, OP::TimerState, B>>,
     logger: ArconLogger,
 
-    #[cfg(feature = "hardware_counters")]
+    #[cfg(all(feature = "hardware_counters", target_os = "linux"))]
     #[cfg(not(test))]
     hardware_metric_group: HardwareMetricGroup,
 
@@ -160,7 +160,7 @@ where
         backend: Arc<B>,
         logger: ArconLogger,
 
-        #[cfg(feature = "hardware_counters")]
+        #[cfg(all(feature = "hardware_counters", target_os = "linux"))]
         #[cfg(not(test))]
         perf_events: PerfEvents,
     ) -> Self {
@@ -170,7 +170,7 @@ where
         #[cfg(feature = "metrics")]
         let borrowed_descriptor: &str = &descriptor.clone();
 
-        #[cfg(feature = "hardware_counters")]
+        #[cfg(all(feature = "hardware_counters", target_os = "linux"))]
         #[cfg(not(test))]
         let hardware_metric_group = {
             let hardware_metrics_group = Group::new().unwrap();
@@ -207,7 +207,7 @@ where
             timer: UnsafeCell::new(timer),
             logger,
 
-            #[cfg(feature = "hardware_counters")]
+            #[cfg(all(feature = "hardware_counters", target_os = "linux"))]
             #[cfg(not(test))]
             hardware_metric_group,
 
@@ -248,7 +248,7 @@ where
             self.node_metrics.inbound_throughput.get_value()
         );
 
-        #[cfg(feature = "hardware_counters")]
+        #[cfg(all(feature = "hardware_counters", target_os = "linux"))]
         #[cfg(not(test))]
         {
             let counts = self.hardware_metric_group.group.read()?;
@@ -521,7 +521,7 @@ mod tests {
     // Tests the message logic of Node.
     use super::*;
 
-    #[cfg(feature = "hardware_counters")]
+    #[cfg(all(feature = "hardware_counters", target_os = "linux"))]
     #[cfg(not(test))]
     use crate::metrics::perf_event::HardwareCounter;
     use crate::{

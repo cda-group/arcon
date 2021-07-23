@@ -5,7 +5,7 @@
 
 mod ewma;
 mod meter;
-#[cfg(feature = "hardware_counters")]
+#[cfg(all(feature = "hardware_counters", target_os = "linux"))]
 pub mod perf_event;
 
 #[cfg(feature = "metrics")]
