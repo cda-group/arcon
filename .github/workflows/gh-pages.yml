@@ -18,7 +18,7 @@ jobs:
         with:
           node-version: '14'
 
-      - run: cd website && npm run build
+      - run: cd website && npm install && npm run build
 
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v3
