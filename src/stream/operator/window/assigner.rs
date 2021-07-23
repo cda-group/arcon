@@ -291,9 +291,9 @@ mod tests {
     #[cfg(not(test))]
     use crate::metrics::perf_event::{HardwareCounter, PerfEvents};
     use crate::{
+        application::*,
         data::{ArconMessage, NodeID},
         manager::node::{NodeManager, NodeManagerPort},
-        pipeline::*,
         stream::{
             channel::{
                 strategy::{forward::Forward, ChannelStrategy},
@@ -315,15 +315,14 @@ mod tests {
         ActorRefStrong<ArconMessage<u64>>,
         Arc<Component<DebugNode<u64>>>,
     ) {
-        let mut pipeline = Pipeline::default();
-        let pool_info = pipeline.get_pool_info();
-        let epoch_manager_ref = pipeline.epoch_manager();
+        let mut app = Application::default();
+        let pool_info = app.get_pool_info();
+        let epoch_manager_ref = app.epoch_manager();
 
         // Create a sink
-        let sink = pipeline.data_system().create(DebugNode::<u64>::new);
+        let sink = app.data_system().create(DebugNode::<u64>::new);
 
-        pipeline
-            .data_system()
+        app.data_system()
             .start_notify(&sink)
             .wait_timeout(std::time::Duration::from_millis(100))
             .expect("started");
@@ -355,17 +354,16 @@ mod tests {
             _,
         >::new(
             descriptor.clone(),
-            pipeline.data_system.clone(),
+            app.data_system.clone(),
             epoch_manager_ref,
             in_channels.clone(),
             backend.clone(),
-            pipeline.arcon_logger.clone(),
+            app.arcon_logger.clone(),
         );
 
-        let node_manager_comp = pipeline.ctrl_system().create(|| nm);
+        let node_manager_comp = app.ctrl_system().create(|| nm);
 
-        pipeline
-            .ctrl_system()
+        app.ctrl_system()
             .start_notify(&node_manager_comp)
             .wait_timeout(std::time::Duration::from_millis(100))
             .expect("started");
@@ -391,20 +389,19 @@ mod tests {
             window_assigner,
             NodeState::new(NodeID::new(0), in_channels, backend.clone()),
             backend,
-            pipeline.arcon_logger.clone(),
+            app.arcon_logger.clone(),
             #[cfg(feature = "hardware_counters")]
             #[cfg(not(test))]
             perf_events,
         );
 
-        let window_comp = pipeline.data_system().create(|| node);
+        let window_comp = app.data_system().create(|| node);
         let required_ref = window_comp.on_definition(|cd| cd.node_manager_port.share());
 
         biconnect_components::<NodeManagerPort, _, _>(&node_manager_comp, &window_comp)
             .expect("connection");
 
-        pipeline
-            .data_system()
+        app.data_system()
             .start_notify(&window_comp)
             .wait_timeout(std::time::Duration::from_millis(100))
             .expect("started");

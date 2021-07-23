@@ -11,7 +11,7 @@ pub mod window;
 use metrics::{gauge, increment_counter, register_counter, register_gauge};
 
 use crate::{
-    conf::logger::ArconLogger,
+    application::conf::logger::ArconLogger,
     data::{ArconElement, ArconEvent, ArconType},
     error::{timer::TimerResult, *},
     index::{ArconState, Timer},

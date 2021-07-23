@@ -86,8 +86,8 @@ mod tests {
         let file = NamedTempFile::new().unwrap();
         let file_path = file.path().to_string_lossy().into_owned();
 
-        let mut pipeline = Pipeline::default()
-            .collection(vec![6i32, 2i32, 15i32, 30i32], |conf| {
+        let mut app = Application::default()
+            .iterator(vec![6i32, 2i32, 15i32, 30i32], |conf| {
                 conf.set_arcon_time(ArconTime::Process);
             })
             .operator(OperatorBuilder {
@@ -99,7 +99,7 @@ mod tests {
             })
             .build();
 
-        pipeline.start();
+        app.start();
 
         std::thread::sleep(std::time::Duration::from_secs(1));
 

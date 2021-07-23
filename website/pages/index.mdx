@@ -1,0 +1,30 @@
+import { Link } from 'gatsby';
+import {
+  ScreenContainer,
+  Button,
+  HeroSection,
+  Hero,
+  HeroBody,
+  HeroTitle,
+  HeroTeaser,
+  HeroActionList,
+  HeroAction,
+} from "smooth-doc/components";
+import heroBackgroundImageURL from "../images/hero-background.png";
+
+<HeroSection>
+  <Hero backgroundImageURL={heroBackgroundImageURL}>
+    <HeroBody>
+      <HeroTitle>Arcon</HeroTitle>
+      <HeroTeaser>Runtime for writing real-time analytics applications in Rust</HeroTeaser>
+      <HeroActionList>
+        <HeroAction>
+        <Button as={Link} to="/learn/about/">
+        Learn More
+        </Button>
+        </HeroAction>
+      </HeroActionList>
+    </HeroBody>
+  </Hero>
+</HeroSection>
+

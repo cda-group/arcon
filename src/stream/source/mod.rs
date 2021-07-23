@@ -34,12 +34,12 @@ pub trait Source: Send + 'static {
 }
 
 // Implement Source for IntoIterator<Item = ArconType>
-impl<D, I> Source for I
+impl<I> Source for I
 where
-    I: IntoIterator<Item = D> + Iterator<Item = D> + Send + 'static,
-    D: ArconType,
+    I: Iterator + 'static + Send + 'static,
+    I::Item: ArconType,
 {
-    type Item = D;
+    type Item = I::Item;
 
     fn poll_next(&mut self) -> SourceResult<Poll<Self::Item>> {
         match self.next() {

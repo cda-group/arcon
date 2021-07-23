@@ -6,8 +6,6 @@ pub mod debug;
 
 pub mod source;
 
-use crate::conf::logger::ArconLogger;
-
 #[cfg(feature = "metrics")]
 use metrics::{counter, gauge};
 
@@ -15,6 +13,7 @@ use metrics::{counter, gauge};
 #[cfg(not(test))]
 use perf_event::{Builder, Group};
 
+use crate::application::conf::logger::ArconLogger;
 #[cfg(feature = "unsafe_flight")]
 use crate::data::flight_serde::unsafe_remote::UnsafeSerde;
 use crate::{
@@ -526,7 +525,7 @@ mod tests {
     #[cfg(not(test))]
     use crate::metrics::perf_event::HardwareCounter;
     use crate::{
-        pipeline::*,
+        application::*,
         stream::{
             channel::{strategy::forward::Forward, Channel},
             node::debug::DebugNode,
@@ -547,14 +546,13 @@ mod tests {
         ) -> (ActorRef<ArconMessage<i32>>, Arc<Component<DebugNode<i32>>>) {
             // Returns a filter Node with input channels: sender1..sender3
             // And a debug sink receiving its results
-            let mut pipeline = Pipeline::default();
-            let pool_info = pipeline.get_pool_info();
-            let epoch_manager_ref = pipeline.epoch_manager();
+            let mut app = Application::default();
+            let pool_info = app.get_pool_info();
+            let epoch_manager_ref = app.epoch_manager();
 
-            let sink = pipeline.data_system().create(DebugNode::<i32>::new);
+            let sink = app.data_system().create(DebugNode::<i32>::new);
 
-            pipeline
-                .data_system()
+            app.data_system()
                 .start_notify(&sink)
                 .wait_timeout(std::time::Duration::from_millis(100))
                 .expect("started");
@@ -576,16 +574,15 @@ mod tests {
 
             let nm = NodeManager::<OP, _>::new(
                 descriptor.clone(),
-                pipeline.data_system.clone(),
+                app.data_system.clone(),
                 epoch_manager_ref,
                 in_channels.clone(),
                 backend.clone(),
-                pipeline.arcon_logger.clone(),
+                app.arcon_logger.clone(),
             );
-            let node_manager_comp = pipeline.ctrl_system().create(|| nm);
+            let node_manager_comp = app.ctrl_system().create(|| nm);
 
-            pipeline
-                .ctrl_system()
+            app.ctrl_system()
                 .start_notify(&node_manager_comp)
                 .wait_timeout(std::time::Duration::from_millis(100))
                 .expect("started");
@@ -596,19 +593,18 @@ mod tests {
                 op,
                 NodeState::new(NodeID::new(0), in_channels, backend.clone()),
                 backend,
-                pipeline.arcon_logger.clone(),
+                app.arcon_logger.clone(),
                 #[cfg(not(test))]
                 perf_events,
             );
 
-            let filter_comp = pipeline.data_system().create(|| node);
+            let filter_comp = app.data_system().create(|| node);
             let required_ref = filter_comp.on_definition(|cd| cd.node_manager_port.share());
 
             biconnect_components::<NodeManagerPort, _, _>(&node_manager_comp, &filter_comp)
                 .expect("connection");
 
-            pipeline
-                .data_system()
+            app.data_system()
                 .start_notify(&filter_comp)
                 .wait_timeout(std::time::Duration::from_millis(100))
                 .expect("started");

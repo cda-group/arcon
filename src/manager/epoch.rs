@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
-    conf::logger::ArconLogger,
+    application::conf::logger::ArconLogger,
     data::{Epoch, StateID},
     manager::query::{QueryManagerMsg, QueryManagerPort},
     stream::node::source::SourceEvent,

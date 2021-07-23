@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
+    application::conf::logger::ArconLogger,
+    application::Application,
     buffer::event::PoolInfo,
-    conf::logger::ArconLogger,
     data::{ArconMessage, ArconType, NodeID},
     dataflow::{
         api::{OperatorBuilder, SourceBuilderType},
@@ -14,7 +15,6 @@ use crate::{
         node::{NodeManager, NodeManagerPort},
         source::{SourceManager, SourceManagerPort},
     },
-    pipeline::Pipeline,
     stream::{
         channel::{
             strategy::{forward::Forward, keyed::Keyed, *},
@@ -40,7 +40,11 @@ use kompact::{
 use std::{any::Any, convert::TryInto, sync::Arc};
 
 pub type SourceManagerConstructor = Box<
-    dyn FnOnce(Vec<Arc<dyn Any + Send + Sync>>, ChannelKind, &mut Pipeline) -> ErasedSourceManager,
+    dyn FnOnce(
+        Vec<Arc<dyn Any + Send + Sync>>,
+        ChannelKind,
+        &mut Application,
+    ) -> ErasedSourceManager,
 >;
 pub type SourceConstructor = Box<
     dyn FnOnce(
@@ -50,8 +54,9 @@ pub type SourceConstructor = Box<
     ) -> Arc<dyn AbstractComponent<Message = SourceEvent>>,
 >;
 pub type ErasedSourceManager = Arc<dyn AbstractComponent<Message = SourceEvent>>;
-pub type NodeManagerConstructor =
-    Box<dyn FnOnce(Vec<NodeID>, ErasedComponents, ChannelKind, &mut Pipeline) -> ErasedComponents>;
+pub type NodeManagerConstructor = Box<
+    dyn FnOnce(Vec<NodeID>, ErasedComponents, ChannelKind, &mut Application) -> ErasedComponents,
+>;
 
 pub type ErasedComponent = Arc<dyn Any + Send + Sync>;
 pub type ErasedComponents = Vec<ErasedComponent>;
@@ -101,8 +106,8 @@ pub(crate) fn source_manager_constructor<S: Source + 'static, B: Backend>(
     Box::new(
         move |components: Vec<Arc<dyn std::any::Any + Send + Sync>>,
               channel_kind: ChannelKind,
-              pipeline: &mut Pipeline| {
-            let epoch_manager_ref = pipeline.epoch_manager();
+              app: &mut Application| {
+            let epoch_manager_ref = app.epoch_manager();
 
             let manager = SourceManager::new(
                 descriptor,
@@ -110,9 +115,9 @@ pub(crate) fn source_manager_constructor<S: Source + 'static, B: Backend>(
                 watermark_interval,
                 epoch_manager_ref,
                 backend.clone(),
-                pipeline.arcon_logger.clone(),
+                app.arcon_logger.clone(),
             );
-            let source_manager_comp = pipeline.ctrl_system().create(|| manager);
+            let source_manager_comp = app.ctrl_system().create(|| manager);
 
             match builder_type {
                 SourceBuilderType::Single(builder) => {
@@ -121,7 +126,7 @@ pub(crate) fn source_manager_constructor<S: Source + 'static, B: Backend>(
                     let source_index = 0;
                     let source = source_cons(backend.clone());
                     create_source_node(
-                        pipeline,
+                        app,
                         source_index,
                         components.clone(),
                         channel_kind,
@@ -137,7 +142,7 @@ pub(crate) fn source_manager_constructor<S: Source + 'static, B: Backend>(
                         let source_conf = builder.conf.clone();
                         let source = source_cons(backend.clone(), source_index, parallelism); // todo
                         create_source_node(
-                            pipeline,
+                            app,
                             source_index,
                             components.clone(),
                             channel_kind,
@@ -152,14 +157,13 @@ pub(crate) fn source_manager_constructor<S: Source + 'static, B: Backend>(
                 source_manager_comp.actor_ref().hold().expect("fail");
 
             // Set source reference at the EpochManager
-            if let Some(epoch_manager) = &pipeline.epoch_manager {
+            if let Some(epoch_manager) = &app.epoch_manager {
                 epoch_manager.on_definition(|cd| {
                     cd.source_manager = Some(source_ref);
                 });
             }
 
-            pipeline
-                .ctrl_system()
+            app.ctrl_system()
                 .start_notify(&source_manager_comp)
                 .wait_timeout(std::time::Duration::from_millis(2000))
                 .expect("Failed to start SourceManager");
@@ -171,7 +175,7 @@ pub(crate) fn source_manager_constructor<S: Source + 'static, B: Backend>(
 
 // helper function to create source node..
 fn create_source_node<S, B>(
-    pipeline: &mut Pipeline,
+    app: &mut Application,
     source_index: usize,
     components: Vec<Arc<dyn std::any::Any + Send + Sync>>,
     channel_kind: ChannelKind,
@@ -182,8 +186,8 @@ fn create_source_node<S, B>(
     S: Source,
     B: Backend,
 {
-    let pool_info = pipeline.get_pool_info();
-    let max_key = pipeline.conf.max_key;
+    let pool_info = app.get_pool_info();
+    let max_key = app.conf.max_key;
     let channel_strategy = channel_strategy(
         components.clone(),
         NodeID::new(source_index as u32),
@@ -196,12 +200,11 @@ fn create_source_node<S, B>(
         source,
         source_conf,
         channel_strategy,
-        pipeline.arcon_logger.clone(),
+        app.arcon_logger.clone(),
     );
-    let source_node_comp = pipeline.data_system().create(|| source_node);
+    let source_node_comp = app.data_system().create(|| source_node);
 
-    pipeline
-        .data_system()
+    app.data_system()
         .start_notify(&source_node_comp)
         .wait_timeout(std::time::Duration::from_millis(2000))
         .expect("Failed to start Source Node");
@@ -227,8 +230,8 @@ pub(crate) fn node_manager_constructor<OP: Operator + 'static, B: Backend>(
         move |in_channels: Vec<NodeID>,
               components: ErasedComponents,
               channel_kind: ChannelKind,
-              pipeline: &mut Pipeline| {
-            let epoch_manager_ref = pipeline.epoch_manager();
+              app: &mut Application| {
+            let epoch_manager_ref = app.epoch_manager();
 
             // How many instances of this Operator we are initially creating
             let instances = match builder.conf.parallelism_strategy {
@@ -236,7 +239,7 @@ pub(crate) fn node_manager_constructor<OP: Operator + 'static, B: Backend>(
                 _ => panic!("Managed ParallelismStrategy not supported yet"),
             };
 
-            let max_key = pipeline.conf.max_key as usize;
+            let max_key = app.conf.max_key as usize;
 
             // Define the NodeManager
             let manager = NodeManager::<OP, B>::new(
@@ -249,30 +252,29 @@ pub(crate) fn node_manager_constructor<OP: Operator + 'static, B: Backend>(
             );
 
             // Create the actual NodeManager component
-            let manager_comp = pipeline.ctrl_system().create(|| manager);
+            let manager_comp = app.ctrl_system().create(|| manager);
 
-            // Connect NodeManager to the SnapshotManager of the pipeline
-            pipeline.snapshot_manager.on_definition(|scd| {
+            // Connect NodeManager to the SnapshotManager of the app
+            app.snapshot_manager.on_definition(|scd| {
                 manager_comp.on_definition(|cd| {
                     biconnect_ports(&mut scd.manager_port, &mut cd.snapshot_manager_port);
                 });
             });
 
-            pipeline.query_manager.on_definition(|scd| {
+            app.query_manager.on_definition(|scd| {
                 manager_comp.on_definition(|cd| {
                     biconnect_ports(&mut scd.manager_port, &mut cd.query_manager_port);
                 });
             });
 
             // Start NodeManager
-            pipeline
-                .ctrl_system()
+            app.ctrl_system()
                 .start_notify(&manager_comp)
                 .wait_timeout(std::time::Duration::from_millis(2000))
                 .expect("Failed to start NodeManager");
 
             // Fetch PoolInfo object that ChannelStrategies use to organise their buffers
-            let pool_info = pipeline.get_pool_info();
+            let pool_info = app.get_pool_info();
             // Fetch the Operator constructor from the builder
             let operator = builder.constructor;
 
@@ -293,13 +295,13 @@ pub(crate) fn node_manager_constructor<OP: Operator + 'static, B: Backend>(
                     operator(backend.clone()),
                     NodeState::new(node_id, in_channels.clone(), backend.clone()),
                     backend.clone(),
-                    pipeline.arcon_logger.clone(),
+                    app.arcon_logger.clone(),
                     #[cfg(feature = "hardware_counters")]
                     #[cfg(not(test))]
                     builder.conf.perf_events.clone(),
                 );
 
-                let node_comp = pipeline.data_system().create(|| node);
+                let node_comp = app.data_system().create(|| node);
                 let required_ref: RequiredRef<NodeManagerPort> = node_comp.required_ref();
                 biconnect_components::<NodeManagerPort, _, _>(&manager_comp, &node_comp)
                     .expect("fail");
@@ -307,8 +309,7 @@ pub(crate) fn node_manager_constructor<OP: Operator + 'static, B: Backend>(
                 let node_comp: Arc<dyn AbstractComponent<Message = ArconMessage<OP::IN>>> =
                     node_comp;
 
-                pipeline
-                    .data_system()
+                app.data_system()
                     .start_notify(&node_comp)
                     .wait_timeout(std::time::Duration::from_millis(2000))
                     .expect("Failed to start Node Component");

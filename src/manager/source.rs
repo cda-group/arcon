@@ -3,7 +3,7 @@
 
 use super::epoch::EpochEvent;
 use crate::{
-    conf::logger::ArconLogger,
+    application::conf::logger::ArconLogger,
     data::StateID,
     stream::{node::source::SourceEvent, time::ArconTime},
 };

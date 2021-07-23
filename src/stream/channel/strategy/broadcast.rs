@@ -127,8 +127,8 @@ where
 mod tests {
     use super::{Channel, *};
     use crate::{
+        application::Application,
         data::ArconElement,
-        pipeline::Pipeline,
         stream::{
             channel::strategy::{tests::*, ChannelStrategy},
             node::debug::DebugNode,
@@ -139,9 +139,9 @@ mod tests {
 
     #[test]
     fn broadcast_local_test() {
-        let mut pipeline = Pipeline::default();
-        let pool_info = pipeline.get_pool_info();
-        let system = pipeline.data_system();
+        let mut app = Application::default();
+        let pool_info = app.get_pool_info();
+        let system = app.data_system();
 
         let components: u32 = 8;
         let total_msgs: u64 = 10;
@@ -180,6 +180,6 @@ mod tests {
                 assert_eq!(cd.data.len() as u64, total_msgs);
             });
         }
-        pipeline.shutdown();
+        app.shutdown();
     }
 }
