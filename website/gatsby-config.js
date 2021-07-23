@@ -1,4 +1,5 @@
 module.exports = {
+  pathPrefix: '/arcon',
   plugins: [
     {
       resolve: "smooth-doc",
