@@ -1,6 +1,5 @@
 use crate::metrics::meter::Meter;
 use metrics::{register_counter, register_gauge};
-use serde::Deserialize;
 
 #[derive(Clone, Debug, Default)]
 pub struct NodeMetrics {

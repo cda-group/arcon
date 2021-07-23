@@ -110,13 +110,8 @@ where
 
                     #[cfg(feature = "metrics")]
                     gauge!(
-                        format!(
-                            "{}_{}",
-                            &self.source_node_descriptor, "incoming_message_rate"
-                        ),
-                        self.source_node_runtime_metrics
-                            .incoming_message_rate
-                            .get_value()
+                        format!("{}_{}", &self.descriptor, "incoming_message_rate"),
+                        self.source_metrics.incoming_message_rate.get_value()
                     );
                     match self.conf.time {
                         ArconTime::Event => match &self.conf.extractor {
@@ -147,8 +142,8 @@ where
 
                     #[cfg(feature = "metrics")]
                     counter!(
-                        format!("{}_{}", &self.source_node_descriptor, "error_counter"),
-                        self.source_node_runtime_metrics.error_counter.get_value() as u64
+                        format!("{}_{}", &self.descriptor, "error_counter"),
+                        self.source_metrics.error_counter.get_value() as u64
                     );
                     return self.handle_source_error(error);
                 }

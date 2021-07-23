@@ -246,7 +246,7 @@ where
         #[cfg(feature = "metrics")]
         gauge!(
             format!("{}_{}", &self.descriptor, "inbound_throughput"),
-            self.node_runtime_metrics.inbound_throughput.get_value()
+            self.node_metrics.inbound_throughput.get_value()
         );
 
         #[cfg(feature = "hardware_counters")]
@@ -256,7 +256,7 @@ where
             let counter_iterator = self.hardware_metric_group.counters.iter();
             for (metric_name, counter) in counter_iterator {
                 gauge!(
-                    self.performance_metric
+                    self.hardware_metric_group
                         .get_field_gauge_name(metric_name, &self.descriptor),
                     counts[&counter] as f64
                 );
@@ -337,7 +337,7 @@ where
                         #[cfg(feature = "metrics")]
                         counter!(
                             format!("{}_{}", &self.descriptor, "watermark_counter"),
-                            self.node_runtime_metrics.watermark_counter.get_value() as u64
+                            self.node_metrics.watermark_counter.get_value() as u64
                         );
 
                         // Forward the watermark
@@ -409,7 +409,7 @@ where
         #[cfg(feature = "metrics")]
         counter!(
             format!("{}_{}", &self.descriptor, "epoch_counter"),
-            self.node_runtime_metrics.epoch_counter.get_value() as u64
+            self.node_metrics.epoch_counter.get_value() as u64
         );
         // flush the blocked_channels list
         self.node_state.blocked_channels().clear();
