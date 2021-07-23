@@ -24,13 +24,13 @@ impl Operator for MyOperator {
 
     fn on_start(
         &mut self,
-        mut ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
+        mut _ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
     ) -> ArconResult<()> {
         #[cfg(feature = "metrics")]
-        ctx.register_gauge("custom_gauge");
+        _ctx.register_gauge("custom_gauge");
 
         #[cfg(feature = "metrics")]
-        ctx.register_gauge("custom_counter");
+        _ctx.register_gauge("custom_counter");
 
         Ok(())
         // within the function it would actually do the register_gauge!("operator_name_id_my_cool_gauge");

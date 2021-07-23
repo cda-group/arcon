@@ -26,7 +26,7 @@ exclude = [
 ]
 
 [features]
-default = ["serde", "metrics", "hardware_counters"]
+default = ["serde", "metrics"]
 arcon_serde = ["serde_json", "bincode", "serde", "uuid/serde"]
 unsafe_flight = ["abomonation", "abomonation_derive", "arcon_macros/unsafe_flight"]
 kafka = ["rdkafka", "futures", "serde_json", "serde"]
