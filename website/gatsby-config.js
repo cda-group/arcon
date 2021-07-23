@@ -1,3 +1,5 @@
+const path = require('path')
+
 module.exports = {
   pathPrefix: '/arcon',
   plugins: [
@@ -12,6 +14,7 @@ module.exports = {
         siteUrl: "https://example.com",
         github: 'https://github.com/cda-group/arcon',
         githubRepositoryURL: 'https://github.com/cda-group/arcon',
+        baseDirectory: path.resolve(__dirname, '../'),
         navItems: [{ title: 'Learn', url: '/learn/about' }],
         sections: ['Arcon', 'Guide', 'Advanced'],
       },

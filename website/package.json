@@ -1,6 +1,6 @@
 {
-  "name": "smooth-doc-starter",
-  "version": "0.0.0",
+  "name": "arcon-website",
+  "version": "0.0.1",
   "private": true,
   "scripts": {
     "develop": "gatsby develop",
@@ -8,9 +8,9 @@
     "serve": "gatsby serve"
   },
   "dependencies": {
-    "gatsby": "^2.15.18",
+    "gatsby": "^3.8.0",
     "react": "^16.10.1",
     "react-dom": "^16.10.1",
-    "smooth-doc": "^5.0.4"
+    "smooth-doc": "^8.0.0"
   }
 }

@@ -1,3 +1,4 @@
+import { Link } from 'gatsby';
 import {
   ScreenContainer,
   Button,
@@ -18,13 +19,9 @@ import heroBackgroundImageURL from "../images/hero-background.png";
       <HeroTeaser>Runtime for writing real-time analytics applications in Rust</HeroTeaser>
       <HeroActionList>
         <HeroAction>
-          <Button
-            variant="primary"
-            forwardedAs="a"
-            href="/learn/about"
-          >
-            Learn More
-          </Button>
+        <Button as={Link} to="/learn/about/">
+        Learn More
+        </Button>
         </HeroAction>
       </HeroActionList>
     </HeroBody>
