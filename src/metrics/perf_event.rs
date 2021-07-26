@@ -1,5 +1,5 @@
 use crate::prelude::alloc::fmt::Formatter;
-use metrics::register_gauge;
+use metrics::register_histogram;
 use perf_event::{events::Hardware, Counter, Group};
 use serde::Deserialize;
 use std::fmt;
@@ -80,7 +80,7 @@ impl HardwareMetricGroup {
     ) -> std::io::Result<()> {
         let iterator = perf_events.counters.iter();
         for value in iterator {
-            register_gauge!(self.get_field_gauge_name(&node_name, &value.to_string()));
+            register_histogram!(self.get_field_gauge_name(&node_name, &value.to_string()));
         }
         self.group.enable()
     }

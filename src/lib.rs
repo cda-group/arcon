@@ -96,7 +96,7 @@ pub mod error;
 mod index;
 /// Module containing different runtime managers
 mod manager;
-#[cfg(feature = "arcon_metrics")]
+#[cfg(feature = "metrics")]
 #[allow(dead_code)]
 /// Arcon metrics
 mod metrics;

@@ -7,10 +7,9 @@ pub mod debug;
 pub mod source;
 
 #[cfg(feature = "metrics")]
-use metrics::{counter, gauge};
+use metrics::{counter, gauge, histogram};
 
-#[cfg(all(feature = "hardware_counters", target_os = "linux"))]
-#[cfg(not(test))]
+#[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
 use perf_event::{Builder, Group};
 
 use crate::application::conf::logger::ArconLogger;
@@ -38,12 +37,11 @@ use std::{cell::UnsafeCell, sync::Arc};
 /// Type alias for a Node description
 pub type NodeDescriptor = String;
 
-#[cfg(all(feature = "hardware_counters", target_os = "linux"))]
-#[cfg(not(test))]
+#[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
 use crate::metrics::perf_event::{HardwareMetricGroup, PerfEvents};
 
 #[cfg(feature = "metrics")]
-use crate::metrics::runtime_metrics::{MetricValue, NodeMetrics};
+use crate::metrics::runtime_metrics::NodeMetrics;
 
 #[derive(ArconState)]
 pub struct NodeState<OP: Operator + 'static, B: Backend> {
@@ -69,7 +67,6 @@ pub struct NodeState<OP: Operator + 'static, B: Backend> {
     /// Identifier for the Node
     #[ephemeral]
     id: NodeID,
-    // perf_metrics_group: Group,
 }
 
 impl<OP: Operator + 'static, B: Backend> StateConstructor for NodeState<OP, B> {
@@ -109,6 +106,7 @@ macro_rules! make_context {
             &mut (*$sel.timer.get()),
             &mut (*$sel.channel_strategy.get()),
             &$sel.logger,
+            #[cfg(feature = "metrics")]
             &$sel.descriptor,
         )
     };
@@ -138,8 +136,7 @@ where
     timer: UnsafeCell<ArconTimer<u64, OP::TimerState, B>>,
     logger: ArconLogger,
 
-    #[cfg(all(feature = "hardware_counters", target_os = "linux"))]
-    #[cfg(not(test))]
+    #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
     hardware_metric_group: HardwareMetricGroup,
 
     #[cfg(feature = "metrics")]
@@ -170,8 +167,7 @@ where
         #[cfg(feature = "metrics")]
         let borrowed_descriptor: &str = &descriptor.clone();
 
-        #[cfg(all(feature = "hardware_counters", target_os = "linux"))]
-        #[cfg(not(test))]
+        #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
         let hardware_metric_group = {
             let hardware_metrics_group = Group::new().unwrap();
             let mut hardware_metric_group = HardwareMetricGroup {
@@ -207,8 +203,7 @@ where
             timer: UnsafeCell::new(timer),
             logger,
 
-            #[cfg(all(feature = "hardware_counters", target_os = "linux"))]
-            #[cfg(not(test))]
+            #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
             hardware_metric_group,
 
             #[cfg(feature = "metrics")]
@@ -222,7 +217,7 @@ where
         #[cfg(feature = "metrics")]
         self.node_metrics
             .inbound_throughput
-            .update_value(message.total_events());
+            .mark_n(message.total_events());
 
         if !self.node_state.in_channels.contains(message.sender()) {
             error!(
@@ -237,29 +232,41 @@ where
             self.node_state.message_buffer().append(message.raw())?;
             return Ok(());
         }
+
+        #[cfg(feature = "metrics")]
+        self.node_metrics.start_timer();
         match message {
             MessageContainer::Raw(r) => self.handle_events(r.sender, r.events)?,
             MessageContainer::Local(l) => self.handle_events(l.sender, l.events)?,
         }
 
         #[cfg(feature = "metrics")]
+        {
+            let elapsed = self.node_metrics.get_elapsed_time();
+            histogram!(
+                format!("{}_{}", &self.descriptor, "batch_execution_time"),
+                elapsed
+            );
+        }
+
+        #[cfg(feature = "metrics")]
         gauge!(
             format!("{}_{}", &self.descriptor, "inbound_throughput"),
-            self.node_metrics.inbound_throughput.get_value()
+            self.node_metrics.inbound_throughput.get_one_min_rate()
         );
 
-        #[cfg(all(feature = "hardware_counters", target_os = "linux"))]
-        #[cfg(not(test))]
+        #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
         {
             let counts = self.hardware_metric_group.group.read()?;
             let counter_iterator = self.hardware_metric_group.counters.iter();
             for (metric_name, counter) in counter_iterator {
-                gauge!(
+                histogram!(
                     self.hardware_metric_group
                         .get_field_gauge_name(metric_name, &self.descriptor),
-                    counts[&counter] as f64
+                    counts[counter] as f64
                 );
             }
+            self.hardware_metric_group.group.reset()?;
         }
 
         Ok(())
@@ -331,12 +338,12 @@ where
                             }
                         };
                         #[cfg(feature = "metrics")]
-                        self.node_metrics.watermark_counter.update_value(1);
+                        self.node_metrics.increment_watermark_counter();
 
                         #[cfg(feature = "metrics")]
                         counter!(
                             format!("{}_{}", &self.descriptor, "watermark_counter"),
-                            self.node_metrics.watermark_counter.get_value() as u64
+                            self.node_metrics.watermark_counter as u64
                         );
 
                         // Forward the watermark
@@ -403,12 +410,12 @@ where
     #[inline]
     fn complete_epoch(&mut self) -> ArconResult<()> {
         #[cfg(feature = "metrics")]
-        self.node_metrics.epoch_counter.update_value(1);
+        self.node_metrics.increment_epoch_counter();
 
         #[cfg(feature = "metrics")]
         counter!(
             format!("{}_{}", &self.descriptor, "epoch_counter"),
-            self.node_metrics.epoch_counter.get_value() as u64
+            self.node_metrics.epoch_counter as u64
         );
         // flush the blocked_channels list
         self.node_state.blocked_channels().clear();

@@ -4,7 +4,7 @@
 use metrics::{counter, gauge};
 
 #[cfg(feature = "metrics")]
-use crate::metrics::runtime_metrics::{MetricValue, SourceMetrics};
+use crate::metrics::runtime_metrics::SourceMetrics;
 
 use crate::{
     application::conf::logger::ArconLogger,
@@ -73,7 +73,7 @@ where
         channel_strategy: ChannelStrategy<S::Item>,
         logger: ArconLogger,
     ) -> Self {
-        let borrowed_source_name: &str = &conf.source_name.clone();
+        let borrowed_source_name: &str = &conf.name.clone();
         Self {
             ctx: ComponentContext::uninitialised(),
             manager_port: RequiredPort::uninitialised(),
@@ -106,12 +106,12 @@ where
             match poll {
                 Ok(Poll::Ready(record)) => {
                     #[cfg(feature = "metrics")]
-                    self.source_metrics.incoming_message_rate.update_value(1);
+                    self.source_metrics.incoming_message_rate.mark_n(1);
 
                     #[cfg(feature = "metrics")]
                     gauge!(
                         format!("{}_{}", &self.descriptor, "incoming_message_rate"),
-                        self.source_metrics.incoming_message_rate.get_value()
+                        self.source_metrics.incoming_message_rate.get_one_min_rate()
                     );
                     match self.conf.time {
                         ArconTime::Event => match &self.conf.extractor {
@@ -138,12 +138,12 @@ where
                 }
                 Err(error) => {
                     #[cfg(feature = "metrics")]
-                    self.source_metrics.error_counter.update_value(1);
+                    self.source_metrics.increment_error_counter();
 
                     #[cfg(feature = "metrics")]
                     counter!(
                         format!("{}_{}", &self.descriptor, "error_counter"),
-                        self.source_metrics.error_counter.get_value() as u64
+                        self.source_metrics.error_counter as u64
                     );
                     return self.handle_source_error(error);
                 }

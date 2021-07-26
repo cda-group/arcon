@@ -130,7 +130,8 @@ where
         timer: &'b mut Timer<u64, OP::TimerState, B>,
         channel_strategy: &'c mut ChannelStrategy<OP::OUT>,
         logger: &'d ArconLogger,
-        _name: &'a str,
+
+        #[cfg(feature = "metrics")] _name: &'a str,
     ) -> Self {
         OperatorContext {
             channel_strategy,

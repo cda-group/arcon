@@ -13,10 +13,10 @@ A runtime for writing streaming applications
 
 [workspace]
 members = [
-  "arcon_build",
-  "arcon_tests",
-  "arcon_shell",
-  "arcon_examples"
+    "arcon_build",
+    "arcon_tests",
+    "arcon_shell",
+    "arcon_examples"
 ]
 
 # TODO fix these later again
@@ -32,9 +32,9 @@ unsafe_flight = ["abomonation", "abomonation_derive", "arcon_macros/unsafe_fligh
 kafka = ["rdkafka", "futures", "serde_json", "serde"]
 thread_pinning = ["kompact/thread_pinning"]
 socket = ["tokio-util", "futures", "serde_json", "serde"]
-arcon_metrics=["metrics", "metrics-exporter-prometheus", "metrics-util"]
-hardware_counters=["perf-event", "arcon_metrics"]
-#metrics = []
+hardware_counters = ["perf-event", "metrics"]
+prometheus_exporter = ["metrics-exporter-prometheus", "metrics"]
+
 
 # state features
 rocksdb = ["arcon_state/rocks"]
@@ -50,7 +50,7 @@ cfg-if = "0.1.10"
 crossbeam-utils = "0.7"
 num_cpus = "1.0"
 hierarchical_hash_wheel_timer = "1.0"
-hocon = {version = "0.3", default-features = false, features = ["serde-support"]}
+hocon = { version = "0.3", default-features = false, features = ["serde-support"] }
 snafu = "0.6"
 
 # Logging
@@ -84,9 +84,8 @@ abomonation = { version = "0.7.3", optional = true }
 abomonation_derive = { version = "0.5.0", optional = true }
 
 
-metrics = {version="0.16.0", optional=true}
-metrics-exporter-prometheus = {version="0.5.0", optional=true}
-metrics-util = {version="0.9.1", optional=true}
+metrics = { version = "0.16.0", optional = true }
+metrics-exporter-prometheus = { version = "0.5.0", optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 perf-event = { version = "0.4.7", optional = true }
@@ -98,7 +97,7 @@ rand = "0.6.5"
 slog = { version = "2.2", features = ["max_level_error"] }
 criterion = { version = "0.3" }
 bincode = "1.1.4"
-serde = { version = "1.0.63", features = ["derive"]}
+serde = { version = "1.0.63", features = ["derive"] }
 lz4-compression = "0.6.1"
 once_cell = "1.3.1"
 abomonation = "0.7.3"

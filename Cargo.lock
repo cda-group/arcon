@@ -114,7 +114,6 @@ dependencies = [
  "lz4-compression",
  "metrics",
  "metrics-exporter-prometheus",
- "metrics-util 0.9.1",
  "num_cpus",
  "once_cell",
  "perf-event",
@@ -1117,8 +1116,6 @@ dependencies = [
  "arcon_build",
  "arrow",
  "datafusion",
- "metrics-exporter-prometheus",
- "perf-event",
  "prost 0.7.0",
  "serde",
  "tempfile",
@@ -1887,7 +1884,7 @@ dependencies = [
  "hyper",
  "ipnet",
  "metrics",
- "metrics-util 0.8.0",
+ "metrics-util",
  "parking_lot",
  "quanta",
  "thiserror",
@@ -1913,29 +1910,6 @@ name = "metrics-util"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c0c93306cf63ff153c57963151a011194af0f33c91fe30ec30faf98732350a1a"
-dependencies = [
- "aho-corasick",
- "atomic-shim",
- "crossbeam-epoch 0.9.4",
- "crossbeam-utils 0.8.4",
- "dashmap",
- "hashbrown 0.11.2",
- "indexmap",
- "metrics",
- "num_cpus",
- "ordered-float 2.1.1",
- "parking_lot",
- "quanta",
- "radix_trie",
- "sketches-ddsketch",
- "t1ha",
-]
-
-[[package]]
-name = "metrics-util"
-version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bd2a095cccde5b79bf33556d987688db3d94cb1d75b1f9499a3de3291cb71ebd"
 dependencies = [
  "aho-corasick",
  "atomic-shim",
