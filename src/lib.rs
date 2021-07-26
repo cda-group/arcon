@@ -26,15 +26,16 @@
 //!     - Enables RocksDB to be used as a Backend
 //! - `arcon_serde`
 //!     - Adds serde support for Arcon Types
+//! - `metrics'
+//!     - Records internal runtime metrics and allows users to register custom metrics from an Operator
+//!     - If no exporter (e.g., prometheus_exporter) is enabled, the metrics will be logged by the runtime.
 //! - `hardware_counters`
 //!     - Enables counters like cache misses, branch misses etc.
 //!     - It is to be noted that this feature is only compatible with linux OS as it uses perf_event_open() under the hood
 //!     - One has to provide CAP_SYS_ADMIN capability to use it for eg:  setcap cap_sys_admin+ep target/debug/collection , this takes the built file as an argument.
 //!     - Not executing the above command will result into "Operation not permitted" error assuming the feature flag is enabled.
-//! - `metrics'
-//!     - Enables software metrics for node like epoch_counter, water_mark_counter etc.
-//!     - It also enables source node realted metrics like inbound_throughput, error_counter etc.
-//!     - One can also register custom counters using the operator_context if the feature flag is on.
+
+//!
 //!
 
 // Enable use of arcon_macros within this crate
