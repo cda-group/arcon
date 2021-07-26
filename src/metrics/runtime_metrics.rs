@@ -6,7 +6,7 @@ pub struct NodeMetrics {
     pub inbound_throughput: Meter,
     pub epoch_counter: u64,
     pub watermark_counter: u64,
-    pub batch_execution_time: u64
+    pub batch_execution_time: u64,
 }
 
 impl NodeMetrics {
@@ -16,13 +16,11 @@ impl NodeMetrics {
         register_counter!(format!("{}_{}", node_name, "watermark_counter"));
         register_histogram!(format!("{}_{}", node_name, "batch_execution_time"));
 
-
         NodeMetrics {
             inbound_throughput: Meter::new(),
             epoch_counter: 0,
             watermark_counter: 0,
-            batch_execution_time: 0
-
+            batch_execution_time: 0,
         }
     }
 
@@ -34,15 +32,14 @@ impl NodeMetrics {
         self.watermark_counter += 1;
     }
 
-    pub fn start_timer(&mut self){
+    pub fn start_timer(&mut self) {
         self.batch_execution_time = crate::util::get_system_time_nano()
     }
 
-    pub fn get_elapsed_time(&self) -> f64{
-        let elapsed: f64 = (crate::util::get_system_time_nano() -  self.batch_execution_time) as f64;
+    pub fn get_elapsed_time(&self) -> f64 {
+        let elapsed: f64 = (crate::util::get_system_time_nano() - self.batch_execution_time) as f64;
         elapsed
     }
-
 }
 pub struct SourceMetrics {
     pub incoming_message_rate: Meter,
