@@ -1,7 +1,7 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 #[cfg(feature = "metrics")]
-use metrics::{counter, gauge};
+use metrics::{gauge, increment_counter};
 
 #[cfg(feature = "metrics")]
 use crate::metrics::runtime_metrics::SourceMetrics;
@@ -141,10 +141,7 @@ where
                     self.source_metrics.increment_error_counter();
 
                     #[cfg(feature = "metrics")]
-                    counter!(
-                        format!("{}_{}", &self.descriptor, "error_counter"),
-                        self.source_metrics.error_counter as u64
-                    );
+                    increment_counter!(format!("{}_{}", &self.descriptor, "error_counter"),);
                     return self.handle_source_error(error);
                 }
             }

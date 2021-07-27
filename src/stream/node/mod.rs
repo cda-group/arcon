@@ -7,7 +7,7 @@ pub mod debug;
 pub mod source;
 
 #[cfg(feature = "metrics")]
-use metrics::{counter, gauge, histogram};
+use metrics::{gauge, histogram, increment_counter};
 
 #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
 use perf_event::{Builder, Group};
@@ -341,10 +341,7 @@ where
                         self.node_metrics.increment_watermark_counter();
 
                         #[cfg(feature = "metrics")]
-                        counter!(
-                            format!("{}_{}", &self.descriptor, "watermark_counter"),
-                            self.node_metrics.watermark_counter as u64
-                        );
+                        increment_counter!(format!("{}_{}", &self.descriptor, "watermark_counter"));
 
                         // Forward the watermark
                         unsafe {
@@ -413,10 +410,7 @@ where
         self.node_metrics.increment_epoch_counter();
 
         #[cfg(feature = "metrics")]
-        counter!(
-            format!("{}_{}", &self.descriptor, "epoch_counter"),
-            self.node_metrics.epoch_counter as u64
-        );
+        increment_counter!(format!("{}_{}", &self.descriptor, "epoch_counter"));
         // flush the blocked_channels list
         self.node_state.blocked_channels().clear();
 
