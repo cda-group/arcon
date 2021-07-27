@@ -1,6 +1,8 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
+#[cfg(all(feature = "metrics", not(feature = "prometheus_exporter")))]
+use crate::metrics::log_recorder::LogRecorder;
 #[cfg(feature = "kafka")]
 use crate::stream::source::{
     kafka::{KafkaConsumer, KafkaConsumerConf, KafkaConsumerState},
@@ -39,6 +41,10 @@ pub mod conf;
 pub use crate::dataflow::stream::Stream;
 pub use assembled::AssembledApplication;
 
+#[cfg(all(feature = "prometheus_exporter", feature = "metrics", not(test)))]
+use metrics_exporter_prometheus::PrometheusBuilder;
+
+/// A Pipeline is the starting point of all Arcon applications.
 /// An Application is the starting point of all Arcon applications.
 /// It contains all necessary runtime components, configuration,
 /// and a custom allocator.
@@ -101,9 +107,26 @@ impl Default for Application {
 
 impl Application {
     /// Creates a new Application using the given ApplicationConf
+
     fn new(conf: ApplicationConf) -> Self {
+        #[cfg(all(feature = "prometheus_exporter", feature = "metrics", not(test)))]
+        {
+            PrometheusBuilder::new()
+                .install()
+                .expect("failed to install Prometheus recorder")
+        }
+
         let allocator = Arc::new(Mutex::new(Allocator::new(conf.allocator_capacity)));
         let arcon_logger = conf.arcon_logger();
+
+        #[cfg(all(feature = "metrics", not(feature = "prometheus_exporter")))]
+        {
+            let recorder = LogRecorder {
+                logger: arcon_logger.clone(),
+            };
+            metrics::set_boxed_recorder(Box::new(recorder)).unwrap();
+        }
+
         let (ctrl_system, data_system, snapshot_manager, epoch_manager) =
             Self::setup(&conf, &arcon_logger);
         let endpoint_manager = ctrl_system.create(EndpointManager::new);

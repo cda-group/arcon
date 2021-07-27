@@ -214,8 +214,9 @@ impl<A: ArconType> MessageContainer<A> {
         }
     }
     /// Return number of events in the message
-    #[cfg(feature = "metrics")]
+
     #[inline]
+    #[cfg(feature = "metrics")]
     pub fn total_events(&self) -> u64 {
         match self {
             MessageContainer::Raw(r) => r.events.len() as u64,

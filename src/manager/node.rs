@@ -22,9 +22,6 @@ use fxhash::FxHashMap;
 use kompact::{component::AbstractComponent, prelude::*};
 use std::{collections::HashSet, sync::Arc};
 
-#[cfg(feature = "metrics")]
-use crate::stream::node::NodeMetrics;
-
 pub type AbstractNode<IN> = (
     Arc<dyn AbstractComponent<Message = ArconMessage<IN>>>,
     RequiredRef<NodeManagerPort>,
@@ -36,7 +33,6 @@ pub struct MetricReport {
     pub(crate) descriptor: String,
     pub(crate) id: NodeID,
     pub(crate) parallelism: usize,
-    pub(crate) metrics: NodeMetrics,
 }
 
 /// Checkpoint Request for a running Node
@@ -70,8 +66,6 @@ pub enum NodeEvent {
 #[derive(Clone, Debug)]
 #[allow(dead_code)]
 pub enum NodeManagerEvent {
-    #[cfg(feature = "metrics")]
-    Metrics(NodeID, NodeMetrics),
     Watermark(NodeID, Watermark),
     Epoch(NodeID, Epoch),
     Checkpoint(CheckpointRequest),
@@ -307,8 +301,6 @@ where
                     }
                 }
             }
-            #[cfg(feature = "metrics")]
-            NodeManagerEvent::Metrics(_, _) => {}
         }
         Ok(())
     }

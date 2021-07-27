@@ -6,6 +6,9 @@ use hocon::HoconLoader;
 use serde::Deserialize;
 use std::{path::Path, sync::Arc};
 
+#[cfg(all(feature = "hardware_counters", target_os = "linux"))]
+use crate::metrics::perf_event::PerfEvents;
+
 // Defines a Default State Backend for high-level operators that do not use any
 // custom-defined state but still need a backend defined for internal runtime state.
 cfg_if::cfg_if! {
@@ -60,6 +63,8 @@ pub struct OperatorConf {
     pub parallelism_strategy: ParallelismStrategy,
     /// Defines the type of Stream, by default streams are Keyed in Arcon.
     pub stream_kind: StreamKind,
+    #[cfg(all(feature = "hardware_counters", target_os = "linux"))]
+    pub perf_events: PerfEvents,
 }
 
 impl OperatorConf {
@@ -83,6 +88,7 @@ pub struct SourceConf<S: ArconType> {
     pub extractor: Option<TimestampExtractor<S>>,
     pub time: ArconTime,
     pub batch_size: usize,
+    pub name: String,
 }
 
 impl<S: ArconType> SourceConf<S> {
@@ -98,6 +104,10 @@ impl<S: ArconType> SourceConf<S> {
     pub fn set_batch_size(&mut self, size: usize) {
         self.batch_size = size;
     }
+
+    pub fn set_source_name(&mut self, name: String) {
+        self.name = name;
+    }
 }
 
 impl<S: ArconType> Default for SourceConf<S> {
@@ -106,6 +116,7 @@ impl<S: ArconType> Default for SourceConf<S> {
             extractor: None,
             time: Default::default(),
             batch_size: 1024,
+            name: format!("source_{}", uuid::Uuid::new_v4().to_string()),
         }
     }
 }

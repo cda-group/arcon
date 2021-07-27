@@ -15,7 +15,7 @@ const M5_ALPHA: f64 = 1.0 - (-INTERVAL as f64 / SECONDS_PER_MINUTE / FIVE_MINUTE
 const M15_ALPHA: f64 = 1.0 - (-INTERVAL as f64 / SECONDS_PER_MINUTE / FIFTEEN_MINUTES as f64);
 
 /// Exponentially Weighted Moving Average
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct EWMA {
     initialised: bool,
     rate: f64,

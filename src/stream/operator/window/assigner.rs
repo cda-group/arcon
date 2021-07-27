@@ -287,6 +287,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature = "hardware_counters")]
+    #[cfg(not(test))]
+    use crate::metrics::perf_event::{HardwareCounter, PerfEvents};
     use crate::{
         application::*,
         data::{ArconMessage, NodeID},
@@ -367,6 +370,10 @@ mod tests {
 
         let window = AppenderWindowFn::new(backend.clone(), &appender_fn);
 
+        #[cfg(feature = "hardware_counters")]
+        #[cfg(not(test))]
+        let mut perf_events = PerfEvents::new();
+
         let window_assigner = WindowAssigner::sliding(
             window,
             backend.clone(),
@@ -383,6 +390,9 @@ mod tests {
             NodeState::new(NodeID::new(0), in_channels, backend.clone()),
             backend,
             app.arcon_logger.clone(),
+            #[cfg(feature = "hardware_counters")]
+            #[cfg(not(test))]
+            perf_events,
         );
 
         let window_comp = app.data_system().create(|| node);

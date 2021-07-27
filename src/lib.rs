@@ -26,6 +26,24 @@
 //!     - Enables RocksDB to be used as a Backend
 //! - `arcon_serde`
 //!     - Adds serde support for Arcon Types
+//! - `metrics'
+//!     - Records internal runtime metrics and allows users to register custom metrics from an Operator
+//!     - If no exporter (e.g., prometheus_exporter) is enabled, the metrics will be logged by the runtime.
+//! - `hardware_counters`
+//!     - Enables counters like cache misses, branch misses etc.
+//!     - It is to be noted that this feature is only compatible with linux OS as it uses perf_event_open() under the hood
+//!     - One has to provide CAP_SYS_ADMIN capability to use it for eg:  setcap cap_sys_admin+ep target/debug/collection , this takes the built file as an argument.
+//!     - Not executing the above command will result into "Operation not permitted" error assuming the feature flag is enabled.
+//! - `prometheus_exporter`
+//!     - If this flag is enabled , one can see the metrics using the prometheus scrape endpoint assuming there is a running prometheus instance.
+//!     - One has to add a target to prometheus config:
+//!     - job_name: 'metrics-exporter-prometheus-http'
+//!         scrape_interval: 1s
+//!          static_configs:
+//!           - targets: ['localhost:9000']
+
+//!
+//!
 
 // Enable use of arcon_macros within this crate
 #[cfg_attr(test, macro_use)]
@@ -196,4 +214,7 @@ pub mod prelude {
     pub use rayon::prelude::*;
 
     pub use std::sync::Arc;
+
+    #[cfg(all(feature = "hardware_counters", target_os = "linux"))]
+    pub use crate::metrics::perf_event::{HardwareCounter, PerfEvents};
 }

@@ -6,6 +6,12 @@ pub mod debug;
 
 pub mod source;
 
+#[cfg(feature = "metrics")]
+use metrics::{gauge, histogram, increment_counter};
+
+#[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
+use perf_event::{Builder, Group};
+
 use crate::application::conf::logger::ArconLogger;
 #[cfg(feature = "unsafe_flight")]
 use crate::data::flight_serde::unsafe_remote::UnsafeSerde;
@@ -28,54 +34,17 @@ use fxhash::*;
 use kompact::prelude::*;
 use std::{cell::UnsafeCell, sync::Arc};
 
-#[cfg(feature = "metrics")]
-use crate::metrics::{counter::Counter, gauge::Gauge, meter::Meter};
-
 /// Type alias for a Node description
 pub type NodeDescriptor = String;
 
-#[cfg(feature = "metrics")]
-/// Metrics reported by an Arcon Node
-#[derive(Debug, Clone)]
-pub struct NodeMetrics {
-    /// Meter reporting inbound throughput
-    pub inbound_throughput: Meter,
-    /// Counter for total epochs processed
-    pub epoch_counter: Counter,
-    /// Counter for total watermarks processed
-    pub watermark_counter: Counter,
-    /// Current watermark
-    pub watermark: Watermark,
-    /// Current epoch
-    pub epoch: Epoch,
-    /// Gauge Metric representing number of outbound channels
-    pub outbound_channels: Gauge,
-    /// Gauge Metric representing number of inbound channels
-    pub inbound_channels: Gauge,
-}
+#[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
+use crate::metrics::perf_event::{HardwareMetricGroup, PerfEvents};
 
 #[cfg(feature = "metrics")]
-impl Default for NodeMetrics {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+use crate::metrics::runtime_metrics::NodeMetrics;
 
 #[cfg(feature = "metrics")]
-impl NodeMetrics {
-    /// Creates a NodeMetrics struct
-    pub fn new() -> NodeMetrics {
-        NodeMetrics {
-            inbound_throughput: Meter::new(),
-            epoch_counter: Counter::new(),
-            watermark_counter: Counter::new(),
-            watermark: Watermark::new(0),
-            epoch: Epoch::new(0),
-            outbound_channels: Gauge::new(),
-            inbound_channels: Gauge::new(),
-        }
-    }
-}
+use std::time::Instant;
 
 #[derive(ArconState)]
 pub struct NodeState<OP: Operator + 'static, B: Backend> {
@@ -140,6 +109,8 @@ macro_rules! make_context {
             &mut (*$sel.timer.get()),
             &mut (*$sel.channel_strategy.get()),
             &$sel.logger,
+            #[cfg(feature = "metrics")]
+            &$sel.descriptor,
         )
     };
 }
@@ -161,14 +132,18 @@ where
     channel_strategy: UnsafeCell<ChannelStrategy<OP::OUT>>,
     /// User-defined Operator
     operator: UnsafeCell<OP>,
-    #[cfg(feature = "metrics")]
-    /// Metrics collected by the Node
-    metrics: NodeMetrics,
+
     /// Internal Node State
     node_state: NodeState<OP, B>,
     /// Event time scheduler
     timer: UnsafeCell<ArconTimer<u64, OP::TimerState, B>>,
     logger: ArconLogger,
+
+    #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
+    hardware_metric_group: HardwareMetricGroup,
+
+    #[cfg(feature = "metrics")]
+    node_metrics: NodeMetrics,
 }
 
 impl<OP, B> Node<OP, B>
@@ -184,9 +159,41 @@ where
         node_state: NodeState<OP, B>,
         backend: Arc<B>,
         logger: ArconLogger,
+
+        #[cfg(all(feature = "hardware_counters", target_os = "linux"))]
+        #[cfg(not(test))]
+        perf_events: PerfEvents,
     ) -> Self {
         let timer_id = format!("_{}_timer", descriptor);
         let timer = ArconTimer::new(timer_id, backend);
+
+        #[cfg(feature = "metrics")]
+        let borrowed_descriptor: &str = &descriptor.clone();
+
+        #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
+        let hardware_metric_group = {
+            let hardware_metrics_group = Group::new().unwrap();
+            let mut hardware_metric_group = HardwareMetricGroup {
+                group: hardware_metrics_group,
+                counters: vec![],
+            };
+
+            let iterator = perf_events.counters.iter();
+            for val in iterator {
+                hardware_metric_group.counters.push((
+                    val.to_string(),
+                    Builder::new()
+                        .group(&mut hardware_metric_group.group)
+                        .kind(val.get_hardware_kind())
+                        .build()
+                        .unwrap(),
+                ));
+            }
+            hardware_metric_group
+                .register_hardware_metric_gauges(descriptor.clone(), perf_events)
+                .ok();
+            hardware_metric_group
+        };
 
         Node {
             ctx: ComponentContext::uninitialised(),
@@ -194,17 +201,27 @@ where
             descriptor,
             channel_strategy: UnsafeCell::new(channel_strategy),
             operator: UnsafeCell::new(operator),
-            #[cfg(feature = "metrics")]
-            metrics: NodeMetrics::new(),
+
             node_state,
             timer: UnsafeCell::new(timer),
             logger,
+
+            #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
+            hardware_metric_group,
+
+            #[cfg(feature = "metrics")]
+            node_metrics: NodeMetrics::new(borrowed_descriptor),
         }
     }
 
     /// Message handler for both locally and remote sent messages
     #[inline]
     fn handle_message(&mut self, message: MessageContainer<OP::IN>) -> ArconResult<()> {
+        #[cfg(feature = "metrics")]
+        self.node_metrics
+            .inbound_throughput
+            .mark_n(message.total_events());
+
         if !self.node_state.in_channels.contains(message.sender()) {
             error!(
                 self.logger,
@@ -220,24 +237,47 @@ where
         }
 
         #[cfg(feature = "metrics")]
-        self.record_incoming_events(message.total_events());
-
+        let start_time = Instant::now();
         match message {
-            MessageContainer::Raw(r) => self.handle_events(r.sender, r.events),
-            MessageContainer::Local(l) => self.handle_events(l.sender, l.events),
+            MessageContainer::Raw(r) => self.handle_events(r.sender, r.events)?,
+            MessageContainer::Local(l) => self.handle_events(l.sender, l.events)?,
         }
+
+        #[cfg(feature = "metrics")]
+        {
+            let elapsed = start_time.elapsed();
+            histogram!(
+                format!("{}_{}", &self.descriptor, "batch_execution_time"),
+                elapsed.as_micros() as f64
+            );
+        }
+
+        #[cfg(feature = "metrics")]
+        gauge!(
+            format!("{}_{}", &self.descriptor, "inbound_throughput"),
+            self.node_metrics.inbound_throughput.get_one_min_rate()
+        );
+
+        #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
+        {
+            let counts = self.hardware_metric_group.group.read()?;
+            let counter_iterator = self.hardware_metric_group.counters.iter();
+            for (metric_name, counter) in counter_iterator {
+                histogram!(
+                    self.hardware_metric_group
+                        .get_field_gauge_name(metric_name, &self.descriptor),
+                    counts[counter] as f64
+                );
+            }
+            self.hardware_metric_group.group.reset()?;
+        }
+
+        Ok(())
     }
 
     #[inline(always)]
     fn sender_blocked(&mut self, sender: &NodeID) -> bool {
         self.node_state.blocked_channels().contains(sender)
-    }
-
-    #[cfg(feature = "metrics")]
-    /// Mark amount of inbound events
-    #[inline(always)]
-    fn record_incoming_events(&mut self, total: u64) {
-        self.metrics.inbound_throughput.mark_n(total);
     }
 
     /// Iterate over a batch of ArconEvent's
@@ -301,12 +341,8 @@ where
                             }
                         };
 
-                        // Set current watermark
                         #[cfg(feature = "metrics")]
-                        {
-                            self.metrics.watermark = new_watermark;
-                            self.metrics.watermark_counter.inc();
-                        }
+                        increment_counter!(format!("{}_{}", &self.descriptor, "watermark_counter"));
 
                         // Forward the watermark
                         unsafe {
@@ -371,14 +407,10 @@ where
 
     #[inline]
     fn complete_epoch(&mut self) -> ArconResult<()> {
+        #[cfg(feature = "metrics")]
+        increment_counter!(format!("{}_{}", &self.descriptor, "epoch_counter"));
         // flush the blocked_channels list
         self.node_state.blocked_channels().clear();
-
-        #[cfg(feature = "metrics")]
-        {
-            self.metrics.epoch = self.node_state.current_epoch;
-            self.metrics.epoch_counter.inc();
-        }
 
         // Iterate over the message-buffer until empty
         for message in self.node_state.message_buffer().consume()? {
@@ -399,21 +431,6 @@ where
             self.logger,
             "Started Arcon Node {} with Node ID {:?}", self.descriptor, self.node_state.id
         );
-
-        #[cfg(feature = "metrics")]
-        {
-            // Start periodic timer reporting Node metrics
-            if let Some(interval) = &self.ctx().config()["node_metrics_interval"].as_i64() {
-                let time_dur = std::time::Duration::from_millis(*interval as u64);
-                self.schedule_periodic(time_dur, time_dur, |c_self, _id| {
-                    c_self.node_manager_port.trigger(NodeManagerEvent::Metrics(
-                        c_self.node_state.id,
-                        c_self.metrics.clone(),
-                    ));
-                    Handled::Ok
-                });
-            }
-        }
 
         unsafe {
             let operator = &mut (*self.operator.get());
@@ -502,6 +519,10 @@ where
 mod tests {
     // Tests the message logic of Node.
     use super::*;
+
+    #[cfg(all(feature = "hardware_counters", target_os = "linux"))]
+    #[cfg(not(test))]
+    use crate::metrics::perf_event::HardwareCounter;
     use crate::{
         application::*,
         stream::{
@@ -547,6 +568,9 @@ mod tests {
             let descriptor = String::from("node_");
             let in_channels = vec![1.into(), 2.into(), 3.into()];
 
+            #[cfg(not(test))]
+            let mut perf_events = PerfEvents::new();
+
             let nm = NodeManager::<OP, _>::new(
                 descriptor.clone(),
                 app.data_system.clone(),
@@ -569,6 +593,8 @@ mod tests {
                 NodeState::new(NodeID::new(0), in_channels, backend.clone()),
                 backend,
                 app.arcon_logger.clone(),
+                #[cfg(not(test))]
+                perf_events,
             );
 
             let filter_comp = app.data_system().create(|| node);

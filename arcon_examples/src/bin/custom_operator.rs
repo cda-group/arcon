@@ -19,12 +19,31 @@ impl Operator for MyOperator {
     type TimerState = ArconNever;
     type OperatorState = ();
 
+    fn on_start(
+        &mut self,
+        mut _ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
+    ) -> ArconResult<()> {
+        #[cfg(feature = "metrics")]
+        _ctx.register_gauge("custom_gauge");
+
+        #[cfg(feature = "metrics")]
+        _ctx.register_gauge("custom_counter");
+
+        Ok(())
+        // within the function it would actually do the register_gauge!("operator_name_id_my_cool_gauge");
+    }
     fn handle_element(
         &mut self,
         element: ArconElement<Self::IN>,
         mut ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
     ) -> ArconResult<()> {
         let custom_event = CustomEvent { id: element.data };
+
+        #[cfg(feature = "metrics")]
+        ctx.update_gauge("custom_gauge", 1.0);
+
+        #[cfg(feature = "metrics")]
+        ctx.increment_counter("custom_counter");
 
         ctx.output(ArconElement {
             data: custom_event,
@@ -33,6 +52,7 @@ impl Operator for MyOperator {
 
         Ok(())
     }
+
     ignore_timeout!();
     ignore_persist!();
 

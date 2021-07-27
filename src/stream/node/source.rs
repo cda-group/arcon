@@ -1,5 +1,10 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
+#[cfg(feature = "metrics")]
+use metrics::{gauge, increment_counter};
+
+#[cfg(feature = "metrics")]
+use crate::metrics::runtime_metrics::SourceMetrics;
 
 use crate::{
     application::conf::logger::ArconLogger,
@@ -51,6 +56,10 @@ where
     source_index: usize,
     source: S,
     logger: ArconLogger,
+
+    #[cfg(feature = "metrics")]
+    source_metrics: SourceMetrics,
+    descriptor: String,
 }
 
 impl<S> SourceNode<S>
@@ -64,6 +73,7 @@ where
         channel_strategy: ChannelStrategy<S::Item>,
         logger: ArconLogger,
     ) -> Self {
+        let borrowed_source_name: &str = &conf.name.clone();
         Self {
             ctx: ComponentContext::uninitialised(),
             manager_port: RequiredPort::uninitialised(),
@@ -76,6 +86,11 @@ where
             source_index,
             source,
             logger,
+
+            #[cfg(feature = "metrics")]
+            source_metrics: SourceMetrics::new(borrowed_source_name),
+
+            descriptor: String::from(borrowed_source_name),
         }
     }
     pub fn process(&mut self) -> ArconResult<()> {
@@ -90,6 +105,14 @@ where
 
             match poll {
                 Ok(Poll::Ready(record)) => {
+                    #[cfg(feature = "metrics")]
+                    self.source_metrics.incoming_message_rate.mark_n(1);
+
+                    #[cfg(feature = "metrics")]
+                    gauge!(
+                        format!("{}_{}", &self.descriptor, "incoming_message_rate"),
+                        self.source_metrics.incoming_message_rate.get_one_min_rate()
+                    );
                     match self.conf.time {
                         ArconTime::Event => match &self.conf.extractor {
                             Some(extractor) => {
@@ -114,6 +137,8 @@ where
                     return Ok(());
                 }
                 Err(error) => {
+                    #[cfg(feature = "metrics")]
+                    increment_counter!(format!("{}_{}", &self.descriptor, "error_counter"),);
                     return self.handle_source_error(error);
                 }
             }
@@ -197,7 +222,7 @@ where
     fn on_start(&mut self) -> Handled {
         info!(
             self.logger,
-            "Starting up Source with Index {}", self.source_index
+            "Starting up Source {} with Index {}", self.descriptor, self.source_index
         );
         let shared = self.loopback_receive.share();
         self.loopback_send.connect(shared);

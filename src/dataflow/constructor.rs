@@ -296,6 +296,8 @@ pub(crate) fn node_manager_constructor<OP: Operator + 'static, B: Backend>(
                     NodeState::new(node_id, in_channels.clone(), backend.clone()),
                     backend.clone(),
                     app.arcon_logger.clone(),
+                    #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
+                    builder.conf.perf_events.clone(),
                 );
 
                 let node_comp = app.data_system().create(|| node);

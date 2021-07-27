@@ -6,7 +6,7 @@ use crate::metrics::ewma::EWMA;
 use std::time::Duration;
 
 /// Meter metric measuring throughput in various forms using EWMA
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug, Default)]
 pub struct Meter {
     /// One-min rate
     m1_rate: EWMA,
