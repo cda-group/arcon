@@ -54,14 +54,14 @@ use metrics_exporter_prometheus::PrometheusBuilder;
 /// See [Configuration](ApplicationConf)
 ///
 /// With the default configuration
-/// ```
+/// ```no_run
 /// use arcon::prelude::Application;
 ///
 /// let app = Application::default();
 /// ```
 ///
 /// With configuration
-/// ```
+/// ```no_run
 /// use arcon::prelude::{Application, ApplicationConf};
 ///
 /// let conf = ApplicationConf {
