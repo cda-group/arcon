@@ -1,7 +1,6 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 // Based off: https://github.com/infusionsoft/yammer-metrics/blob/master/metrics-core/src/main/java/com/codahale/metrics/EWMA.java
-use serde::Deserialize;
 
 const INTERVAL: isize = 5;
 const SECONDS_PER_MINUTE: f64 = 60.0;
@@ -16,7 +15,7 @@ const M5_ALPHA: f64 = 1.0 - (-INTERVAL as f64 / SECONDS_PER_MINUTE / FIVE_MINUTE
 const M15_ALPHA: f64 = 1.0 - (-INTERVAL as f64 / SECONDS_PER_MINUTE / FIFTEEN_MINUTES as f64);
 
 /// Exponentially Weighted Moving Average
-#[derive(Deserialize, Clone, Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct EWMA {
     initialised: bool,
     rate: f64,

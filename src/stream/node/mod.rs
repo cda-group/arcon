@@ -246,7 +246,6 @@ where
         #[cfg(feature = "metrics")]
         {
             let elapsed = start_time.elapsed();
-            self.node_metrics.batch_execution_time = elapsed.as_micros() as f64;
             histogram!(
                 format!("{}_{}", &self.descriptor, "batch_execution_time"),
                 elapsed.as_micros() as f64
@@ -341,8 +340,6 @@ where
                                     .handle_timeout(timeout, make_context!(self))?;
                             }
                         };
-                        #[cfg(feature = "metrics")]
-                        self.node_metrics.increment_watermark_counter();
 
                         #[cfg(feature = "metrics")]
                         increment_counter!(format!("{}_{}", &self.descriptor, "watermark_counter"));
@@ -410,9 +407,6 @@ where
 
     #[inline]
     fn complete_epoch(&mut self) -> ArconResult<()> {
-        #[cfg(feature = "metrics")]
-        self.node_metrics.increment_epoch_counter();
-
         #[cfg(feature = "metrics")]
         increment_counter!(format!("{}_{}", &self.descriptor, "epoch_counter"));
         // flush the blocked_channels list

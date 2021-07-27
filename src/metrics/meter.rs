@@ -3,11 +3,10 @@
 // Based off: https://github.com/infusionsoft/yammer-metrics/blob/master/metrics-core/src/main/java/com/codahale/metrics/Meter.java
 
 use crate::metrics::ewma::EWMA;
-use serde::Deserialize;
 use std::time::Duration;
 
 /// Meter metric measuring throughput in various forms using EWMA
-#[derive(Deserialize, Clone, Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct Meter {
     /// One-min rate
     m1_rate: EWMA,

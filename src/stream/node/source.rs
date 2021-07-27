@@ -138,9 +138,6 @@ where
                 }
                 Err(error) => {
                     #[cfg(feature = "metrics")]
-                    self.source_metrics.increment_error_counter();
-
-                    #[cfg(feature = "metrics")]
                     increment_counter!(format!("{}_{}", &self.descriptor, "error_counter"),);
                     return self.handle_source_error(error);
                 }
