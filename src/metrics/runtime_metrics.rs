@@ -6,7 +6,7 @@ pub struct NodeMetrics {
     pub inbound_throughput: Meter,
     pub epoch_counter: u64,
     pub watermark_counter: u64,
-    pub batch_execution_time: u64,
+    pub batch_execution_time: f64,
 }
 
 impl NodeMetrics {
@@ -20,7 +20,7 @@ impl NodeMetrics {
             inbound_throughput: Meter::new(),
             epoch_counter: 0,
             watermark_counter: 0,
-            batch_execution_time: 0,
+            batch_execution_time: 0.0,
         }
     }
 
@@ -30,15 +30,6 @@ impl NodeMetrics {
 
     pub fn increment_watermark_counter(&mut self) {
         self.watermark_counter += 1;
-    }
-
-    pub fn start_timer(&mut self) {
-        self.batch_execution_time = crate::util::get_system_time_nano()
-    }
-
-    pub fn get_elapsed_time(&self) -> f64 {
-        let elapsed: f64 = (crate::util::get_system_time_nano() - self.batch_execution_time) as f64;
-        elapsed
     }
 }
 pub struct SourceMetrics {

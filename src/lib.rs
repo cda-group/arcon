@@ -34,6 +34,13 @@
 //!     - It is to be noted that this feature is only compatible with linux OS as it uses perf_event_open() under the hood
 //!     - One has to provide CAP_SYS_ADMIN capability to use it for eg:  setcap cap_sys_admin+ep target/debug/collection , this takes the built file as an argument.
 //!     - Not executing the above command will result into "Operation not permitted" error assuming the feature flag is enabled.
+//! - `prometheus_exporter`
+//!     - If this flag is enabled , one can see the metrics using the prometheus scrape endpoint assuming there is a running prometheus instance.
+//!     - One has to add a target to prometheus config:
+//!     - job_name: 'metrics-exporter-prometheus-http'
+//!         scrape_interval: 1s
+//!          static_configs:
+//!           - targets: ['localhost:9000']
 
 //!
 //!

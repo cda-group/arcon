@@ -111,8 +111,7 @@ impl Application {
     fn new(conf: ApplicationConf) -> Self {
         #[cfg(all(feature = "prometheus_exporter", feature = "metrics", not(test)))]
         {
-            let _builder = PrometheusBuilder::new();
-            _builder
+            PrometheusBuilder::new()
                 .install()
                 .expect("failed to install Prometheus recorder")
         }

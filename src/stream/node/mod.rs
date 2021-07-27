@@ -43,6 +43,9 @@ use crate::metrics::perf_event::{HardwareMetricGroup, PerfEvents};
 #[cfg(feature = "metrics")]
 use crate::metrics::runtime_metrics::NodeMetrics;
 
+#[cfg(feature = "metrics")]
+use std::time::Instant;
+
 #[derive(ArconState)]
 pub struct NodeState<OP: Operator + 'static, B: Backend> {
     /// Durable message buffer used for blocked channels
@@ -234,7 +237,7 @@ where
         }
 
         #[cfg(feature = "metrics")]
-        self.node_metrics.start_timer();
+        let start_time = Instant::now();
         match message {
             MessageContainer::Raw(r) => self.handle_events(r.sender, r.events)?,
             MessageContainer::Local(l) => self.handle_events(l.sender, l.events)?,
@@ -242,10 +245,11 @@ where
 
         #[cfg(feature = "metrics")]
         {
-            let elapsed = self.node_metrics.get_elapsed_time();
+            let elapsed = start_time.elapsed();
+            self.node_metrics.batch_execution_time = elapsed.as_micros() as f64;
             histogram!(
                 format!("{}_{}", &self.descriptor, "batch_execution_time"),
-                elapsed
+                elapsed.as_micros() as f64
             );
         }
 
