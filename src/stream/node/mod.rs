@@ -7,7 +7,9 @@ pub mod debug;
 pub mod source;
 
 #[cfg(feature = "metrics")]
-use metrics::{gauge, histogram, increment_counter};
+use metrics::{
+    gauge, histogram, increment_counter, register_counter, register_gauge, register_histogram, Unit,
+};
 
 #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
 use perf_event::{Builder, Group};
@@ -168,7 +170,12 @@ where
         let timer = ArconTimer::new(timer_id, backend);
 
         #[cfg(feature = "metrics")]
-        let borrowed_descriptor: &str = &descriptor.clone();
+        {
+            register_gauge!("inbound_throughput", "node" => descriptor.clone());
+            register_counter!("epoch_counter", "node" => descriptor.clone());
+            register_counter!("watermark_counter", "node" => descriptor.clone());
+            register_histogram!("batch_execution_time", Unit::Nanoseconds,"execution time per events batch","node" => descriptor.clone());
+        }
 
         #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
         let hardware_metric_group = {
@@ -210,7 +217,7 @@ where
             hardware_metric_group,
 
             #[cfg(feature = "metrics")]
-            node_metrics: NodeMetrics::new(borrowed_descriptor),
+            node_metrics: NodeMetrics::new(),
         }
     }
 
@@ -246,28 +253,18 @@ where
         #[cfg(feature = "metrics")]
         {
             let elapsed = start_time.elapsed();
-            histogram!(
-                format!("{}_{}", &self.descriptor, "batch_execution_time"),
-                elapsed.as_micros() as f64
-            );
+            histogram!("batch_execution_time", elapsed.as_micros() as f64,"node" => self.descriptor.clone());
         }
 
         #[cfg(feature = "metrics")]
-        gauge!(
-            format!("{}_{}", &self.descriptor, "inbound_throughput"),
-            self.node_metrics.inbound_throughput.get_one_min_rate()
-        );
+        gauge!("inbound_throughput", self.node_metrics.inbound_throughput.get_one_min_rate(), "node" => self.descriptor.clone());
 
         #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
         {
             let counts = self.hardware_metric_group.group.read()?;
             let counter_iterator = self.hardware_metric_group.counters.iter();
             for (metric_name, counter) in counter_iterator {
-                histogram!(
-                    self.hardware_metric_group
-                        .get_field_gauge_name(metric_name, &self.descriptor),
-                    counts[counter] as f64
-                );
+                histogram!(String::from(metric_name), counts[counter] as f64,"node" => self.descriptor.clone());
             }
             self.hardware_metric_group.group.reset()?;
         }
@@ -342,7 +339,7 @@ where
                         };
 
                         #[cfg(feature = "metrics")]
-                        increment_counter!(format!("{}_{}", &self.descriptor, "watermark_counter"));
+                        increment_counter!("watermark_counter", "node" => self.descriptor.clone());
 
                         // Forward the watermark
                         unsafe {
@@ -408,7 +405,8 @@ where
     #[inline]
     fn complete_epoch(&mut self) -> ArconResult<()> {
         #[cfg(feature = "metrics")]
-        increment_counter!(format!("{}_{}", &self.descriptor, "epoch_counter"));
+        increment_counter!("epoch_counter", "node" => self.descriptor.clone());
+
         // flush the blocked_channels list
         self.node_state.blocked_channels().clear();
 

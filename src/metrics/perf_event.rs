@@ -80,12 +80,8 @@ impl HardwareMetricGroup {
     ) -> std::io::Result<()> {
         let iterator = perf_events.counters.iter();
         for value in iterator {
-            register_histogram!(self.get_field_gauge_name(&node_name, &value.to_string()));
+            register_histogram!(value.to_string(),"node" => String::from (node_name.clone()));
         }
         self.group.enable()
-    }
-
-    pub fn get_field_gauge_name(&self, field_name: &str, node_name: &str) -> String {
-        format!("{}_{}", node_name, field_name)
     }
 }

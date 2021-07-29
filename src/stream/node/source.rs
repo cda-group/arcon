@@ -1,7 +1,7 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 #[cfg(feature = "metrics")]
-use metrics::{gauge, increment_counter};
+use metrics::{gauge, increment_counter, register_counter, register_gauge};
 
 #[cfg(feature = "metrics")]
 use crate::metrics::runtime_metrics::SourceMetrics;
@@ -74,6 +74,13 @@ where
         logger: ArconLogger,
     ) -> Self {
         let borrowed_source_name: &str = &conf.name.clone();
+
+        #[cfg(feature = "metrics")]
+        {
+            register_gauge!("incoming_message_rate", "source" => conf.name.clone());
+            register_counter!("error_counter", "source" => conf.name.clone());
+        }
+
         Self {
             ctx: ComponentContext::uninitialised(),
             manager_port: RequiredPort::uninitialised(),
@@ -88,31 +95,24 @@ where
             logger,
 
             #[cfg(feature = "metrics")]
-            source_metrics: SourceMetrics::new(borrowed_source_name),
+            source_metrics: SourceMetrics::new(),
 
             descriptor: String::from(borrowed_source_name),
         }
     }
-    pub fn process(&mut self) -> ArconResult<()> {
+    pub fn process(&mut self) -> ArconResult<usize> {
         let mut counter = 0;
+        let error_counter = 0;
 
         loop {
             if counter >= self.conf.batch_size {
-                return Ok(());
+                return Ok(counter);
             }
 
             let poll = self.source.poll_next()?;
 
             match poll {
                 Ok(Poll::Ready(record)) => {
-                    #[cfg(feature = "metrics")]
-                    self.source_metrics.incoming_message_rate.mark_n(1);
-
-                    #[cfg(feature = "metrics")]
-                    gauge!(
-                        format!("{}_{}", &self.descriptor, "incoming_message_rate"),
-                        self.source_metrics.incoming_message_rate.get_one_min_rate()
-                    );
                     match self.conf.time {
                         ArconTime::Event => match &self.conf.extractor {
                             Some(extractor) => {
@@ -129,31 +129,37 @@ where
                 }
                 Ok(Poll::Pending) => {
                     // nothing to collect, reschedule...
-                    return Ok(());
+                    return Ok(counter);
                 }
                 Ok(Poll::Done) => {
                     // signal end..
                     self.ended = true;
-                    return Ok(());
+                    return Ok(counter);
                 }
                 Err(error) => {
                     #[cfg(feature = "metrics")]
-                    increment_counter!(format!("{}_{}", &self.descriptor, "error_counter"),);
-                    return self.handle_source_error(error);
+                    increment_counter!("error_counter", "source" => self.descriptor.clone());
+
+                    return self.handle_source_error(error, error_counter);
                 }
             }
         }
     }
 
-    fn handle_source_error(&self, source_error: SourceError) -> ArconResult<()> {
+    fn handle_source_error(
+        &self,
+        source_error: SourceError,
+        mut error_counter: usize,
+    ) -> ArconResult<usize> {
         #[cfg(feature = "kafka")]
         if let SourceError::Kafka { error } = &source_error {
+            error_counter += 1;
             match error {
                 // TODO: figure out which other kafka errors should cause a stop
                 KafkaError::Canceled | KafkaError::ConsumerCommit(_) => {
                     return Err(crate::error::Error::Unsupported {
                         msg: error.to_string(),
-                    })
+                    });
                 }
                 _ => (),
             }
@@ -162,7 +168,7 @@ where
         // if we reach here, it means the error was not that serious...
         // but we log it
         error!(self.logger, "{}", source_error);
-        Ok(())
+        Ok(error_counter)
     }
 
     #[inline]
@@ -235,12 +241,23 @@ where
     S: Source,
 {
     fn handle(&mut self, _event: ProcessSource) -> Handled {
-        if let Err(error) = self.process() {
-            // fatal error, must shutdown..
-            // TODO: coordinate shutdown of the application..
-            error!(self.logger, "{}", error);
-        }
+        match self.process() {
+            #[cfg(not(feature = "metrics"))]
+            Ok(_) => (),
+            #[cfg(feature = "metrics")]
+            Ok(polled_records) => {
+                self.source_metrics
+                    .incoming_message_rate
+                    .mark_n(polled_records as u64);
+                gauge!("incoming_message_rate",  self.source_metrics.incoming_message_rate.get_one_min_rate(), "source" => self.descriptor.clone());
+            }
 
+            Err(error) => {
+                // fatal error, must shutdown..
+                // TODO: coordinate shutdown of the application..
+                error!(self.logger, "{}", error);
+            }
+        }
         if self.ended {
             self.manager_port.trigger(SourceManagerEvent::End);
         } else {
