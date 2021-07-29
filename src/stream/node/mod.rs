@@ -198,9 +198,7 @@ where
                         .unwrap(),
                 ));
             }
-            // hardware_metric_group
-            //     .register_hardware_metric_gauges(descriptor.clone(), perf_events)
-            //     .ok();
+
             let iterator = perf_events.counters.iter();
             for value in iterator {
                 register_histogram!(value.to_string(),"node" => descriptor.clone());
