@@ -51,7 +51,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        build: [Linux, macOS, Windows]
+        build: [Linux, macOS]
         include:
           - build: Linux
             os: ubuntu-latest
@@ -59,10 +59,6 @@ jobs:
           - build: macOS
             os: macos-latest
             experimental: false
-          - build: Windows
-            os: windows-latest
-            features: cmake-build,libz-static
-            experimental: true
     steps:
       - name: checkout
         uses: actions/checkout@v2
@@ -72,12 +68,6 @@ jobs:
             toolchain: ${{ env.msrv }}
             default: true
             profile: minimal
-      - name: Remove msys64 # taken from rust-rocksdb
-        if: runner.os == 'Windows'
-        run: Remove-Item -LiteralPath "C:\msys64\" -Force -Recurse
-      - name: Install dependencies
-        if: runner.os == 'Windows'
-        run: choco install llvm -y
       - name: test
         uses: actions-rs/cargo@v1
         with:
