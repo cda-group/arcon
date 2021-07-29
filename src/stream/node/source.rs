@@ -102,7 +102,6 @@ where
     }
     pub fn process(&mut self) -> ArconResult<usize> {
         let mut counter = 0;
-        let error_counter = 0;
 
         loop {
             if counter >= self.conf.batch_size {
@@ -140,20 +139,22 @@ where
                     #[cfg(feature = "metrics")]
                     increment_counter!("error_counter", "source" => self.descriptor.clone());
 
-                    return self.handle_source_error(error, error_counter);
+                    match self.handle_source_error(error) {
+                        Ok(_) => {
+                            counter += 1;
+                        }
+                        Err(err) => {
+                            return Err(err);
+                        }
+                    }
                 }
             }
         }
     }
 
-    fn handle_source_error(
-        &self,
-        source_error: SourceError,
-        mut error_counter: usize,
-    ) -> ArconResult<usize> {
+    fn handle_source_error(&self, source_error: SourceError) -> ArconResult<()> {
         #[cfg(feature = "kafka")]
         if let SourceError::Kafka { error } = &source_error {
-            error_counter += 1;
             match error {
                 // TODO: figure out which other kafka errors should cause a stop
                 KafkaError::Canceled | KafkaError::ConsumerCommit(_) => {
@@ -168,7 +169,7 @@ where
         // if we reach here, it means the error was not that serious...
         // but we log it
         error!(self.logger, "{}", source_error);
-        Ok(error_counter)
+        Ok(())
     }
 
     #[inline]

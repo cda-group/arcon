@@ -8,7 +8,7 @@ pub mod source;
 
 #[cfg(feature = "metrics")]
 use metrics::{
-    gauge, histogram, increment_counter, register_counter, register_gauge, register_histogram, Unit,
+    gauge, histogram, increment_counter, register_counter, register_gauge, register_histogram,
 };
 
 #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
@@ -174,8 +174,10 @@ where
             register_gauge!("inbound_throughput", "node" => descriptor.clone());
             register_counter!("epoch_counter", "node" => descriptor.clone());
             register_counter!("watermark_counter", "node" => descriptor.clone());
-            register_histogram!("batch_execution_time", Unit::Nanoseconds,"execution time per events batch","node" => descriptor.clone());
+            register_histogram!("batch_execution_time","execution time per events batch","node" => descriptor.clone());
         }
+        #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
+        {}
 
         #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
         let hardware_metric_group = {
@@ -196,9 +198,15 @@ where
                         .unwrap(),
                 ));
             }
-            hardware_metric_group
-                .register_hardware_metric_gauges(descriptor.clone(), perf_events)
-                .ok();
+            // hardware_metric_group
+            //     .register_hardware_metric_gauges(descriptor.clone(), perf_events)
+            //     .ok();
+            let iterator = perf_events.counters.iter();
+            for value in iterator {
+                register_histogram!(value.to_string(),"node" => descriptor.clone());
+            }
+            hardware_metric_group.group.enable().ok();
+
             hardware_metric_group
         };
 
