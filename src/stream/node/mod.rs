@@ -142,7 +142,7 @@ where
     logger: ArconLogger,
 
     #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
-    hardware_metric_group: HardwareMetricGroup,
+    perf_events: PerfEvents,
 
     #[cfg(feature = "metrics")]
     node_metrics: NodeMetrics,
@@ -176,37 +176,6 @@ where
             register_counter!("watermark_counter", "node" => descriptor.clone());
             register_histogram!("batch_execution_time","execution time per events batch","node" => descriptor.clone());
         }
-        #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
-        {}
-
-        #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
-        let hardware_metric_group = {
-            let hardware_metrics_group = Group::new().unwrap();
-            let mut hardware_metric_group = HardwareMetricGroup {
-                group: hardware_metrics_group,
-                counters: vec![],
-            };
-
-            let iterator = perf_events.counters.iter();
-            for val in iterator {
-                hardware_metric_group.counters.push((
-                    val.to_string(),
-                    Builder::new()
-                        .group(&mut hardware_metric_group.group)
-                        .kind(val.get_hardware_kind())
-                        .build()
-                        .unwrap(),
-                ));
-            }
-
-            let iterator = perf_events.counters.iter();
-            for value in iterator {
-                register_histogram!(value.to_string(),"node" => descriptor.clone());
-            }
-            hardware_metric_group.group.enable().ok();
-
-            hardware_metric_group
-        };
 
         Node {
             ctx: ComponentContext::uninitialised(),
@@ -220,7 +189,7 @@ where
             logger,
 
             #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
-            hardware_metric_group,
+            perf_events,
 
             #[cfg(feature = "metrics")]
             node_metrics: NodeMetrics::new(),
@@ -249,12 +218,51 @@ where
             return Ok(());
         }
 
+        #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
+        let mut hardware_metric_group = {
+            let perf_events_group = Group::new().unwrap();
+            let mut hardware_metric_group = HardwareMetricGroup {
+                group: perf_events_group,
+                counters: vec![],
+            };
+
+            let iterator = self.perf_events.counters.iter();
+            for val in iterator {
+                hardware_metric_group.counters.push((
+                    val.to_string(),
+                    Builder::new()
+                        .group(&mut hardware_metric_group.group)
+                        .kind(val.get_hardware_kind())
+                        .build()
+                        .unwrap(),
+                ));
+            }
+
+            let iterator = self.perf_events.counters.iter();
+            for value in iterator {
+                register_histogram!(value.to_string(),"node" => self.descriptor.clone());
+            }
+            hardware_metric_group.group.enable().ok();
+
+            hardware_metric_group
+        };
+
         #[cfg(feature = "metrics")]
         let start_time = Instant::now();
+
+        #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
+        {
+            hardware_metric_group.group.reset()?;
+            hardware_metric_group.group.enable()?;
+        }
+
         match message {
             MessageContainer::Raw(r) => self.handle_events(r.sender, r.events)?,
             MessageContainer::Local(l) => self.handle_events(l.sender, l.events)?,
         }
+
+        #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
+        hardware_metric_group.group.disable()?;
 
         #[cfg(feature = "metrics")]
         {
@@ -267,12 +275,11 @@ where
 
         #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
         {
-            let counts = self.hardware_metric_group.group.read()?;
-            let counter_iterator = self.hardware_metric_group.counters.iter();
+            let counts = hardware_metric_group.group.read()?;
+            let counter_iterator = hardware_metric_group.counters.iter();
             for (metric_name, counter) in counter_iterator {
                 histogram!(String::from(metric_name), counts[counter] as f64,"node" => self.descriptor.clone());
             }
-            self.hardware_metric_group.group.reset()?;
         }
 
         Ok(())
