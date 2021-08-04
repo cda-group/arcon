@@ -1,5 +1,5 @@
 use crate::prelude::alloc::fmt::Formatter;
-use perf_event::{events::Hardware, Counter, Group};
+use perf_event::events::Hardware;
 use serde::Deserialize;
 use std::fmt;
 

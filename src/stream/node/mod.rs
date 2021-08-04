@@ -40,12 +40,11 @@ use std::{cell::UnsafeCell, sync::Arc};
 pub type NodeDescriptor = String;
 
 #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
-use crate::metrics::perf_event::{HardwareMetricGroup, PerfEvents};
+use crate::metrics::perf_event::PerfEvents;
 
 #[cfg(feature = "metrics")]
 use crate::metrics::runtime_metrics::NodeMetrics;
 
-use perf_event::Counter;
 #[cfg(feature = "metrics")]
 use std::time::Instant;
 
@@ -227,7 +226,7 @@ where
         }
 
         #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
-        let mut counter_tuple: (Group, Vec<(String, Counter)>) = {
+        let (mut group, counters) = {
             let mut group = Group::new()?;
             let mut counters = Vec::with_capacity(self.perf_events.counters.len());
             for hardware_counter in self.perf_events.counters.iter() {
@@ -245,7 +244,7 @@ where
         let start_time = Instant::now();
 
         #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
-            counter_tuple.0.enable()?;
+        group.enable()?;
 
         match message {
             MessageContainer::Raw(r) => self.handle_events(r.sender, r.events)?,
@@ -253,7 +252,7 @@ where
         }
 
         #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
-            counter_tuple.0.disable()?;
+        group.disable()?;
 
         #[cfg(feature = "metrics")]
         {
@@ -266,8 +265,8 @@ where
 
         #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
         {
-            let counts = counter_tuple.0.read()?;
-            for (metric_name, counter) in counter_tuple.1.iter() {
+            let counts = group.read()?;
+            for (metric_name, counter) in counters.iter() {
                 histogram!(String::from(metric_name), counts[counter] as f64, "node" => self.descriptor.clone());
             }
         }
