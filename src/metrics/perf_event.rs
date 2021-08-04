@@ -65,8 +65,3 @@ impl PerfEvents {
         self.counters.push(hardware_metric_kind);
     }
 }
-
-pub struct HardwareMetricGroup {
-    pub group: Group,
-    pub counters: Vec<(String, Counter)>,
-}

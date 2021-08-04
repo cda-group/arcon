@@ -45,6 +45,7 @@ use crate::metrics::perf_event::{HardwareMetricGroup, PerfEvents};
 #[cfg(feature = "metrics")]
 use crate::metrics::runtime_metrics::NodeMetrics;
 
+use perf_event::Counter;
 #[cfg(feature = "metrics")]
 use std::time::Instant;
 
@@ -177,6 +178,13 @@ where
             register_histogram!("batch_execution_time","execution time per events batch","node" => descriptor.clone());
         }
 
+        #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
+        {
+            for value in perf_events.counters.iter() {
+                register_histogram!(value.to_string(),"node" => descriptor.clone());
+            }
+        }
+
         Node {
             ctx: ComponentContext::uninitialised(),
             node_manager_port: RequiredPort::uninitialised(),
@@ -219,42 +227,25 @@ where
         }
 
         #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
-        let mut hardware_metric_group = {
-            let perf_events_group = Group::new().unwrap();
-            let mut hardware_metric_group = HardwareMetricGroup {
-                group: perf_events_group,
-                counters: vec![],
-            };
+        let mut counter_tuple: (Group, Vec<(String, Counter)>) = {
+            let mut group = Group::new()?;
+            let mut counters = Vec::with_capacity(self.perf_events.counters.len());
+            for hardware_counter in self.perf_events.counters.iter() {
+                let counter = Builder::new()
+                    .group(&mut group)
+                    .kind(hardware_counter.get_hardware_kind())
+                    .build()?;
 
-            let iterator = self.perf_events.counters.iter();
-            for val in iterator {
-                hardware_metric_group.counters.push((
-                    val.to_string(),
-                    Builder::new()
-                        .group(&mut hardware_metric_group.group)
-                        .kind(val.get_hardware_kind())
-                        .build()
-                        .unwrap(),
-                ));
+                counters.push((hardware_counter.to_string(), counter));
             }
-
-            let iterator = self.perf_events.counters.iter();
-            for value in iterator {
-                register_histogram!(value.to_string(),"node" => self.descriptor.clone());
-            }
-            hardware_metric_group.group.enable().ok();
-
-            hardware_metric_group
+            (group, counters)
         };
 
         #[cfg(feature = "metrics")]
         let start_time = Instant::now();
 
         #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
-        {
-            hardware_metric_group.group.reset()?;
-            hardware_metric_group.group.enable()?;
-        }
+            counter_tuple.0.enable()?;
 
         match message {
             MessageContainer::Raw(r) => self.handle_events(r.sender, r.events)?,
@@ -262,7 +253,7 @@ where
         }
 
         #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
-        hardware_metric_group.group.disable()?;
+            counter_tuple.0.disable()?;
 
         #[cfg(feature = "metrics")]
         {
@@ -275,10 +266,9 @@ where
 
         #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
         {
-            let counts = hardware_metric_group.group.read()?;
-            let counter_iterator = hardware_metric_group.counters.iter();
-            for (metric_name, counter) in counter_iterator {
-                histogram!(String::from(metric_name), counts[counter] as f64,"node" => self.descriptor.clone());
+            let counts = counter_tuple.0.read()?;
+            for (metric_name, counter) in counter_tuple.1.iter() {
+                histogram!(String::from(metric_name), counts[counter] as f64, "node" => self.descriptor.clone());
             }
         }
 
