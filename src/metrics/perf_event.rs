@@ -1,6 +1,5 @@
 use crate::prelude::alloc::fmt::Formatter;
-use metrics::register_histogram;
-use perf_event::{events::Hardware, Counter, Group};
+use perf_event::events::Hardware;
 use serde::Deserialize;
 use std::fmt;
 
@@ -64,28 +63,5 @@ impl PerfEvents {
 
     pub fn add(&mut self, hardware_metric_kind: HardwareCounter) {
         self.counters.push(hardware_metric_kind);
-    }
-}
-
-pub struct HardwareMetricGroup {
-    pub group: Group,
-    pub counters: Vec<(String, Counter)>,
-}
-
-impl HardwareMetricGroup {
-    pub(crate) fn register_hardware_metric_gauges(
-        &mut self,
-        node_name: String,
-        perf_events: PerfEvents,
-    ) -> std::io::Result<()> {
-        let iterator = perf_events.counters.iter();
-        for value in iterator {
-            register_histogram!(self.get_field_gauge_name(&node_name, &value.to_string()));
-        }
-        self.group.enable()
-    }
-
-    pub fn get_field_gauge_name(&self, field_name: &str, node_name: &str) -> String {
-        format!("{}_{}", node_name, field_name)
     }
 }

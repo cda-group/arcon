@@ -7,7 +7,9 @@ pub mod debug;
 pub mod source;
 
 #[cfg(feature = "metrics")]
-use metrics::{gauge, histogram, increment_counter};
+use metrics::{
+    gauge, histogram, increment_counter, register_counter, register_gauge, register_histogram,
+};
 
 #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
 use perf_event::{Builder, Group};
@@ -38,7 +40,7 @@ use std::{cell::UnsafeCell, sync::Arc};
 pub type NodeDescriptor = String;
 
 #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
-use crate::metrics::perf_event::{HardwareMetricGroup, PerfEvents};
+use crate::metrics::perf_event::PerfEvents;
 
 #[cfg(feature = "metrics")]
 use crate::metrics::runtime_metrics::NodeMetrics;
@@ -140,7 +142,7 @@ where
     logger: ArconLogger,
 
     #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
-    hardware_metric_group: HardwareMetricGroup,
+    perf_events: PerfEvents,
 
     #[cfg(feature = "metrics")]
     node_metrics: NodeMetrics,
@@ -168,32 +170,19 @@ where
         let timer = ArconTimer::new(timer_id, backend);
 
         #[cfg(feature = "metrics")]
-        let borrowed_descriptor: &str = &descriptor.clone();
+        {
+            register_gauge!("inbound_throughput", "node" => descriptor.clone());
+            register_counter!("epoch_counter", "node" => descriptor.clone());
+            register_counter!("watermark_counter", "node" => descriptor.clone());
+            register_histogram!("batch_execution_time","execution time per events batch","node" => descriptor.clone());
+        }
 
         #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
-        let hardware_metric_group = {
-            let hardware_metrics_group = Group::new().unwrap();
-            let mut hardware_metric_group = HardwareMetricGroup {
-                group: hardware_metrics_group,
-                counters: vec![],
-            };
-
-            let iterator = perf_events.counters.iter();
-            for val in iterator {
-                hardware_metric_group.counters.push((
-                    val.to_string(),
-                    Builder::new()
-                        .group(&mut hardware_metric_group.group)
-                        .kind(val.get_hardware_kind())
-                        .build()
-                        .unwrap(),
-                ));
+        {
+            for value in perf_events.counters.iter() {
+                register_histogram!(value.to_string(),"node" => descriptor.clone());
             }
-            hardware_metric_group
-                .register_hardware_metric_gauges(descriptor.clone(), perf_events)
-                .ok();
-            hardware_metric_group
-        };
+        }
 
         Node {
             ctx: ComponentContext::uninitialised(),
@@ -207,10 +196,10 @@ where
             logger,
 
             #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
-            hardware_metric_group,
+            perf_events,
 
             #[cfg(feature = "metrics")]
-            node_metrics: NodeMetrics::new(borrowed_descriptor),
+            node_metrics: NodeMetrics::new(),
         }
     }
 
@@ -236,40 +225,50 @@ where
             return Ok(());
         }
 
+        #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
+        let (mut group, counters) = {
+            let mut group = Group::new()?;
+            let mut counters = Vec::with_capacity(self.perf_events.counters.len());
+            for hardware_counter in self.perf_events.counters.iter() {
+                let counter = Builder::new()
+                    .group(&mut group)
+                    .kind(hardware_counter.get_hardware_kind())
+                    .build()?;
+
+                counters.push((hardware_counter.to_string(), counter));
+            }
+            (group, counters)
+        };
+
         #[cfg(feature = "metrics")]
         let start_time = Instant::now();
+
+        #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
+        group.enable()?;
+
         match message {
             MessageContainer::Raw(r) => self.handle_events(r.sender, r.events)?,
             MessageContainer::Local(l) => self.handle_events(l.sender, l.events)?,
         }
 
+        #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
+        group.disable()?;
+
         #[cfg(feature = "metrics")]
         {
             let elapsed = start_time.elapsed();
-            histogram!(
-                format!("{}_{}", &self.descriptor, "batch_execution_time"),
-                elapsed.as_micros() as f64
-            );
+            histogram!("batch_execution_time", elapsed.as_micros() as f64,"node" => self.descriptor.clone());
         }
 
         #[cfg(feature = "metrics")]
-        gauge!(
-            format!("{}_{}", &self.descriptor, "inbound_throughput"),
-            self.node_metrics.inbound_throughput.get_one_min_rate()
-        );
+        gauge!("inbound_throughput", self.node_metrics.inbound_throughput.get_one_min_rate(), "node" => self.descriptor.clone());
 
         #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
         {
-            let counts = self.hardware_metric_group.group.read()?;
-            let counter_iterator = self.hardware_metric_group.counters.iter();
-            for (metric_name, counter) in counter_iterator {
-                histogram!(
-                    self.hardware_metric_group
-                        .get_field_gauge_name(metric_name, &self.descriptor),
-                    counts[counter] as f64
-                );
+            let counts = group.read()?;
+            for (metric_name, counter) in counters.iter() {
+                histogram!(String::from(metric_name), counts[counter] as f64, "node" => self.descriptor.clone());
             }
-            self.hardware_metric_group.group.reset()?;
         }
 
         Ok(())
@@ -342,7 +341,7 @@ where
                         };
 
                         #[cfg(feature = "metrics")]
-                        increment_counter!(format!("{}_{}", &self.descriptor, "watermark_counter"));
+                        increment_counter!("watermark_counter", "node" => self.descriptor.clone());
 
                         // Forward the watermark
                         unsafe {
@@ -408,7 +407,8 @@ where
     #[inline]
     fn complete_epoch(&mut self) -> ArconResult<()> {
         #[cfg(feature = "metrics")]
-        increment_counter!(format!("{}_{}", &self.descriptor, "epoch_counter"));
+        increment_counter!("epoch_counter", "node" => self.descriptor.clone());
+
         // flush the blocked_channels list
         self.node_state.blocked_channels().clear();
 
