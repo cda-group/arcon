@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use super::epoch::EpochEvent;
+#[cfg(feature = "metrics")]
+use metrics::{gauge, register_gauge};
+
 use crate::{
     application::conf::logger::ArconLogger,
     data::StateID,
@@ -61,6 +64,11 @@ impl<B: Backend> SourceManager<B> {
         backend: Arc<B>,
         logger: ArconLogger,
     ) -> Self {
+        #[cfg(feature = "metrics")]
+        {
+            register_gauge!("sources", "source_manager" => state_id.clone() );
+        }
+
         Self {
             ctx: ComponentContext::uninitialised(),
             manager_port: ProvidedPort::uninitialised(),
@@ -77,6 +85,11 @@ impl<B: Backend> SourceManager<B> {
     }
 
     pub(crate) fn add_source(&mut self, source: Arc<dyn AbstractComponent<Message = SourceEvent>>) {
+        #[cfg(feature = "metrics")]
+        {
+            gauge!("sources", 1.0,"source_manager" => self.state_id.clone() );
+        }
+
         let source_ref = source.actor_ref().hold().expect("failed to fetch ref");
         self.sources.push(source);
         self.source_refs.push(source_ref);
