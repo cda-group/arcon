@@ -65,9 +65,7 @@ impl<B: Backend> SourceManager<B> {
         logger: ArconLogger,
     ) -> Self {
         #[cfg(feature = "metrics")]
-        {
-            register_gauge!("sources", "source_manager" => state_id.clone() );
-        }
+        register_gauge!("sources", "source_manager" => state_id.clone() );
 
         Self {
             ctx: ComponentContext::uninitialised(),
@@ -85,11 +83,6 @@ impl<B: Backend> SourceManager<B> {
     }
 
     pub(crate) fn add_source(&mut self, source: Arc<dyn AbstractComponent<Message = SourceEvent>>) {
-        #[cfg(feature = "metrics")]
-        {
-            gauge!("sources", 1.0,"source_manager" => self.state_id.clone() );
-        }
-
         let source_ref = source.actor_ref().hold().expect("failed to fetch ref");
         self.sources.push(source);
         self.source_refs.push(source_ref);
@@ -134,6 +127,9 @@ impl<B: Backend> Actor for SourceManager<B> {
         // If we received a start message, start the periodic timer
         // that instructs sources to send off watermarks.
         if SourceEvent::Start == msg {
+            #[cfg(feature = "metrics")]
+            gauge!("sources", 1.0,"source_manager" => self.state_id.clone());
+
             let duration = std::time::Duration::from_millis(self.watermark_interval);
             let timeout =
                 self.schedule_periodic(duration, duration, Self::handle_watermark_timeout);

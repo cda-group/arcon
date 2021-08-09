@@ -61,10 +61,13 @@ impl Allocator {
     pub fn new(limit: usize) -> Allocator {
         #[cfg(feature = "allocator_metrics")]
         {
-            register_gauge!("total_bytes", "arcon_allocator" => "arcon_allocator");
-            register_gauge!("bytes_remaining", "arcon_allocator" => "arcon_allocator");
-            register_counter!("alloc_counter", "arcon_allocator" => "arcon_allocator");
+            register_gauge!("arcon_allocator_total_bytes");
+            register_gauge!("arcon_allocator_bytes_remaining");
+            register_counter!("arcon_allocator_alloc_counter");
         }
+
+        #[cfg(feature = "allocator_metrics")]
+        gauge!("arcon_allocator_total_bytes", limit as f64);
 
         Allocator {
             allocations: FxHashMap::default(),
@@ -122,9 +125,11 @@ impl Allocator {
 
         #[cfg(feature = "allocator_metrics")]
         {
-            increment_counter!("alloc_counter", "arcon_allocator" => "arcon_allocator");
-            gauge!("bytes_remaining",self.bytes_remaining() as f64 ,"arcon_allocator" => "arcon_allocator");
-            gauge!("total_bytes",self.limit as f64 ,"arcon_allocator" => "arcon_allocator");
+            increment_counter!("arcon_allocator_alloc_counter");
+            gauge!(
+                "arcon_allocator_bytes_remaining",
+                self.bytes_remaining() as f64
+            );
         }
 
         Ok(Alloc((self.alloc_epoch, id), mem))

@@ -132,7 +132,7 @@ where
     /// A text description of the operating NodeManager
     ///
     /// e.g., window_sliding_avg_price
-    state_id: StateID,
+    pub(crate) state_id: StateID,
     /// Port for incoming local events from nodes this manager controls
     pub(crate) manager_port: ProvidedPort<NodeManagerPort>,
     /// Port for the SnapshotManager component
