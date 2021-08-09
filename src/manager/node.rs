@@ -16,10 +16,15 @@ use crate::{
     reportable_error,
     stream::operator::Operator,
 };
+
+#[cfg(feature = "metrics")]
+use metrics::{gauge, histogram, register_gauge, register_histogram};
+
 use arcon_macros::ArconState;
 use arcon_state::Backend;
 use fxhash::FxHashMap;
 use kompact::{component::AbstractComponent, prelude::*};
+use std::time::Instant;
 use std::{collections::HashSet, sync::Arc};
 
 pub type AbstractNode<IN> = (
@@ -169,6 +174,11 @@ where
         backend: Arc<B>,
         logger: ArconLogger,
     ) -> Self {
+        #[cfg(feature = "metrics")]
+        {
+            register_gauge!("nodes", "node_manager" => state_id.clone());
+            register_histogram!("checkpoint_execution_time_ms", "node_manager" => state_id.clone());
+        }
         NodeManager {
             ctx: ComponentContext::uninitialised(),
             state_id,
@@ -254,6 +264,8 @@ where
     }
 
     fn handle_node_event(&mut self, event: NodeManagerEvent) -> ArconResult<()> {
+        gauge!("nodes", self.nodes.len() as f64 ,"node_manager" => self.state_id.clone());
+
         match event {
             NodeManagerEvent::Watermark(id, w) => {
                 self.manager_state.watermarks.put(id, w)?;
@@ -273,7 +285,16 @@ where
                             .insert((request.id, request.epoch));
 
                         if self.manager_state.checkpoint_acks.len() == self.nodes.len() {
+                            //TODO: here addd shit
+                            #[cfg(feature = "metrics")]
+                            let start_time = Instant::now();
+
                             self.checkpoint()?;
+                            #[cfg(feature = "metrics")]
+                            {
+                                let elapsed = start_time.elapsed();
+                                histogram!("checkpoint_execution_time_ms", elapsed.as_millis() as f64,"node_manager" => self.state_id.clone());
+                            }
                             self.manager_state.checkpoint_acks.clear();
 
                             for (_, port_ref) in self.nodes.values() {
