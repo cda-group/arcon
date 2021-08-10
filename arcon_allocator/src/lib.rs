@@ -5,7 +5,7 @@ use fxhash::FxHashMap;
 use snafu::Snafu;
 use std::alloc::{GlobalAlloc, Layout, System};
 
-#[cfg(feature = "allocator_metrics")]
+#[cfg(feature = "metrics")]
 use metrics::{gauge, increment_counter, register_counter, register_gauge};
 
 /// Type alias for a unique Alloc identifier
@@ -59,14 +59,14 @@ pub struct Allocator {
 impl Allocator {
     /// Creates a new Allocator with the given memory limit size
     pub fn new(limit: usize) -> Allocator {
-        #[cfg(feature = "allocator_metrics")]
+        #[cfg(feature = "metrics")]
         {
             register_gauge!("arcon_allocator_total_bytes");
             register_gauge!("arcon_allocator_bytes_remaining");
             register_counter!("arcon_allocator_alloc_counter");
         }
 
-        #[cfg(feature = "allocator_metrics")]
+        #[cfg(feature = "metrics")]
         gauge!("arcon_allocator_total_bytes", limit as f64);
 
         Allocator {
@@ -123,7 +123,7 @@ impl Allocator {
         self.allocations
             .insert((self.alloc_epoch, id), (mem, layout));
 
-        #[cfg(feature = "allocator_metrics")]
+        #[cfg(feature = "metrics")]
         {
             increment_counter!("arcon_allocator_alloc_counter");
             gauge!(
