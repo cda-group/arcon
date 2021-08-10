@@ -128,7 +128,7 @@ impl<B: Backend> Actor for SourceManager<B> {
         // that instructs sources to send off watermarks.
         if SourceEvent::Start == msg {
             #[cfg(feature = "metrics")]
-            gauge!("sources", 1.0,"source_manager" => self.state_id.clone());
+            gauge!("sources",self.sources.len() as f64,"source_manager" => self.state_id.clone());
 
             let duration = std::time::Duration::from_millis(self.watermark_interval);
             let timeout =

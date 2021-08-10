@@ -335,6 +335,8 @@ where
     fn on_start(&mut self) -> Handled {
         info!(self.logger, "Started NodeManager for {}", self.state_id,);
 
+        #[cfg(feature = "metrics")]
+        gauge!("nodes", self.nodes.len() as f64 ,"node_manager" => self.state_id.clone());
         // Register state id
         if self.has_snapshot_state() {
             self.snapshot_manager_port

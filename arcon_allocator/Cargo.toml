@@ -4,10 +4,6 @@ version = "0.1.0"
 authors = ["Max Meldrum <mmeldrum@kth.se>"]
 edition = "2018"
 
-[features]
-allocator_metrics = ["metrics"]
-
-
 [dependencies]
 fxhash = "0.2.1"
 snafu = "0.6"
