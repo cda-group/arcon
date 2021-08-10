@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use super::epoch::EpochEvent;
+#[cfg(feature = "metrics")]
+use metrics::{gauge, register_gauge};
+
 use crate::{
     application::conf::logger::ArconLogger,
     data::StateID,
@@ -61,6 +64,9 @@ impl<B: Backend> SourceManager<B> {
         backend: Arc<B>,
         logger: ArconLogger,
     ) -> Self {
+        #[cfg(feature = "metrics")]
+        register_gauge!("sources", "source_manager" => state_id.clone() );
+
         Self {
             ctx: ComponentContext::uninitialised(),
             manager_port: ProvidedPort::uninitialised(),
@@ -121,6 +127,9 @@ impl<B: Backend> Actor for SourceManager<B> {
         // If we received a start message, start the periodic timer
         // that instructs sources to send off watermarks.
         if SourceEvent::Start == msg {
+            #[cfg(feature = "metrics")]
+            gauge!("sources",self.sources.len() as f64,"source_manager" => self.state_id.clone());
+
             let duration = std::time::Duration::from_millis(self.watermark_interval);
             let timeout =
                 self.schedule_periodic(duration, duration, Self::handle_watermark_timeout);

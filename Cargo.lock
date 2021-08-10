@@ -140,6 +140,7 @@ name = "arcon_allocator"
 version = "0.1.0"
 dependencies = [
  "fxhash",
+ "metrics",
  "snafu",
 ]
 

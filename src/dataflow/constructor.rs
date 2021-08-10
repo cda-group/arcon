@@ -250,7 +250,6 @@ pub(crate) fn node_manager_constructor<OP: Operator + 'static, B: Backend>(
                 backend.clone(),
                 logger.clone(),
             );
-
             // Create the actual NodeManager component
             let manager_comp = app.ctrl_system().create(|| manager);
 
@@ -266,12 +265,6 @@ pub(crate) fn node_manager_constructor<OP: Operator + 'static, B: Backend>(
                     biconnect_ports(&mut scd.manager_port, &mut cd.query_manager_port);
                 });
             });
-
-            // Start NodeManager
-            app.ctrl_system()
-                .start_notify(&manager_comp)
-                .wait_timeout(std::time::Duration::from_millis(2000))
-                .expect("Failed to start NodeManager");
 
             // Fetch PoolInfo object that ChannelStrategies use to organise their buffers
             let pool_info = app.get_pool_info();
@@ -318,6 +311,11 @@ pub(crate) fn node_manager_constructor<OP: Operator + 'static, B: Backend>(
                     cd.nodes.insert(node_id, (node_comp, required_ref));
                 });
             }
+            // Start NodeManager
+            app.ctrl_system()
+                .start_notify(&manager_comp)
+                .wait_timeout(std::time::Duration::from_millis(2000))
+                .expect("Failed to start NodeManager");
 
             // Fetch all created Nodes on this NodeManager and return them as Erased
             // for the next stage..

@@ -34,7 +34,7 @@ thread_pinning = ["kompact/thread_pinning"]
 socket = ["tokio-util", "futures", "serde_json", "serde"]
 hardware_counters = ["perf-event", "metrics"]
 prometheus_exporter = ["metrics-exporter-prometheus", "metrics"]
-
+allocator_metrics = ["arcon_allocator/metrics"]
 
 # state features
 rocksdb = ["arcon_state/rocks"]
