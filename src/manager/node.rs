@@ -24,6 +24,7 @@ use arcon_macros::ArconState;
 use arcon_state::Backend;
 use fxhash::FxHashMap;
 use kompact::{component::AbstractComponent, prelude::*};
+#[cfg(feature = "metrics")]
 use std::time::Instant;
 use std::{collections::HashSet, sync::Arc};
 
