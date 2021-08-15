@@ -7,7 +7,6 @@ use crate::{
     stream::operator::{Operator, OperatorContext},
 };
 use arcon_state::Backend;
-use kompact::prelude::*;
 use std::{
     cell::RefCell,
     fs::{File, OpenOptions},
@@ -55,16 +54,17 @@ where
     type OUT = ArconNever;
     type TimerState = ArconNever;
     type OperatorState = ();
+    type ElementIterator = std::iter::Empty<ArconElement<Self::OUT>>;
 
     fn handle_element(
         &mut self,
         element: ArconElement<IN>,
-        _ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> ArconResult<()> {
+        _ctx: OperatorContext<Self, impl Backend>,
+    ) -> ArconResult<Self::ElementIterator> {
         if let Err(err) = writeln!(self.file.borrow_mut(), "{:?}", element.data) {
             eprintln!("Error while writing to file sink {}", err.to_string());
         }
-        Ok(())
+        Ok(std::iter::empty::<ArconElement<Self::OUT>>())
     }
     crate::ignore_timeout!();
     crate::ignore_persist!();

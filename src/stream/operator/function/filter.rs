@@ -9,7 +9,6 @@ use crate::{
     util::ArconFnBounds,
 };
 use arcon_state::Backend;
-use kompact::prelude::ComponentDefinition;
 use std::marker::PhantomData;
 
 pub struct Filter<IN, F, S>
@@ -65,16 +64,18 @@ where
     type OUT = IN;
     type TimerState = ArconNever;
     type OperatorState = S;
+    type ElementIterator = Option<ArconElement<Self::OUT>>;
 
     fn handle_element(
         &mut self,
         element: ArconElement<IN>,
-        mut ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> ArconResult<()> {
+        _: OperatorContext<Self, impl Backend>,
+    ) -> ArconResult<Self::ElementIterator> {
         if (self.udf)(&element.data, &mut self.state) {
-            ctx.output(element);
+            Ok(Some(element))
+        } else {
+            Ok(None)
         }
-        Ok(())
     }
     crate::ignore_timeout!();
 

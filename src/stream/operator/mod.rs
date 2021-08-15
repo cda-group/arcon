@@ -12,13 +12,11 @@ use metrics::{gauge, increment_counter, register_counter, register_gauge};
 
 use crate::{
     application::conf::logger::ArconLogger,
-    data::{ArconElement, ArconEvent, ArconType},
+    data::{ArconElement, ArconType},
     error::{timer::TimerResult, *},
     index::{ArconState, Timer},
-    stream::channel::strategy::ChannelStrategy,
 };
 use arcon_state::Backend;
-use kompact::prelude::ComponentDefinition;
 use prost::Message;
 
 /// Defines the methods an `Operator` must implement
@@ -32,11 +30,10 @@ pub trait Operator: Send + Sized {
     /// State type for the Operator
     type OperatorState: ArconState;
 
+    type ElementIterator: IntoIterator<Item = ArconElement<Self::OUT>> + 'static;
+
     /// Determines what the `Operator` runs before beginning to process Elements
-    fn on_start(
-        &mut self,
-        mut _ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> ArconResult<()> {
+    fn on_start(&mut self, mut _ctx: OperatorContext<Self, impl Backend>) -> ArconResult<()> {
         Ok(())
     }
 
@@ -44,15 +41,15 @@ pub trait Operator: Send + Sized {
     fn handle_element(
         &mut self,
         element: ArconElement<Self::IN>,
-        ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> ArconResult<()>;
+        ctx: OperatorContext<Self, impl Backend>,
+    ) -> ArconResult<Self::ElementIterator>;
 
     /// Determines how the `Operator` handles timeouts it registered earlier when they are triggered
     fn handle_timeout(
         &mut self,
         timeout: Self::TimerState,
-        ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> ArconResult<()>;
+        ctx: OperatorContext<Self, impl Backend>,
+    ) -> ArconResult<Option<Self::ElementIterator>>;
 
     /// Determines how the `Operator` persists its state
     fn persist(&mut self) -> ArconResult<()>;
@@ -70,9 +67,9 @@ macro_rules! ignore_timeout {
         fn handle_timeout(
             &mut self,
             _timeout: Self::TimerState,
-            _ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-        ) -> ArconResult<()> {
-            Ok(())
+            _ctx: OperatorContext<Self, impl Backend>,
+        ) -> ArconResult<Option<Self::ElementIterator>> {
+            Ok(None)
         }
     };
 }
@@ -98,57 +95,38 @@ macro_rules! ignore_state {
 }
 
 /// Context Available to an Arcon Operator
-pub struct OperatorContext<'a, 'c, 'b, 'd, OP, B, CD>
+pub struct OperatorContext<'b, 'd, OP, B>
 where
     OP: Operator + 'static,
     B: Backend,
-    CD: ComponentDefinition + Sized + 'static,
 {
-    /// Channel Strategy that is used to pass on events
-    channel_strategy: &'c mut ChannelStrategy<OP::OUT>,
     /// A Timer that can be used to schedule event timers
     timer: &'b mut Timer<u64, OP::TimerState, B>,
-    /// A reference to the backing ComponentDefinition
-    source: &'a CD,
     /// Reference to logger
     logger: &'d ArconLogger,
-
     #[cfg(feature = "metrics")]
-    name: &'a str,
+    name: &'d str,
 }
 
 //Note the _ prefixed name field, this is due to the presence of feature flag .Therefore this var might not be used.
-impl<'a, 'c, 'b, 'd, OP, B, CD> OperatorContext<'a, 'c, 'b, 'd, OP, B, CD>
+impl<'b, 'd, OP, B> OperatorContext<'b, 'd, OP, B>
 where
     OP: Operator + 'static,
     B: Backend,
-    CD: ComponentDefinition + Sized + 'static,
 {
     #[inline]
     pub(crate) fn new(
-        source: &'a CD,
         timer: &'b mut Timer<u64, OP::TimerState, B>,
-        channel_strategy: &'c mut ChannelStrategy<OP::OUT>,
         logger: &'d ArconLogger,
-
-        #[cfg(feature = "metrics")] _name: &'a str,
+        #[cfg(feature = "metrics")] _name: &'d str,
     ) -> Self {
         OperatorContext {
-            channel_strategy,
             timer,
-            source,
             logger,
 
             #[cfg(feature = "metrics")]
             name: _name,
         }
-    }
-
-    /// Add an event to the channel strategy
-    #[inline]
-    pub fn output(&mut self, element: ArconElement<OP::OUT>) {
-        self.channel_strategy
-            .add(ArconEvent::Element(element), self.source)
     }
 
     /// Enable users to log within an Operator

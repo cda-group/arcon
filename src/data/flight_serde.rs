@@ -129,9 +129,10 @@ pub mod unsafe_remote {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::stream::channel::strategy::send;
     use crate::{
         application::Application,
-        data::{ArconElement, ArconEvent, ArconType},
+        data::{ArconElement, ArconEvent, ArconType, Watermark},
         stream::{
             channel::{
                 strategy::{forward::Forward, ChannelStrategy},
@@ -346,11 +347,15 @@ mod test {
         let element = ArconElement::new(data);
 
         comp.on_definition(|cd| {
-            channel_strategy.add(ArconEvent::Element(element.clone()), cd);
-            channel_strategy.add(ArconEvent::Element(element.clone()), cd);
-            channel_strategy.add(ArconEvent::Element(element.clone()), cd);
-            channel_strategy.add(ArconEvent::Element(element), cd);
-            channel_strategy.flush(cd);
+            channel_strategy.push(ArconEvent::Element(element.clone()));
+            channel_strategy.push(ArconEvent::Element(element.clone()));
+            channel_strategy.push(ArconEvent::Element(element.clone()));
+            channel_strategy.push(ArconEvent::Element(element));
+
+            // force a flush through a marker
+            for (channel, msg) in channel_strategy.push(ArconEvent::Watermark(Watermark::new(0))) {
+                let _ = send(&channel, msg, cd);
+            }
         });
 
         std::thread::sleep(timeout);

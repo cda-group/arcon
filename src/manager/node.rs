@@ -264,8 +264,6 @@ where
     }
 
     fn handle_node_event(&mut self, event: NodeManagerEvent) -> ArconResult<()> {
-        gauge!("nodes", self.nodes.len() as f64 ,"node_manager" => self.state_id.clone());
-
         match event {
             NodeManagerEvent::Watermark(id, w) => {
                 self.manager_state.watermarks.put(id, w)?;

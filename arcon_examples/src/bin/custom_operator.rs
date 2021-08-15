@@ -18,11 +18,9 @@ impl Operator for MyOperator {
     type OUT = CustomEvent;
     type TimerState = ArconNever;
     type OperatorState = ();
+    type ElementIterator = std::iter::Once<ArconElement<Self::OUT>>;
 
-    fn on_start(
-        &mut self,
-        mut _ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> ArconResult<()> {
+    fn on_start(&mut self, mut _ctx: OperatorContext<Self, impl Backend>) -> ArconResult<()> {
         #[cfg(feature = "metrics")]
         _ctx.register_gauge("custom_gauge");
 
@@ -30,27 +28,24 @@ impl Operator for MyOperator {
         _ctx.register_gauge("custom_counter");
 
         Ok(())
-        // within the function it would actually do the register_gauge!("operator_name_id_my_cool_gauge");
     }
     fn handle_element(
         &mut self,
         element: ArconElement<Self::IN>,
-        mut ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> ArconResult<()> {
+        _ctx: OperatorContext<Self, impl Backend>,
+    ) -> ArconResult<Self::ElementIterator> {
         let custom_event = CustomEvent { id: element.data };
 
         #[cfg(feature = "metrics")]
-        ctx.update_gauge("custom_gauge", 1.0);
+        _ctx.update_gauge("custom_gauge", 1.0);
 
         #[cfg(feature = "metrics")]
-        ctx.increment_counter("custom_counter");
+        _ctx.increment_counter("custom_counter");
 
-        ctx.output(ArconElement {
+        Ok(std::iter::once(ArconElement {
             data: custom_event,
             timestamp: element.timestamp,
-        });
-
-        Ok(())
+        }))
     }
 
     ignore_timeout!();
@@ -69,12 +64,13 @@ impl Operator for TimerOperator {
     type OUT = CustomEvent;
     type TimerState = u64;
     type OperatorState = ();
+    type ElementIterator = std::iter::Once<ArconElement<Self::OUT>>;
 
     fn handle_element(
         &mut self,
         element: ArconElement<Self::IN>,
-        mut ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> ArconResult<()> {
+        mut ctx: OperatorContext<Self, impl Backend>,
+    ) -> ArconResult<Self::ElementIterator> {
         let current_time = ctx.current_time()?;
         let key = element.data.get_key();
         let time = current_time + 1000;
@@ -83,18 +79,16 @@ impl Operator for TimerOperator {
             error!(ctx.log(), "Failed to schedule timer with err {}", err);
         }
 
-        ctx.output(element);
-
-        Ok(())
+        Ok(std::iter::once(element))
     }
 
     fn handle_timeout(
         &mut self,
         timeout: Self::TimerState,
-        ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> ArconResult<()> {
+        ctx: OperatorContext<Self, impl Backend>,
+    ) -> ArconResult<Option<Self::ElementIterator>> {
         info!(ctx.log(), "Got a timer timeout for {:?}", timeout);
-        Ok(())
+        Ok(None)
     }
 
     ignore_persist!();

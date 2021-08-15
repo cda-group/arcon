@@ -11,13 +11,12 @@ use crate::{
     stream::channel::Channel,
 };
 use kompact::prelude::{ComponentDefinition, SerError};
+use std::sync::Arc;
 
 #[allow(dead_code)]
 pub mod broadcast;
 pub mod forward;
 pub mod keyed;
-#[allow(dead_code)]
-pub mod round_robin;
 
 /// A `ChannelStrategy` defines a strategy of how messages are sent downstream
 ///
@@ -33,9 +32,6 @@ where
     Broadcast(broadcast::Broadcast<A>),
     /// Partition data to a set of `Channels` based on keyed hash
     Keyed(keyed::Keyed<A>),
-    /// Send messages to a Vec of `Channels` in a Round Robin fashion
-    #[allow(dead_code)]
-    RoundRobin(round_robin::RoundRobin<A>),
     /// A strategy that prints to the console
     Console,
     /// A strategy that simply does nothing
@@ -47,32 +43,25 @@ where
     A: ArconType,
 {
     /// Add event to outgoing buffer
+    ///
+    /// The function returns a tuple of channel and msg if the buffers are full or a marker was inputted.
     #[inline]
-    pub fn add(&mut self, event: ArconEvent<A>, source: &impl ComponentDefinition) {
+    pub fn push(
+        &mut self,
+        event: ArconEvent<A>,
+    ) -> impl IntoIterator<Item = (Arc<Channel<A>>, ArconMessage<A>)> {
         match self {
-            ChannelStrategy::Forward(s) => s.add(event, source),
-            ChannelStrategy::Broadcast(s) => s.add(event, source),
-            ChannelStrategy::Keyed(s) => s.add(event, source),
-            ChannelStrategy::RoundRobin(s) => s.add(event, source),
+            ChannelStrategy::Forward(s) => s.add(event),
+            ChannelStrategy::Keyed(s) => s.add(event),
+            ChannelStrategy::Broadcast(s) => s.add(event),
             ChannelStrategy::Console => {
                 println!("{:?}", event);
+                Vec::new()
             }
-            ChannelStrategy::Mute => (),
+            ChannelStrategy::Mute => Vec::new(),
         }
     }
-    /// Flush batch of events out
-    #[inline]
-    #[cfg(test)]
-    pub(crate) fn flush(&mut self, source: &impl ComponentDefinition) {
-        match self {
-            ChannelStrategy::Forward(s) => s.flush(source),
-            ChannelStrategy::Broadcast(s) => s.flush(source),
-            ChannelStrategy::Keyed(s) => s.flush(source),
-            ChannelStrategy::RoundRobin(s) => s.flush(source),
-            ChannelStrategy::Console => (),
-            ChannelStrategy::Mute => (),
-        }
-    }
+
     /// Returns number of outgoing channels
     #[inline]
     #[allow(dead_code)]
@@ -81,7 +70,6 @@ where
             ChannelStrategy::Forward(_) => 1,
             ChannelStrategy::Broadcast(s) => s.num_channels(),
             ChannelStrategy::Keyed(s) => s.num_channels(),
-            ChannelStrategy::RoundRobin(s) => s.num_channels(),
             ChannelStrategy::Console => 0,
             ChannelStrategy::Mute => 0,
         }
@@ -92,7 +80,7 @@ where
 ///
 /// The message may be sent to a local or remote component
 #[inline]
-fn send<A: ArconType>(
+pub(crate) fn send<A: ArconType>(
     channel: &Channel<A>,
     message: ArconMessage<A>,
     source: &impl ComponentDefinition,

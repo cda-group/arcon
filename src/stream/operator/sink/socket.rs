@@ -87,12 +87,13 @@ where
     type OUT = ArconNever;
     type TimerState = ArconNever;
     type OperatorState = ();
+    type ElementIterator = std::iter::Empty<ArconElement<Self::OUT>>;
 
     fn handle_element(
         &mut self,
         element: ArconElement<Self::IN>,
-        _ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> ArconResult<()> {
+        _ctx: OperatorContext<Self, impl Backend>,
+    ) -> ArconResult<Self::ElementIterator> {
         let mut tx = self.tx_channel.clone();
         let fmt_data = {
             if let Ok(mut json) = serde_json::to_string(&element.data) {
@@ -110,7 +111,7 @@ where
             }
         };
         self.runtime_handle.spawn(req_dispatch);
-        Ok(())
+        Ok(std::iter::empty())
     }
     crate::ignore_timeout!();
     crate::ignore_persist!();

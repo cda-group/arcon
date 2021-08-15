@@ -13,7 +13,7 @@ use crate::{
 };
 use arcon_macros::ArconState;
 use arcon_state::Backend;
-use kompact::prelude::{error, ComponentDefinition};
+use kompact::prelude::error;
 use prost::Message;
 use std::{marker::PhantomData, sync::Arc};
 
@@ -150,7 +150,7 @@ where
     fn new_window_trigger(
         &mut self,
         window_ctx: WindowContext,
-        ctx: &mut OperatorContext<Self, impl Backend, impl ComponentDefinition>,
+        ctx: &mut OperatorContext<Self, impl Backend>,
     ) -> ArconResult<()> {
         let window_start = match self.state.window_start().get(&window_ctx.key)? {
             Some(start) => start,
@@ -196,13 +196,14 @@ where
     type OUT = OUT;
     type TimerState = WindowEvent;
     type OperatorState = ();
+    type ElementIterator = Option<ArconElement<Self::OUT>>;
 
     fn handle_element(
         &mut self,
         element: ArconElement<IN>,
-        mut ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> ArconResult<()> {
-        let ts = element.timestamp.unwrap_or(1);
+        mut ctx: OperatorContext<Self, impl Backend>,
+    ) -> ArconResult<Self::ElementIterator> {
+        let ts = element.timestamp;
 
         let time = ctx.current_time()?;
 
@@ -210,7 +211,7 @@ where
 
         if ts < ts_lower_bound {
             // Late arrival: early return
-            return Ok(());
+            return Ok(None);
         }
 
         let key = self.get_key(&element);
@@ -251,14 +252,14 @@ where
             }
         }
 
-        Ok(())
+        Ok(None)
     }
 
     fn handle_timeout(
         &mut self,
         timeout: Self::TimerState,
-        mut ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> ArconResult<()> {
+        _: OperatorContext<Self, impl Backend>,
+    ) -> ArconResult<Option<Self::ElementIterator>> {
         let WindowEvent {
             key,
             index,
@@ -272,8 +273,7 @@ where
         self.window.clear(window_ctx)?;
         self.state.active_windows().remove(&window_ctx)?;
 
-        ctx.output(ArconElement::with_timestamp(result, timestamp));
-        Ok(())
+        Ok(Some(Some(ArconElement::with_timestamp(result, timestamp))))
     }
     fn persist(&mut self) -> ArconResult<()> {
         self.state.persist()?;
@@ -431,10 +431,10 @@ mod tests {
         ArconMessage::watermark(time, 0.into())
     }
     fn timestamped_event(ts: u64) -> ArconMessage<u64> {
-        ArconMessage::element(1u64, Some(ts), 0.into())
+        ArconMessage::element(1u64, ts, 0.into())
     }
     fn timestamped_keyed_event(ts: u64, id: u64) -> ArconMessage<u64> {
-        ArconMessage::element(id, Some(ts), 0.into())
+        ArconMessage::element(id, ts, 0.into())
     }
 
     // Tests:
@@ -503,7 +503,7 @@ mod tests {
         // Inspect and assert
         sink.on_definition(|cd| {
             let w0 = &cd.data[0].data;
-            let w0_ts = &cd.data[0].timestamp.expect("should have a timestamp");
+            let w0_ts = &cd.data[0].timestamp;
             assert_eq!(&cd.data.len(), &(1_usize));
             assert_eq!(w0, &2);
             assert_eq!(w0_ts, &(moment + 10));
@@ -525,9 +525,9 @@ mod tests {
         // Inspect and assert
         sink.on_definition(|cd| {
             let w0 = &cd.data[0].data;
-            let w0_ts = &cd.data[0].timestamp.expect("should have a timestamp");
+            let w0_ts = &cd.data[0].timestamp;
             let w1 = &cd.data[1].data;
-            let w1_ts = &cd.data[1].timestamp.expect("should have a timestamp");
+            let w1_ts = &cd.data[1].timestamp;
             assert_eq!(&cd.data.len(), &(2_usize));
             assert_eq!(w0, &1);
             assert_eq!(w0_ts, &(moment));

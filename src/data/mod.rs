@@ -141,25 +141,19 @@ impl<A: ArconType> From<ArconEvent<A>> for ArconEventWrapper<A> {
 pub struct ArconElement<A: ArconType> {
     #[prost(message, required, tag = "1")]
     pub data: A,
-    #[prost(message, tag = "2")]
-    pub timestamp: Option<u64>,
+    #[prost(uint64, tag = "2")]
+    pub timestamp: u64,
 }
 
 impl<A: ArconType> ArconElement<A> {
     /// Creates an ArconElement without a timestamp
     pub fn new(data: A) -> Self {
-        ArconElement {
-            data,
-            timestamp: None,
-        }
+        ArconElement { data, timestamp: 0 }
     }
 
     /// Creates an ArconElement with a timestamp
-    pub fn with_timestamp(data: A, ts: u64) -> Self {
-        ArconElement {
-            data,
-            timestamp: Some(ts),
-        }
+    pub fn with_timestamp(data: A, timestamp: u64) -> Self {
+        ArconElement { data, timestamp }
     }
 }
 
@@ -297,7 +291,7 @@ impl<A: ArconType> ArconMessage<A> {
     /// Creates an ArconMessage with a single [ArconEvent::Element] event
     ///
     /// This function should only be used for development and test purposes.
-    pub fn element(data: A, timestamp: Option<u64>, sender: NodeID) -> ArconMessage<A> {
+    pub fn element(data: A, timestamp: u64, sender: NodeID) -> ArconMessage<A> {
         ArconMessage {
             events: vec![ArconEvent::Element(ArconElement { data, timestamp }).into()].into(),
             sender,

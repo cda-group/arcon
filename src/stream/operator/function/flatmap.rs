@@ -9,7 +9,6 @@ use crate::{
     util::ArconFnBounds,
 };
 use arcon_state::Backend;
-use kompact::prelude::ComponentDefinition;
 use std::marker::PhantomData;
 
 pub struct FlatMap<IN, OUTS, F, S>
@@ -47,7 +46,7 @@ where
 impl<IN, OUTS, F, S> FlatMap<IN, OUTS, F, S>
 where
     IN: ArconType,
-    OUTS: IntoIterator,
+    OUTS: IntoIterator + 'static,
     OUTS::Item: ArconType,
     F: Fn(IN, &mut S) -> ArconResult<OUTS> + ArconFnBounds,
     S: ArconState,
@@ -64,7 +63,7 @@ where
 impl<IN, OUTS, F, S> Operator for FlatMap<IN, OUTS, F, S>
 where
     IN: ArconType,
-    OUTS: IntoIterator,
+    OUTS: IntoIterator + 'static,
     OUTS::Item: ArconType,
     F: Fn(IN, &mut S) -> ArconResult<OUTS> + ArconFnBounds,
     S: ArconState,
@@ -73,20 +72,20 @@ where
     type OUT = OUTS::Item;
     type TimerState = ArconNever;
     type OperatorState = S;
+    type ElementIterator = Box<dyn Iterator<Item = ArconElement<Self::OUT>>>;
 
     fn handle_element(
         &mut self,
         element: ArconElement<IN>,
-        mut ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> ArconResult<()> {
+        _: OperatorContext<Self, impl Backend>,
+    ) -> ArconResult<Self::ElementIterator> {
+        let timestamp = element.timestamp;
         let result = (self.udf)(element.data, &mut self.state)?;
-        for item in result {
-            ctx.output(ArconElement {
-                data: item,
-                timestamp: element.timestamp,
-            });
-        }
-        Ok(())
+        Ok(Box::new(
+            result
+                .into_iter()
+                .map(move |e| ArconElement::with_timestamp(e, timestamp)),
+        ))
     }
 
     crate::ignore_timeout!();

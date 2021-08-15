@@ -9,7 +9,6 @@ use crate::{
     util::ArconFnBounds,
 };
 use arcon_state::Backend;
-use kompact::prelude::ComponentDefinition;
 use std::marker::PhantomData;
 
 pub struct Map<IN, OUT, F, S>
@@ -73,18 +72,18 @@ where
     type OUT = OUT;
     type TimerState = ArconNever;
     type OperatorState = S;
+    type ElementIterator = std::iter::Once<ArconElement<Self::OUT>>;
 
     fn handle_element(
         &mut self,
         element: ArconElement<IN>,
-        mut ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> ArconResult<()> {
-        ctx.output(ArconElement {
-            data: (self.udf)(element.data, &mut self.state)?,
-            timestamp: element.timestamp,
-        });
-
-        Ok(())
+        _: OperatorContext<Self, impl Backend>,
+    ) -> ArconResult<Self::ElementIterator> {
+        let data = (self.udf)(element.data, &mut self.state)?;
+        Ok(std::iter::once(ArconElement::with_timestamp(
+            data,
+            element.timestamp,
+        )))
     }
 
     crate::ignore_timeout!();

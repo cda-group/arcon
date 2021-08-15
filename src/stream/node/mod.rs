@@ -26,7 +26,7 @@ use crate::{
     manager::node::{NodeManagerEvent::Checkpoint, *},
     reportable_error,
     stream::{
-        channel::strategy::ChannelStrategy,
+        channel::strategy::{send, ChannelStrategy},
         operator::{Operator, OperatorContext},
     },
 }; // conflicts with Kompact Timer trait
@@ -107,9 +107,7 @@ impl<OP: Operator + 'static, B: Backend> NodeState<OP, B> {
 macro_rules! make_context {
     ($sel:ident) => {
         OperatorContext::new(
-            $sel,
             &mut (*$sel.timer.get()),
-            &mut (*$sel.channel_strategy.get()),
             &$sel.logger,
             #[cfg(feature = "metrics")]
             &$sel.descriptor,
@@ -293,7 +291,7 @@ where
                         None => return reportable_error!("Uninitialised watermark"),
                     };
 
-                    if e.timestamp.unwrap_or(u64::max_value()) <= watermark.timestamp {
+                    if e.timestamp <= watermark.timestamp {
                         continue 'event_loop;
                     }
 
@@ -302,7 +300,9 @@ where
                         // Set key for the current element
                         // TODO: Should use a pre-defined key for Non-Keyed Streams.
                         operator.state().set_key(e.data.get_key());
-                        operator.handle_element(e, make_context!(self))?;
+                        for elem in operator.handle_element(e, make_context!(self))? {
+                            self.add_outgoing_event(ArconEvent::Element(elem))?;
+                        }
                     };
                 }
                 ArconEvent::Watermark(w) => {
@@ -335,8 +335,13 @@ where
                             let timer = &mut (*self.timer.get());
                             let timeouts = timer.advance_to(new_watermark.timestamp)?;
                             for timeout in timeouts {
-                                (*self.operator.get())
-                                    .handle_timeout(timeout, make_context!(self))?;
+                                if let Some(elems_iter) = (*self.operator.get())
+                                    .handle_timeout(timeout, make_context!(self))?
+                                {
+                                    for elem in elems_iter {
+                                        self.add_outgoing_event(ArconEvent::Element(elem))?;
+                                    }
+                                }
                             }
                         };
 
@@ -344,10 +349,7 @@ where
                         increment_counter!("watermark_counter", "node" => self.descriptor.clone());
 
                         // Forward the watermark
-                        unsafe {
-                            (*self.channel_strategy.get())
-                                .add(ArconEvent::Watermark(new_watermark), self);
-                        };
+                        self.add_outgoing_event(ArconEvent::Watermark(new_watermark))?;
                     }
                 }
                 ArconEvent::Epoch(e) => {
@@ -382,10 +384,7 @@ where
                         self.node_manager_port.trigger(Checkpoint(request));
 
                         // Forward the Epoch
-                        unsafe {
-                            (*self.channel_strategy.get())
-                                .add(ArconEvent::Epoch(self.node_state.current_epoch), self);
-                        };
+                        self.add_outgoing_event(ArconEvent::Epoch(self.node_state.current_epoch))?;
 
                         // Update current epoch
                         self.node_state.current_epoch.epoch += 1;
@@ -393,14 +392,34 @@ where
                 }
                 ArconEvent::Death(s) => {
                     // We are instructed to shutdown....
-                    unsafe {
-                        (*self.channel_strategy.get()).add(ArconEvent::Death(s), self);
-                    };
+                    self.add_outgoing_event(ArconEvent::Death(s))?;
                     self.ctx.suicide(); // TODO: is suicide enough?
                 }
             }
         }
 
+        Ok(())
+    }
+
+    #[inline]
+    fn add_outgoing_event(&mut self, event: ArconEvent<OP::OUT>) -> ArconResult<()> {
+        let channel_strategy = unsafe { &mut *self.channel_strategy.get() };
+        for (channel, msg) in channel_strategy.push(event) {
+            match send(&channel, msg, self) {
+                Err(SerError::BufferError(msg)) | Err(SerError::NoBuffersAvailable(msg)) => {
+                    return Err(Error::Unsupported { msg });
+                }
+                Err(SerError::InvalidData(msg))
+                | Err(SerError::InvalidType(msg))
+                | Err(SerError::Unknown(msg)) => {
+                    return reportable_error!("{}", msg);
+                }
+                Err(SerError::NoClone) => {
+                    return reportable_error!("Got Kompact's SerError::NoClone");
+                }
+                Ok(_) => (),
+            }
+        }
         Ok(())
     }
 
@@ -626,7 +645,7 @@ mod tests {
     }
 
     fn element(data: i32, time: u64, sender: u32) -> ArconMessage<i32> {
-        ArconMessage::element(data, Some(time), sender.into())
+        ArconMessage::element(data, time, sender.into())
     }
 
     fn epoch(epoch: u64, sender: u32) -> ArconMessage<i32> {

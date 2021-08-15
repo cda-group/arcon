@@ -9,11 +9,12 @@ use crate::metrics::runtime_metrics::SourceMetrics;
 use crate::{
     application::conf::logger::ArconLogger,
     data::{ArconElement, ArconEvent, Epoch, Watermark},
-    error::{source::SourceError, ArconResult},
+    error::{source::SourceError, ArconResult, Error},
     manager::source::{SourceManagerEvent, SourceManagerPort},
     prelude::SourceConf,
+    reportable_error,
     stream::{
-        channel::strategy::ChannelStrategy,
+        channel::strategy::{send, ChannelStrategy},
         source::{Poll, Source},
         time::ArconTime,
     },
@@ -116,13 +117,15 @@ where
                         ArconTime::Event => match &self.conf.extractor {
                             Some(extractor) => {
                                 let timestamp = extractor(&record);
-                                self.output_with_timestamp(record, timestamp);
+                                self.output(record, timestamp)?;
                             }
                             None => {
                                 panic!("Cannot use ArconTime::Event without an timestamp extractor")
                             }
                         },
-                        ArconTime::Process => self.output(record),
+                        ArconTime::Process => {
+                            self.output(record, crate::util::get_system_time())?
+                        }
                     }
                     counter += 1;
                 }
@@ -173,21 +176,32 @@ where
     }
 
     #[inline]
-    pub fn output(&mut self, data: S::Item) {
-        self.send(ArconEvent::Element(ArconElement::new(data)));
-    }
-
-    #[inline]
-    pub fn output_with_timestamp(&mut self, data: S::Item, timestamp: u64) {
+    pub fn output(&mut self, data: S::Item, timestamp: u64) -> ArconResult<()> {
         self.update_watermark(timestamp);
-        self.send(ArconEvent::Element(ArconElement::with_timestamp(
+        self.send_event(ArconEvent::Element(ArconElement::with_timestamp(
             data, timestamp,
-        )));
+        )))
     }
 
     #[inline(always)]
-    fn send(&mut self, event: ArconEvent<S::Item>) {
-        self.channel_strategy.borrow_mut().add(event, self);
+    fn send_event(&mut self, event: ArconEvent<S::Item>) -> ArconResult<()> {
+        for (channel, msg) in self.channel_strategy.borrow_mut().push(event) {
+            match send(&channel, msg, self) {
+                Err(SerError::BufferError(msg)) | Err(SerError::NoBuffersAvailable(msg)) => {
+                    return Err(Error::Unsupported { msg });
+                }
+                Err(SerError::InvalidData(msg))
+                | Err(SerError::InvalidType(msg))
+                | Err(SerError::Unknown(msg)) => {
+                    return reportable_error!("{}", msg);
+                }
+                Err(SerError::NoClone) => {
+                    return reportable_error!("Got Kompact's SerError::NoClone");
+                }
+                Ok(_) => (),
+            }
+        }
+        Ok(())
     }
 
     #[inline(always)]
@@ -195,10 +209,10 @@ where
         self.watermark = std::cmp::max(ts, self.watermark);
     }
 
-    pub fn handle_source_event(&mut self, event: SourceEvent) {
+    pub fn handle_source_event(&mut self, event: SourceEvent) -> ArconResult<()> {
         match event {
             SourceEvent::Epoch(epoch) => {
-                self.send(ArconEvent::Epoch(epoch));
+                self.send_event(ArconEvent::Epoch(epoch))?;
             }
             SourceEvent::Watermark(time) => {
                 let wm = match time {
@@ -213,12 +227,19 @@ where
                 self.update_watermark(wm.timestamp);
 
                 // send watermark downstream
-                self.send(ArconEvent::Watermark(wm));
+                self.send_event(ArconEvent::Watermark(wm))?;
             }
             SourceEvent::Start => {
                 self.loopback_send.trigger(ProcessSource);
             }
         }
+        Ok(())
+    }
+
+    fn source_shutdown(&mut self, error: Error) {
+        // fatal error, must shutdown..
+        // TODO: coordinate shutdown of the application..
+        error!(self.logger, "{}", error);
     }
 }
 
@@ -254,9 +275,7 @@ where
             }
 
             Err(error) => {
-                // fatal error, must shutdown..
-                // TODO: coordinate shutdown of the application..
-                error!(self.logger, "{}", error);
+                self.source_shutdown(error);
             }
         }
         if self.ended {
@@ -293,7 +312,9 @@ where
     type Message = SourceEvent;
 
     fn receive_local(&mut self, msg: Self::Message) -> Handled {
-        self.handle_source_event(msg);
+        if let Err(err) = self.handle_source_event(msg) {
+            self.source_shutdown(err);
+        }
         Handled::Ok
     }
     fn receive_network(&mut self, _: NetMessage) -> Handled {
