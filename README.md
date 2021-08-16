@@ -1,6 +1,10 @@
+<p align="center">
+  <img width="300" height="300" src=".github/arcon_logo.png">
+</p>
+
 # Arcon
 
-A runtime for writing streaming applications with the Rust programming language.
+A runtime for writing real-time analytics applications in the Rust programming language.
 
 ![ci](https://github.com/cda-group/arcon/workflows/ci/badge.svg)
 [![License](https://img.shields.io/badge/License-AGPL--3.0--only-blue)](https://github.com/cda-group/arcon)
@@ -52,7 +56,7 @@ fn main() {
 }
 ```
 
-More advanced examples can be found [here](guide/examples).
+More advanced examples can be found [here](arcon_examples/src/bin).
 
 ## Project Layout
 
