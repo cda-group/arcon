@@ -7,6 +7,7 @@ import {
   FeatureTitle,
   FeatureText,
   ScreenContainer,
+  Article,
   Button,
   HeroSection,
   Hero,
@@ -15,12 +16,16 @@ import {
   HeroTeaser,
   HeroActionList,
   HeroAction,
+  SiblingNav,
+  SiblingNavLink,
 } from "smooth-doc/components";
 import heroBackgroundImageURL from "../images/arcon_hero_background.png";
 import rustLogoUrl from '../images/rust_logo.png'
 import arrowLogoUrl from '../images/icons8-crafting-table-100.png'
 import stateLogoUrl from '../images/icons8-big-data-100.png'
 import middlewareLogoUrl from '../images/icons8-data-transfer-100.png'
+import CreatingApplication from '../partials/creating-application.mdx'
+
 
 <HeroSection>
   <Hero backgroundImageURL={heroBackgroundImageURL}>
@@ -76,3 +81,13 @@ Work-in-Progress Feature
 </Feature>
 </FeatureList>
 </FeatureSection>
+<ScreenContainer as="section" py={5}>
+  <Article>
+    <CreatingApplication/>
+    <SiblingNav>
+      <SiblingNavLink type="next" to="/learn/getting-started/">
+        Read full guide
+      </SiblingNavLink>
+    </SiblingNav>
+  </Article>
+</ScreenContainer>
