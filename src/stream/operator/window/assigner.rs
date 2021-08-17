@@ -3,10 +3,10 @@
 
 use super::{WindowContext, WindowFunction};
 use crate::{
-    reportable_error,
     data::{ArconElement, ArconType},
     error::*,
     index::{ArconState, EagerHashTable, IndexOps, StateConstructor},
+    reportable_error,
     stream::{
         operator::{Operator, OperatorContext},
         time::Time,
