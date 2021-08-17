@@ -126,12 +126,11 @@ pub trait Backend:
 
                 Self::restore(&state_path, &latest_checkpoint_path, id)
             }
-            None => Self::create(&state_path, id)
+            None => Self::create(&state_path, id),
         }
     }
 
-    fn return_name(&self)-> String;
-
+    fn return_name(&self) -> String;
 
     fn create(live_path: &Path, name: String) -> Result<Self>
     where

@@ -6,9 +6,7 @@ use bytes::BufMut;
 use std::{cell::Cell, sync::Arc};
 
 #[cfg(feature = "metrics")]
-use metrics::{
-    gauge, histogram, increment_counter, register_counter, register_gauge, register_histogram,
-};
+use metrics::register_counter;
 
 pub struct Handle<S, IK = (), N = ()>
 where
@@ -243,8 +241,13 @@ impl<S: StateType, IK: Metakey, N: Metakey> Handle<S, IK, N> {
         if !self.registered {
             panic!("State handles should be registered before activation!")
         }
-        register_gauge!(format!("{}_bytes_read", self.get_name()), "backend"=>backend.return_name());
-        register_gauge!(format!("{}_bytes_written", self.get_name()), "backend"=>backend.return_name());
+
+        #[cfg(feature = "metrics")]
+        {
+            register_counter!(format!("{}_bytes_read", self.get_name()), "backend"=>backend.return_name());
+            register_counter!(format!("{}_bytes_written", self.get_name()), "backend"=>backend.return_name());
+        }
+
         ActiveHandle {
             backend,
             inner: self,

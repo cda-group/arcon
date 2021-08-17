@@ -8,12 +8,9 @@ use crate::{
     sled::Sled,
     Handle, VecOps, VecState,
 };
-use std::iter;
 #[cfg(feature = "metrics")]
-use metrics::{
-    gauge, histogram, increment_counter, register_counter, register_gauge, register_histogram,
-};
-
+use metrics::counter;
+use std::iter;
 
 impl VecOps for Sled {
     fn vec_clear<T: Value, IK: Metakey, N: Metakey>(
@@ -35,7 +32,8 @@ impl VecOps for Sled {
         let mut serialized = Vec::with_capacity(
             <usize as FixedBytes>::SIZE + protobuf::size_hint(&value).unwrap_or(0),
         );
-        gauge!(format!("{}_bytes_written", handle.get_name()), serialized.len() as f64, "backend" => self.name.clone());
+        #[cfg(feature = "metrics")]
+        counter!(format!("{}_bytes_written", handle.get_name()), serialized.len() as u64, "backend" => self.name.clone());
         fixed_bytes::serialize_into(&mut serialized, &1usize)?;
         protobuf::serialize_into(&mut serialized, &value)?;
 
@@ -53,7 +51,8 @@ impl VecOps for Sled {
         let key = handle.serialize_metakeys()?;
         if let Some(serialized) = self.get(&handle.id, &key)? {
             // reader is updated to point at the yet unconsumed part of the serialized data
-            gauge!(format!("{}_bytes_read", handle.get_name()), serialized.len() as f64, "backend" => self.name.clone());
+            #[cfg(feature = "metrics")]
+            counter!(format!("{}_bytes_read", handle.get_name()), serialized.len() as u64, "backend" => self.name.clone());
             let mut reader = &serialized[..];
             let len: usize = fixed_bytes::deserialize_from(&mut reader)?;
             let mut res = Vec::with_capacity(len);
@@ -127,7 +126,8 @@ impl VecOps for Sled {
         for elem in value {
             protobuf::serialize_into(&mut storage, &elem)?;
         }
-        gauge!(format!("{}_bytes_written", handle.get_name()), storage.len() as f64, "backend" => self.name.clone());
+        #[cfg(feature = "metrics")]
+        counter!(format!("{}_bytes_written", handle.get_name()), storage.len() as u64, "backend" => self.name.clone());
         self.put(&handle.id, &key, &storage)?;
 
         Ok(())

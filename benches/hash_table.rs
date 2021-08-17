@@ -974,7 +974,7 @@ macro_rules! read {
     ($keys: expr, $bencher: expr, $type_value:ident, $backend:expr, $mod_capacity:expr, $read_capacity:expr) => {{
         let dir = tempdir().unwrap();
         with_backend_type!($backend, |B| {
-            let backend = Arc::new(B::create(dir.as_ref()).unwrap());
+            let backend = Arc::new(B::create(dir.as_ref(), $backend.to_string()).unwrap());
             let mut map: HashTable<u64, $type_value, B> =
                 HashTable::with_capacity("_table", backend, $mod_capacity, $read_capacity);
 
@@ -996,7 +996,7 @@ macro_rules! insert {
     ($keys: expr, $bencher: expr, $type_value:ident, $backend:expr, $mod_capacity:expr, $read_capacity:expr, $full_eviction:expr) => {{
         let dir = tempdir().unwrap();
         with_backend_type!($backend, |B| {
-            let backend = Arc::new(B::create(dir.as_ref()).unwrap());
+            let backend = Arc::new(B::create(dir.as_ref(), $backend.to_string()).unwrap());
             let mut map: HashTable<u64, $type_value, B> =
                 HashTable::with_capacity("_table", backend, $mod_capacity, $read_capacity);
 
@@ -1023,7 +1023,7 @@ macro_rules! rmw {
     ($keys: expr, $bencher: expr, $type_value:ident, $backend:expr, $mod_capacity:expr, $read_capacity:expr, $full_eviction:expr) => {{
         let dir = tempdir().unwrap();
         with_backend_type!($backend, |B| {
-            let backend = Arc::new(B::create(dir.as_ref()).unwrap());
+            let backend = Arc::new(B::create(dir.as_ref(), $backend.to_string()).unwrap());
 
             let mut map: HashTable<u64, $type_value, B> =
                 HashTable::with_capacity("_table", backend, $mod_capacity, $read_capacity);
@@ -1086,7 +1086,7 @@ macro_rules! read_eager {
     ($keys: expr, $bencher: expr, $type_value:ident, $backend:expr) => {{
         let dir = tempdir().unwrap();
         with_backend_type!($backend, |B| {
-            let backend = Arc::new(B::create(dir.as_ref()).unwrap());
+            let backend = Arc::new(B::create(dir.as_ref(), $backend.to_string()).unwrap());
             let mut eager_map = EagerHashTable::new("_eager", backend);
 
             // Fill in some keys

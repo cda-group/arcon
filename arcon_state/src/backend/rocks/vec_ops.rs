@@ -12,9 +12,7 @@ use rocksdb::MergeOperands;
 use std::{iter, mem};
 
 #[cfg(feature = "metrics")]
-use metrics::{
-    gauge, histogram, increment_counter, register_counter, register_gauge, register_histogram,
-};
+use metrics::counter;
 
 impl VecOps for Rocks {
     fn vec_clear<T: Value, IK: Metakey, N: Metakey>(
@@ -36,7 +34,8 @@ impl VecOps for Rocks {
         let mut serialized = Vec::with_capacity(
             <usize as FixedBytes>::SIZE + protobuf::size_hint(&value).unwrap_or(0),
         );
-        gauge!(format!("{}_bytes_written", handle.get_name()), serialized.len() as f64, "backend" => self.name.clone());
+        #[cfg(feature = "metrics")]
+        counter!(format!("{}_bytes_written", handle.get_name()), serialized.len() as u64, "backend" => self.name.clone());
 
         fixed_bytes::serialize_into(&mut serialized, &1usize)?;
         protobuf::serialize_into(&mut serialized, &value)?;
@@ -55,7 +54,8 @@ impl VecOps for Rocks {
     ) -> Result<Vec<T>> {
         let key = handle.serialize_metakeys()?;
         if let Some(serialized) = self.get(&handle.id, &key)? {
-            gauge!(format!("{}_bytes_read", handle.get_name()), serialized.len() as f64, "backend" => self.name.clone());
+            #[cfg(feature = "metrics")]
+            counter!(format!("{}_bytes_read", handle.get_name()), serialized.len() as u64, "backend" => self.name.clone());
             // reader is updated to point at the yet unconsumed part of the serialized data
             let mut reader = &serialized[..];
             let len: usize = fixed_bytes::deserialize_from(&mut reader)?;
@@ -126,7 +126,8 @@ impl VecOps for Rocks {
         for elem in value {
             protobuf::serialize_into(&mut storage, &elem)?;
         }
-        gauge!(format!("{}_bytes_written", handle.get_name()), storage.len() as f64, "backend" => self.name.clone());
+        #[cfg(feature = "metrics")]
+        counter!(format!("{}_bytes_written", handle.get_name()), storage.len() as u64, "backend" => self.name.clone());
         self.put(&handle.id, key, storage)
     }
 

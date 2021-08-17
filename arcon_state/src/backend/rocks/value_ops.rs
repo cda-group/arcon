@@ -7,9 +7,7 @@ use crate::{
     Handle, Rocks, ValueOps, ValueState,
 };
 #[cfg(feature = "metrics")]
-use metrics::{
-    gauge, histogram, increment_counter, register_counter, register_gauge, register_histogram,
-};
+use metrics::counter;
 
 impl ValueOps for Rocks {
     fn value_clear<T: Value, IK: Metakey, N: Metakey>(
@@ -27,7 +25,8 @@ impl ValueOps for Rocks {
     ) -> Result<Option<T>> {
         let key = handle.serialize_metakeys()?;
         if let Some(serialized) = self.get(&handle.id, &key)? {
-            gauge!(format!("{}_bytes_read", handle.get_name()), serialized.len() as f64, "backend" => self.name.clone());
+            #[cfg(feature = "metrics")]
+            counter!(format!("{}_bytes_read", handle.get_name()), serialized.len() as u64, "backend" => self.name.clone());
             let value = protobuf::deserialize(&serialized)?;
             Ok(Some(value))
         } else {
@@ -48,7 +47,8 @@ impl ValueOps for Rocks {
             None
         };
         let serialized = protobuf::serialize(&value)?;
-        gauge!(format!("{}_bytes_written", handle.get_name()), serialized.len() as f64, "backend" => self.name.clone());
+        #[cfg(feature = "metrics")]
+        counter!(format!("{}_bytes_written", handle.get_name()), serialized.len() as u64, "backend" => self.name.clone());
         self.put(&handle.id, key, serialized)?;
         Ok(old)
     }
@@ -60,7 +60,8 @@ impl ValueOps for Rocks {
     ) -> Result<()> {
         let key = handle.serialize_metakeys()?;
         let serialized = protobuf::serialize(&value)?;
-        gauge!(format!("{}_bytes_written", handle.get_name()), serialized.len() as f64, "backend" => self.name.clone());
+        #[cfg(feature = "metrics")]
+        counter!(format!("{}_bytes_written", handle.get_name()), serialized.len() as u64, "backend" => self.name.clone());
         self.put(&handle.id, key, serialized)?;
         Ok(())
     }
@@ -72,7 +73,8 @@ impl ValueOps for Rocks {
     ) -> Result<()> {
         let key = handle.serialize_metakeys()?;
         let serialized = protobuf::serialize(value)?;
-        gauge!(format!("{}_bytes_written", handle.get_name()), serialized.len() as f64, "backend" => self.name.clone());
+        #[cfg(feature = "metrics")]
+        counter!(format!("{}_bytes_written", handle.get_name()), serialized.len() as u64, "backend" => self.name.clone());
         self.put(&handle.id, key, serialized)?;
         Ok(())
     }

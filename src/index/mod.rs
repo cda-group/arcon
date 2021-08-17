@@ -59,7 +59,8 @@ pub trait ArconState: StateConstructor + Send + 'static {
         Self: Sized,
     {
         let snapshot_dir = std::path::Path::new(&snapshot.snapshot_path);
-        let backend = Self::BackendType::restore(snapshot_dir, snapshot_dir, String::from(Self::STATE_ID))?;
+        let backend =
+            Self::BackendType::restore(snapshot_dir, snapshot_dir, String::from(Self::STATE_ID))?;
         Ok(Self::new(Arc::new(backend)))
     }
 

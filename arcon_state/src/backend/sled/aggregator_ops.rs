@@ -4,13 +4,10 @@ use crate::{
     data::Metakey, error::*, serialization::protobuf, sled::Sled, Aggregator, AggregatorOps,
     AggregatorState, Handle,
 };
+#[cfg(feature = "metrics")]
+use metrics::counter;
 use sled::MergeOperator;
 use std::iter;
-#[cfg(feature = "metrics")]
-use metrics::{
-    gauge, histogram, increment_counter, register_counter, register_gauge, register_histogram,
-};
-
 
 pub(crate) const ACCUMULATOR_MARKER: u8 = 0xAC;
 pub(crate) const VALUE_MARKER: u8 = 0x00;
@@ -34,7 +31,8 @@ impl AggregatorOps for Sled {
         if let Some(serialized) = self.get(&handle.id, &key)? {
             assert_eq!(serialized[0], ACCUMULATOR_MARKER);
             let serialized = &serialized[1..];
-            gauge!(format!("{}_bytes_read", handle.get_name()), serialized.len() as f64, "backend" => self.name.clone());
+            #[cfg(feature = "metrics")]
+            counter!(format!("{}_bytes_read", handle.get_name()), serialized.len() as u64, "backend" => self.name.clone());
             let current_accumulator = protobuf::deserialize(serialized)?;
             Ok(handle
                 .extra_data
@@ -54,7 +52,8 @@ impl AggregatorOps for Sled {
         let key = handle.serialize_metakeys()?;
         let mut serialized = vec![VALUE_MARKER];
         protobuf::serialize_into(&mut serialized, &value)?;
-        gauge!(format!("{}_bytes_written", handle.get_name()), serialized.len() as f64, "backend" => self.name.clone());
+        #[cfg(feature = "metrics")]
+        counter!(format!("{}_bytes_written", handle.get_name()), serialized.len() as u64, "backend" => self.name.clone());
 
         // See the make_aggregator_merge function in this module. Its result is set as the merging operator for this state.
         self.tree(&handle.id)?.merge(key, serialized)?;

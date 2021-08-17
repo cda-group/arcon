@@ -9,10 +9,7 @@ use crate::{
     Handle, ValueOps, ValueState,
 };
 #[cfg(feature = "metrics")]
-use metrics::{
-    gauge, histogram, increment_counter, register_counter, register_gauge, register_histogram,
-};
-
+use metrics::counter;
 impl ValueOps for Sled {
     fn value_clear<T: Value, IK: Metakey, N: Metakey>(
         &self,
@@ -29,7 +26,8 @@ impl ValueOps for Sled {
     ) -> Result<Option<T>> {
         let key = handle.serialize_metakeys()?;
         if let Some(serialized) = self.get(&handle.id, &key)? {
-            gauge!(format!("{}_bytes_read", handle.get_name()), serialized.len() as f64, "backend" => self.name.clone());
+            #[cfg(feature = "metrics")]
+            counter!(format!("{}_bytes_read", handle.get_name()), serialized.len() as u64, "backend" => self.name.clone());
             let value = protobuf::deserialize(&serialized)?;
             Ok(Some(value))
         } else {
@@ -44,7 +42,8 @@ impl ValueOps for Sled {
     ) -> Result<Option<T>> {
         let key = handle.serialize_metakeys()?;
         let serialized = protobuf::serialize(&value)?;
-        gauge!(format!("{}_bytes_written", handle.get_name()), serialized.len() as f64, "backend" => self.name.clone());
+        #[cfg(feature = "metrics")]
+        counter!(format!("{}_bytes_written", handle.get_name()), serialized.len() as u64, "backend" => self.name.clone());
         let old = match self.put(&handle.id, &key, &serialized)? {
             Some(bytes) => Some(protobuf::deserialize(bytes.as_ref())?),
             None => None,
@@ -59,7 +58,8 @@ impl ValueOps for Sled {
     ) -> Result<()> {
         let key = handle.serialize_metakeys()?;
         let serialized = protobuf::serialize(&value)?;
-        gauge!(format!("{}_bytes_written", handle.get_name()), serialized.len() as f64, "backend" => self.name.clone());
+        #[cfg(feature = "metrics")]
+        counter!(format!("{}_bytes_written", handle.get_name()), serialized.len() as u64, "backend" => self.name.clone());
         self.put(&handle.id, &key, &serialized)?;
         Ok(())
     }
@@ -71,7 +71,8 @@ impl ValueOps for Sled {
     ) -> Result<()> {
         let key = handle.serialize_metakeys()?;
         let serialized = protobuf::serialize(value)?;
-        gauge!(format!("{}_bytes_written", handle.get_name()), serialized.len() as f64, "backend" => self.name.clone());
+        #[cfg(feature = "metrics")]
+        counter!(format!("{}_bytes_written", handle.get_name()), serialized.len() as u64, "backend" => self.name.clone());
         self.put(&handle.id, &key, &serialized)?;
         Ok(())
     }

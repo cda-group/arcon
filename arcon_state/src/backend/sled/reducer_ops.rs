@@ -8,13 +8,10 @@ use crate::{
     sled::Sled,
     Handle, Reducer, ReducerOps, ReducerState,
 };
+#[cfg(feature = "metrics")]
+use metrics::counter;
 use sled::MergeOperator;
 use std::iter;
-#[cfg(feature = "metrics")]
-use metrics::{
-    gauge, histogram, increment_counter, register_counter, register_gauge, register_histogram,
-};
-
 
 impl ReducerOps for Sled {
     fn reducer_clear<T: Value, F: Reducer<T>, IK: Metakey, N: Metakey>(
@@ -32,7 +29,8 @@ impl ReducerOps for Sled {
     ) -> Result<Option<T>> {
         let key = handle.serialize_metakeys()?;
         if let Some(storage) = self.get(&handle.id, &key)? {
-            gauge!(format!("{}_bytes_read", handle.get_name()), storage.len() as f64, "backend" => self.name.clone());
+            #[cfg(feature = "metrics")]
+            counter!(format!("{}_bytes_read", handle.get_name()), storage.len() as u64, "backend" => self.name.clone());
             let value = protobuf::deserialize(&*storage)?;
             Ok(Some(value))
         } else {
@@ -47,7 +45,8 @@ impl ReducerOps for Sled {
     ) -> Result<()> {
         let key = handle.serialize_metakeys()?;
         let serialized = protobuf::serialize(&value)?;
-        gauge!(format!("{}_bytes_written", handle.get_name()), serialized.len() as f64, "backend" => self.name.clone());
+        #[cfg(feature = "metrics")]
+        counter!(format!("{}_bytes_written", handle.get_name()), serialized.len() as u64, "backend" => self.name.clone());
 
         // See the make_reducer_merge function in this module. Its result is set as the merging
         // operator for this state.

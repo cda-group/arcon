@@ -132,7 +132,7 @@ pub mod test_utils {
         use arcon_state::backend::Backend;
         let test_dir = tempfile::tempdir().unwrap();
         let path = test_dir.path();
-        arcon_state::Sled::create(path).unwrap()
+        arcon_state::Sled::create(path, String::from("testDB")).unwrap()
     }
 }
 
