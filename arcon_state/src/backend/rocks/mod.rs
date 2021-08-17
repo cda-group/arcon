@@ -7,6 +7,10 @@ use crate::{
     Aggregator, AggregatorState, Backend, Handle, MapState, Reducer, ReducerState, ValueState,
     VecState,
 };
+#[cfg(feature = "metrics")]
+use metrics::{
+    gauge, histogram, increment_counter, register_counter, register_gauge, register_histogram,
+};
 use rocksdb::{
     checkpoint::Checkpoint, ColumnFamily, ColumnFamilyDescriptor, DBPinnableSlice, Options,
     SliceTransform, WriteBatch, WriteOptions, DB,
@@ -26,6 +30,7 @@ pub struct Rocks {
     inner: UnsafeCell<DB>,
     path: PathBuf,
     restored: bool,
+    name: String,
 }
 
 // we use epochs, so WAL is useless for us
@@ -139,7 +144,11 @@ where
 }
 
 impl Backend for Rocks {
-    fn create(path: &Path) -> Result<Self>
+    fn return_name(&self) -> String {
+        self.name.clone()
+    }
+
+    fn create(path: &Path, name: String) -> Result<Self>
     where
         Self: Sized,
     {
@@ -171,10 +180,11 @@ impl Backend for Rocks {
             inner: UnsafeCell::new(DB::open_cf_descriptors(&opts, &path, cfds)?),
             path,
             restored: false,
+            name,
         })
     }
 
-    fn restore(live_path: &Path, checkpoint_path: &Path) -> Result<Self>
+    fn restore(live_path: &Path, checkpoint_path: &Path, name: String) -> Result<Self>
     where
         Self: Sized,
     {
@@ -206,7 +216,7 @@ impl Backend for Rocks {
             fs::copy(&source_path, &target_path)?;
         }
 
-        Rocks::create(live_path).map(|mut r| {
+        Rocks::create(live_path, name.clone()).map(|mut r| {
             //r.get_mut().restored = true;
             r.restored = true;
             r

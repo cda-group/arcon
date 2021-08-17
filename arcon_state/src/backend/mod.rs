@@ -124,16 +124,19 @@ pub trait Backend:
                     epoch = epoch
                 ));
 
-                Self::restore(&state_path, &latest_checkpoint_path)
+                Self::restore(&state_path, &latest_checkpoint_path, id)
             }
-            None => Self::create(&state_path),
+            None => Self::create(&state_path, id)
         }
     }
 
-    fn create(live_path: &Path) -> Result<Self>
+    fn return_name(&self)-> String;
+
+
+    fn create(live_path: &Path, name: String) -> Result<Self>
     where
         Self: Sized;
-    fn restore(live_path: &Path, checkpoint_path: &Path) -> Result<Self>
+    fn restore(live_path: &Path, checkpoint_path: &Path, name: String) -> Result<Self>
     where
         Self: Sized;
 

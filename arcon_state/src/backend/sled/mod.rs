@@ -20,6 +20,7 @@ use std::{
 pub struct Sled {
     db: Db,
     restored: bool,
+    name: String
 }
 
 impl Sled {
@@ -65,7 +66,11 @@ impl Sled {
 }
 
 impl Backend for Sled {
-    fn create(live_path: &Path) -> Result<Self>
+    fn return_name(&self) -> String {
+        self.name.clone()
+    }
+
+    fn create(live_path: &Path, name: String) -> Result<Self>
     where
         Self: Sized,
     {
@@ -73,11 +78,12 @@ impl Backend for Sled {
         Ok(Sled {
             db,
             restored: false,
+            name
         })
     }
 
     #[allow(unused_variables)]
-    fn restore(live_path: &Path, checkpoint_path: &Path) -> Result<Self>
+    fn restore(live_path: &Path, checkpoint_path: &Path, name: String) -> Result<Self>
     where
         Self: Sized,
     {
@@ -95,7 +101,7 @@ impl Backend for Sled {
             restored = true;
         }
 
-        Ok(Sled { db, restored })
+        Ok(Sled { db, restored, name })
     }
 
     fn was_restored(&self) -> bool {

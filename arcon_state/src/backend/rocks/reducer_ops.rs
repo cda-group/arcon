@@ -9,6 +9,10 @@ use crate::{
     Handle, Reducer, ReducerOps, ReducerState, Rocks,
 };
 use rocksdb::{merge_operator::MergeFn, MergeOperands};
+#[cfg(feature = "metrics")]
+use metrics::{
+    gauge, histogram, increment_counter, register_counter, register_gauge, register_histogram,
+};
 
 impl ReducerOps for Rocks {
     fn reducer_clear<T: Value, F: Reducer<T>, IK: Metakey, N: Metakey>(
@@ -26,6 +30,7 @@ impl ReducerOps for Rocks {
     ) -> Result<Option<T>> {
         let key = handle.serialize_metakeys()?;
         if let Some(storage) = self.get(&handle.id, &key)? {
+            gauge!(format!("{}_bytes_read", handle.get_name()), storage.len() as f64, "backend" => self.name.clone());
             let value = protobuf::deserialize(&*storage)?;
             Ok(Some(value))
         } else {
@@ -44,6 +49,7 @@ impl ReducerOps for Rocks {
         let cf = self.get_cf_handle(&handle.id)?;
         // See the make_reducer_merge function in this module. Its result is set as the merging
         // operator for this state.
+        gauge!(format!("{}_bytes_written", handle.get_name()), serialized.len() as f64, "backend" => self.name.clone());
         Ok(self
             .db()
             .merge_cf_opt(cf, key, serialized, &default_write_opts())?)
