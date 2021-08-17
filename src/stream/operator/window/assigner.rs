@@ -3,6 +3,7 @@
 
 use super::{WindowContext, WindowFunction};
 use crate::{
+    reportable_error,
     data::{ArconElement, ArconType},
     error::*,
     index::{ArconState, EagerHashTable, IndexOps, StateConstructor},
@@ -155,7 +156,7 @@ where
         let window_start = match self.state.window_start().get(&window_ctx.key)? {
             Some(start) => start,
             None => {
-                return crate::reportable_error!(
+                return reportable_error!(
                     "Unexpected failure, could not find window start for existing key"
                 );
             }
@@ -245,10 +246,7 @@ where
             if !active_exist {
                 self.state.active_windows().put(window_ctx, ())?;
 
-                if let Err(event) = self.new_window_trigger(window_ctx, &mut ctx) {
-                    // I'm pretty sure this shouldn't happen
-                    unreachable!("Window was expired when scheduled: {:?}", event);
-                }
+                self.new_window_trigger(window_ctx, &mut ctx)?;
             }
         }
 
