@@ -7,6 +7,9 @@ pub mod function;
 pub mod sink;
 /// Available window operators
 pub mod window;
+
+mod chain;
+
 #[cfg(feature = "metrics")]
 use metrics::{gauge, increment_counter, register_counter, register_gauge};
 
@@ -14,10 +17,10 @@ use crate::{
     application::conf::logger::ArconLogger,
     data::{ArconElement, ArconType},
     error::{timer::TimerResult, *},
-    index::{ArconState, Timer},
+    index::{timer::ArconTimer, ArconState},
 };
-use arcon_state::Backend;
 use prost::Message;
+use std::cell::RefCell;
 
 /// Defines the methods an `Operator` must implement
 pub trait Operator: Send + Sized {
@@ -29,11 +32,11 @@ pub trait Operator: Send + Sized {
     type TimerState: Message + Clone + Default;
     /// State type for the Operator
     type OperatorState: ArconState;
-
+    /// Iterator that produces outgoing elements
     type ElementIterator: IntoIterator<Item = ArconElement<Self::OUT>> + 'static;
 
     /// Determines what the `Operator` runs before beginning to process Elements
-    fn on_start(&mut self, mut _ctx: OperatorContext<Self, impl Backend>) -> ArconResult<()> {
+    fn on_start(&mut self, mut _ctx: OperatorContext<Self>) -> ArconResult<()> {
         Ok(())
     }
 
@@ -41,14 +44,14 @@ pub trait Operator: Send + Sized {
     fn handle_element(
         &mut self,
         element: ArconElement<Self::IN>,
-        ctx: OperatorContext<Self, impl Backend>,
+        ctx: OperatorContext<Self>,
     ) -> ArconResult<Self::ElementIterator>;
 
     /// Determines how the `Operator` handles timeouts it registered earlier when they are triggered
     fn handle_timeout(
         &mut self,
         timeout: Self::TimerState,
-        ctx: OperatorContext<Self, impl Backend>,
+        ctx: OperatorContext<Self>,
     ) -> ArconResult<Option<Self::ElementIterator>>;
 
     /// Determines how the `Operator` persists its state
@@ -67,7 +70,7 @@ macro_rules! ignore_timeout {
         fn handle_timeout(
             &mut self,
             _timeout: Self::TimerState,
-            _ctx: OperatorContext<Self, impl Backend>,
+            _ctx: OperatorContext<Self>,
         ) -> ArconResult<Option<Self::ElementIterator>> {
             Ok(None)
         }
@@ -95,37 +98,34 @@ macro_rules! ignore_state {
 }
 
 /// Context Available to an Arcon Operator
-pub struct OperatorContext<'b, 'd, OP, B>
+#[derive(Clone)]
+pub struct OperatorContext<'b, 'd, OP>
 where
-    OP: Operator + 'static,
-    B: Backend,
+    OP: Operator,
 {
     /// A Timer that can be used to schedule event timers
-    timer: &'b mut Timer<u64, OP::TimerState, B>,
+    timer: &'b RefCell<Box<dyn ArconTimer<Key = u64, Value = OP::TimerState>>>,
     /// Reference to logger
     logger: &'d ArconLogger,
     #[cfg(feature = "metrics")]
     name: &'d str,
 }
 
-//Note the _ prefixed name field, this is due to the presence of feature flag .Therefore this var might not be used.
-impl<'b, 'd, OP, B> OperatorContext<'b, 'd, OP, B>
+impl<'b, 'd, OP> OperatorContext<'b, 'd, OP>
 where
-    OP: Operator + 'static,
-    B: Backend,
+    OP: Operator,
 {
     #[inline]
     pub(crate) fn new(
-        timer: &'b mut Timer<u64, OP::TimerState, B>,
+        timer: &'b RefCell<Box<dyn ArconTimer<Key = u64, Value = OP::TimerState>>>,
         logger: &'d ArconLogger,
-        #[cfg(feature = "metrics")] _name: &'d str,
+        #[cfg(feature = "metrics")] name: &'d str,
     ) -> Self {
         OperatorContext {
             timer,
             logger,
-
             #[cfg(feature = "metrics")]
-            name: _name,
+            name,
         }
     }
 
@@ -140,7 +140,7 @@ where
     /// Get current event time
     #[inline]
     pub fn current_time(&mut self) -> StateResult<u64> {
-        self.timer.current_time()
+        self.timer.borrow().get_time()
     }
 
     /// Schedule at a specific time in the future
@@ -153,9 +153,8 @@ where
         key: I,
         time: u64,
         entry: OP::TimerState,
-        //) -> Result<(), OP::TimerState> {
     ) -> TimerResult<OP::TimerState> {
-        self.timer.schedule_at(key.into(), time, entry)
+        self.timer.borrow_mut().schedule_at(key.into(), time, entry)
     }
 
     #[cfg(feature = "metrics")]

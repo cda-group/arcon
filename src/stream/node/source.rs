@@ -12,9 +12,8 @@ use crate::{
     error::{source::SourceError, ArconResult, Error},
     manager::source::{SourceManagerEvent, SourceManagerPort},
     prelude::SourceConf,
-    reportable_error,
     stream::{
-        channel::strategy::{send, ChannelStrategy},
+        channel::strategy::ChannelStrategy,
         source::{Poll, Source},
         time::ArconTime,
     },
@@ -185,23 +184,8 @@ where
 
     #[inline(always)]
     fn send_event(&mut self, event: ArconEvent<S::Item>) -> ArconResult<()> {
-        for (channel, msg) in self.channel_strategy.borrow_mut().push(event) {
-            match send(&channel, msg, self) {
-                Err(SerError::BufferError(msg)) | Err(SerError::NoBuffersAvailable(msg)) => {
-                    return Err(Error::Unsupported { msg });
-                }
-                Err(SerError::InvalidData(msg))
-                | Err(SerError::InvalidType(msg))
-                | Err(SerError::Unknown(msg)) => {
-                    return reportable_error!("{}", msg);
-                }
-                Err(SerError::NoClone) => {
-                    return reportable_error!("Got Kompact's SerError::NoClone");
-                }
-                Ok(_) => (),
-            }
-        }
-        Ok(())
+        let mut strategy = self.channel_strategy.borrow_mut();
+        super::common::add_outgoing_event(event, &mut strategy, self)
     }
 
     #[inline(always)]

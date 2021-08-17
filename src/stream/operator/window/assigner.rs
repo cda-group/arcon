@@ -150,7 +150,7 @@ where
     fn new_window_trigger(
         &mut self,
         window_ctx: WindowContext,
-        ctx: &mut OperatorContext<Self, impl Backend>,
+        ctx: &mut OperatorContext<Self>,
     ) -> ArconResult<()> {
         let window_start = match self.state.window_start().get(&window_ctx.key)? {
             Some(start) => start,
@@ -201,7 +201,7 @@ where
     fn handle_element(
         &mut self,
         element: ArconElement<IN>,
-        mut ctx: OperatorContext<Self, impl Backend>,
+        mut ctx: OperatorContext<Self>,
     ) -> ArconResult<Self::ElementIterator> {
         let ts = element.timestamp;
 
@@ -258,7 +258,7 @@ where
     fn handle_timeout(
         &mut self,
         timeout: Self::TimerState,
-        _: OperatorContext<Self, impl Backend>,
+        _: OperatorContext<Self>,
     ) -> ArconResult<Option<Self::ElementIterator>> {
         let WindowEvent {
             key,

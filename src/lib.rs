@@ -204,8 +204,8 @@ pub mod prelude {
     };
 
     pub use crate::index::{
-        AppenderIndex, EagerAppender, EagerHashTable, EagerValue, EmptyState, HashTable, IndexOps,
-        LazyValue, LocalValue, StateConstructor, Timer as ArconTimer, ValueIndex,
+        timer, AppenderIndex, EagerAppender, EagerHashTable, EagerValue, EmptyState, HashTable,
+        IndexOps, LazyValue, LocalValue, StateConstructor, ValueIndex,
     };
 
     pub use prost::*;

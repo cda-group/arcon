@@ -43,6 +43,20 @@ impl<E: Value> TimerEvent<E> {
     }
 }
 
+pub trait ArconTimer: Send {
+    type Key: Eq + Hash;
+    type Value: std::fmt::Debug;
+
+    fn schedule_at(
+        &mut self,
+        id: Self::Key,
+        time: u64,
+        entry: Self::Value,
+    ) -> TimerResult<Self::Value>;
+    fn advance_to(&mut self, ts: u64) -> Result<Vec<Self::Value>>;
+    fn get_time(&self) -> Result<u64>;
+}
+
 /// An Index for Stream Timers
 ///
 /// The Index utilises the [QuadWheelWithOverflow] data structure
@@ -185,9 +199,24 @@ where
             Err(f) => crate::reportable_error!("Could not insert timer entry! {:?}", f),
         }
     }
+}
+
+impl<K, V, B> ArconTimer for Timer<K, V, B>
+where
+    K: Key + Eq + Hash,
+    V: Value,
+    B: Backend,
+{
+    type Key = K;
+    type Value = V;
 
     #[inline]
-    pub fn schedule_at(&mut self, id: K, time: u64, entry: V) -> TimerResult<V> {
+    fn schedule_at(
+        &mut self,
+        id: Self::Key,
+        time: u64,
+        entry: Self::Value,
+    ) -> TimerResult<Self::Value> {
         let curr_time = self.current_time().unwrap();
         // Check for expired target time
         if time <= curr_time {
@@ -203,7 +232,7 @@ where
     }
 
     #[inline]
-    pub fn advance_to(&mut self, ts: u64) -> Result<Vec<V>> {
+    fn advance_to(&mut self, ts: u64) -> Result<Vec<Self::Value>> {
         let mut res = Vec::new();
         let curr_time = self.current_time().unwrap();
         if ts < curr_time {
@@ -219,6 +248,10 @@ where
         // this cast must be safe now
         self.tick_and_collect(time_left as u32, &mut res)?;
         Ok(res)
+    }
+    fn get_time(&self) -> Result<u64> {
+        let time = self.time_handle.get()?;
+        Ok(time.unwrap_or(0))
     }
 }
 

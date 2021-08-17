@@ -1,9 +1,11 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/// Common code between node types
+pub mod common;
 /// Debug version of [Node]
 pub mod debug;
-
+/// SourceNode components that drives the execution of sources
 pub mod source;
 
 #[cfg(feature = "metrics")]
@@ -21,20 +23,20 @@ use crate::{
     data::{flight_serde::reliable_remote::ReliableSerde, RawArconMessage, *},
     error::{ArconResult, *},
     index::{
-        AppenderIndex, ArconState, EagerAppender, IndexOps, StateConstructor, Timer as ArconTimer,
+        timer::ArconTimer, AppenderIndex, ArconState, EagerAppender, IndexOps, StateConstructor,
     },
     manager::node::{NodeManagerEvent::Checkpoint, *},
     reportable_error,
     stream::{
-        channel::strategy::{send, ChannelStrategy},
+        channel::strategy::ChannelStrategy,
         operator::{Operator, OperatorContext},
     },
-}; // conflicts with Kompact Timer trait
+};
 use arcon_macros::ArconState;
 use arcon_state::Backend;
 use fxhash::*;
 use kompact::prelude::*;
-use std::{cell::UnsafeCell, sync::Arc};
+use std::{cell::RefCell, cell::UnsafeCell, sync::Arc};
 
 /// Type alias for a Node description
 pub type NodeDescriptor = String;
@@ -107,7 +109,7 @@ impl<OP: Operator + 'static, B: Backend> NodeState<OP, B> {
 macro_rules! make_context {
     ($sel:ident) => {
         OperatorContext::new(
-            &mut (*$sel.timer.get()),
+            &$sel.timer,
             &$sel.logger,
             #[cfg(feature = "metrics")]
             &$sel.descriptor,
@@ -131,18 +133,18 @@ where
     /// Channel Strategy used by the Node
     channel_strategy: UnsafeCell<ChannelStrategy<OP::OUT>>,
     /// User-defined Operator
-    operator: UnsafeCell<OP>,
-
+    operator: OP,
     /// Internal Node State
     node_state: NodeState<OP, B>,
     /// Event time scheduler
-    timer: UnsafeCell<ArconTimer<u64, OP::TimerState, B>>,
+    timer: RefCell<Box<dyn ArconTimer<Key = u64, Value = OP::TimerState>>>,
+    /// Installed Arcon logger
     logger: ArconLogger,
-
     #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
+    /// Configured hardware counters
     perf_events: PerfEvents,
-
     #[cfg(feature = "metrics")]
+    /// Struct holding metrics information
     node_metrics: NodeMetrics,
 }
 
@@ -159,13 +161,12 @@ where
         node_state: NodeState<OP, B>,
         backend: Arc<B>,
         logger: ArconLogger,
-
         #[cfg(all(feature = "hardware_counters", target_os = "linux"))]
         #[cfg(not(test))]
         perf_events: PerfEvents,
     ) -> Self {
         let timer_id = format!("_{}_timer", descriptor);
-        let timer = ArconTimer::new(timer_id, backend);
+        let timer = crate::index::timer::Timer::new(timer_id, backend);
 
         #[cfg(feature = "metrics")]
         {
@@ -187,15 +188,12 @@ where
             node_manager_port: RequiredPort::uninitialised(),
             descriptor,
             channel_strategy: UnsafeCell::new(channel_strategy),
-            operator: UnsafeCell::new(operator),
-
+            operator,
             node_state,
-            timer: UnsafeCell::new(timer),
+            timer: RefCell::new(Box::new(timer)),
             logger,
-
             #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
             perf_events,
-
             #[cfg(feature = "metrics")]
             node_metrics: NodeMetrics::new(),
         }
@@ -295,15 +293,12 @@ where
                         continue 'event_loop;
                     }
 
-                    unsafe {
-                        let operator = &mut (*self.operator.get());
-                        // Set key for the current element
-                        // TODO: Should use a pre-defined key for Non-Keyed Streams.
-                        operator.state().set_key(e.data.get_key());
-                        for elem in operator.handle_element(e, make_context!(self))? {
-                            self.add_outgoing_event(ArconEvent::Element(elem))?;
-                        }
-                    };
+                    // Set key for the current element
+                    // TODO: Should use a pre-defined key for Non-Keyed Streams.
+                    self.operator.state().set_key(e.data.get_key());
+                    for elem in self.operator.handle_element(e, make_context!(self))? {
+                        self.add_outgoing_event(ArconEvent::Element(elem))?;
+                    }
                 }
                 ArconEvent::Watermark(w) => {
                     let watermark = match self.node_state.watermarks().get(&sender) {
@@ -331,19 +326,19 @@ where
                     if new_watermark.timestamp > self.node_state.current_watermark.timestamp {
                         self.node_state.current_watermark = new_watermark;
 
-                        unsafe {
-                            let timer = &mut (*self.timer.get());
-                            let timeouts = timer.advance_to(new_watermark.timestamp)?;
-                            for timeout in timeouts {
-                                if let Some(elems_iter) = (*self.operator.get())
-                                    .handle_timeout(timeout, make_context!(self))?
-                                {
-                                    for elem in elems_iter {
-                                        self.add_outgoing_event(ArconEvent::Element(elem))?;
-                                    }
+                        let timeouts = self
+                            .timer
+                            .borrow_mut()
+                            .advance_to(new_watermark.timestamp)?;
+                        for timeout in timeouts {
+                            if let Some(elems) =
+                                self.operator.handle_timeout(timeout, make_context!(self))?
+                            {
+                                for elem in elems {
+                                    self.add_outgoing_event(ArconEvent::Element(elem))?;
                                 }
                             }
-                        };
+                        }
 
                         #[cfg(feature = "metrics")]
                         increment_counter!("watermark_counter", "node" => self.descriptor.clone());
@@ -367,14 +362,8 @@ where
                         // persist internal node state for this node
                         self.node_state.persist()?;
 
-                        unsafe {
-                            // persist timer
-                            let timer = &mut (*self.timer.get());
-                            timer.persist()?;
-
-                            // persist possible operator state..
-                            (*self.operator.get()).persist()?;
-                        };
+                        // persist possible operator state..
+                        self.operator.persist()?;
 
                         // Create checkpoint request and send it off to the NodeManager
                         let request = CheckpointRequest::new(
@@ -403,24 +392,8 @@ where
 
     #[inline]
     fn add_outgoing_event(&mut self, event: ArconEvent<OP::OUT>) -> ArconResult<()> {
-        let channel_strategy = unsafe { &mut *self.channel_strategy.get() };
-        for (channel, msg) in channel_strategy.push(event) {
-            match send(&channel, msg, self) {
-                Err(SerError::BufferError(msg)) | Err(SerError::NoBuffersAvailable(msg)) => {
-                    return Err(Error::Unsupported { msg });
-                }
-                Err(SerError::InvalidData(msg))
-                | Err(SerError::InvalidType(msg))
-                | Err(SerError::Unknown(msg)) => {
-                    return reportable_error!("{}", msg);
-                }
-                Err(SerError::NoClone) => {
-                    return reportable_error!("Got Kompact's SerError::NoClone");
-                }
-                Ok(_) => (),
-            }
-        }
-        Ok(())
+        let strategy = unsafe { &mut *self.channel_strategy.get() };
+        common::add_outgoing_event(event, strategy, self)
     }
 
     #[inline]
@@ -451,12 +424,9 @@ where
             "Started Arcon Node {} with Node ID {:?}", self.descriptor, self.node_state.id
         );
 
-        unsafe {
-            let operator = &mut (*self.operator.get());
-            if operator.on_start(make_context!(self)).is_err() {
-                error!(self.logger, "Failed to run startup code");
-            }
-        };
+        if self.operator.on_start(make_context!(self)).is_err() {
+            error!(self.logger, "Failed to run startup code");
+        }
 
         Handled::Ok
     }

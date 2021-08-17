@@ -6,7 +6,6 @@ use crate::{
     error::ArconResult,
     stream::operator::{Operator, OperatorContext},
 };
-use arcon_state::Backend;
 use std::{
     cell::RefCell,
     fs::{File, OpenOptions},
@@ -59,7 +58,7 @@ where
     fn handle_element(
         &mut self,
         element: ArconElement<IN>,
-        _ctx: OperatorContext<Self, impl Backend>,
+        _ctx: OperatorContext<Self>,
     ) -> ArconResult<Self::ElementIterator> {
         if let Err(err) = writeln!(self.file.borrow_mut(), "{:?}", element.data) {
             eprintln!("Error while writing to file sink {}", err.to_string());

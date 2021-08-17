@@ -8,7 +8,6 @@ use crate::{
     stream::operator::{Operator, OperatorContext},
     util::ArconFnBounds,
 };
-use arcon_state::Backend;
 use std::marker::PhantomData;
 
 pub struct Filter<IN, F, S>
@@ -69,7 +68,7 @@ where
     fn handle_element(
         &mut self,
         element: ArconElement<IN>,
-        _: OperatorContext<Self, impl Backend>,
+        _: OperatorContext<Self>,
     ) -> ArconResult<Self::ElementIterator> {
         if (self.udf)(&element.data, &mut self.state) {
             Ok(Some(element))

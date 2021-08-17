@@ -7,7 +7,6 @@ use crate::{
     stream::operator::{Operator, OperatorContext},
 };
 use ::serde::Serialize;
-use arcon_state::Backend;
 use bytes::Bytes;
 use futures::{channel, executor::block_on, SinkExt, StreamExt};
 use kompact::prelude::*;
@@ -92,7 +91,7 @@ where
     fn handle_element(
         &mut self,
         element: ArconElement<Self::IN>,
-        _ctx: OperatorContext<Self, impl Backend>,
+        _ctx: OperatorContext<Self>,
     ) -> ArconResult<Self::ElementIterator> {
         let mut tx = self.tx_channel.clone();
         let fmt_data = {

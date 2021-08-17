@@ -20,7 +20,7 @@ impl Operator for MyOperator {
     type OperatorState = ();
     type ElementIterator = std::iter::Once<ArconElement<Self::OUT>>;
 
-    fn on_start(&mut self, mut _ctx: OperatorContext<Self, impl Backend>) -> ArconResult<()> {
+    fn on_start(&mut self, mut _ctx: OperatorContext<Self>) -> ArconResult<()> {
         #[cfg(feature = "metrics")]
         _ctx.register_gauge("custom_gauge");
 
@@ -32,7 +32,7 @@ impl Operator for MyOperator {
     fn handle_element(
         &mut self,
         element: ArconElement<Self::IN>,
-        _ctx: OperatorContext<Self, impl Backend>,
+        _ctx: OperatorContext<Self>,
     ) -> ArconResult<Self::ElementIterator> {
         let custom_event = CustomEvent { id: element.data };
 
@@ -69,7 +69,7 @@ impl Operator for TimerOperator {
     fn handle_element(
         &mut self,
         element: ArconElement<Self::IN>,
-        mut ctx: OperatorContext<Self, impl Backend>,
+        mut ctx: OperatorContext<Self>,
     ) -> ArconResult<Self::ElementIterator> {
         let current_time = ctx.current_time()?;
         let key = element.data.get_key();
@@ -85,7 +85,7 @@ impl Operator for TimerOperator {
     fn handle_timeout(
         &mut self,
         timeout: Self::TimerState,
-        ctx: OperatorContext<Self, impl Backend>,
+        ctx: OperatorContext<Self>,
     ) -> ArconResult<Option<Self::ElementIterator>> {
         info!(ctx.log(), "Got a timer timeout for {:?}", timeout);
         Ok(None)

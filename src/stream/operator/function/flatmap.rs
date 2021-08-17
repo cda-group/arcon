@@ -8,7 +8,6 @@ use crate::{
     stream::operator::{Operator, OperatorContext},
     util::ArconFnBounds,
 };
-use arcon_state::Backend;
 use std::marker::PhantomData;
 
 pub struct FlatMap<IN, OUTS, F, S>
@@ -77,7 +76,7 @@ where
     fn handle_element(
         &mut self,
         element: ArconElement<IN>,
-        _: OperatorContext<Self, impl Backend>,
+        _: OperatorContext<Self>,
     ) -> ArconResult<Self::ElementIterator> {
         let timestamp = element.timestamp;
         let result = (self.udf)(element.data, &mut self.state)?;
