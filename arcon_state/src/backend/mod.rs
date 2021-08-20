@@ -271,8 +271,10 @@ pub mod faster;
 #[cfg(all(feature = "faster", target_os = "linux"))]
 pub use self::faster::Faster;
 
+pub mod metrics_utils;
 #[cfg(feature = "sled")]
 pub mod sled;
+
 #[cfg(feature = "sled")]
 pub use self::sled::Sled;
 

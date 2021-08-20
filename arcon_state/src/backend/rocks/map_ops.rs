@@ -1,5 +1,7 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
+#[cfg(feature = "metrics")]
+use crate::metrics_utils::*;
 use crate::{
     data::{Key, Metakey, Value},
     error::*,
@@ -8,8 +10,7 @@ use crate::{
     serialization::{fixed_bytes, protobuf},
     Handle, MapOps, MapState, Rocks,
 };
-#[cfg(feature = "metrics")]
-use metrics::counter;
+
 use rocksdb::WriteBatch;
 
 impl MapOps for Rocks {
@@ -28,7 +29,11 @@ impl MapOps for Rocks {
     ) -> Result<Option<V>> {
         let key = handle.serialize_metakeys_and_key(key)?;
         if let Some(serialized) = self.get(&handle.id, &key)? {
-            counter!(format!("{}_bytes_read", handle.get_name()), serialized.len() as u64, "backend" => self.name.clone());
+            record_bytes_read(
+                &handle.get_name(),
+                serialized.len() as u64,
+                self.name.clone(),
+            );
             let value = protobuf::deserialize(&serialized)?;
             Ok(Some(value))
         } else {
@@ -45,7 +50,11 @@ impl MapOps for Rocks {
         let key = handle.serialize_metakeys_and_key(&key)?;
         let serialized = protobuf::serialize(&value)?;
         #[cfg(feature = "metrics")]
-        counter!(format!("{}_bytes_written", handle.get_name()), serialized.len() as u64, "backend" => self.name.clone());
+        record_bytes_written(
+            &handle.get_name(),
+            serialized.len() as u64,
+            self.name.clone(),
+        );
         self.put(&handle.id, key, serialized)?;
 
         Ok(())
@@ -60,7 +69,11 @@ impl MapOps for Rocks {
         let key = handle.serialize_metakeys_and_key(key)?;
         let serialized = protobuf::serialize(value)?;
         #[cfg(feature = "metrics")]
-        counter!(format!("{}_bytes_written", handle.get_name()), serialized.len() as u64, "backend" => self.name.clone());
+        record_bytes_written(
+            &handle.get_name(),
+            serialized.len() as u64,
+            self.name.clone(),
+        );
         self.put(&handle.id, key, serialized)?;
 
         Ok(())
@@ -77,7 +90,7 @@ impl MapOps for Rocks {
         // couldn't find a `put` that would return the previous value from rocks
         let old = if let Some(slice) = self.get(&handle.id, &key)? {
             #[cfg(feature = "metrics")]
-            counter!(format!("{}_bytes_written", handle.get_name()), slice.len() as u64, "backend" => self.name.clone());
+            record_bytes_written(&handle.get_name(), slice.len() as u64, self.name.clone());
 
             Some(protobuf::deserialize(&slice[..])?)
         } else {
@@ -102,7 +115,11 @@ impl MapOps for Rocks {
             let key = handle.serialize_metakeys_and_key(&user_key)?;
             let serialized = protobuf::serialize(&value)?;
             #[cfg(feature = "metrics")]
-            counter!(format!("{}_bytes_written", handle.get_name()), serialized.len() as u64, "backend" => self.name.clone());
+            record_bytes_written(
+                &handle.get_name(),
+                serialized.len() as u64,
+                self.name.clone(),
+            );
             wb.put_cf(cf, key, serialized);
         }
 
@@ -120,7 +137,11 @@ impl MapOps for Rocks {
             let key = handle.serialize_metakeys_and_key(user_key)?;
             let serialized = protobuf::serialize(value)?;
             #[cfg(feature = "metrics")]
-            counter!(format!("{}_bytes_written", handle.get_name()), serialized.len() as u64, "backend" => self.name.clone());
+            record_bytes_written(
+                &handle.get_name(),
+                serialized.len() as u64,
+                self.name.clone(),
+            );
             wb.put_cf(cf, key, serialized);
         }
 

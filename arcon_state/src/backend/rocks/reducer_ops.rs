@@ -1,6 +1,8 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
+#[cfg(feature = "metrics")]
+use crate::metrics_utils::*;
 use crate::{
     data::{Metakey, Value},
     error::*,
@@ -8,8 +10,7 @@ use crate::{
     serialization::protobuf,
     Handle, Reducer, ReducerOps, ReducerState, Rocks,
 };
-#[cfg(feature = "metrics")]
-use metrics::counter;
+
 use rocksdb::{merge_operator::MergeFn, MergeOperands};
 
 impl ReducerOps for Rocks {
@@ -29,7 +30,7 @@ impl ReducerOps for Rocks {
         let key = handle.serialize_metakeys()?;
         if let Some(storage) = self.get(&handle.id, &key)? {
             #[cfg(feature = "metrics")]
-            counter!(format!("{}_bytes_read", handle.get_name()), storage.len() as u64, "backend" => self.name.clone());
+            record_bytes_read(&handle.get_name(), storage.len() as u64, self.name.clone());
             let value = protobuf::deserialize(&*storage)?;
             Ok(Some(value))
         } else {
@@ -49,7 +50,11 @@ impl ReducerOps for Rocks {
         // See the make_reducer_merge function in this module. Its result is set as the merging
         // operator for this state.
         #[cfg(feature = "metrics")]
-        counter!(format!("{}_bytes_written", handle.get_name()), serialized.len() as u64, "backend" => self.name.clone());
+        record_bytes_written(
+            &handle.get_name(),
+            serialized.len() as u64,
+            self.name.clone(),
+        );
         Ok(self
             .db()
             .merge_cf_opt(cf, key, serialized, &default_write_opts())?)

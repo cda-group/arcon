@@ -12,7 +12,7 @@ use rocksdb::MergeOperands;
 use std::{iter, mem};
 
 #[cfg(feature = "metrics")]
-use metrics::counter;
+use crate::metrics_utils::*;
 
 impl VecOps for Rocks {
     fn vec_clear<T: Value, IK: Metakey, N: Metakey>(
@@ -35,7 +35,11 @@ impl VecOps for Rocks {
             <usize as FixedBytes>::SIZE + protobuf::size_hint(&value).unwrap_or(0),
         );
         #[cfg(feature = "metrics")]
-        counter!(format!("{}_bytes_written", handle.get_name()), serialized.len() as u64, "backend" => self.name.clone());
+        record_bytes_written(
+            &handle.get_name(),
+            serialized.len() as u64,
+            self.name.clone(),
+        );
 
         fixed_bytes::serialize_into(&mut serialized, &1usize)?;
         protobuf::serialize_into(&mut serialized, &value)?;
@@ -55,7 +59,11 @@ impl VecOps for Rocks {
         let key = handle.serialize_metakeys()?;
         if let Some(serialized) = self.get(&handle.id, &key)? {
             #[cfg(feature = "metrics")]
-            counter!(format!("{}_bytes_read", handle.get_name()), serialized.len() as u64, "backend" => self.name.clone());
+            record_bytes_read(
+                &handle.get_name(),
+                serialized.len() as u64,
+                self.name.clone(),
+            );
             // reader is updated to point at the yet unconsumed part of the serialized data
             let mut reader = &serialized[..];
             let len: usize = fixed_bytes::deserialize_from(&mut reader)?;
@@ -127,7 +135,7 @@ impl VecOps for Rocks {
             protobuf::serialize_into(&mut storage, &elem)?;
         }
         #[cfg(feature = "metrics")]
-        counter!(format!("{}_bytes_written", handle.get_name()), storage.len() as u64, "backend" => self.name.clone());
+        record_bytes_written(&handle.get_name(), storage.len() as u64, self.name.clone());
         self.put(&handle.id, key, storage)
     }
 

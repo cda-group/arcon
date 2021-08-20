@@ -6,8 +6,9 @@ use crate::{
     serialization::protobuf,
     Handle, Rocks, ValueOps, ValueState,
 };
+
 #[cfg(feature = "metrics")]
-use metrics::counter;
+use crate::metrics_utils::*;
 
 impl ValueOps for Rocks {
     fn value_clear<T: Value, IK: Metakey, N: Metakey>(
@@ -26,7 +27,11 @@ impl ValueOps for Rocks {
         let key = handle.serialize_metakeys()?;
         if let Some(serialized) = self.get(&handle.id, &key)? {
             #[cfg(feature = "metrics")]
-            counter!(format!("{}_bytes_read", handle.get_name()), serialized.len() as u64, "backend" => self.name.clone());
+            record_bytes_read(
+                &handle.get_name(),
+                serialized.len() as u64,
+                self.name.clone(),
+            );
             let value = protobuf::deserialize(&serialized)?;
             Ok(Some(value))
         } else {
@@ -48,7 +53,11 @@ impl ValueOps for Rocks {
         };
         let serialized = protobuf::serialize(&value)?;
         #[cfg(feature = "metrics")]
-        counter!(format!("{}_bytes_written", handle.get_name()), serialized.len() as u64, "backend" => self.name.clone());
+        record_bytes_written(
+            &handle.get_name(),
+            serialized.len() as u64,
+            self.name.clone(),
+        );
         self.put(&handle.id, key, serialized)?;
         Ok(old)
     }
@@ -61,7 +70,11 @@ impl ValueOps for Rocks {
         let key = handle.serialize_metakeys()?;
         let serialized = protobuf::serialize(&value)?;
         #[cfg(feature = "metrics")]
-        counter!(format!("{}_bytes_written", handle.get_name()), serialized.len() as u64, "backend" => self.name.clone());
+        record_bytes_written(
+            &handle.get_name(),
+            serialized.len() as u64,
+            self.name.clone(),
+        );
         self.put(&handle.id, key, serialized)?;
         Ok(())
     }
@@ -74,7 +87,11 @@ impl ValueOps for Rocks {
         let key = handle.serialize_metakeys()?;
         let serialized = protobuf::serialize(value)?;
         #[cfg(feature = "metrics")]
-        counter!(format!("{}_bytes_written", handle.get_name()), serialized.len() as u64, "backend" => self.name.clone());
+        record_bytes_written(
+            &handle.get_name(),
+            serialized.len() as u64,
+            self.name.clone(),
+        );
         self.put(&handle.id, key, serialized)?;
         Ok(())
     }
