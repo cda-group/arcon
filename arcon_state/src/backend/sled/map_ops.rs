@@ -31,7 +31,7 @@ impl MapOps for Sled {
         let key = handle.serialize_metakeys_and_key(key)?;
         if let Some(serialized) = self.get(&handle.id, &key)? {
             #[cfg(feature = "metrics")]
-            record_bytes_read(&handle.get_name(), serialized.len() as u64, self.name);
+            record_bytes_read(handle.name(), serialized.len() as u64, self.name);
             let value = protobuf::deserialize(&serialized)?;
             Ok(Some(value))
         } else {
@@ -48,7 +48,7 @@ impl MapOps for Sled {
         let key = handle.serialize_metakeys_and_key(&key)?;
         let serialized = protobuf::serialize(&value)?;
         #[cfg(feature = "metrics")]
-        record_bytes_written(&handle.get_name(), serialized.len() as u64, self.name);
+        record_bytes_written(handle.name(), serialized.len() as u64, self.name);
         self.put(&handle.id, &key, &serialized)?;
 
         Ok(())
@@ -63,7 +63,7 @@ impl MapOps for Sled {
         let key = handle.serialize_metakeys_and_key(key)?;
         let serialized = protobuf::serialize(value)?;
         #[cfg(feature = "metrics")]
-        record_bytes_read(&handle.get_name(), serialized.len() as u64, self.name);
+        record_bytes_read(handle.name(), serialized.len() as u64, self.name);
         self.put(&handle.id, &key, &serialized)?;
 
         Ok(())
@@ -79,7 +79,7 @@ impl MapOps for Sled {
 
         let serialized = protobuf::serialize(&value)?;
         #[cfg(feature = "metrics")]
-        record_bytes_read(&handle.get_name(), serialized.len() as u64, self.name);
+        record_bytes_read(handle.name(), serialized.len() as u64, self.name);
         let old = match self.put(&handle.id, &key, &serialized)? {
             Some(x) => Some(protobuf::deserialize(&x)?),
             None => None,
@@ -100,7 +100,7 @@ impl MapOps for Sled {
             let key = handle.serialize_metakeys_and_key(&user_key)?;
             let serialized = protobuf::serialize(&value)?;
             #[cfg(feature = "metrics")]
-            record_bytes_read(&handle.get_name(), serialized.len() as u64, self.name);
+            record_bytes_read(handle.name(), serialized.len() as u64, self.name);
             batch.insert(key, serialized);
         }
 
@@ -119,7 +119,7 @@ impl MapOps for Sled {
             let key = handle.serialize_metakeys_and_key(user_key)?;
             let serialized = protobuf::serialize(value)?;
             #[cfg(feature = "metrics")]
-            record_bytes_read(&handle.get_name(), serialized.len() as u64, self.name);
+            record_bytes_read(handle.name(), serialized.len() as u64, self.name);
             batch.insert(key, serialized);
         }
 

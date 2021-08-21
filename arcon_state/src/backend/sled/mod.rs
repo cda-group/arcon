@@ -66,7 +66,7 @@ impl Sled {
 }
 
 impl Backend for Sled {
-    fn return_name(&self) -> &'static str {
+    fn name(&self) -> &'static str {
         self.name
     }
 

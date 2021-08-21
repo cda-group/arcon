@@ -229,8 +229,8 @@ impl<S: StateType, IK: Metakey, N: Metakey> Handle<S, IK, N> {
         IK::SIZE + N::SIZE
     }
 
-    pub fn get_name(&self) -> String {
-        self.id.clone()
+    pub fn name(&self) -> &str {
+        self.id.as_str()
     }
 }
 //endregion
@@ -244,8 +244,8 @@ impl<S: StateType, IK: Metakey, N: Metakey> Handle<S, IK, N> {
 
         #[cfg(feature = "metrics")]
         {
-            register_counter!(format!("{}_bytes_read", self.get_name()), "backend"=>backend.return_name());
-            register_counter!(format!("{}_bytes_written", self.get_name()), "backend"=>backend.return_name());
+            register_counter!(format!("{}_bytes_read", self.name()), "backend"=>backend.name());
+            register_counter!(format!("{}_bytes_written", self.name()), "backend"=>backend.name());
         }
 
         ActiveHandle {

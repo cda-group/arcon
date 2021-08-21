@@ -141,7 +141,7 @@ where
 }
 
 impl Backend for Rocks {
-    fn return_name(&self) -> &'static str {
+    fn name(&self) -> &'static str {
         self.name
     }
 

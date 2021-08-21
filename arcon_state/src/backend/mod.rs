@@ -130,7 +130,7 @@ pub trait Backend:
         }
     }
 
-    fn return_name(&self) -> &'static str;
+    fn name(&self) -> &'static str;
 
     fn create(live_path: &Path, name: &'static str) -> Result<Self>
     where

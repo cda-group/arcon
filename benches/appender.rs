@@ -58,13 +58,7 @@ fn mean(numbers: &[u64]) -> f32 {
 fn appender_mean_eager(backend: BackendType, window_size: usize, b: &mut Bencher) {
     let dir = tempdir().unwrap();
     with_backend_type!(backend, |B| {
-        let backend = Arc::new(
-            B::create(
-                dir.as_ref(),
-                Box::leak(backend.to_string().into_boxed_str()),
-            )
-            .unwrap(),
-        );
+        let backend = Arc::new(B::create(dir.as_ref(), "appender_backend").unwrap());
         let mut eager_appender = EagerAppender::new("_appender", backend);
 
         b.iter(|| {
