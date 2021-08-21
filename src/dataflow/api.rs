@@ -30,7 +30,7 @@ impl<OP: Operator, Backend: arcon_state::Backend> OperatorBuilder<OP, Backend> {
     pub(crate) fn create_backend(
         &self,
         state_dir: std::path::PathBuf,
-        name: String,
+        name: &'static str,
     ) -> Arc<Backend> {
         Arc::new(Backend::create(&state_dir, name).unwrap())
     }

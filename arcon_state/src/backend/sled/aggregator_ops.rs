@@ -34,11 +34,7 @@ impl AggregatorOps for Sled {
             assert_eq!(serialized[0], ACCUMULATOR_MARKER);
             let serialized = &serialized[1..];
             #[cfg(feature = "metrics")]
-            record_bytes_read(
-                &handle.get_name(),
-                serialized.len() as u64,
-                self.name.clone(),
-            );
+            record_bytes_read(&handle.get_name(), serialized.len() as u64, self.name);
             let current_accumulator = protobuf::deserialize(serialized)?;
             Ok(handle
                 .extra_data
@@ -59,11 +55,7 @@ impl AggregatorOps for Sled {
         let mut serialized = vec![VALUE_MARKER];
         protobuf::serialize_into(&mut serialized, &value)?;
         #[cfg(feature = "metrics")]
-        record_bytes_written(
-            &handle.get_name(),
-            serialized.len() as u64,
-            self.name.clone(),
-        );
+        record_bytes_written(&handle.get_name(), serialized.len() as u64, self.name);
 
         // See the make_aggregator_merge function in this module. Its result is set as the merging operator for this state.
         self.tree(&handle.id)?.merge(key, serialized)?;

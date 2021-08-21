@@ -34,14 +34,11 @@ impl VecOps for Sled {
         let mut serialized = Vec::with_capacity(
             <usize as FixedBytes>::SIZE + protobuf::size_hint(&value).unwrap_or(0),
         );
-        #[cfg(feature = "metrics")]
-        record_bytes_written(
-            &handle.get_name(),
-            serialized.len() as u64,
-            self.name.clone(),
-        );
+
         fixed_bytes::serialize_into(&mut serialized, &1usize)?;
         protobuf::serialize_into(&mut serialized, &value)?;
+        #[cfg(feature = "metrics")]
+        record_bytes_written(&handle.get_name(), serialized.len() as u64, self.name);
 
         let tree = self.tree(&handle.id)?;
         // See the vec_merge function in this module. It is set as the merge operator for every vec state.
@@ -58,11 +55,7 @@ impl VecOps for Sled {
         if let Some(serialized) = self.get(&handle.id, &key)? {
             // reader is updated to point at the yet unconsumed part of the serialized data
             #[cfg(feature = "metrics")]
-            record_bytes_read(
-                &handle.get_name(),
-                serialized.len() as u64,
-                self.name.clone(),
-            );
+            record_bytes_read(&handle.get_name(), serialized.len() as u64, self.name);
             let mut reader = &serialized[..];
             let len: usize = fixed_bytes::deserialize_from(&mut reader)?;
             let mut res = Vec::with_capacity(len);
@@ -137,7 +130,7 @@ impl VecOps for Sled {
             protobuf::serialize_into(&mut storage, &elem)?;
         }
         #[cfg(feature = "metrics")]
-        record_bytes_written(&handle.get_name(), storage.len() as u64, self.name.clone());
+        record_bytes_written(&handle.get_name(), storage.len() as u64, self.name);
         self.put(&handle.id, &key, &storage)?;
 
         Ok(())

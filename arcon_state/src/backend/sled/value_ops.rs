@@ -29,11 +29,7 @@ impl ValueOps for Sled {
         let key = handle.serialize_metakeys()?;
         if let Some(serialized) = self.get(&handle.id, &key)? {
             #[cfg(feature = "metrics")]
-            record_bytes_read(
-                &handle.get_name(),
-                serialized.len() as u64,
-                self.name.clone(),
-            );
+            record_bytes_read(&handle.get_name(), serialized.len() as u64, self.name);
             let value = protobuf::deserialize(&serialized)?;
             Ok(Some(value))
         } else {
@@ -49,11 +45,7 @@ impl ValueOps for Sled {
         let key = handle.serialize_metakeys()?;
         let serialized = protobuf::serialize(&value)?;
         #[cfg(feature = "metrics")]
-        record_bytes_written(
-            &handle.get_name(),
-            serialized.len() as u64,
-            self.name.clone(),
-        );
+        record_bytes_written(&handle.get_name(), serialized.len() as u64, self.name);
         let old = match self.put(&handle.id, &key, &serialized)? {
             Some(bytes) => Some(protobuf::deserialize(bytes.as_ref())?),
             None => None,
@@ -69,11 +61,7 @@ impl ValueOps for Sled {
         let key = handle.serialize_metakeys()?;
         let serialized = protobuf::serialize(&value)?;
         #[cfg(feature = "metrics")]
-        record_bytes_written(
-            &handle.get_name(),
-            serialized.len() as u64,
-            self.name.clone(),
-        );
+        record_bytes_written(&handle.get_name(), serialized.len() as u64, self.name);
         self.put(&handle.id, &key, &serialized)?;
         Ok(())
     }
@@ -86,11 +74,7 @@ impl ValueOps for Sled {
         let key = handle.serialize_metakeys()?;
         let serialized = protobuf::serialize(value)?;
         #[cfg(feature = "metrics")]
-        record_bytes_written(
-            &handle.get_name(),
-            serialized.len() as u64,
-            self.name.clone(),
-        );
+        record_bytes_written(&handle.get_name(), serialized.len() as u64, self.name);
         self.put(&handle.id, &key, &serialized)?;
         Ok(())
     }

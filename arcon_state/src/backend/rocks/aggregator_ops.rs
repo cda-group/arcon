@@ -32,11 +32,7 @@ impl AggregatorOps for Rocks {
             assert_eq!(serialized[0], ACCUMULATOR_MARKER);
             let serialized = &serialized[1..];
             #[cfg(feature = "metrics")]
-            record_bytes_read(
-                &handle.get_name(),
-                serialized.len() as u64,
-                self.name.clone(),
-            );
+            record_bytes_read(&handle.get_name(), serialized.len() as u64, self.name);
             let current_accumulator = protobuf::deserialize(serialized)?;
             Ok(handle
                 .extra_data
@@ -58,11 +54,7 @@ impl AggregatorOps for Rocks {
         serialized.push(VALUE_MARKER);
         protobuf::serialize_into(&mut serialized, &value)?;
         #[cfg(feature = "metrics")]
-        record_bytes_written(
-            &handle.get_name(),
-            serialized.len() as u64,
-            self.name.clone(),
-        );
+        record_bytes_written(&handle.get_name(), serialized.len() as u64, self.name);
         let cf = self.get_cf_handle(&handle.id)?;
         // See the make_aggregating_merge function in this module. Its result is set as the
         // merging operator for this state.

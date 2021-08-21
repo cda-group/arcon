@@ -232,8 +232,8 @@ impl<IN: ArconType> Stream<IN> {
         let mut state_dir = self.ctx.app.arcon_conf().state_dir();
         let state_id = builder.state_id();
         state_dir.push(state_id.clone());
-
-        let backend = builder.create_backend(state_dir, state_id.clone());
+        let backend =
+            builder.create_backend(state_dir, Box::leak(state_id.clone().into_boxed_str()));
 
         let outgoing_channels = match builder.conf.parallelism_strategy {
             ParallelismStrategy::Static(num) => num,
