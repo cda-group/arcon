@@ -4,7 +4,7 @@
 use crate::{
     data::{ArconElement, ArconNever, ArconType},
     error::*,
-    index::ArconState,
+    index::{ArconState, EmptyState},
     stream::operator::{Operator, OperatorContext},
     util::ArconFnBounds,
 };
@@ -16,22 +16,20 @@ where
     F: Fn(&IN, &mut S) -> bool + ArconFnBounds,
     S: ArconState,
 {
-    state: S,
     udf: F,
-    _marker: PhantomData<fn(IN) -> bool>,
+    _marker: PhantomData<fn(IN, S) -> bool>,
 }
 
-impl<IN> Filter<IN, fn(&IN, &mut ()) -> bool, ()>
+impl<IN> Filter<IN, fn(&IN, &mut EmptyState) -> bool, EmptyState>
 where
     IN: ArconType,
 {
     #[allow(clippy::new_ret_no_self)]
     pub fn new(
         udf: impl Fn(&IN) -> bool + ArconFnBounds,
-    ) -> Filter<IN, impl Fn(&IN, &mut ()) -> bool + ArconFnBounds, ()> {
-        let udf = move |input: &IN, _: &mut ()| udf(input);
+    ) -> Filter<IN, impl Fn(&IN, &mut EmptyState) -> bool + ArconFnBounds, EmptyState> {
+        let udf = move |input: &IN, _: &mut EmptyState| udf(input);
         Filter {
-            state: (),
             udf,
             _marker: Default::default(),
         }
@@ -44,9 +42,8 @@ where
     F: Fn(&IN, &mut S) -> bool + ArconFnBounds,
     S: ArconState,
 {
-    pub fn stateful(state: S, udf: F) -> Self {
+    pub fn stateful(udf: F) -> Self {
         Filter {
-            state,
             udf,
             _marker: Default::default(),
         }
@@ -68,21 +65,13 @@ where
     fn handle_element(
         &mut self,
         element: ArconElement<IN>,
-        _: OperatorContext<Self>,
+        ctx: &mut OperatorContext<Self::TimerState, Self::OperatorState>,
     ) -> ArconResult<Self::ElementIterator> {
-        if (self.udf)(&element.data, &mut self.state) {
+        if (self.udf)(&element.data, ctx.state()) {
             Ok(Some(element))
         } else {
             Ok(None)
         }
     }
     crate::ignore_timeout!();
-
-    fn persist(&mut self) -> ArconResult<()> {
-        self.state.persist()?;
-        Ok(())
-    }
-    fn state(&mut self) -> &mut Self::OperatorState {
-        &mut self.state
-    }
 }

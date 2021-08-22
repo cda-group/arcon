@@ -4,6 +4,7 @@
 use crate::{
     data::{ArconElement, ArconNever, ArconType},
     error::ArconResult,
+    prelude::EmptyState,
     stream::operator::{Operator, OperatorContext},
 };
 use std::{
@@ -19,7 +20,6 @@ where
     IN: ArconType,
 {
     file: RefCell<File>,
-    op_state: (),
     _marker: PhantomData<IN>,
 }
 
@@ -39,7 +39,6 @@ where
 
         LocalFileSink {
             file,
-            op_state: (),
             _marker: PhantomData,
         }
     }
@@ -52,13 +51,13 @@ where
     type IN = IN;
     type OUT = ArconNever;
     type TimerState = ArconNever;
-    type OperatorState = ();
+    type OperatorState = EmptyState;
     type ElementIterator = std::iter::Empty<ArconElement<Self::OUT>>;
 
     fn handle_element(
         &mut self,
         element: ArconElement<IN>,
-        _ctx: OperatorContext<Self>,
+        _ctx: &mut OperatorContext<Self::TimerState, Self::OperatorState>,
     ) -> ArconResult<Self::ElementIterator> {
         if let Err(err) = writeln!(self.file.borrow_mut(), "{:?}", element.data) {
             eprintln!("Error while writing to file sink {}", err.to_string());
@@ -66,11 +65,6 @@ where
         Ok(std::iter::empty::<ArconElement<Self::OUT>>())
     }
     crate::ignore_timeout!();
-    crate::ignore_persist!();
-
-    fn state(&mut self) -> &mut Self::OperatorState {
-        &mut self.op_state
-    }
 }
 
 #[cfg(test)]
@@ -90,7 +84,8 @@ mod tests {
                 conf.set_arcon_time(ArconTime::Process);
             })
             .operator(OperatorBuilder {
-                constructor: Arc::new(move |_: Arc<Sled>| LocalFileSink::new(&file_path)),
+                operator: Arc::new(move || LocalFileSink::new(&file_path)),
+                state: Arc::new(|_| EmptyState),
                 conf: OperatorConf {
                     parallelism_strategy: ParallelismStrategy::Static(1),
                     ..Default::default()

@@ -18,16 +18,6 @@ pub struct MyState<B: Backend> {
     events: EagerValue<Event, B>,
 }
 
-impl<B: Backend> StateConstructor for MyState<B> {
-    type BackendType = B;
-
-    fn new(backend: Arc<Self::BackendType>) -> Self {
-        Self {
-            events: EagerValue::new("_events", backend),
-        }
-    }
-}
-
 fn main() {
     let conf = ApplicationConf {
         epoch_interval: 2500,
@@ -40,11 +30,14 @@ fn main() {
             conf.set_timestamp_extractor(|x: &Event| x.id);
         })
         .operator(OperatorBuilder {
-            constructor: Arc::new(|backend: Arc<Sled>| {
-                Map::stateful(MyState::new(backend), |event, state| {
+            operator: Arc::new(|| {
+                Map::stateful(|event, state: &mut MyState<_>| {
                     state.events().put(event)?;
                     Ok(event)
                 })
+            }),
+            state: Arc::new(|backend| MyState {
+                events: EagerValue::new("_events", backend),
             }),
             conf: Default::default(),
         })

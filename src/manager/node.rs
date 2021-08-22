@@ -5,14 +5,13 @@ use crate::{
     application::conf::logger::ArconLogger,
     data::{ArconMessage, Epoch, NodeID, StateID, Watermark},
     error::*,
-    index::{
-        ArconState, HashTable, IndexOps, LocalValue, StateConstructor, ValueIndex, EMPTY_STATE_ID,
-    },
+    index::{ArconState, HashTable, IndexOps, LocalValue, ValueIndex, EMPTY_STATE_ID},
     manager::{
         epoch::EpochEvent,
         query::{QueryManagerMsg, QueryManagerPort, TableRegistration},
         snapshot::{Snapshot, SnapshotEvent, SnapshotManagerPort},
     },
+    prelude::OperatorBuilder,
     reportable_error,
     stream::operator::Operator,
 };
@@ -93,9 +92,8 @@ pub struct NodeManagerState<B: Backend> {
     checkpoint_acks: HashSet<(NodeID, Epoch)>,
 }
 
-impl<B: Backend> StateConstructor for NodeManagerState<B> {
-    type BackendType = B;
-    fn new(backend: Arc<Self::BackendType>) -> Self {
+impl<B: Backend> NodeManagerState<B> {
+    fn new(backend: Arc<B>) -> Self {
         Self {
             watermarks: HashTable::with_capacity("_watermarks", backend.clone(), 64, 64),
             epochs: HashTable::with_capacity("_epochs", backend.clone(), 64, 64),
@@ -158,6 +156,7 @@ where
     /// Internal manager state
     manager_state: NodeManagerState<B>,
     latest_snapshot: Option<Snapshot>,
+    builder: OperatorBuilder<OP, B>,
     logger: ArconLogger,
 }
 
@@ -173,6 +172,7 @@ where
         in_channels: Vec<NodeID>,
         backend: Arc<B>,
         logger: ArconLogger,
+        builder: OperatorBuilder<OP, B>,
     ) -> Self {
         #[cfg(feature = "metrics")]
         {
@@ -196,6 +196,7 @@ where
             backend,
             latest_snapshot: None,
             logger,
+            builder,
         }
     }
 
@@ -304,7 +305,10 @@ where
 
                             if OP::OperatorState::has_tables() {
                                 if let Some(snapshot) = &self.latest_snapshot {
-                                    let mut state = OP::OperatorState::restore(snapshot.clone())?;
+                                    let mut state = OP::OperatorState::restore(
+                                        snapshot.clone(),
+                                        self.builder.state.clone(),
+                                    )?;
                                     for table in state.tables() {
                                         let registration = TableRegistration {
                                             epoch: epoch.epoch,

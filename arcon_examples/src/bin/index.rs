@@ -8,10 +8,8 @@ pub struct StreamState<B: Backend> {
     counters: EagerAppender<u64, B>,
 }
 
-impl<B: Backend> StateConstructor for StreamState<B> {
-    type BackendType = B;
-
-    fn new(backend: Arc<Self::BackendType>) -> Self {
+impl<B: Backend> StreamState<B> {
+    pub fn new(backend: Arc<B>) -> Self {
         Self {
             counter: LazyValue::new("_counter", backend.clone()),
             counters_map: HashTable::new("_counters_map", backend.clone()),

@@ -4,6 +4,7 @@
 use super::{hash_table::eager::EagerHashTable, IndexOps};
 use crate::{
     error::timer::{TimerExpiredError, TimerResult},
+    error::ArconResult,
     table::ImmutableTable,
 };
 use arcon_state::{
@@ -261,12 +262,12 @@ where
     V: Value,
     B: Backend,
 {
-    fn persist(&mut self) -> arcon_state::error::Result<()> {
+    fn persist(&mut self) -> ArconResult<()> {
         self.timeouts.persist()?;
         Ok(())
     }
     fn set_key(&mut self, _: u64) {}
-    fn table(&mut self) -> Result<Option<ImmutableTable>> {
+    fn table(&mut self) -> ArconResult<Option<ImmutableTable>> {
         Ok(None)
     }
 }
@@ -275,11 +276,12 @@ where
 mod tests {
     use super::*;
     use crate::test_utils::temp_backend;
+    use arcon_state::Sled;
     use std::sync::Arc;
 
     #[test]
     fn timer_index_test() {
-        let backend = Arc::new(temp_backend());
+        let backend = Arc::new(temp_backend::<Sled>());
         let mut timer = Timer::new("mytimer", backend);
 
         // Timer per key...

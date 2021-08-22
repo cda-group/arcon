@@ -1,4 +1,4 @@
-use arcon::{ignore_persist, ignore_timeout, prelude::*};
+use arcon::{ignore_timeout, prelude::*};
 use std::sync::Arc;
 
 #[cfg_attr(feature = "arcon_serde", derive(serde::Deserialize, serde::Serialize))]
@@ -11,16 +11,19 @@ pub struct CustomEvent {
 }
 
 #[derive(Default)]
-pub struct MyOperator(EmptyState);
+pub struct MyOperator;
 
 impl Operator for MyOperator {
     type IN = u64;
     type OUT = CustomEvent;
     type TimerState = ArconNever;
-    type OperatorState = ();
+    type OperatorState = EmptyState;
     type ElementIterator = std::iter::Once<ArconElement<Self::OUT>>;
 
-    fn on_start(&mut self, mut _ctx: OperatorContext<Self>) -> ArconResult<()> {
+    fn on_start(
+        &mut self,
+        _ctx: &mut OperatorContext<Self::TimerState, Self::OperatorState>,
+    ) -> ArconResult<()> {
         #[cfg(feature = "metrics")]
         _ctx.register_gauge("custom_gauge");
 
@@ -32,7 +35,7 @@ impl Operator for MyOperator {
     fn handle_element(
         &mut self,
         element: ArconElement<Self::IN>,
-        _ctx: OperatorContext<Self>,
+        _ctx: &mut OperatorContext<Self::TimerState, Self::OperatorState>,
     ) -> ArconResult<Self::ElementIterator> {
         let custom_event = CustomEvent { id: element.data };
 
@@ -49,27 +52,22 @@ impl Operator for MyOperator {
     }
 
     ignore_timeout!();
-    ignore_persist!();
-
-    fn state(&mut self) -> &mut Self::OperatorState {
-        &mut self.0
-    }
 }
 
 #[derive(Default)]
-pub struct TimerOperator(EmptyState);
+pub struct TimerOperator;
 
 impl Operator for TimerOperator {
     type IN = CustomEvent;
     type OUT = CustomEvent;
     type TimerState = u64;
-    type OperatorState = ();
+    type OperatorState = EmptyState;
     type ElementIterator = std::iter::Once<ArconElement<Self::OUT>>;
 
     fn handle_element(
         &mut self,
         element: ArconElement<Self::IN>,
-        mut ctx: OperatorContext<Self>,
+        ctx: &mut OperatorContext<Self::TimerState, Self::OperatorState>,
     ) -> ArconResult<Self::ElementIterator> {
         let current_time = ctx.current_time()?;
         let key = element.data.get_key();
@@ -85,16 +83,10 @@ impl Operator for TimerOperator {
     fn handle_timeout(
         &mut self,
         timeout: Self::TimerState,
-        ctx: OperatorContext<Self>,
+        ctx: &mut OperatorContext<Self::TimerState, Self::OperatorState>,
     ) -> ArconResult<Option<Self::ElementIterator>> {
         info!(ctx.log(), "Got a timer timeout for {:?}", timeout);
         Ok(None)
-    }
-
-    ignore_persist!();
-
-    fn state(&mut self) -> &mut Self::OperatorState {
-        &mut self.0
     }
 }
 
@@ -104,11 +96,13 @@ fn main() {
             conf.set_timestamp_extractor(|x: &u64| *x);
         })
         .operator(OperatorBuilder {
-            constructor: Arc::new(|_: Arc<Sled>| MyOperator::default()),
+            operator: Arc::new(|| MyOperator),
+            state: Arc::new(|_| EmptyState),
             conf: Default::default(),
         })
         .operator(OperatorBuilder {
-            constructor: Arc::new(|_: Arc<Sled>| TimerOperator::default()),
+            operator: Arc::new(|| TimerOperator),
+            state: Arc::new(|_| EmptyState),
             conf: Default::default(),
         })
         .build();

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use super::{HashTable, IndexOps, IndexValue, ValueIndex};
+use crate::error::ArconResult;
 use crate::table::ImmutableTable;
 use arcon_state::{error::*, Backend};
 use std::{borrow::Cow, sync::Arc};
@@ -76,7 +77,7 @@ where
     B: Backend,
 {
     #[inline]
-    fn persist(&mut self) -> Result<()> {
+    fn persist(&mut self) -> ArconResult<()> {
         self.hash_table.persist()
     }
     #[inline]
@@ -84,7 +85,7 @@ where
         self.current_key = key;
     }
 
-    fn table(&mut self) -> Result<Option<ImmutableTable>> {
+    fn table(&mut self) -> ArconResult<Option<ImmutableTable>> {
         let (_, values) = self.hash_table.full_iter()?;
         let mut table = V::table();
         table
@@ -101,6 +102,7 @@ where
 mod tests {
     use super::*;
     use crate::test_utils::temp_backend;
+    use arcon_state::Sled;
     use eager::EagerValue;
     use std::sync::Arc;
 
@@ -131,13 +133,13 @@ mod tests {
 
     #[test]
     fn lazy_value_index_test() {
-        let backend = Arc::new(temp_backend());
+        let backend = Arc::new(temp_backend::<Sled>());
         let index: LazyValue<u64, _> = LazyValue::new("myvalue", backend);
         assert!(index_test(index).is_ok());
     }
     #[test]
     fn eager_value_index_test() {
-        let backend = Arc::new(temp_backend());
+        let backend = Arc::new(temp_backend::<Sled>());
         let index: EagerValue<u64, _> = EagerValue::new("myvalue", backend);
         assert!(index_test(index).is_ok());
     }

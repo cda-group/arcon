@@ -8,8 +8,6 @@ pub mod sink;
 /// Available window operators
 pub mod window;
 
-mod chain;
-
 #[cfg(feature = "metrics")]
 use metrics::{gauge, increment_counter, register_counter, register_gauge};
 
@@ -20,7 +18,6 @@ use crate::{
     index::{timer::ArconTimer, ArconState},
 };
 use prost::Message;
-use std::cell::RefCell;
 
 /// Defines the methods an `Operator` must implement
 pub trait Operator: Send + Sized {
@@ -36,7 +33,10 @@ pub trait Operator: Send + Sized {
     type ElementIterator: IntoIterator<Item = ArconElement<Self::OUT>> + 'static;
 
     /// Determines what the `Operator` runs before beginning to process Elements
-    fn on_start(&mut self, mut _ctx: OperatorContext<Self>) -> ArconResult<()> {
+    fn on_start(
+        &mut self,
+        _ctx: &mut OperatorContext<Self::TimerState, Self::OperatorState>,
+    ) -> ArconResult<()> {
         Ok(())
     }
 
@@ -44,23 +44,15 @@ pub trait Operator: Send + Sized {
     fn handle_element(
         &mut self,
         element: ArconElement<Self::IN>,
-        ctx: OperatorContext<Self>,
+        ctx: &mut OperatorContext<Self::TimerState, Self::OperatorState>,
     ) -> ArconResult<Self::ElementIterator>;
 
     /// Determines how the `Operator` handles timeouts it registered earlier when they are triggered
     fn handle_timeout(
         &mut self,
         timeout: Self::TimerState,
-        ctx: OperatorContext<Self>,
+        ctx: &mut OperatorContext<Self::TimerState, Self::OperatorState>,
     ) -> ArconResult<Option<Self::ElementIterator>>;
-
-    /// Determines how the `Operator` persists its state
-    fn persist(&mut self) -> ArconResult<()>;
-
-    /// A get function to the operator's state.
-    ///
-    /// Use the ``ignore_state!()`` macro to indicate its an empty state.
-    fn state(&mut self) -> &mut Self::OperatorState;
 }
 
 /// Helper macro to implement an empty ´handle_timeout` function
@@ -70,63 +62,52 @@ macro_rules! ignore_timeout {
         fn handle_timeout(
             &mut self,
             _timeout: Self::TimerState,
-            _ctx: OperatorContext<Self>,
+            _ctx: &mut OperatorContext<Self::TimerState, Self::OperatorState>,
         ) -> ArconResult<Option<Self::ElementIterator>> {
             Ok(None)
         }
     };
 }
 
-/// Helper macro to implement an empty ´persist` function
-#[macro_export]
-macro_rules! ignore_persist {
-    () => {
-        fn persist(&mut self) -> ArconResult<()> {
-            Ok(())
-        }
-    };
-}
-
-/// Helper macro to implement an empty ´state` function
-#[macro_export]
-macro_rules! ignore_state {
-    () => {
-        fn state(&mut self) -> &mut Self::OperatorState {
-            crate::index::EmptyState
-        }
-    };
-}
-
 /// Context Available to an Arcon Operator
-#[derive(Clone)]
-pub struct OperatorContext<'b, 'd, OP>
+pub struct OperatorContext<TimerState, OperatorState>
 where
-    OP: Operator,
+    TimerState: Message + Clone + Default,
+    OperatorState: ArconState,
 {
     /// A Timer that can be used to schedule event timers
-    timer: &'b RefCell<Box<dyn ArconTimer<Key = u64, Value = OP::TimerState>>>,
+    pub(crate) timer: Box<dyn ArconTimer<Key = u64, Value = TimerState>>,
+    /// State of the Operator
+    pub(crate) state: OperatorState,
     /// Reference to logger
-    logger: &'d ArconLogger,
+    pub(crate) logger: ArconLogger,
     #[cfg(feature = "metrics")]
-    name: &'d str,
+    name: String,
 }
 
-impl<'b, 'd, OP> OperatorContext<'b, 'd, OP>
+impl<TimerState, OperatorState> OperatorContext<TimerState, OperatorState>
 where
-    OP: Operator,
+    TimerState: Message + Clone + Default,
+    OperatorState: ArconState,
 {
     #[inline]
     pub(crate) fn new(
-        timer: &'b RefCell<Box<dyn ArconTimer<Key = u64, Value = OP::TimerState>>>,
-        logger: &'d ArconLogger,
-        #[cfg(feature = "metrics")] name: &'d str,
+        timer: Box<dyn ArconTimer<Key = u64, Value = TimerState>>,
+        state: OperatorState,
+        logger: ArconLogger,
+        #[cfg(feature = "metrics")] name: String,
     ) -> Self {
         OperatorContext {
             timer,
+            state,
             logger,
             #[cfg(feature = "metrics")]
             name,
         }
+    }
+    #[inline]
+    pub fn state(&mut self) -> &mut OperatorState {
+        &mut self.state
     }
 
     /// Enable users to log within an Operator
@@ -134,13 +115,13 @@ where
     /// `error!(ctx.log(), "Something bad happened!");
     #[inline]
     pub fn log(&self) -> &ArconLogger {
-        self.logger
+        &self.logger
     }
 
     /// Get current event time
     #[inline]
     pub fn current_time(&mut self) -> StateResult<u64> {
-        self.timer.borrow().get_time()
+        self.timer.get_time()
     }
 
     /// Schedule at a specific time in the future
@@ -152,9 +133,9 @@ where
         &mut self,
         key: I,
         time: u64,
-        entry: OP::TimerState,
-    ) -> TimerResult<OP::TimerState> {
-        self.timer.borrow_mut().schedule_at(key.into(), time, entry)
+        entry: TimerState,
+    ) -> TimerResult<TimerState> {
+        self.timer.schedule_at(key.into(), time, entry)
     }
 
     #[cfg(feature = "metrics")]

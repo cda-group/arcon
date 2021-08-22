@@ -4,7 +4,7 @@
 use crate::{
     data::{ArconElement, ArconNever, ArconType},
     error::*,
-    index::ArconState,
+    index::{ArconState, EmptyState},
     stream::operator::{Operator, OperatorContext},
     util::ArconFnBounds,
 };
@@ -17,12 +17,11 @@ where
     F: Fn(IN, &mut S) -> ArconResult<OUT> + ArconFnBounds,
     S: ArconState,
 {
-    state: S,
     udf: F,
-    _marker: PhantomData<fn(IN) -> ArconResult<OUT>>,
+    _marker: PhantomData<fn(IN, S) -> ArconResult<OUT>>,
 }
 
-impl<IN, OUT> Map<IN, OUT, fn(IN, &mut ()) -> ArconResult<OUT>, ()>
+impl<IN, OUT> Map<IN, OUT, fn(IN, &mut EmptyState) -> ArconResult<OUT>, EmptyState>
 where
     IN: ArconType,
     OUT: ArconType,
@@ -30,14 +29,14 @@ where
     #[allow(clippy::new_ret_no_self)]
     pub fn new(
         udf: impl Fn(IN) -> OUT + ArconFnBounds,
-    ) -> Map<IN, OUT, impl Fn(IN, &mut ()) -> ArconResult<OUT> + ArconFnBounds, ()> {
-        let udf = move |input: IN, _: &mut ()| {
+    ) -> Map<IN, OUT, impl Fn(IN, &mut EmptyState) -> ArconResult<OUT> + ArconFnBounds, EmptyState>
+    {
+        let udf = move |input: IN, _: &mut EmptyState| {
             let output = udf(input);
             Ok(output)
         };
 
         Map {
-            state: (),
             udf,
             _marker: Default::default(),
         }
@@ -51,9 +50,8 @@ where
     F: Fn(IN, &mut S) -> ArconResult<OUT> + ArconFnBounds,
     S: ArconState,
 {
-    pub fn stateful(state: S, udf: F) -> Self {
+    pub fn stateful(udf: F) -> Self {
         Map {
-            state,
             udf,
             _marker: Default::default(),
         }
@@ -76,9 +74,9 @@ where
     fn handle_element(
         &mut self,
         element: ArconElement<IN>,
-        _: OperatorContext<Self>,
+        ctx: &mut OperatorContext<Self::TimerState, Self::OperatorState>,
     ) -> ArconResult<Self::ElementIterator> {
-        let data = (self.udf)(element.data, &mut self.state)?;
+        let data = (self.udf)(element.data, ctx.state())?;
         Ok(std::iter::once(ArconElement::with_timestamp(
             data,
             element.timestamp,
@@ -86,12 +84,4 @@ where
     }
 
     crate::ignore_timeout!();
-
-    fn persist(&mut self) -> ArconResult<()> {
-        self.state.persist()?;
-        Ok(())
-    }
-    fn state(&mut self) -> &mut Self::OperatorState {
-        &mut self.state
-    }
 }

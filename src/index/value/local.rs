@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
+    error::ArconResult,
     index::{IndexOps, ValueIndex},
     table::ImmutableTable,
 };
@@ -99,7 +100,7 @@ where
     V: Value,
     B: Backend,
 {
-    fn persist(&mut self) -> Result<()> {
+    fn persist(&mut self) -> ArconResult<()> {
         if let Some(data) = &self.data {
             // only push data to the handle if it has actually been modified
             if self.modified {
@@ -110,7 +111,7 @@ where
         Ok(())
     }
     fn set_key(&mut self, _: u64) {}
-    fn table(&mut self) -> Result<Option<ImmutableTable>> {
+    fn table(&mut self) -> ArconResult<Option<ImmutableTable>> {
         Ok(None)
     }
 }

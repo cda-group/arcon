@@ -1,6 +1,7 @@
 // Copyright (c) 2021, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
+use super::api::Assigner;
 use crate::{data::ArconType, stream::time::ArconTime};
 use hocon::HoconLoader;
 use serde::Deserialize;
@@ -119,4 +120,10 @@ impl<S: ArconType> Default for SourceConf<S> {
             name: format!("source_{}", uuid::Uuid::new_v4().to_string()),
         }
     }
+}
+
+#[derive(Clone)]
+pub struct WindowConf {
+    pub assigner: Assigner,
+    pub kind: StreamKind,
 }
