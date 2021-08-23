@@ -155,6 +155,7 @@ impl VecOps for Sled {
             len += 1;
             protobuf::serialize_into(&mut serialized, &elem)?;
         }
+        #[cfg(feature = "metrics")]
         record_bytes_written(handle.name(), serialized.len() as u64, self.name.as_str());
 
         // fill in the length
@@ -176,6 +177,7 @@ impl VecOps for Sled {
             if storage.is_empty() {
                 return Ok(0);
             }
+            #[cfg(feature = "metrics")]
             record_bytes_read(handle.name(), storage.len() as u64, self.name.as_str());
             let len = fixed_bytes::deserialize_from(&mut storage.as_ref())?;
             Ok(len)
