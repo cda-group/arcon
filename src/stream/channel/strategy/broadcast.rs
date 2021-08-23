@@ -7,6 +7,7 @@ use crate::{
     stream::channel::{strategy::send, Channel},
 };
 use kompact::prelude::{ComponentDefinition, SerError};
+use std::sync::Arc;
 
 /// A Broadcast strategy for one-to-many message sending
 #[allow(dead_code)]
@@ -17,7 +18,7 @@ where
     /// A buffer pool of EventBuffer's
     buffer_pool: BufferPool<ArconEventWrapper<A>>,
     /// Vec of Channels that messages are broadcasted to
-    channels: Vec<Channel<A>>,
+    channels: Vec<Arc<Channel<A>>>,
     /// A buffer holding outgoing events
     curr_buffer: BufferWriter<ArconEventWrapper<A>>,
     /// An Identifier that is embedded in each outgoing message
@@ -53,7 +54,7 @@ where
 
         Broadcast {
             buffer_pool,
-            channels,
+            channels: channels.into_iter().map(Arc::new).collect(),
             curr_buffer,
             sender_id,
             pool_info,
@@ -61,22 +62,56 @@ where
     }
 
     #[inline]
-    pub fn add<CD>(&mut self, event: ArconEvent<A>, source: &CD)
-    where
-        CD: ComponentDefinition + Sized + 'static,
-    {
-        if let ArconEvent::Element(_) = &event {
-            if let Some(e) = self.curr_buffer.push(event.into()) {
-                // buffer is full, flush.
-                self.flush(source);
-                self.curr_buffer.push(e);
-            }
-        } else if let Some(e) = self.curr_buffer.push(event.into()) {
-            self.flush(source);
+    fn push_event(&mut self, event: ArconEvent<A>) -> Option<ArconMessage<A>> {
+        self.curr_buffer.push(event.into()).map(|e| {
+            let msg = self.message();
             self.curr_buffer.push(e);
-            self.flush(source);
-        } else {
-            self.flush(source);
+            msg
+        })
+    }
+    #[inline]
+    fn message(&mut self) -> ArconMessage<A> {
+        let reader = self.curr_buffer.reader();
+        let msg = ArconMessage {
+            events: reader,
+            sender: self.sender_id,
+        };
+
+        // TODO: Should probably not busy wait here..
+        self.curr_buffer = self.buffer_pool.get();
+
+        msg
+    }
+
+    #[inline]
+    pub fn add(&mut self, event: ArconEvent<A>) -> Vec<(Arc<Channel<A>>, ArconMessage<A>)> {
+        match &event {
+            ArconEvent::Element(_) => self
+                .push_event(event)
+                .map(move |msg| {
+                    self.channels
+                        .iter()
+                        .map(|c| (c.clone(), msg.clone()))
+                        .collect()
+                })
+                .unwrap_or_else(Vec::new),
+            _ => match self.push_event(event) {
+                Some(msg) => {
+                    let msg_two = self.message();
+                    self.channels
+                        .iter()
+                        .map(|c| (c.clone(), msg.clone()))
+                        .chain(self.channels.iter().map(|c| (c.clone(), msg_two.clone())))
+                        .collect()
+                }
+                None => {
+                    let msg = self.message();
+                    self.channels
+                        .iter()
+                        .map(|c| (c.clone(), msg.clone()))
+                        .collect()
+                }
+            },
         }
     }
 
@@ -128,9 +163,9 @@ mod tests {
     use super::{Channel, *};
     use crate::{
         application::Application,
-        data::ArconElement,
+        data::{ArconElement, Watermark},
         stream::{
-            channel::strategy::{tests::*, ChannelStrategy},
+            channel::strategy::{send, tests::*, ChannelStrategy},
             node::debug::DebugNode,
         },
     };
@@ -167,9 +202,14 @@ mod tests {
         comp.on_definition(|cd| {
             for _i in 0..total_msgs {
                 let elem = ArconElement::new(Input { id: 1 });
-                let _ = channel_strategy.add(ArconEvent::Element(elem), cd);
+                for (channel, msg) in channel_strategy.push(ArconEvent::Element(elem)) {
+                    send(&channel, msg, cd).unwrap();
+                }
             }
-            channel_strategy.flush(cd);
+            // force a flush through a marker
+            for (channel, msg) in channel_strategy.push(ArconEvent::Watermark(Watermark::new(0))) {
+                send(&channel, msg, cd).unwrap();
+            }
         });
 
         std::thread::sleep(std::time::Duration::from_secs(1));

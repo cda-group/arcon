@@ -6,7 +6,7 @@ use crate::{
     dataflow::conf::{DefaultBackend, OperatorConf, SourceConf},
     index::{ArconState, EMPTY_STATE_ID},
     stream::{
-        operator::{window::WindowFunction, Operator},
+        operator::Operator,
         source::Source,
         time::{ArconTime, Time},
     },
@@ -18,10 +18,21 @@ use std::sync::Arc;
 ///
 /// Defines everything needed in order for Arcon to instantiate
 /// and manage an Operator during runtime.
+///
+/// ```no_run
+/// use arcon::prelude::*;
+/// let builder = OperatorBuilder {
+///    operator: Arc::new(|| Map::new(|x: u64| x + 10)),
+///    state: Arc::new(|_backend: Arc<Sled>| EmptyState),
+///    conf: Default::default(),
+/// };
+///```
 #[derive(Clone)]
 pub struct OperatorBuilder<OP: Operator, Backend = DefaultBackend> {
     /// Operator Constructor
-    pub constructor: Arc<dyn Fn(Arc<Backend>) -> OP + Send + Sync + 'static>,
+    pub operator: Arc<dyn Fn() -> OP + Send + Sync + 'static>,
+    /// State Constructor
+    pub state: Arc<dyn Fn(Arc<Backend>) -> OP::OperatorState + Send + Sync + 'static>,
     /// Operator Config
     pub conf: OperatorConf,
 }
@@ -34,7 +45,6 @@ impl<OP: Operator, Backend: arcon_state::Backend> OperatorBuilder<OP, Backend> {
     ) -> Arc<Backend> {
         Arc::new(Backend::create(&state_dir, String::from(name)).unwrap())
     }
-
     pub(crate) fn state_id(&self) -> StateID {
         let mut state_id = OP::OperatorState::STATE_ID.to_owned();
         if state_id == EMPTY_STATE_ID {
@@ -100,6 +110,7 @@ pub struct ParallelSourceBuilder<S: Source, Backend = DefaultBackend> {
 }
 
 /// Enum containing different window assigner types
+#[derive(Clone)]
 pub enum Assigner {
     Sliding {
         length: Time,
@@ -110,20 +121,4 @@ pub enum Assigner {
         length: Time,
         late_arrival: Time,
     },
-}
-
-/// Window Builder
-///
-/// Contains everything needed to create a Window Operator
-pub struct WindowBuilder<W, B>
-where
-    W: WindowFunction + 'static,
-    B: Backend,
-{
-    /// Type of Window Assigner
-    pub assigner: Assigner,
-    /// Define how the WindowFunction is created
-    pub function: Arc<dyn Fn(Arc<B>) -> W + Send + Sync + 'static>,
-    /// Operator Conf used by the Window Operator
-    pub conf: OperatorConf,
 }

@@ -41,7 +41,6 @@
 //!         scrape_interval: 1s
 //!          static_configs:
 //!           - targets: ['localhost:9000']
-
 //!
 //!
 
@@ -67,6 +66,7 @@ pub use crate::data::{ArconType, VersionId};
 #[doc(hidden)]
 pub use crate::{
     data::arrow::ToArrow,
+    error::ArconResult,
     table::{ImmutableTable, MutableTable, RecordBatchBuilder, RECORD_BATCH_SIZE},
 };
 #[doc(hidden)]
@@ -122,17 +122,17 @@ mod util;
 #[cfg(test)]
 pub mod test_utils {
     use arcon_allocator::Allocator;
+    use arcon_state::backend::Backend;
     use once_cell::sync::Lazy;
     use std::sync::{Arc, Mutex};
 
     pub static ALLOCATOR: Lazy<Arc<Mutex<Allocator>>> =
         Lazy::new(|| Arc::new(Mutex::new(Allocator::new(1073741824))));
 
-    pub fn temp_backend() -> arcon_state::Sled {
-        use arcon_state::backend::Backend;
+    pub fn temp_backend<B: Backend>() -> B {
         let test_dir = tempfile::tempdir().unwrap();
         let path = test_dir.path();
-        arcon_state::Sled::create(path, "testDB".to_string()).unwrap()
+        B::create(path, "testDB".to_string()).unwrap()
     }
 }
 
@@ -142,27 +142,20 @@ pub mod client {
 
 /// Helper module that imports everything related to arcon into scope
 pub mod prelude {
-    /*
-    #[cfg(feature = "socket")]
-    pub use crate::stream::{
-        operator::sink::socket::SocketSink,
-        source::socket::{SocketKind, SocketSource},
-    };
-    */
     pub use crate::{
         application::conf::{logger::LoggerType, ApplicationConf},
         application::{Application, AssembledApplication, Stream},
         data::{ArconElement, ArconNever, ArconType, StateID, VersionId},
         dataflow::{
-            api::{Assigner, OperatorBuilder, SourceBuilder, WindowBuilder},
-            conf::{OperatorConf, ParallelismStrategy, SourceConf, StreamKind},
+            api::{Assigner, OperatorBuilder, SourceBuilder},
+            conf::{OperatorConf, ParallelismStrategy, SourceConf, StreamKind, WindowConf},
         },
         manager::snapshot::Snapshot,
         stream::{
             operator::{
                 function::{Filter, FlatMap, Map, MapInPlace},
                 sink::local_file::LocalFileSink,
-                window::{AppenderWindowFn, ArrowWindowFn, IncrementalWindowFn, WindowAssigner},
+                window::{WindowAssigner, WindowState},
                 Operator, OperatorContext,
             },
             source::{schema::ProtoSchema, Source},
@@ -177,7 +170,6 @@ pub mod prelude {
     pub use crate::stream::source::schema::JsonSchema;
     #[cfg(feature = "kafka")]
     pub use rdkafka::config::ClientConfig;
-    //pub use crate::stream::operator::sink::kafka::KafkaSink;
 
     pub use crate::error::{timer::TimerExpiredError, ArconResult, StateResult};
 
@@ -204,8 +196,9 @@ pub mod prelude {
     };
 
     pub use crate::index::{
-        AppenderIndex, EagerAppender, EagerHashTable, EagerValue, EmptyState, HashTable, IndexOps,
-        LazyValue, LocalValue, StateConstructor, Timer as ArconTimer, ValueIndex,
+        timer, AppenderIndex, AppenderWindow, ArrowWindow, EagerAppender, EagerHashTable,
+        EagerValue, EmptyState, HashTable, IncrementalWindow, IndexOps, LazyValue, LocalValue,
+        ValueIndex,
     };
 
     pub use prost::*;

@@ -241,6 +241,13 @@ pub(crate) fn node_manager_constructor<OP: Operator + 'static, B: Backend>(
 
             let max_key = app.conf.max_key as usize;
 
+            #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
+            let perf_events = builder.conf.perf_events.clone();
+            // Fetch the Operator constructor from the builder
+            let operator = builder.operator.clone();
+            // Fetch the Operator state constructor from the builder
+            let operator_state = builder.state.clone();
+
             // Define the NodeManager
             let manager = NodeManager::<OP, B>::new(
                 descriptor.clone(),
@@ -249,6 +256,7 @@ pub(crate) fn node_manager_constructor<OP: Operator + 'static, B: Backend>(
                 in_channels.clone(),
                 backend.clone(),
                 logger.clone(),
+                builder,
             );
             // Create the actual NodeManager component
             let manager_comp = app.ctrl_system().create(|| manager);
@@ -268,8 +276,6 @@ pub(crate) fn node_manager_constructor<OP: Operator + 'static, B: Backend>(
 
             // Fetch PoolInfo object that ChannelStrategies use to organise their buffers
             let pool_info = app.get_pool_info();
-            // Fetch the Operator constructor from the builder
-            let operator = builder.constructor;
 
             // Create `instances` number of Nodes and add them into the NodeManager
             for (curr_node_id, _) in (0..instances).enumerate() {
@@ -285,12 +291,13 @@ pub(crate) fn node_manager_constructor<OP: Operator + 'static, B: Backend>(
                         max_key as u64,
                         channel_kind,
                     ),
-                    operator(backend.clone()),
+                    operator(),
+                    operator_state(backend.clone()),
                     NodeState::new(node_id, in_channels.clone(), backend.clone()),
                     backend.clone(),
                     app.arcon_logger.clone(),
                     #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
-                    builder.conf.perf_events.clone(),
+                    perf_events.clone(),
                 );
 
                 let node_comp = app.data_system().create(|| node);

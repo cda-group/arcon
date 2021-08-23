@@ -4,10 +4,10 @@
 use crate::{
     data::{ArconElement, ArconNever, ArconType},
     error::ArconResult,
+    index::EmptyState,
     stream::operator::{Operator, OperatorContext},
 };
 use ::serde::Serialize;
-use arcon_state::Backend;
 use bytes::Bytes;
 use futures::{channel, executor::block_on, SinkExt, StreamExt};
 use kompact::prelude::*;
@@ -27,7 +27,6 @@ where
 {
     tx_channel: channel::mpsc::Sender<Bytes>,
     runtime_handle: Handle,
-    op_state: (),
     _handle: JoinHandle<()>,
     _marker: PhantomData<IN>,
 }
@@ -72,7 +71,6 @@ where
         SocketSink {
             tx_channel: tx,
             runtime_handle,
-            op_state: (),
             _handle: th,
             _marker: PhantomData,
         }
@@ -86,13 +84,14 @@ where
     type IN = IN;
     type OUT = ArconNever;
     type TimerState = ArconNever;
-    type OperatorState = ();
+    type OperatorState = EmptyState;
+    type ElementIterator = std::iter::Empty<ArconElement<Self::OUT>>;
 
     fn handle_element(
         &mut self,
         element: ArconElement<Self::IN>,
-        _ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> ArconResult<()> {
+        _ctx: &mut OperatorContext<Self::TimerState, Self::OperatorState>,
+    ) -> ArconResult<Self::ElementIterator> {
         let mut tx = self.tx_channel.clone();
         let fmt_data = {
             if let Ok(mut json) = serde_json::to_string(&element.data) {
@@ -110,13 +109,9 @@ where
             }
         };
         self.runtime_handle.spawn(req_dispatch);
-        Ok(())
+        Ok(std::iter::empty())
     }
     crate::ignore_timeout!();
-    crate::ignore_persist!();
-    fn state(&mut self) -> &mut Self::OperatorState {
-        &mut self.op_state
-    }
 }
 
 #[cfg(test)]
@@ -138,7 +133,8 @@ mod tests {
                         conf.set_arcon_time(ArconTime::Process);
                     })
                     .operator(OperatorBuilder {
-                        constructor: Arc::new(move |_: Arc<Sled>| SocketSink::udp(addr)),
+                        operator: Arc::new(move || SocketSink::udp(addr)),
+                        state: Arc::new(|_| EmptyState),
                         conf: OperatorConf {
                             parallelism_strategy: ParallelismStrategy::Static(1),
                             ..Default::default()

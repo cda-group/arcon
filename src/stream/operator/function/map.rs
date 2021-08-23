@@ -4,12 +4,10 @@
 use crate::{
     data::{ArconElement, ArconNever, ArconType},
     error::*,
-    index::ArconState,
+    index::{ArconState, EmptyState},
     stream::operator::{Operator, OperatorContext},
     util::ArconFnBounds,
 };
-use arcon_state::Backend;
-use kompact::prelude::ComponentDefinition;
 use std::marker::PhantomData;
 
 pub struct Map<IN, OUT, F, S>
@@ -19,12 +17,11 @@ where
     F: Fn(IN, &mut S) -> ArconResult<OUT> + ArconFnBounds,
     S: ArconState,
 {
-    state: S,
     udf: F,
-    _marker: PhantomData<fn(IN) -> ArconResult<OUT>>,
+    _marker: PhantomData<fn(IN, S) -> ArconResult<OUT>>,
 }
 
-impl<IN, OUT> Map<IN, OUT, fn(IN, &mut ()) -> ArconResult<OUT>, ()>
+impl<IN, OUT> Map<IN, OUT, fn(IN, &mut EmptyState) -> ArconResult<OUT>, EmptyState>
 where
     IN: ArconType,
     OUT: ArconType,
@@ -32,14 +29,14 @@ where
     #[allow(clippy::new_ret_no_self)]
     pub fn new(
         udf: impl Fn(IN) -> OUT + ArconFnBounds,
-    ) -> Map<IN, OUT, impl Fn(IN, &mut ()) -> ArconResult<OUT> + ArconFnBounds, ()> {
-        let udf = move |input: IN, _: &mut ()| {
+    ) -> Map<IN, OUT, impl Fn(IN, &mut EmptyState) -> ArconResult<OUT> + ArconFnBounds, EmptyState>
+    {
+        let udf = move |input: IN, _: &mut EmptyState| {
             let output = udf(input);
             Ok(output)
         };
 
         Map {
-            state: (),
             udf,
             _marker: Default::default(),
         }
@@ -53,9 +50,8 @@ where
     F: Fn(IN, &mut S) -> ArconResult<OUT> + ArconFnBounds,
     S: ArconState,
 {
-    pub fn stateful(state: S, udf: F) -> Self {
+    pub fn stateful(udf: F) -> Self {
         Map {
-            state,
             udf,
             _marker: Default::default(),
         }
@@ -73,27 +69,19 @@ where
     type OUT = OUT;
     type TimerState = ArconNever;
     type OperatorState = S;
+    type ElementIterator = std::iter::Once<ArconElement<Self::OUT>>;
 
     fn handle_element(
         &mut self,
         element: ArconElement<IN>,
-        mut ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> ArconResult<()> {
-        ctx.output(ArconElement {
-            data: (self.udf)(element.data, &mut self.state)?,
-            timestamp: element.timestamp,
-        });
-
-        Ok(())
+        ctx: &mut OperatorContext<Self::TimerState, Self::OperatorState>,
+    ) -> ArconResult<Self::ElementIterator> {
+        let data = (self.udf)(element.data, ctx.state())?;
+        Ok(std::iter::once(ArconElement::with_timestamp(
+            data,
+            element.timestamp,
+        )))
     }
 
     crate::ignore_timeout!();
-
-    fn persist(&mut self) -> ArconResult<()> {
-        self.state.persist()?;
-        Ok(())
-    }
-    fn state(&mut self) -> &mut Self::OperatorState {
-        &mut self.state
-    }
 }

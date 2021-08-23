@@ -5,14 +5,13 @@ use crate::{
     application::conf::logger::ArconLogger,
     data::{ArconMessage, Epoch, NodeID, StateID, Watermark},
     error::*,
-    index::{
-        ArconState, HashTable, IndexOps, LocalValue, StateConstructor, ValueIndex, EMPTY_STATE_ID,
-    },
+    index::{ArconState, HashTable, IndexOps, LocalValue, ValueIndex, EMPTY_STATE_ID},
     manager::{
         epoch::EpochEvent,
         query::{QueryManagerMsg, QueryManagerPort, TableRegistration},
         snapshot::{Snapshot, SnapshotEvent, SnapshotManagerPort},
     },
+    prelude::OperatorBuilder,
     reportable_error,
     stream::operator::Operator,
 };
@@ -24,10 +23,9 @@ use arcon_macros::ArconState;
 use arcon_state::Backend;
 use fxhash::FxHashMap;
 use kompact::{component::AbstractComponent, prelude::*};
-
 #[cfg(feature = "metrics")]
 use std::time::Instant;
-use std::{collections::HashSet, fs, sync::Arc};
+use std::{collections::HashSet, sync::Arc};
 
 pub type AbstractNode<IN> = (
     Arc<dyn AbstractComponent<Message = ArconMessage<IN>>>,
@@ -95,9 +93,8 @@ pub struct NodeManagerState<B: Backend> {
     checkpoint_acks: HashSet<(NodeID, Epoch)>,
 }
 
-impl<B: Backend> StateConstructor for NodeManagerState<B> {
-    type BackendType = B;
-    fn new(backend: Arc<Self::BackendType>) -> Self {
+impl<B: Backend> NodeManagerState<B> {
+    fn new(backend: Arc<B>) -> Self {
         Self {
             watermarks: HashTable::with_capacity("_watermarks", backend.clone(), 64, 64),
             epochs: HashTable::with_capacity("_epochs", backend.clone(), 64, 64),
@@ -160,6 +157,7 @@ where
     /// Internal manager state
     manager_state: NodeManagerState<B>,
     latest_snapshot: Option<Snapshot>,
+    builder: OperatorBuilder<OP, B>,
     logger: ArconLogger,
 }
 
@@ -175,12 +173,12 @@ where
         in_channels: Vec<NodeID>,
         backend: Arc<B>,
         logger: ArconLogger,
+        builder: OperatorBuilder<OP, B>,
     ) -> Self {
         #[cfg(feature = "metrics")]
         {
             register_gauge!("nodes", "node_manager" => state_id.clone());
             register_histogram!("checkpoint_execution_time_ms", "node_manager" => state_id.clone());
-            register_gauge!("last_checkpoint_size", "node_manager"=> state_id.clone());
         }
         NodeManager {
             ctx: ComponentContext::uninitialised(),
@@ -199,6 +197,7 @@ where
             backend,
             latest_snapshot: None,
             logger,
+            builder,
         }
     }
 
@@ -231,12 +230,6 @@ where
                     self.state_id.clone(),
                     snapshot.clone(),
                 ));
-
-                #[cfg(feature = "metrics")]
-                {
-                    let metadata = fs::metadata(checkpoint_dir.clone())?;
-                    gauge!("last_checkpoint_size", metadata.len() as f64,"node_manager" => self.state_id.clone());
-                }
 
                 self.latest_snapshot = Some(snapshot);
             }
@@ -292,6 +285,7 @@ where
                             .insert((request.id, request.epoch));
 
                         if self.manager_state.checkpoint_acks.len() == self.nodes.len() {
+                            //TODO: here addd shit
                             #[cfg(feature = "metrics")]
                             let start_time = Instant::now();
 
@@ -312,8 +306,10 @@ where
 
                             if OP::OperatorState::has_tables() {
                                 if let Some(snapshot) = &self.latest_snapshot {
-                                    let mut state = OP::OperatorState::restore(snapshot.clone())?;
-
+                                    let mut state = OP::OperatorState::restore(
+                                        snapshot.clone(),
+                                        self.builder.state.clone(),
+                                    )?;
                                     for table in state.tables() {
                                         let registration = TableRegistration {
                                             epoch: epoch.epoch,

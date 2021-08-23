@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
+    error::ArconResult,
     index::{AppenderIndex, HashTable, IndexOps, IndexValue},
     table::ImmutableTable,
 };
@@ -69,14 +70,14 @@ where
     V: IndexValue,
     B: Backend,
 {
-    fn persist(&mut self) -> Result<()> {
+    fn persist(&mut self) -> ArconResult<()> {
         // for each modified, set handle key and drain
         unimplemented!();
     }
     fn set_key(&mut self, key: u64) {
         self.current_key = key;
     }
-    fn table(&mut self) -> Result<Option<ImmutableTable>> {
+    fn table(&mut self) -> ArconResult<Option<ImmutableTable>> {
         Ok(None)
     }
 }
@@ -108,6 +109,7 @@ where
 mod tests {
     use super::*;
     use crate::test_utils::temp_backend;
+    use arcon_state::Sled;
     use eager::EagerAppender;
     use std::sync::Arc;
 
@@ -138,7 +140,7 @@ mod tests {
 
     #[test]
     fn eager_appender_test() {
-        let backend = Arc::new(temp_backend());
+        let backend = Arc::new(temp_backend::<Sled>());
         let index = EagerAppender::new("appender", backend);
         assert!(index_test(index).is_ok());
     }

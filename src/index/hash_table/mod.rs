@@ -9,7 +9,7 @@ use std::{
     hash::{BuildHasher, Hash, Hasher},
 };
 
-use crate::{index::IndexOps, table::ImmutableTable};
+use crate::{error::ArconResult, index::IndexOps, table::ImmutableTable};
 use arcon_state::{
     backend::{
         handles::{ActiveHandle, Handle},
@@ -336,7 +336,7 @@ where
     }
 
     #[allow(clippy::type_complexity)]
-    pub fn full_iter(&mut self) -> Result<(usize, Box<dyn Iterator<Item = Result<V>> + '_>)> {
+    pub fn full_iter(&mut self) -> ArconResult<(usize, Box<dyn Iterator<Item = Result<V>> + '_>)> {
         // call our persist method to force possible modified values to the backend
         self.persist()?;
         let len = self.handle.len()?;
@@ -358,7 +358,7 @@ where
     V: Value,
     B: Backend,
 {
-    fn persist(&mut self) -> Result<()> {
+    fn persist(&mut self) -> ArconResult<()> {
         let table = self.raw_table_mut();
         unsafe {
             self.handle.insert_all_by_ref(table.iter_modified())?;
@@ -366,7 +366,7 @@ where
         Ok(())
     }
     fn set_key(&mut self, _: u64) {}
-    fn table(&mut self) -> Result<Option<ImmutableTable>> {
+    fn table(&mut self) -> ArconResult<Option<ImmutableTable>> {
         Ok(None)
     }
 }

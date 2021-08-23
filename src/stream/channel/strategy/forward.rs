@@ -4,9 +4,9 @@
 use crate::{
     buffer::event::{BufferPool, BufferWriter, PoolInfo},
     data::{ArconEvent, ArconEventWrapper, ArconMessage, ArconType, NodeID},
-    stream::channel::{strategy::send, Channel},
+    stream::channel::Channel,
 };
-use kompact::prelude::{ComponentDefinition, SerError};
+use std::sync::Arc;
 
 /// `Forward` is a one-to-one channel strategy between two components
 #[allow(dead_code)]
@@ -19,7 +19,7 @@ where
     /// A buffer holding outgoing events
     curr_buffer: BufferWriter<ArconEventWrapper<A>>,
     /// Channel that represents a connection to another component
-    channel: Channel<A>,
+    channel: Arc<Channel<A>>,
     /// An identifier that is embedded with outgoing messages
     sender_id: NodeID,
     /// Struct holding information regarding the BufferPool
@@ -45,56 +45,56 @@ where
         Forward {
             buffer_pool,
             curr_buffer,
-            channel,
+            channel: Arc::new(channel),
             sender_id,
             pool_info,
         }
     }
-
-    #[inline]
-    pub fn add<CD>(&mut self, event: ArconEvent<A>, source: &CD)
-    where
-        CD: ComponentDefinition + Sized + 'static,
-    {
-        if let ArconEvent::Element(_) = &event {
-            if let Some(e) = self.curr_buffer.push(event.into()) {
-                // buffer is full, flush.
-                self.flush(source);
-                self.curr_buffer.push(e);
+    pub fn add(&mut self, event: ArconEvent<A>) -> Vec<(Arc<Channel<A>>, ArconMessage<A>)> {
+        match &event {
+            ArconEvent::Element(_) => {
+                // Return message only if buffer is full
+                self.push_event(event)
+                    .map(move |msg| vec![(self.channel.clone(), msg)])
+                    .unwrap_or_else(Vec::new)
             }
-        } else {
-            // Watermark/Epoch.
-            // Send downstream as soon as possible
-            // TODO: bit ugly..
-
-            if let Some(e) = self.curr_buffer.push(event.into()) {
-                self.flush(source);
-                self.curr_buffer.push(e);
-                self.flush(source);
-            } else {
-                self.flush(source);
+            _ => {
+                // We received a marker, return messages
+                match self.push_event(event) {
+                    Some(msg) => {
+                        // buffer was full, dispatch returned msg + newly created one with the marker
+                        let msg2 = self.message();
+                        vec![(self.channel.clone(), msg), (self.channel.clone(), msg2)]
+                    }
+                    None => {
+                        // Buffer was not full, but fetch message and return..
+                        let msg = self.message();
+                        vec![(self.channel.clone(), msg)]
+                    }
+                }
             }
         }
     }
+    #[inline]
+    fn push_event(&mut self, event: ArconEvent<A>) -> Option<ArconMessage<A>> {
+        self.curr_buffer.push(event.into()).map(|e| {
+            let msg = self.message();
+            self.curr_buffer.push(e);
+            msg
+        })
+    }
 
     #[inline]
-    pub fn flush<CD>(&mut self, source: &CD)
-    where
-        CD: ComponentDefinition + Sized + 'static,
-    {
+    fn message(&mut self) -> ArconMessage<A> {
         let reader = self.curr_buffer.reader();
         let msg = ArconMessage {
             events: reader,
             sender: self.sender_id,
         };
-
-        if let Err(SerError::BufferError(err)) = send(&self.channel, msg, source) {
-            // TODO: Figure out how to get more space for `tell_serialised`
-            panic!("Buffer Error {}", err);
-        };
-
         // TODO: Should probably not busy wait here..
         self.curr_buffer = self.buffer_pool.get();
+
+        msg
     }
 }
 
@@ -103,9 +103,9 @@ mod tests {
     use super::{Channel, *};
     use crate::{
         application::Application,
-        data::{ArconElement, ArconEvent},
+        data::{ArconElement, ArconEvent, Watermark},
         stream::{
-            channel::strategy::{forward::Forward, tests::*, ChannelStrategy},
+            channel::strategy::{forward::Forward, send, tests::*, ChannelStrategy},
             node::debug::DebugNode,
         },
     };
@@ -128,9 +128,12 @@ mod tests {
         comp.on_definition(|cd| {
             for _i in 0..total_msgs {
                 let elem = ArconElement::new(Input { id: 1 });
-                let _ = channel_strategy.add(ArconEvent::Element(elem), cd);
+                let _ = channel_strategy.push(ArconEvent::Element(elem));
             }
-            channel_strategy.flush(cd);
+            // force a flush through a marker
+            for (channel, msg) in channel_strategy.push(ArconEvent::Watermark(Watermark::new(0))) {
+                let _ = send(&channel, msg, cd);
+            }
         });
 
         std::thread::sleep(std::time::Duration::from_secs(1));

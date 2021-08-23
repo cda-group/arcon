@@ -6,7 +6,11 @@ pub mod appender;
 pub mod hash_table;
 pub mod timer;
 pub mod value;
+pub mod window;
 
+use crate::error::ArconResult;
+use crate::stream::operator::window::WindowContext;
+use crate::ArconType;
 use crate::{data::arrow::ToArrow, manager::snapshot::Snapshot, table::ImmutableTable};
 use arcon_state::{
     data::{Key, Value},
@@ -23,6 +27,9 @@ pub use self::{
     hash_table::{eager::EagerHashTable, HashTable},
     timer::{Timer, TimerEvent},
     value::{EagerValue, LazyValue, LocalValue},
+    window::appender::AppenderWindow,
+    window::arrow::ArrowWindow,
+    window::incremental::IncrementalWindow,
 };
 
 /// Common Index Operations
@@ -30,41 +37,29 @@ pub use self::{
 /// All indexes must implement the IndexOps trait
 pub trait IndexOps {
     /// This method ensures all non-persisted data gets pushed to a Backend
-    fn persist(&mut self) -> Result<()>;
+    fn persist(&mut self) -> ArconResult<()>;
     /// Set the current active key for the index
     fn set_key(&mut self, key: u64);
 
     /// Create a [ImmutableTable] from the data in the Index
-    fn table(&mut self) -> Result<Option<ImmutableTable>>;
-}
-
-/// A separate trait for defining a state constructor for [ArconState]
-pub trait StateConstructor {
-    /// The State Backend that is used
-    type BackendType: Backend;
-
-    /// Constructor method for creating `Self`
-    fn new(backend: Arc<Self::BackendType>) -> Self
-    where
-        Self: Sized;
+    fn table(&mut self) -> ArconResult<Option<ImmutableTable>>;
 }
 
 /// Active Arcon State
-pub trait ArconState: StateConstructor + Send + 'static {
+pub trait ArconState: Send + 'static {
     const STATE_ID: &'static str;
 
     /// Restores an ArconState from a [Snapshot]
-    fn restore(snapshot: Snapshot) -> Result<Self>
+    fn restore<B: Backend>(snapshot: Snapshot, f: Arc<dyn Fn(Arc<B>) -> Self>) -> ArconResult<Self>
     where
         Self: Sized,
     {
         let snapshot_dir = std::path::Path::new(&snapshot.snapshot_path);
-        let backend =
-            Self::BackendType::restore(snapshot_dir, snapshot_dir, String::from(Self::STATE_ID))?;
-        Ok(Self::new(Arc::new(backend)))
+        let backend = B::restore(snapshot_dir, snapshot_dir, String::from(Self::STATE_ID))?;
+        Ok(f(Arc::new(backend)))
     }
 
-    fn persist(&mut self) -> Result<()>;
+    fn persist(&mut self) -> ArconResult<()>;
     fn set_key(&mut self, key: u64);
 
     /// Returns a Vec of registered tables
@@ -72,20 +67,21 @@ pub trait ArconState: StateConstructor + Send + 'static {
 
     fn table_ids() -> Vec<String>;
 
-    fn get_table(&mut self, id: &str) -> Result<Option<ImmutableTable>>;
+    fn get_table(&mut self, id: &str) -> ArconResult<Option<ImmutableTable>>;
 
     fn has_tables() -> bool;
 }
 
-/// Identifier for empty ArconState ()
+/// Identifier for empty ArconState
 pub const EMPTY_STATE_ID: &str = "!";
 
-pub type EmptyState = ();
+/// Struct used to signal an empty ArconState implementation
+pub struct EmptyState;
 
 impl ArconState for EmptyState {
     const STATE_ID: &'static str = EMPTY_STATE_ID;
 
-    fn persist(&mut self) -> Result<()> {
+    fn persist(&mut self) -> ArconResult<()> {
         Ok(())
     }
     fn set_key(&mut self, _: u64) {}
@@ -95,7 +91,7 @@ impl ArconState for EmptyState {
     fn table_ids() -> Vec<String> {
         Vec::new()
     }
-    fn get_table(&mut self, _: &str) -> Result<Option<ImmutableTable>> {
+    fn get_table(&mut self, _: &str) -> ArconResult<Option<ImmutableTable>> {
         Ok(None)
     }
     fn has_tables() -> bool {
@@ -103,20 +99,14 @@ impl ArconState for EmptyState {
     }
 }
 
-impl StateConstructor for EmptyState {
-    type BackendType = crate::Sled;
-
-    fn new(_: Arc<Self::BackendType>) -> Self {}
-}
-
 impl IndexOps for EmptyState {
-    fn persist(&mut self) -> Result<()> {
+    fn persist(&mut self) -> ArconResult<()> {
         Ok(())
     }
     fn set_key(&mut self, _: u64) {
         // ignore
     }
-    fn table(&mut self) -> Result<Option<ImmutableTable>> {
+    fn table(&mut self) -> ArconResult<Option<ImmutableTable>> {
         Ok(None)
     }
 }
@@ -194,4 +184,19 @@ where
     fn rmw<F>(&mut self, key: &K, value: V)
     where
         F: FnMut(&mut V) + Sized;
+}
+
+/// Index for Streaming Windows
+///
+/// Contains all the methods a Window must implement
+pub trait WindowIndex: Send + Sized + IndexOps + 'static {
+    type IN: ArconType;
+    type OUT: ArconType;
+
+    /// The `on_element` function is called per received window element
+    fn on_element(&mut self, element: Self::IN, ctx: WindowContext) -> ArconResult<()>;
+    /// The `result` function is called at the end of a window's lifetime
+    fn result(&mut self, ctx: WindowContext) -> ArconResult<Self::OUT>;
+    /// Clears the window state for the passed context
+    fn clear(&mut self, ctx: WindowContext) -> ArconResult<()>;
 }

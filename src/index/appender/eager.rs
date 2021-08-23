@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::{
+    error::ArconResult,
     index::{AppenderIndex, IndexOps},
     table::ImmutableTable,
 };
@@ -44,13 +45,13 @@ where
     V: Value,
     B: Backend,
 {
-    fn persist(&mut self) -> Result<()> {
+    fn persist(&mut self) -> ArconResult<()> {
         Ok(())
     }
     fn set_key(&mut self, key: u64) {
         self.handle.set_item_key(key);
     }
-    fn table(&mut self) -> Result<Option<ImmutableTable>> {
+    fn table(&mut self) -> ArconResult<Option<ImmutableTable>> {
         Ok(None)
     }
 }

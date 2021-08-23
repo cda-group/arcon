@@ -15,22 +15,9 @@ pub struct StreamingState<B: Backend> {
     emph: u64,
 }
 
-impl<B: Backend> StateConstructor for StreamingState<B> {
-    type BackendType = B;
-
-    fn new(backend: Arc<Self::BackendType>) -> Self {
-        Self {
-            watermark: LazyValue::new("_watermark", backend.clone()),
-            epoch: LazyValue::new("_epoch", backend.clone()),
-            counters: HashTable::new("_counters", backend),
-            emph: 0,
-        }
-    }
-}
-
 #[test]
 fn streaming_state_test() -> ArconResult<()> {
-    let backend = Arc::new(crate::test_utils::temp_backend());
+    let backend = Arc::new(crate::test_utils::temp_backend::<Sled>());
 
     let mut state = StreamingState {
         watermark: LazyValue::new("_watermark", backend.clone()),

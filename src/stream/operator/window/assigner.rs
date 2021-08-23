@@ -1,19 +1,22 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use super::{WindowContext, WindowFunction};
+use super::WindowContext;
+use crate::dataflow::{
+    api::Assigner,
+    conf::{StreamKind, WindowConf},
+};
+use crate::index::WindowIndex;
 use crate::{
     data::{ArconElement, ArconType},
     error::*,
-    index::{ArconState, EagerHashTable, IndexOps, StateConstructor},
-    stream::{
-        operator::{Operator, OperatorContext},
-        time::Time,
-    },
+    index::{EagerHashTable, IndexOps},
+    reportable_error,
+    stream::operator::{Operator, OperatorContext},
 };
 use arcon_macros::ArconState;
 use arcon_state::Backend;
-use kompact::prelude::{error, ComponentDefinition};
+use kompact::prelude::error;
 use prost::Message;
 use std::{marker::PhantomData, sync::Arc};
 
@@ -43,30 +46,26 @@ impl WindowEvent {
 }
 
 #[derive(ArconState)]
-pub struct AssignerState<B: Backend> {
+pub struct WindowState<I: WindowIndex, B: Backend> {
     window_start: EagerHashTable<Key, Timestamp, B>,
     active_windows: EagerHashTable<WindowContext, (), B>,
+    index: I,
 }
 
-impl<B: Backend> StateConstructor for AssignerState<B> {
-    type BackendType = B;
-    fn new(backend: Arc<Self::BackendType>) -> Self {
+impl<I: WindowIndex, B: Backend> WindowState<I, B> {
+    pub fn new(index: I, backend: Arc<B>) -> Self {
         Self {
             window_start: EagerHashTable::new("_window_start", backend.clone()),
             active_windows: EagerHashTable::new("_active_windows", backend),
+            index,
         }
     }
 }
 
 /// Window Assigner Based on Event Time
-///
-/// IN: Input event
-/// OUT: Output of Window
-pub struct WindowAssigner<IN, OUT, W, B>
+pub struct WindowAssigner<I, B>
 where
-    IN: ArconType,
-    OUT: ArconType,
-    W: WindowFunction + Sized,
+    I: WindowIndex,
     B: Backend,
 {
     // effectively immutable, so no reason to persist
@@ -74,55 +73,34 @@ where
     window_slide: u64,
     late_arrival_time: u64,
     keyed: bool,
-
-    // window keeps its own state per key and index (via state backend api)
-    window: W,
-    // simply persisted state
-    state: AssignerState<B>,
-    op_state: (),
-    _marker: PhantomData<(IN, OUT)>,
+    _marker: PhantomData<(I, B)>,
 }
 
-impl<IN, OUT, W, B> WindowAssigner<IN, OUT, W, B>
+impl<I, B> WindowAssigner<I, B>
 where
-    IN: ArconType,
-    OUT: ArconType,
-    W: WindowFunction<IN = IN, OUT = OUT>,
+    I: WindowIndex,
     B: Backend,
 {
-    /// Create a WindowAssigner for tumbling windows
-    pub fn tumbling(
-        window: W,
-        backend: Arc<B>,
-        length: Time,
-        late_arrival_time: Time,
-        keyed: bool,
-    ) -> Self {
-        let slide = length.0; // slide = length means that we operate on tumbling windows
-        Self::setup(window, backend, length.0, slide, late_arrival_time.0, keyed)
-    }
-
-    /// Create a WindowAssigner for sliding windows
-    pub fn sliding(
-        window: W,
-        backend: Arc<B>,
-        length: Time,
-        slide: Time,
-        late_arrival_time: Time,
-        keyed: bool,
-    ) -> Self {
-        Self::setup(
-            window,
-            backend,
-            length.0,
-            slide.0,
-            late_arrival_time.0,
-            keyed,
-        )
+    pub fn new(conf: WindowConf) -> Self {
+        let keyed = match conf.kind {
+            StreamKind::Keyed => true,
+            StreamKind::Local => false,
+        };
+        match conf.assigner {
+            Assigner::Sliding {
+                length,
+                slide,
+                late_arrival,
+            } => Self::setup(length.0, slide.0, late_arrival.0, keyed),
+            Assigner::Tumbling {
+                length,
+                late_arrival,
+            } => Self::setup(length.0, length.0, late_arrival.0, keyed),
+        }
     }
 
     // Setup method for both sliding and tumbling windows
-    fn setup(window: W, backend: Arc<B>, length: u64, slide: u64, late: u64, keyed: bool) -> Self {
+    fn setup(length: u64, slide: u64, late: u64, keyed: bool) -> Self {
         // Sanity check on slide and length
         if length < slide {
             panic!("Window Length lower than slide!");
@@ -131,17 +109,11 @@ where
             panic!("Window Length not divisible by slide!");
         }
 
-        let state = AssignerState::new(backend);
-
         WindowAssigner {
             window_length: length,
             window_slide: slide,
             late_arrival_time: late,
-            window,
             keyed,
-
-            state,
-            op_state: (),
             _marker: Default::default(),
         }
     }
@@ -150,12 +122,12 @@ where
     fn new_window_trigger(
         &mut self,
         window_ctx: WindowContext,
-        ctx: &mut OperatorContext<Self, impl Backend, impl ComponentDefinition>,
+        ctx: &mut OperatorContext<WindowEvent, WindowState<I, B>>,
     ) -> ArconResult<()> {
-        let window_start = match self.state.window_start().get(&window_ctx.key)? {
+        let window_start = match ctx.state().window_start().get(&window_ctx.key)? {
             Some(start) => start,
             None => {
-                return crate::reportable_error!(
+                return reportable_error!(
                     "Unexpected failure, could not find window start for existing key"
                 );
             }
@@ -177,7 +149,7 @@ where
     }
 
     #[inline]
-    fn get_key(&self, e: &ArconElement<IN>) -> u64 {
+    fn get_key(&self, e: &ArconElement<I::IN>) -> u64 {
         if !self.keyed {
             return 0;
         }
@@ -185,24 +157,23 @@ where
     }
 }
 
-impl<IN, OUT, W, B> Operator for WindowAssigner<IN, OUT, W, B>
+impl<I, B> Operator for WindowAssigner<I, B>
 where
-    IN: ArconType,
-    OUT: ArconType,
-    W: WindowFunction<IN = IN, OUT = OUT>,
+    I: WindowIndex,
     B: Backend,
 {
-    type IN = IN;
-    type OUT = OUT;
+    type IN = I::IN;
+    type OUT = I::OUT;
     type TimerState = WindowEvent;
-    type OperatorState = ();
+    type OperatorState = WindowState<I, B>;
+    type ElementIterator = Option<ArconElement<I::OUT>>;
 
     fn handle_element(
         &mut self,
-        element: ArconElement<IN>,
-        mut ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> ArconResult<()> {
-        let ts = element.timestamp.unwrap_or(1);
+        element: ArconElement<Self::IN>,
+        ctx: &mut OperatorContext<Self::TimerState, Self::OperatorState>,
+    ) -> ArconResult<Self::ElementIterator> {
+        let ts = element.timestamp;
 
         let time = ctx.current_time()?;
 
@@ -210,18 +181,18 @@ where
 
         if ts < ts_lower_bound {
             // Late arrival: early return
-            return Ok(());
+            return Ok(None);
         }
 
         let key = self.get_key(&element);
-        let start = match self.state.window_start().get(&key)? {
+        let start = match ctx.state().window_start().get(&key)? {
             Some(start) => start,
             None => {
                 if ts < self.late_arrival_time {
                     0
                 } else {
                     let start = ts - self.late_arrival_time;
-                    self.state.window_start().put(key, start)?;
+                    ctx.state().window_start().put(key, start)?;
                     start
                 }
             }
@@ -236,29 +207,28 @@ where
         // For all windows, insert element....
         for index in floor..=ceil {
             let window_ctx = WindowContext { key, index };
-            self.window.on_element(element.data.clone(), window_ctx)?;
+            ctx.state()
+                .index()
+                .on_element(element.data.clone(), window_ctx)?;
 
-            let active_exist = self.state.active_windows().contains(&window_ctx)?;
+            let active_exist = ctx.state().active_windows().contains(&window_ctx)?;
 
             // if it does not exist, then add active window and create trigger
             if !active_exist {
-                self.state.active_windows().put(window_ctx, ())?;
+                ctx.state().active_windows().put(window_ctx, ())?;
 
-                if let Err(event) = self.new_window_trigger(window_ctx, &mut ctx) {
-                    // I'm pretty sure this shouldn't happen
-                    unreachable!("Window was expired when scheduled: {:?}", event);
-                }
+                self.new_window_trigger(window_ctx, ctx)?;
             }
         }
 
-        Ok(())
+        Ok(None)
     }
 
     fn handle_timeout(
         &mut self,
         timeout: Self::TimerState,
-        mut ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> ArconResult<()> {
+        ctx: &mut OperatorContext<Self::TimerState, Self::OperatorState>,
+    ) -> ArconResult<Option<Self::ElementIterator>> {
         let WindowEvent {
             key,
             index,
@@ -267,20 +237,13 @@ where
 
         let window_ctx = WindowContext::new(key, index);
 
-        let result = self.window.result(window_ctx)?;
+        let state = ctx.state();
+        let result = state.index().result(window_ctx)?;
+        state.index().clear(window_ctx)?;
 
-        self.window.clear(window_ctx)?;
-        self.state.active_windows().remove(&window_ctx)?;
+        state.active_windows().remove(&window_ctx)?;
 
-        ctx.output(ArconElement::with_timestamp(result, timestamp));
-        Ok(())
-    }
-    fn persist(&mut self) -> ArconResult<()> {
-        self.state.persist()?;
-        self.window.persist()
-    }
-    fn state(&mut self) -> &mut Self::OperatorState {
-        &mut self.op_state
+        Ok(Some(Some(ArconElement::with_timestamp(result, timestamp))))
     }
 }
 
@@ -293,16 +256,19 @@ mod tests {
     use crate::{
         application::*,
         data::{ArconMessage, NodeID},
+        index::AppenderWindow,
         manager::node::{NodeManager, NodeManagerPort},
+        prelude::OperatorBuilder,
         stream::{
             channel::{
                 strategy::{forward::Forward, ChannelStrategy},
                 Channel,
             },
             node::{debug::DebugNode, Node, NodeState},
-            operator::window::AppenderWindowFn,
+            time::Time,
         },
     };
+    use arcon_state::Sled;
     use kompact::prelude::{biconnect_components, ActorRefFactory, ActorRefStrong, Component};
     use std::{sync::Arc, thread, time, time::UNIX_EPOCH};
 
@@ -336,7 +302,7 @@ mod tests {
             pool_info,
         ));
 
-        let backend = Arc::new(crate::test_utils::temp_backend());
+        let backend = Arc::new(crate::test_utils::temp_backend::<Sled>());
         let descriptor = String::from("node_");
         let in_channels = vec![0.into()];
 
@@ -344,21 +310,36 @@ mod tests {
             u.len() as u64
         }
 
-        let nm = NodeManager::<
-            WindowAssigner<
-                u64,
-                u64,
-                AppenderWindowFn<u64, u64, fn(&[u64]) -> u64, arcon_state::Sled>,
-                arcon_state::Sled,
-            >,
-            _,
-        >::new(
+        let builder = OperatorBuilder {
+            operator: Arc::new(move || {
+                let conf = WindowConf {
+                    assigner: Assigner::Sliding {
+                        length: Time::seconds(length),
+                        slide: Time::seconds(slide),
+                        late_arrival: Time::seconds(late),
+                    },
+                    kind: StreamKind::Keyed,
+                };
+                WindowAssigner::new(conf)
+            }),
+            state: Arc::new(|backend: Arc<Sled>| {
+                let index = AppenderWindow::new(backend.clone(), &appender_fn);
+                WindowState::new(index, backend)
+            }),
+            conf: Default::default(),
+        };
+
+        let operator = builder.operator.clone();
+        let operator_state = builder.state.clone();
+
+        let nm = NodeManager::new(
             descriptor.clone(),
             app.data_system.clone(),
             epoch_manager_ref,
             in_channels.clone(),
             backend.clone(),
             app.arcon_logger.clone(),
+            builder,
         );
 
         let node_manager_comp = app.ctrl_system().create(|| nm);
@@ -368,25 +349,15 @@ mod tests {
             .wait_timeout(std::time::Duration::from_millis(100))
             .expect("started");
 
-        let window = AppenderWindowFn::new(backend.clone(), &appender_fn);
-
         #[cfg(feature = "hardware_counters")]
         #[cfg(not(test))]
         let mut perf_events = PerfEvents::new();
 
-        let window_assigner = WindowAssigner::sliding(
-            window,
-            backend.clone(),
-            Time::seconds(length),
-            Time::seconds(slide),
-            Time::seconds(late),
-            true,
-        );
-
         let node = Node::new(
             descriptor,
             channel_strategy,
-            window_assigner,
+            operator(),
+            operator_state(backend.clone()),
             NodeState::new(NodeID::new(0), in_channels, backend.clone()),
             backend,
             app.arcon_logger.clone(),
@@ -431,10 +402,10 @@ mod tests {
         ArconMessage::watermark(time, 0.into())
     }
     fn timestamped_event(ts: u64) -> ArconMessage<u64> {
-        ArconMessage::element(1u64, Some(ts), 0.into())
+        ArconMessage::element(1u64, ts, 0.into())
     }
     fn timestamped_keyed_event(ts: u64, id: u64) -> ArconMessage<u64> {
-        ArconMessage::element(id, Some(ts), 0.into())
+        ArconMessage::element(id, ts, 0.into())
     }
 
     // Tests:
@@ -503,7 +474,7 @@ mod tests {
         // Inspect and assert
         sink.on_definition(|cd| {
             let w0 = &cd.data[0].data;
-            let w0_ts = &cd.data[0].timestamp.expect("should have a timestamp");
+            let w0_ts = &cd.data[0].timestamp;
             assert_eq!(&cd.data.len(), &(1_usize));
             assert_eq!(w0, &2);
             assert_eq!(w0_ts, &(moment + 10));
@@ -525,9 +496,9 @@ mod tests {
         // Inspect and assert
         sink.on_definition(|cd| {
             let w0 = &cd.data[0].data;
-            let w0_ts = &cd.data[0].timestamp.expect("should have a timestamp");
+            let w0_ts = &cd.data[0].timestamp;
             let w1 = &cd.data[1].data;
-            let w1_ts = &cd.data[1].timestamp.expect("should have a timestamp");
+            let w1_ts = &cd.data[1].timestamp;
             assert_eq!(&cd.data.len(), &(2_usize));
             assert_eq!(w0, &1);
             assert_eq!(w0_ts, &(moment));
