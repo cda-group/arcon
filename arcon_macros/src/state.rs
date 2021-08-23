@@ -75,7 +75,7 @@ pub fn derive_state(input: TokenStream) -> TokenStream {
             fn has_tables() -> bool {
                 #has_tables_quote
             }
-            fn get_table(&mut self, id: &str) -> Result<Option<::arcon::ImmutableTable>, ::arcon::ArconStateError> {
+            fn get_table(&mut self, id: &str) -> ::arcon::ArconResult<Option<::arcon::ImmutableTable>> {
                 match id {
                     #(#table_lookups)*
                     _ => Ok(None),
@@ -92,7 +92,7 @@ pub fn derive_state(input: TokenStream) -> TokenStream {
                     const STATE_ID: &'static str = stringify!(#name);
 
                     #[inline]
-                    fn persist(&mut self) -> Result<(), ::arcon::ArconStateError> {
+                    fn persist(&mut self) -> ::arcon::ArconResult<()> {
                         #(#persist_quotes)*
                         Ok(())
                     }

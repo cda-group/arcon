@@ -4,6 +4,7 @@
 use super::{hash_table::eager::EagerHashTable, IndexOps};
 use crate::{
     error::timer::{TimerExpiredError, TimerResult},
+    error::ArconResult,
     table::ImmutableTable,
 };
 use arcon_state::{
@@ -41,6 +42,20 @@ impl<E: Value> TimerEvent<E> {
             payload,
         }
     }
+}
+
+pub trait ArconTimer: Send {
+    type Key: Eq + Hash;
+    type Value: std::fmt::Debug;
+
+    fn schedule_at(
+        &mut self,
+        id: Self::Key,
+        time: u64,
+        entry: Self::Value,
+    ) -> TimerResult<Self::Value>;
+    fn advance_to(&mut self, ts: u64) -> Result<Vec<Self::Value>>;
+    fn get_time(&self) -> Result<u64>;
 }
 
 /// An Index for Stream Timers
@@ -185,9 +200,24 @@ where
             Err(f) => crate::reportable_error!("Could not insert timer entry! {:?}", f),
         }
     }
+}
+
+impl<K, V, B> ArconTimer for Timer<K, V, B>
+where
+    K: Key + Eq + Hash,
+    V: Value,
+    B: Backend,
+{
+    type Key = K;
+    type Value = V;
 
     #[inline]
-    pub fn schedule_at(&mut self, id: K, time: u64, entry: V) -> TimerResult<V> {
+    fn schedule_at(
+        &mut self,
+        id: Self::Key,
+        time: u64,
+        entry: Self::Value,
+    ) -> TimerResult<Self::Value> {
         let curr_time = self.current_time().unwrap();
         // Check for expired target time
         if time <= curr_time {
@@ -203,7 +233,7 @@ where
     }
 
     #[inline]
-    pub fn advance_to(&mut self, ts: u64) -> Result<Vec<V>> {
+    fn advance_to(&mut self, ts: u64) -> Result<Vec<Self::Value>> {
         let mut res = Vec::new();
         let curr_time = self.current_time().unwrap();
         if ts < curr_time {
@@ -220,6 +250,10 @@ where
         self.tick_and_collect(time_left as u32, &mut res)?;
         Ok(res)
     }
+    fn get_time(&self) -> Result<u64> {
+        let time = self.time_handle.get()?;
+        Ok(time.unwrap_or(0))
+    }
 }
 
 impl<K, V, B> IndexOps for Timer<K, V, B>
@@ -228,12 +262,12 @@ where
     V: Value,
     B: Backend,
 {
-    fn persist(&mut self) -> arcon_state::error::Result<()> {
+    fn persist(&mut self) -> ArconResult<()> {
         self.timeouts.persist()?;
         Ok(())
     }
     fn set_key(&mut self, _: u64) {}
-    fn table(&mut self) -> Result<Option<ImmutableTable>> {
+    fn table(&mut self) -> ArconResult<Option<ImmutableTable>> {
         Ok(None)
     }
 }
@@ -242,11 +276,12 @@ where
 mod tests {
     use super::*;
     use crate::test_utils::temp_backend;
+    use arcon_state::Sled;
     use std::sync::Arc;
 
     #[test]
     fn timer_index_test() {
-        let backend = Arc::new(temp_backend());
+        let backend = Arc::new(temp_backend::<Sled>());
         let mut timer = Timer::new("mytimer", backend);
 
         // Timer per key...

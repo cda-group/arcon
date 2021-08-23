@@ -4,7 +4,7 @@
 use super::{schema::SourceSchema, Poll, Source};
 use crate::{
     error::source::{SourceError, SourceResult},
-    index::{IndexOps, LazyValue, StateConstructor, ValueIndex},
+    index::{IndexOps, LazyValue, ValueIndex},
 };
 use arcon_macros::ArconState;
 use arcon_state::Backend;
@@ -76,9 +76,8 @@ pub struct KafkaConsumerState<B: Backend> {
     epoch_offsets: LazyValue<i64, B>,
 }
 
-impl<B: Backend> StateConstructor for KafkaConsumerState<B> {
-    type BackendType = B;
-    fn new(backend: Arc<B>) -> Self {
+impl<B: Backend> KafkaConsumerState<B> {
+    pub fn new(backend: Arc<B>) -> Self {
         Self {
             partition_offsets: LazyValue::new("_partition_offsets", backend.clone()),
             epoch_offsets: LazyValue::new("_epoch_offsets", backend),

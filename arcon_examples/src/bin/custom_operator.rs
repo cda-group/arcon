@@ -1,4 +1,4 @@
-use arcon::{ignore_persist, ignore_timeout, prelude::*};
+use arcon::{ignore_timeout, prelude::*};
 use std::sync::Arc;
 
 #[cfg_attr(feature = "arcon_serde", derive(serde::Deserialize, serde::Serialize))]
@@ -11,17 +11,18 @@ pub struct CustomEvent {
 }
 
 #[derive(Default)]
-pub struct MyOperator(EmptyState);
+pub struct MyOperator;
 
 impl Operator for MyOperator {
     type IN = u64;
     type OUT = CustomEvent;
     type TimerState = ArconNever;
-    type OperatorState = ();
+    type OperatorState = EmptyState;
+    type ElementIterator = std::iter::Once<ArconElement<Self::OUT>>;
 
     fn on_start(
         &mut self,
-        mut _ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
+        _ctx: &mut OperatorContext<Self::TimerState, Self::OperatorState>,
     ) -> ArconResult<()> {
         #[cfg(feature = "metrics")]
         _ctx.register_gauge("custom_gauge");
@@ -30,51 +31,44 @@ impl Operator for MyOperator {
         _ctx.register_gauge("custom_counter");
 
         Ok(())
-        // within the function it would actually do the register_gauge!("operator_name_id_my_cool_gauge");
     }
     fn handle_element(
         &mut self,
         element: ArconElement<Self::IN>,
-        mut ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> ArconResult<()> {
+        _ctx: &mut OperatorContext<Self::TimerState, Self::OperatorState>,
+    ) -> ArconResult<Self::ElementIterator> {
         let custom_event = CustomEvent { id: element.data };
 
         #[cfg(feature = "metrics")]
-        ctx.update_gauge("custom_gauge", 1.0);
+        _ctx.update_gauge("custom_gauge", 1.0);
 
         #[cfg(feature = "metrics")]
-        ctx.increment_counter("custom_counter");
+        _ctx.increment_counter("custom_counter");
 
-        ctx.output(ArconElement {
+        Ok(std::iter::once(ArconElement {
             data: custom_event,
             timestamp: element.timestamp,
-        });
-
-        Ok(())
+        }))
     }
 
     ignore_timeout!();
-    ignore_persist!();
-
-    fn state(&mut self) -> &mut Self::OperatorState {
-        &mut self.0
-    }
 }
 
 #[derive(Default)]
-pub struct TimerOperator(EmptyState);
+pub struct TimerOperator;
 
 impl Operator for TimerOperator {
     type IN = CustomEvent;
     type OUT = CustomEvent;
     type TimerState = u64;
-    type OperatorState = ();
+    type OperatorState = EmptyState;
+    type ElementIterator = std::iter::Once<ArconElement<Self::OUT>>;
 
     fn handle_element(
         &mut self,
         element: ArconElement<Self::IN>,
-        mut ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> ArconResult<()> {
+        ctx: &mut OperatorContext<Self::TimerState, Self::OperatorState>,
+    ) -> ArconResult<Self::ElementIterator> {
         let current_time = ctx.current_time()?;
         let key = element.data.get_key();
         let time = current_time + 1000;
@@ -83,24 +77,16 @@ impl Operator for TimerOperator {
             error!(ctx.log(), "Failed to schedule timer with err {}", err);
         }
 
-        ctx.output(element);
-
-        Ok(())
+        Ok(std::iter::once(element))
     }
 
     fn handle_timeout(
         &mut self,
         timeout: Self::TimerState,
-        ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> ArconResult<()> {
+        ctx: &mut OperatorContext<Self::TimerState, Self::OperatorState>,
+    ) -> ArconResult<Option<Self::ElementIterator>> {
         info!(ctx.log(), "Got a timer timeout for {:?}", timeout);
-        Ok(())
-    }
-
-    ignore_persist!();
-
-    fn state(&mut self) -> &mut Self::OperatorState {
-        &mut self.0
+        Ok(None)
     }
 }
 
@@ -110,11 +96,13 @@ fn main() {
             conf.set_timestamp_extractor(|x: &u64| *x);
         })
         .operator(OperatorBuilder {
-            constructor: Arc::new(|_: Arc<Sled>| MyOperator::default()),
+            operator: Arc::new(|| MyOperator),
+            state: Arc::new(|_| EmptyState),
             conf: Default::default(),
         })
         .operator(OperatorBuilder {
-            constructor: Arc::new(|_: Arc<Sled>| TimerOperator::default()),
+            operator: Arc::new(|| TimerOperator),
+            state: Arc::new(|_| EmptyState),
             conf: Default::default(),
         })
         .build();

@@ -1,6 +1,7 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
+use crate::error::ArconResult;
 use crate::{index::IndexOps, table::ImmutableTable};
 use arcon_state::{
     backend::{
@@ -65,11 +66,11 @@ where
     V: Value,
     B: Backend,
 {
-    fn persist(&mut self) -> Result<()> {
+    fn persist(&mut self) -> ArconResult<()> {
         Ok(())
     }
     fn set_key(&mut self, _: u64) {}
-    fn table(&mut self) -> Result<Option<ImmutableTable>> {
+    fn table(&mut self) -> ArconResult<Option<ImmutableTable>> {
         Ok(None)
     }
 }

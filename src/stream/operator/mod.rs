@@ -7,18 +7,16 @@ pub mod function;
 pub mod sink;
 /// Available window operators
 pub mod window;
+
 #[cfg(feature = "metrics")]
 use metrics::{gauge, increment_counter, register_counter, register_gauge};
 
 use crate::{
     application::conf::logger::ArconLogger,
-    data::{ArconElement, ArconEvent, ArconType},
+    data::{ArconElement, ArconType},
     error::{timer::TimerResult, *},
-    index::{ArconState, Timer},
-    stream::channel::strategy::ChannelStrategy,
+    index::{timer::ArconTimer, ArconState},
 };
-use arcon_state::Backend;
-use kompact::prelude::ComponentDefinition;
 use prost::Message;
 
 /// Defines the methods an `Operator` must implement
@@ -31,11 +29,13 @@ pub trait Operator: Send + Sized {
     type TimerState: Message + Clone + Default;
     /// State type for the Operator
     type OperatorState: ArconState;
+    /// Iterator that produces outgoing elements
+    type ElementIterator: IntoIterator<Item = ArconElement<Self::OUT>> + 'static;
 
     /// Determines what the `Operator` runs before beginning to process Elements
     fn on_start(
         &mut self,
-        mut _ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
+        _ctx: &mut OperatorContext<Self::TimerState, Self::OperatorState>,
     ) -> ArconResult<()> {
         Ok(())
     }
@@ -44,23 +44,15 @@ pub trait Operator: Send + Sized {
     fn handle_element(
         &mut self,
         element: ArconElement<Self::IN>,
-        ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> ArconResult<()>;
+        ctx: &mut OperatorContext<Self::TimerState, Self::OperatorState>,
+    ) -> ArconResult<Self::ElementIterator>;
 
     /// Determines how the `Operator` handles timeouts it registered earlier when they are triggered
     fn handle_timeout(
         &mut self,
         timeout: Self::TimerState,
-        ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-    ) -> ArconResult<()>;
-
-    /// Determines how the `Operator` persists its state
-    fn persist(&mut self) -> ArconResult<()>;
-
-    /// A get function to the operator's state.
-    ///
-    /// Use the ``ignore_state!()`` macro to indicate its an empty state.
-    fn state(&mut self) -> &mut Self::OperatorState;
+        ctx: &mut OperatorContext<Self::TimerState, Self::OperatorState>,
+    ) -> ArconResult<Option<Self::ElementIterator>>;
 }
 
 /// Helper macro to implement an empty ´handle_timeout` function
@@ -70,85 +62,52 @@ macro_rules! ignore_timeout {
         fn handle_timeout(
             &mut self,
             _timeout: Self::TimerState,
-            _ctx: OperatorContext<Self, impl Backend, impl ComponentDefinition>,
-        ) -> ArconResult<()> {
-            Ok(())
-        }
-    };
-}
-
-/// Helper macro to implement an empty ´persist` function
-#[macro_export]
-macro_rules! ignore_persist {
-    () => {
-        fn persist(&mut self) -> ArconResult<()> {
-            Ok(())
-        }
-    };
-}
-
-/// Helper macro to implement an empty ´state` function
-#[macro_export]
-macro_rules! ignore_state {
-    () => {
-        fn state(&mut self) -> &mut Self::OperatorState {
-            crate::index::EmptyState
+            _ctx: &mut OperatorContext<Self::TimerState, Self::OperatorState>,
+        ) -> ArconResult<Option<Self::ElementIterator>> {
+            Ok(None)
         }
     };
 }
 
 /// Context Available to an Arcon Operator
-pub struct OperatorContext<'a, 'c, 'b, 'd, OP, B, CD>
+pub struct OperatorContext<TimerState, OperatorState>
 where
-    OP: Operator + 'static,
-    B: Backend,
-    CD: ComponentDefinition + Sized + 'static,
+    TimerState: Message + Clone + Default,
+    OperatorState: ArconState,
 {
-    /// Channel Strategy that is used to pass on events
-    channel_strategy: &'c mut ChannelStrategy<OP::OUT>,
     /// A Timer that can be used to schedule event timers
-    timer: &'b mut Timer<u64, OP::TimerState, B>,
-    /// A reference to the backing ComponentDefinition
-    source: &'a CD,
+    pub(crate) timer: Box<dyn ArconTimer<Key = u64, Value = TimerState>>,
+    /// State of the Operator
+    pub(crate) state: OperatorState,
     /// Reference to logger
-    logger: &'d ArconLogger,
-
+    pub(crate) logger: ArconLogger,
     #[cfg(feature = "metrics")]
-    name: &'a str,
+    name: String,
 }
 
-//Note the _ prefixed name field, this is due to the presence of feature flag .Therefore this var might not be used.
-impl<'a, 'c, 'b, 'd, OP, B, CD> OperatorContext<'a, 'c, 'b, 'd, OP, B, CD>
+impl<TimerState, OperatorState> OperatorContext<TimerState, OperatorState>
 where
-    OP: Operator + 'static,
-    B: Backend,
-    CD: ComponentDefinition + Sized + 'static,
+    TimerState: Message + Clone + Default,
+    OperatorState: ArconState,
 {
     #[inline]
     pub(crate) fn new(
-        source: &'a CD,
-        timer: &'b mut Timer<u64, OP::TimerState, B>,
-        channel_strategy: &'c mut ChannelStrategy<OP::OUT>,
-        logger: &'d ArconLogger,
-
-        #[cfg(feature = "metrics")] _name: &'a str,
+        timer: Box<dyn ArconTimer<Key = u64, Value = TimerState>>,
+        state: OperatorState,
+        logger: ArconLogger,
+        #[cfg(feature = "metrics")] name: String,
     ) -> Self {
         OperatorContext {
-            channel_strategy,
             timer,
-            source,
+            state,
             logger,
-
             #[cfg(feature = "metrics")]
-            name: _name,
+            name,
         }
     }
-
-    /// Add an event to the channel strategy
     #[inline]
-    pub fn output(&mut self, element: ArconElement<OP::OUT>) {
-        self.channel_strategy
-            .add(ArconEvent::Element(element), self.source)
+    pub fn state(&mut self) -> &mut OperatorState {
+        &mut self.state
     }
 
     /// Enable users to log within an Operator
@@ -156,13 +115,13 @@ where
     /// `error!(ctx.log(), "Something bad happened!");
     #[inline]
     pub fn log(&self) -> &ArconLogger {
-        self.logger
+        &self.logger
     }
 
     /// Get current event time
     #[inline]
     pub fn current_time(&mut self) -> StateResult<u64> {
-        self.timer.current_time()
+        self.timer.get_time()
     }
 
     /// Schedule at a specific time in the future
@@ -174,9 +133,8 @@ where
         &mut self,
         key: I,
         time: u64,
-        entry: OP::TimerState,
-        //) -> Result<(), OP::TimerState> {
-    ) -> TimerResult<OP::TimerState> {
+        entry: TimerState,
+    ) -> TimerResult<TimerState> {
         self.timer.schedule_at(key.into(), time, entry)
     }
 

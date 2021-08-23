@@ -4,10 +4,9 @@
 use crate::{
     buffer::event::{BufferPool, BufferWriter, PoolInfo},
     data::{ArconEvent, ArconEventWrapper, ArconMessage, ArconType, NodeID},
-    stream::channel::{strategy::send, Channel},
+    stream::channel::Channel,
 };
-use fxhash::FxHashMap;
-use kompact::prelude::{ComponentDefinition, SerError};
+use std::sync::Arc;
 
 /// A Channel Strategy for Keyed Data Streams
 ///
@@ -26,8 +25,8 @@ where
     key_ranges: u64,
     /// An identifier that is embedded with outgoing messages
     sender_id: NodeID,
-    /// A map with a key range id and its respective Channel/Buffer
-    buffer_map: FxHashMap<usize, (Channel<A>, BufferWriter<ArconEventWrapper<A>>)>,
+    buffers: Vec<BufferWriter<ArconEventWrapper<A>>>,
+    channels: Vec<Arc<Channel<A>>>,
     /// Struct holding information regarding the BufferPool
     _pool_info: PoolInfo,
 }
@@ -55,12 +54,12 @@ where
         )
         .expect("failed to initialise BufferPool");
 
-        let mut buffer_map = FxHashMap::default();
-        for (i, channel) in channels.into_iter().enumerate() {
+        let mut buffers = Vec::with_capacity(channels.len());
+        for _ in 0..channels.len() {
             let writer = buffer_pool
                 .try_get()
                 .expect("failed to fetch initial buffer");
-            buffer_map.insert(i, (channel, writer));
+            buffers.push(writer)
         }
 
         Keyed {
@@ -68,16 +67,33 @@ where
             key_ranges: channels_len,
             max_key,
             sender_id,
-            buffer_map,
+            channels: channels.into_iter().map(Arc::new).collect::<Vec<_>>(),
+            buffers,
             _pool_info: pool_info,
+        }
+    }
+    #[inline]
+    fn push_event(&mut self, index: usize, event: ArconEvent<A>) -> Option<ArconMessage<A>> {
+        let writer = &mut self.buffers[index];
+        match writer.push(event.into()) {
+            Some(e) => {
+                let msg = ArconMessage {
+                    events: writer.reader(),
+                    sender: self.sender_id,
+                };
+                // set a new writer
+                *writer = self.buffer_pool.get();
+
+                // now insert it with fresh buffer writer
+                writer.push(e);
+                Some(msg)
+            }
+            None => None,
         }
     }
 
     #[inline]
-    pub fn add<CD>(&mut self, event: ArconEvent<A>, source: &CD)
-    where
-        CD: ComponentDefinition + Sized + 'static,
-    {
+    pub fn add(&mut self, event: ArconEvent<A>) -> Vec<(Arc<Channel<A>>, ArconMessage<A>)> {
         match &event {
             ArconEvent::Element(element) => {
                 // Get key placement
@@ -85,86 +101,49 @@ where
                 // Calculate which key range index is responsible for this key
                 let index = (key * self.key_ranges / self.max_key) as usize;
 
-                if let Some((chan, buffer)) = self.buffer_map.get_mut(&index) {
-                    if let Some(e) = buffer.push(event.into()) {
-                        // buffer is full
-                        Self::flush_buffer(
-                            self.sender_id,
-                            &mut self.buffer_pool,
-                            chan,
-                            buffer,
-                            source,
-                        );
-                        // This push should now not fail
-                        let _ = buffer.push(e);
-                    }
-                } else {
-                    panic!("Bad Keyed setup");
-                }
+                self.push_event(index, event)
+                    .map(move |msg| vec![(self.channels[index].clone(), msg)])
+                    .unwrap_or_else(Vec::new)
             }
             _ => {
-                // Push watermark/epoch into all outgoing buffers
-                for (_, (chan, buffer)) in self.buffer_map.iter_mut() {
-                    if let Some(e) = buffer.push(event.clone().into()) {
-                        // buffer is full...
-                        Self::flush_buffer(
-                            self.sender_id,
-                            &mut self.buffer_pool,
-                            chan,
-                            buffer,
-                            source,
-                        );
-                        // This push should now not fail
-                        let _ = buffer.push(e);
+                let mut outputs = Vec::with_capacity(self.buffers.len());
+                // clear all buffers
+                for index in 0..self.buffers.len() {
+                    match self.push_event(index, event.clone()) {
+                        Some(msg) => {
+                            // buffer was full
+                            let writer = &mut self.buffers[index];
+                            let msg_two = ArconMessage {
+                                events: writer.reader(),
+                                sender: self.sender_id,
+                            };
+                            // set a new writer
+                            *writer = self.buffer_pool.get();
+
+                            outputs.push((self.channels[index].clone(), msg));
+                            outputs.push((self.channels[index].clone(), msg_two));
+                        }
+                        None => {
+                            let writer = &mut self.buffers[index];
+                            let msg = ArconMessage {
+                                events: writer.reader(),
+                                sender: self.sender_id,
+                            };
+                            // set a new writer
+                            *writer = self.buffer_pool.get();
+
+                            outputs.push((self.channels[index].clone(), msg));
+                        }
                     }
                 }
-                self.flush(source);
+                outputs
             }
         }
-    }
-
-    #[inline]
-    pub fn flush<CD>(&mut self, source: &CD)
-    where
-        CD: ComponentDefinition + Sized + 'static,
-    {
-        for (_, (ref channel, buffer)) in self.buffer_map.iter_mut() {
-            Self::flush_buffer(
-                self.sender_id,
-                &mut self.buffer_pool,
-                channel,
-                buffer,
-                source,
-            );
-        }
-    }
-
-    // Helper function to reduce duplication of code...
-    #[inline(always)]
-    fn flush_buffer<CD>(
-        sender_id: NodeID,
-        buffer_pool: &mut BufferPool<ArconEventWrapper<A>>,
-        channel: &Channel<A>,
-        writer: &mut BufferWriter<ArconEventWrapper<A>>,
-        source: &CD,
-    ) where
-        CD: ComponentDefinition + Sized + 'static,
-    {
-        let msg = ArconMessage {
-            events: writer.reader(),
-            sender: sender_id,
-        };
-        if let Err(SerError::BufferError(err)) = send(channel, msg, source) {
-            // TODO: Figure out how to get more space for `tell_serialised`
-            panic!("Buffer Error {}", err);
-        };
-        // set a new writer
-        *writer = buffer_pool.get();
     }
 
     #[inline]
     pub fn num_channels(&self) -> usize {
-        self.buffer_map.len()
+        self.channels.len()
     }
 }
 
@@ -173,9 +152,9 @@ mod tests {
     use super::{Channel, *};
     use crate::{
         application::Application,
-        data::{ArconElement, ArconEvent, NodeID},
+        data::{ArconElement, ArconEvent, NodeID, Watermark},
         stream::{
-            channel::strategy::{tests::*, ChannelStrategy},
+            channel::strategy::{send, tests::*, ChannelStrategy},
             node::debug::DebugNode,
         },
     };
@@ -224,9 +203,12 @@ mod tests {
         let comp = &comps[0];
         comp.on_definition(|cd| {
             for input in inputs {
-                let _ = channel_strategy.add(input, cd);
+                let _ = channel_strategy.push(input);
             }
-            let _ = channel_strategy.flush(cd);
+            // force a flush through a marker
+            for (channel, msg) in channel_strategy.push(ArconEvent::Watermark(Watermark::new(0))) {
+                let _ = send(&channel, msg, cd);
+            }
         });
 
         std::thread::sleep(std::time::Duration::from_secs(1));

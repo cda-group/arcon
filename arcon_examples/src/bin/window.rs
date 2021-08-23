@@ -10,30 +10,23 @@ fn main() {
             conf.set_arcon_time(ArconTime::Event);
             conf.set_timestamp_extractor(|x: &u64| *x);
         })
-        .window(WindowBuilder {
-            assigner: Assigner::Sliding {
-                length: Time::seconds(1000),
-                slide: Time::seconds(500),
-                late_arrival: Time::seconds(0),
-            },
-            function: Arc::new(|backend: Arc<Sled>| {
-                fn init(i: u64) -> u64 {
-                    i
-                }
-                fn aggregation(i: u64, agg: &u64) -> u64 {
-                    agg + i
-                }
-                IncrementalWindowFn::new(backend, &init, &aggregation)
+        .operator(OperatorBuilder {
+            operator: Arc::new(|| {
+                let conf = WindowConf {
+                    assigner: Assigner::Sliding {
+                        length: Time::seconds(1000),
+                        slide: Time::seconds(500),
+                        late_arrival: Time::seconds(0),
+                    },
+                    kind: StreamKind::Keyed,
+                };
+                WindowAssigner::new(conf)
             }),
-            conf: Default::default(),
-        })
-        .window(WindowBuilder {
-            assigner: Assigner::Tumbling {
-                length: Time::seconds(2000),
-                late_arrival: Time::seconds(0),
-            },
-            function: Arc::new(|backend: Arc<Sled>| AppenderWindowFn::new(backend, &window_sum)),
-            conf: Default::default(),
+            state: Arc::new(|backend| {
+                let index = AppenderWindow::new(backend.clone(), &window_sum);
+                WindowState::new(index, backend)
+            }),
+            conf: OperatorConf::default(),
         })
         .to_console()
         .build();

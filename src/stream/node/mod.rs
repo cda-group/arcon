@@ -1,9 +1,11 @@
 // Copyright (c) 2020, KTH Royal Institute of Technology.
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/// Common code between node types
+pub mod common;
 /// Debug version of [Node]
 pub mod debug;
-
+/// SourceNode components that drives the execution of sources
 pub mod source;
 
 #[cfg(feature = "metrics")]
@@ -20,21 +22,22 @@ use crate::data::flight_serde::unsafe_remote::UnsafeSerde;
 use crate::{
     data::{flight_serde::reliable_remote::ReliableSerde, RawArconMessage, *},
     error::{ArconResult, *},
-    index::{
-        AppenderIndex, ArconState, EagerAppender, IndexOps, StateConstructor, Timer as ArconTimer,
-    },
+    index::{AppenderIndex, ArconState, EagerAppender, IndexOps},
     manager::node::{NodeManagerEvent::Checkpoint, *},
     reportable_error,
     stream::{
         channel::strategy::ChannelStrategy,
         operator::{Operator, OperatorContext},
     },
-}; // conflicts with Kompact Timer trait
+};
 use arcon_macros::ArconState;
 use arcon_state::Backend;
 use fxhash::*;
 use kompact::prelude::*;
-use std::{cell::UnsafeCell, sync::Arc};
+use std::{
+    cell::{RefCell, UnsafeCell},
+    sync::Arc,
+};
 
 /// Type alias for a Node description
 pub type NodeDescriptor = String;
@@ -74,13 +77,6 @@ pub struct NodeState<OP: Operator + 'static, B: Backend> {
     id: NodeID,
 }
 
-impl<OP: Operator + 'static, B: Backend> StateConstructor for NodeState<OP, B> {
-    type BackendType = B;
-    fn new(_: Arc<B>) -> Self {
-        unreachable!();
-    }
-}
-
 impl<OP: Operator + 'static, B: Backend> NodeState<OP, B> {
     pub fn new(id: NodeID, in_channels: Vec<NodeID>, backend: Arc<B>) -> Self {
         let message_buffer = EagerAppender::new("_messagebuffer", backend);
@@ -103,20 +99,6 @@ impl<OP: Operator + 'static, B: Backend> NodeState<OP, B> {
     }
 }
 
-// Just a shorthand to avoid repeating the OperatorContext construction everywhere
-macro_rules! make_context {
-    ($sel:ident) => {
-        OperatorContext::new(
-            $sel,
-            &mut (*$sel.timer.get()),
-            &mut (*$sel.channel_strategy.get()),
-            &$sel.logger,
-            #[cfg(feature = "metrics")]
-            &$sel.descriptor,
-        )
-    };
-}
-
 /// A Node is a [kompact] component that drives the execution of streaming operators
 #[derive(ComponentDefinition)]
 pub struct Node<OP, B>
@@ -133,18 +115,16 @@ where
     /// Channel Strategy used by the Node
     channel_strategy: UnsafeCell<ChannelStrategy<OP::OUT>>,
     /// User-defined Operator
-    operator: UnsafeCell<OP>,
-
+    operator: OP,
+    /// Context for the Operator of this Node
+    operator_context: RefCell<OperatorContext<OP::TimerState, OP::OperatorState>>,
     /// Internal Node State
     node_state: NodeState<OP, B>,
-    /// Event time scheduler
-    timer: UnsafeCell<ArconTimer<u64, OP::TimerState, B>>,
-    logger: ArconLogger,
-
     #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
+    /// Configured hardware counters
     perf_events: PerfEvents,
-
     #[cfg(feature = "metrics")]
+    /// Struct holding metrics information
     node_metrics: NodeMetrics,
 }
 
@@ -154,20 +134,29 @@ where
     B: Backend,
 {
     /// Creates a new Node
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         descriptor: NodeDescriptor,
         channel_strategy: ChannelStrategy<OP::OUT>,
         operator: OP,
+        operator_state: OP::OperatorState,
         node_state: NodeState<OP, B>,
         backend: Arc<B>,
         logger: ArconLogger,
-
         #[cfg(all(feature = "hardware_counters", target_os = "linux"))]
         #[cfg(not(test))]
         perf_events: PerfEvents,
     ) -> Self {
         let timer_id = format!("_{}_timer", descriptor);
-        let timer = ArconTimer::new(timer_id, backend);
+        let timer = crate::index::timer::Timer::new(timer_id, backend);
+
+        let operator_context = OperatorContext::new(
+            Box::new(timer),
+            operator_state,
+            logger,
+            #[cfg(feature = "metrics")]
+            descriptor.clone(),
+        );
 
         #[cfg(feature = "metrics")]
         {
@@ -189,15 +178,11 @@ where
             node_manager_port: RequiredPort::uninitialised(),
             descriptor,
             channel_strategy: UnsafeCell::new(channel_strategy),
-            operator: UnsafeCell::new(operator),
-
+            operator,
+            operator_context: RefCell::new(operator_context),
             node_state,
-            timer: UnsafeCell::new(timer),
-            logger,
-
             #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
             perf_events,
-
             #[cfg(feature = "metrics")]
             node_metrics: NodeMetrics::new(),
         }
@@ -213,7 +198,7 @@ where
 
         if !self.node_state.in_channels.contains(message.sender()) {
             error!(
-                self.logger,
+                self.operator_context.borrow().logger,
                 "Message from invalid sender id {:?}",
                 message.sender()
             );
@@ -293,17 +278,17 @@ where
                         None => return reportable_error!("Uninitialised watermark"),
                     };
 
-                    if e.timestamp.unwrap_or(u64::max_value()) <= watermark.timestamp {
+                    if e.timestamp <= watermark.timestamp {
                         continue 'event_loop;
                     }
 
-                    unsafe {
-                        let operator = &mut (*self.operator.get());
-                        // Set key for the current element
-                        // TODO: Should use a pre-defined key for Non-Keyed Streams.
-                        operator.state().set_key(e.data.get_key());
-                        operator.handle_element(e, make_context!(self))?;
-                    };
+                    // Set key for the current element
+                    // TODO: Should use a pre-defined key for Non-Keyed Streams.
+                    let mut context = self.operator_context.borrow_mut();
+                    context.state().set_key(e.data.get_key());
+                    for elem in self.operator.handle_element(e, &mut context)? {
+                        self.add_outgoing_event(ArconEvent::Element(elem))?;
+                    }
                 }
                 ArconEvent::Watermark(w) => {
                     let watermark = match self.node_state.watermarks().get(&sender) {
@@ -331,27 +316,31 @@ where
                     if new_watermark.timestamp > self.node_state.current_watermark.timestamp {
                         self.node_state.current_watermark = new_watermark;
 
-                        unsafe {
-                            let timer = &mut (*self.timer.get());
-                            let timeouts = timer.advance_to(new_watermark.timestamp)?;
-                            for timeout in timeouts {
-                                (*self.operator.get())
-                                    .handle_timeout(timeout, make_context!(self))?;
+                        let timeouts = self
+                            .operator_context
+                            .borrow_mut()
+                            .timer
+                            .advance_to(new_watermark.timestamp)?;
+                        for timeout in timeouts {
+                            if let Some(elems) = self
+                                .operator
+                                .handle_timeout(timeout, &mut self.operator_context.borrow_mut())?
+                            {
+                                for elem in elems {
+                                    self.add_outgoing_event(ArconEvent::Element(elem))?;
+                                }
                             }
-                        };
+                        }
 
                         #[cfg(feature = "metrics")]
                         increment_counter!("watermark_counter", "node" => self.descriptor.clone());
 
                         // Forward the watermark
-                        unsafe {
-                            (*self.channel_strategy.get())
-                                .add(ArconEvent::Watermark(new_watermark), self);
-                        };
+                        self.add_outgoing_event(ArconEvent::Watermark(new_watermark))?;
                     }
                 }
                 ArconEvent::Epoch(e) => {
-                    debug!(self.logger, "Got Epoch {:?}", e);
+                    debug!(self.operator_context.borrow().logger, "Got Epoch {:?}", e);
                     if e < self.node_state.current_epoch {
                         continue 'event_loop;
                     }
@@ -365,14 +354,8 @@ where
                         // persist internal node state for this node
                         self.node_state.persist()?;
 
-                        unsafe {
-                            // persist timer
-                            let timer = &mut (*self.timer.get());
-                            timer.persist()?;
-
-                            // persist possible operator state..
-                            (*self.operator.get()).persist()?;
-                        };
+                        // persist possible operator state..
+                        self.operator_context.borrow_mut().state.persist()?;
 
                         // Create checkpoint request and send it off to the NodeManager
                         let request = CheckpointRequest::new(
@@ -382,10 +365,7 @@ where
                         self.node_manager_port.trigger(Checkpoint(request));
 
                         // Forward the Epoch
-                        unsafe {
-                            (*self.channel_strategy.get())
-                                .add(ArconEvent::Epoch(self.node_state.current_epoch), self);
-                        };
+                        self.add_outgoing_event(ArconEvent::Epoch(self.node_state.current_epoch))?;
 
                         // Update current epoch
                         self.node_state.current_epoch.epoch += 1;
@@ -393,15 +373,19 @@ where
                 }
                 ArconEvent::Death(s) => {
                     // We are instructed to shutdown....
-                    unsafe {
-                        (*self.channel_strategy.get()).add(ArconEvent::Death(s), self);
-                    };
+                    self.add_outgoing_event(ArconEvent::Death(s))?;
                     self.ctx.suicide(); // TODO: is suicide enough?
                 }
             }
         }
 
         Ok(())
+    }
+
+    #[inline]
+    fn add_outgoing_event(&self, event: ArconEvent<OP::OUT>) -> ArconResult<()> {
+        let strategy = unsafe { &mut *self.channel_strategy.get() };
+        common::add_outgoing_event(event, strategy, self)
     }
 
     #[inline]
@@ -428,16 +412,20 @@ where
 {
     fn on_start(&mut self) -> Handled {
         debug!(
-            self.logger,
+            self.operator_context.borrow().logger,
             "Started Arcon Node {} with Node ID {:?}", self.descriptor, self.node_state.id
         );
 
-        unsafe {
-            let operator = &mut (*self.operator.get());
-            if operator.on_start(make_context!(self)).is_err() {
-                error!(self.logger, "Failed to run startup code");
-            }
-        };
+        if self
+            .operator
+            .on_start(&mut self.operator_context.borrow_mut())
+            .is_err()
+        {
+            error!(
+                self.operator_context.borrow().logger,
+                "Failed to run startup code"
+            );
+        }
 
         Handled::Ok
     }
@@ -453,7 +441,7 @@ where
             NodeEvent::CheckpointResponse(_) => {
                 if let Err(error) = self.complete_epoch() {
                     error!(
-                        self.logger,
+                        self.operator_context.borrow().logger,
                         "Failed to complete epoch with error {:?}", error
                     );
                 }
@@ -469,7 +457,11 @@ where
     B: Backend,
 {
     fn handle(&mut self, e: NodeManagerEvent) -> Handled {
-        trace!(self.logger, "Ignoring node event: {:?}", e);
+        trace!(
+            self.operator_context.borrow().logger,
+            "Ignoring node event: {:?}",
+            e
+        );
         Handled::Ok
     }
 }
@@ -483,7 +475,10 @@ where
 
     fn receive_local(&mut self, msg: Self::Message) -> Handled {
         if let Err(err) = self.handle_message(MessageContainer::Local(msg)) {
-            error!(self.logger, "Failed to handle message: {}", err);
+            error!(
+                self.operator_context.borrow().logger,
+                "Failed to handle message: {}", err
+            );
         }
         Handled::Ok
     }
@@ -506,10 +501,16 @@ where
         match arcon_msg {
             Ok(m) => {
                 if let Err(err) = self.handle_message(MessageContainer::Raw(m)) {
-                    error!(self.logger, "Failed to handle node message: {}", err);
+                    error!(
+                        self.operator_context.borrow().logger,
+                        "Failed to handle node message: {}", err
+                    );
                 }
             }
-            Err(e) => error!(self.logger, "Error ArconNetworkMessage: {:?}", e),
+            Err(e) => error!(
+                self.operator_context.borrow().logger,
+                "Error ArconNetworkMessage: {:?}", e
+            ),
         }
         Handled::Ok
     }
@@ -525,6 +526,8 @@ mod tests {
     use crate::metrics::perf_event::HardwareCounter;
     use crate::{
         application::*,
+        dataflow::api::OperatorBuilder,
+        index::EmptyState,
         stream::{
             channel::{strategy::forward::Forward, Channel},
             node::debug::DebugNode,
@@ -538,10 +541,14 @@ mod tests {
             *x >= 0
         }
 
-        let filter = Filter::new(&filter_fn);
+        let builder = OperatorBuilder::<_> {
+            operator: Arc::new(|| Filter::new(&filter_fn)),
+            state: Arc::new(|_backend| EmptyState),
+            conf: Default::default(),
+        };
 
-        fn setup<OP: Operator<IN = i32, OUT = i32> + 'static>(
-            op: OP,
+        fn setup<OP: Operator<IN = i32, OUT = i32> + 'static, B: Backend>(
+            builder: OperatorBuilder<OP, B>,
         ) -> (ActorRef<ArconMessage<i32>>, Arc<Component<DebugNode<i32>>>) {
             // Returns a filter Node with input channels: sender1..sender3
             // And a debug sink receiving its results
@@ -564,20 +571,24 @@ mod tests {
                 ChannelStrategy::Forward(Forward::new(channel, NodeID::new(0), pool_info));
 
             // Set up  NodeManager
-            let backend = Arc::new(crate::test_utils::temp_backend());
+            let backend = Arc::new(crate::test_utils::temp_backend::<B>());
             let descriptor = String::from("node_");
             let in_channels = vec![1.into(), 2.into(), 3.into()];
+
+            let operator = builder.operator.clone();
+            let operator_state = builder.state.clone();
 
             #[cfg(not(test))]
             let mut perf_events = PerfEvents::new();
 
-            let nm = NodeManager::<OP, _>::new(
+            let nm = NodeManager::<OP, B>::new(
                 descriptor.clone(),
                 app.data_system.clone(),
                 epoch_manager_ref,
                 in_channels.clone(),
                 backend.clone(),
                 app.arcon_logger.clone(),
+                builder,
             );
             let node_manager_comp = app.ctrl_system().create(|| nm);
 
@@ -589,7 +600,8 @@ mod tests {
             let node = Node::<OP, _>::new(
                 descriptor,
                 channel_strategy,
-                op,
+                operator(),
+                operator_state(backend.clone()),
                 NodeState::new(NodeID::new(0), in_channels, backend.clone()),
                 backend,
                 app.arcon_logger.clone(),
@@ -618,7 +630,7 @@ mod tests {
             (filter_ref, sink)
         }
 
-        setup(filter)
+        setup(builder)
     }
 
     fn watermark(time: u64, sender: u32) -> ArconMessage<i32> {
@@ -626,7 +638,7 @@ mod tests {
     }
 
     fn element(data: i32, time: u64, sender: u32) -> ArconMessage<i32> {
-        ArconMessage::element(data, Some(time), sender.into())
+        ArconMessage::element(data, time, sender.into())
     }
 
     fn epoch(epoch: u64, sender: u32) -> ArconMessage<i32> {
