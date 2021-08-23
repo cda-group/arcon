@@ -157,6 +157,7 @@ impl VecOps for Rocks {
         fixed_bytes::serialize_into(&mut serialized.as_mut_slice(), &len)?;
 
         let cf = self.get_cf_handle(&handle.id)?;
+        record_bytes_written(handle.name(), serialized.len() as u64, self.name.as_str());
         self.db()
             .merge_cf_opt(cf, key, serialized, &default_write_opts())?;
 
@@ -176,7 +177,7 @@ impl VecOps for Rocks {
                 // this is certainly a bug, so let's not bother with a Result
                 panic!("vec stored with partial size?");
             }
-
+            record_bytes_read(handle.name(), storage.len() as u64, self.name.as_str());
             let len = fixed_bytes::deserialize_from(&mut storage.as_ref())?;
             Ok(len)
         } else {
