@@ -37,7 +37,7 @@ fn index_rocks_backed(b: &mut Bencher) {
 fn index_rolling_counter(backend: BackendType, b: &mut Bencher) {
     let dir = tempdir().unwrap();
     with_backend_type!(backend, |B| {
-        let backend = Arc::new(B::create(dir.as_ref(), "value_backend").unwrap());
+        let backend = Arc::new(B::create(dir.as_ref(), "value_backend".to_string()).unwrap());
         let mut value_index: LocalValue<u64, B> = LocalValue::new("_value", backend);
         b.iter(|| {
             let curr_value = value_index.get().unwrap().unwrap().into_owned();
@@ -97,7 +97,7 @@ fn naive_rolling_sled(b: &mut Bencher) {
 fn naive_rolling_counter(backend: BackendType, b: &mut Bencher) {
     let dir = tempdir().unwrap();
     with_backend_type!(backend, |B| {
-        let backend = Arc::new(B::create(dir.as_ref(), "value_backend").unwrap());
+        let backend = Arc::new(B::create(dir.as_ref(), "value_backend".to_string()).unwrap());
         let mut value_handle: Handle<ValueState<u64>> = Handle::value("_valueindex");
         backend.register_value_handle(&mut value_handle);
         let mut state = value_handle.activate(backend);
@@ -126,7 +126,7 @@ fn specialised_sled(b: &mut Bencher) {
 fn specialised_rolling_counter(backend: BackendType, b: &mut Bencher) {
     let dir = tempdir().unwrap();
     with_backend_type!(backend, |B| {
-        let backend = Arc::new(B::create(dir.as_ref(), "value_backend").unwrap());
+        let backend = Arc::new(B::create(dir.as_ref(), "value_backend".to_string()).unwrap());
         let mut agg_handle = Handle::aggregator("agger", CounterAggregator);
         backend.register_aggregator_handle(&mut agg_handle);
 

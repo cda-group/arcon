@@ -244,8 +244,8 @@ impl<S: StateType, IK: Metakey, N: Metakey> Handle<S, IK, N> {
 
         #[cfg(feature = "metrics")]
         {
-            register_counter!(format!("{}_bytes_read", self.name()), "backend"=>backend.name());
-            register_counter!(format!("{}_bytes_written", self.name()), "backend"=>backend.name());
+            register_counter!(format!("{}_bytes_read", self.name()), "backend"=>backend.name().to_string());
+            register_counter!(format!("{}_bytes_written", self.name()), "backend"=>backend.name().to_string());
         }
 
         ActiveHandle {

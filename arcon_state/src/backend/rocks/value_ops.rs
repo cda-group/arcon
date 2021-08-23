@@ -27,7 +27,7 @@ impl ValueOps for Rocks {
         let key = handle.serialize_metakeys()?;
         if let Some(serialized) = self.get(&handle.id, &key)? {
             #[cfg(feature = "metrics")]
-            record_bytes_read(handle.name(), serialized.len() as u64, self.name);
+            record_bytes_read(handle.name(), serialized.len() as u64, self.name.as_str());
             let value = protobuf::deserialize(&serialized)?;
             Ok(Some(value))
         } else {
@@ -49,7 +49,7 @@ impl ValueOps for Rocks {
         };
         let serialized = protobuf::serialize(&value)?;
         #[cfg(feature = "metrics")]
-        record_bytes_written(handle.name(), serialized.len() as u64, self.name);
+        record_bytes_written(handle.name(), serialized.len() as u64, self.name.as_str());
         self.put(&handle.id, key, serialized)?;
         Ok(old)
     }
@@ -62,7 +62,7 @@ impl ValueOps for Rocks {
         let key = handle.serialize_metakeys()?;
         let serialized = protobuf::serialize(&value)?;
         #[cfg(feature = "metrics")]
-        record_bytes_written(handle.name(), serialized.len() as u64, self.name);
+        record_bytes_written(handle.name(), serialized.len() as u64, self.name.as_str());
         self.put(&handle.id, key, serialized)?;
         Ok(())
     }
@@ -75,7 +75,7 @@ impl ValueOps for Rocks {
         let key = handle.serialize_metakeys()?;
         let serialized = protobuf::serialize(value)?;
         #[cfg(feature = "metrics")]
-        record_bytes_written(handle.name(), serialized.len() as u64, self.name);
+        record_bytes_written(handle.name(), serialized.len() as u64, self.name.as_str());
         self.put(&handle.id, key, serialized)?;
         Ok(())
     }

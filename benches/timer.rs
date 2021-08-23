@@ -44,7 +44,7 @@ fn index_rocks_backed(b: &mut Bencher) {
 fn timer_inserts(backend: BackendType, b: &mut Bencher) {
     let dir = tempdir().unwrap();
     with_backend_type!(backend, |B| {
-        let backend = Arc::new(B::create(dir.as_ref(), "timer_backend").unwrap());
+        let backend = Arc::new(B::create(dir.as_ref(), "timer_backend".to_string()).unwrap());
         let mut index: ArconTimer<u64, u64, B> = ArconTimer::new("_timer", backend);
         b.iter(|| {
             for id in RANDOM_KEYS.iter() {

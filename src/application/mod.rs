@@ -260,7 +260,7 @@ impl Application {
 
         let mut state_dir = self.arcon_conf().state_dir();
         state_dir.push("source_manager");
-        let backend = Arc::new(B::create(&state_dir, "source_manager").unwrap());
+        let backend = Arc::new(B::create(&state_dir, String::from("source_manager")).unwrap());
         let time = builder_type.time();
         let manager_constructor = source_manager_constructor::<S, B>(
             String::from("source_manager"),

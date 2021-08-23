@@ -30,7 +30,7 @@ impl ReducerOps for Rocks {
         let key = handle.serialize_metakeys()?;
         if let Some(storage) = self.get(&handle.id, &key)? {
             #[cfg(feature = "metrics")]
-            record_bytes_read(handle.name(), storage.len() as u64, self.name);
+            record_bytes_read(handle.name(), storage.len() as u64, self.name.as_str());
             let value = protobuf::deserialize(&*storage)?;
             Ok(Some(value))
         } else {
@@ -50,7 +50,7 @@ impl ReducerOps for Rocks {
         // See the make_reducer_merge function in this module. Its result is set as the merging
         // operator for this state.
         #[cfg(feature = "metrics")]
-        record_bytes_written(handle.name(), serialized.len() as u64, self.name);
+        record_bytes_written(handle.name(), serialized.len() as u64, self.name.as_str());
         Ok(self
             .db()
             .merge_cf_opt(cf, key, serialized, &default_write_opts())?)

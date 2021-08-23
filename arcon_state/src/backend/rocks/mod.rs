@@ -27,7 +27,7 @@ pub struct Rocks {
     inner: UnsafeCell<DB>,
     path: PathBuf,
     restored: bool,
-    name: &'static str,
+    name: String,
 }
 
 // we use epochs, so WAL is useless for us
@@ -141,11 +141,11 @@ where
 }
 
 impl Backend for Rocks {
-    fn name(&self) -> &'static str {
-        self.name
+    fn name(&self) -> &str {
+        self.name.as_str()
     }
 
-    fn create(path: &Path, name: &'static str) -> Result<Self>
+    fn create(path: &Path, name: String) -> Result<Self>
     where
         Self: Sized,
     {
@@ -180,7 +180,7 @@ impl Backend for Rocks {
         })
     }
 
-    fn restore(live_path: &Path, checkpoint_path: &Path, name: &'static str) -> Result<Self>
+    fn restore(live_path: &Path, checkpoint_path: &Path, name: String) -> Result<Self>
     where
         Self: Sized,
     {
@@ -323,7 +323,7 @@ pub mod tests {
             let mut dir_path = dir.path().to_path_buf();
             dir_path.push("rocks");
             fs::create_dir(&dir_path).unwrap();
-            let rocks = Rocks::create(&dir_path, "testDB").unwrap();
+            let rocks = Rocks::create(&dir_path, "testDB".to_string()).unwrap();
             TestDb {
                 rocks: Arc::new(rocks),
                 dir,
@@ -341,7 +341,8 @@ pub mod tests {
             let dir = TempDir::new().unwrap();
             let mut dir_path = dir.path().to_path_buf();
             dir_path.push("rocks");
-            let rocks = Rocks::restore(&dir_path, checkpoint_dir.as_ref(), "testDB").unwrap();
+            let rocks =
+                Rocks::restore(&dir_path, checkpoint_dir.as_ref(), "testDB".to_string()).unwrap();
             TestDb {
                 rocks: Arc::new(rocks),
                 dir,
@@ -398,7 +399,7 @@ pub mod tests {
         let mut restore_dir_path = restore_dir.path().to_path_buf();
         restore_dir_path.push("chkp0");
 
-        let db = Rocks::create(dir_path, "testDB").unwrap();
+        let db = Rocks::create(dir_path, "testDB".to_string()).unwrap();
 
         let key: &[u8] = b"key";
         let initial_value: &[u8] = b"value";
@@ -412,8 +413,12 @@ pub mod tests {
         db.put(column_family, key, new_value)
             .expect("second put failed");
 
-        let db_from_checkpoint = Rocks::restore(&restore_dir_path, &checkpoints_dir_path, "testDB")
-            .expect("Could not open checkpointed db");
+        let db_from_checkpoint = Rocks::restore(
+            &restore_dir_path,
+            &checkpoints_dir_path,
+            "testDB".to_string(),
+        )
+        .expect("Could not open checkpointed db");
 
         assert_eq!(
             new_value,

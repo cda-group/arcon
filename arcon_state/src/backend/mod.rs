@@ -40,7 +40,7 @@ pub struct Config {
 pub trait Backend:
     ValueOps + MapOps + VecOps + ReducerOps + AggregatorOps + Send + Sync + 'static
 {
-    fn restore_or_create(config: &Config, id: &'static str) -> Result<Self>
+    fn restore_or_create(config: &Config, id: String) -> Result<Self>
     where
         Self: Sized,
     {
@@ -130,12 +130,12 @@ pub trait Backend:
         }
     }
 
-    fn name(&self) -> &'static str;
+    fn name(&self) -> &str;
 
-    fn create(live_path: &Path, name: &'static str) -> Result<Self>
+    fn create(live_path: &Path, name: String) -> Result<Self>
     where
         Self: Sized;
-    fn restore(live_path: &Path, checkpoint_path: &Path, name: &'static str) -> Result<Self>
+    fn restore(live_path: &Path, checkpoint_path: &Path, name: String) -> Result<Self>
     where
         Self: Sized;
 
