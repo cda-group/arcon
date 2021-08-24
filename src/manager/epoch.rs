@@ -4,7 +4,6 @@
 use crate::{
     application::conf::logger::ArconLogger,
     data::{Epoch, StateID},
-    manager::query::{QueryManagerMsg, QueryManagerPort},
     stream::node::source::SourceEvent,
 };
 use kompact::prelude::*;
@@ -42,7 +41,6 @@ pub struct EpochManager {
     epoch_acks: HashSet<(StateID, Epoch)>,
     /// Actor Reference to the SnapshotManager
     snapshot_manager: ActorRefStrong<EpochCommit>,
-    query_manager_port: RequiredPort<QueryManagerPort>,
     logger: ArconLogger,
 }
 
@@ -62,7 +60,6 @@ impl EpochManager {
             snapshot_manager,
             source_manager: None,
             epoch_timeout: None,
-            query_manager_port: RequiredPort::uninitialised(),
             logger,
         }
     }
@@ -96,8 +93,6 @@ impl EpochManager {
                         if self.epoch_acks.len() == self.known_state_ids.len() {
                             self.ongoing_epoch_commit = epoch.epoch + 1;
                             self.snapshot_manager.tell(EpochCommit(epoch));
-                            self.query_manager_port
-                                .trigger(QueryManagerMsg::EpochCommit(epoch.epoch));
                             self.epoch_acks.clear();
                         }
                     }
@@ -158,11 +153,6 @@ impl ComponentLifecycle for EpochManager {
         if let Some(timeout) = self.epoch_timeout.take() {
             self.cancel_timer(timeout);
         }
-        Handled::Ok
-    }
-}
-impl Require<QueryManagerPort> for EpochManager {
-    fn handle(&mut self, _: Never) -> Handled {
         Handled::Ok
     }
 }

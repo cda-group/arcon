@@ -5,10 +5,9 @@ use crate::{
     application::conf::logger::ArconLogger,
     data::{ArconMessage, Epoch, NodeID, StateID, Watermark},
     error::*,
-    index::{ArconState, HashTable, IndexOps, LocalValue, ValueIndex, EMPTY_STATE_ID},
+    index::{HashTable, IndexOps, LocalValue, ValueIndex, EMPTY_STATE_ID},
     manager::{
         epoch::EpochEvent,
-        query::{QueryManagerMsg, QueryManagerPort, TableRegistration},
         snapshot::{Snapshot, SnapshotEvent, SnapshotManagerPort},
     },
     prelude::OperatorBuilder,
@@ -137,8 +136,6 @@ where
     pub(crate) manager_port: ProvidedPort<NodeManagerPort>,
     /// Port for the SnapshotManager component
     pub(crate) snapshot_manager_port: RequiredPort<SnapshotManagerPort>,
-    /// Port for the QueryManager component
-    pub(crate) query_manager_port: RequiredPort<QueryManagerPort>,
     /// Actor Reference to the EpochManager
     epoch_manager: ActorRefStrong<EpochEvent>,
     /// Reference to KompactSystem that the Nodes run on..
@@ -187,7 +184,6 @@ where
             state_id,
             manager_port: ProvidedPort::uninitialised(),
             snapshot_manager_port: RequiredPort::uninitialised(),
-            query_manager_port: RequiredPort::uninitialised(),
             epoch_manager,
             data_system,
             node_parallelism: num_cpus::get(),
@@ -310,24 +306,6 @@ where
                                     port_ref,
                                 );
                             }
-
-                            if OP::OperatorState::has_tables() {
-                                if let Some(snapshot) = &self.latest_snapshot {
-                                    let mut state = OP::OperatorState::restore(
-                                        snapshot.clone(),
-                                        self.builder.state.clone(),
-                                    )?;
-                                    for table in state.tables() {
-                                        let registration = TableRegistration {
-                                            epoch: epoch.epoch,
-                                            table,
-                                        };
-                                        self.query_manager_port.trigger(
-                                            QueryManagerMsg::TableRegistration(registration),
-                                        );
-                                    }
-                                }
-                            }
                         }
                     }
                 }
@@ -376,16 +354,6 @@ where
 {
     fn handle(&mut self, _: SnapshotEvent) -> Handled {
         Handled::Ok
-    }
-}
-
-impl<OP, B> Require<QueryManagerPort> for NodeManager<OP, B>
-where
-    OP: Operator + 'static,
-    B: Backend,
-{
-    fn handle(&mut self, _: Never) -> Handled {
-        unreachable!("can't be instantiated!");
     }
 }
 

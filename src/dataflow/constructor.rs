@@ -268,12 +268,6 @@ pub(crate) fn node_manager_constructor<OP: Operator + 'static, B: Backend>(
                 });
             });
 
-            app.query_manager.on_definition(|scd| {
-                manager_comp.on_definition(|cd| {
-                    biconnect_ports(&mut scd.manager_port, &mut cd.query_manager_port);
-                });
-            });
-
             // Fetch PoolInfo object that ChannelStrategies use to organise their buffers
             let pool_info = app.get_pool_info();
 
