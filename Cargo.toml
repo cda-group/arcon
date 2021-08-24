@@ -15,14 +15,11 @@ A runtime for writing streaming applications
 members = [
     "arcon_build",
     "arcon_tests",
-    "arcon_shell",
     "arcon_examples"
 ]
 
-# TODO fix these later again
 exclude = [
-    "arcon_tui",
-    "experiments",
+    "arcon_shell",
 ]
 
 [features]

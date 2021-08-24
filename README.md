@@ -62,19 +62,25 @@ More advanced examples can be found [here](arcon_examples/src/bin).
 
 * [`arcon_allocator`]: Custom allocator.
 * [`arcon_build`]: Protobuf builder
+* [`arcon_examples`]: Example Applications
 * [`arcon_macros`]: Arcon derive macros.
 * [`arcon_shell`]: Explore a live Arcon application
 * [`arcon_state`]: State management features.
 * [`arcon_tests`]: Integration tests
-* [`arcon_tui`]: Text-based dashboard.
+* [`benches`]: Criterion benchmarks
+* [`src`]: Core arcon crate
+* [`website`]: Project website
 
 [`arcon_allocator`]: arcon_allocator
 [`arcon_build`]: arcon_build
+[`arcon_examples`]: arcon_examples
 [`arcon_macros`]: arcon_macros
 [`arcon_shell`]: arcon_shell
 [`arcon_state`]: arcon_state
 [`arcon_tests`]: arcon_tests
-[`arcon_tui`]: arcon_tui
+[`benches`]: benches
+[`src`]: src
+[`website`]: website
 
 ## License
 
