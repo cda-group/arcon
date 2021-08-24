@@ -8,6 +8,10 @@ use crate::{
     sled::Sled,
     Handle, VecOps, VecState,
 };
+
+#[cfg(feature = "metrics")]
+use crate::metrics_utils::*;
+
 use std::iter;
 
 impl VecOps for Sled {
@@ -30,8 +34,11 @@ impl VecOps for Sled {
         let mut serialized = Vec::with_capacity(
             <usize as FixedBytes>::SIZE + protobuf::size_hint(&value).unwrap_or(0),
         );
+
         fixed_bytes::serialize_into(&mut serialized, &1usize)?;
         protobuf::serialize_into(&mut serialized, &value)?;
+        #[cfg(feature = "metrics")]
+        record_bytes_written(handle.name(), serialized.len() as u64, self.name.as_str());
 
         let tree = self.tree(&handle.id)?;
         // See the vec_merge function in this module. It is set as the merge operator for every vec state.
@@ -47,6 +54,8 @@ impl VecOps for Sled {
         let key = handle.serialize_metakeys()?;
         if let Some(serialized) = self.get(&handle.id, &key)? {
             // reader is updated to point at the yet unconsumed part of the serialized data
+            #[cfg(feature = "metrics")]
+            record_bytes_read(handle.name(), serialized.len() as u64, self.name.as_str());
             let mut reader = &serialized[..];
             let len: usize = fixed_bytes::deserialize_from(&mut reader)?;
             let mut res = Vec::with_capacity(len);
@@ -120,7 +129,8 @@ impl VecOps for Sled {
         for elem in value {
             protobuf::serialize_into(&mut storage, &elem)?;
         }
-
+        #[cfg(feature = "metrics")]
+        record_bytes_written(handle.name(), storage.len() as u64, self.name.as_str());
         self.put(&handle.id, &key, &storage)?;
 
         Ok(())
@@ -145,6 +155,8 @@ impl VecOps for Sled {
             len += 1;
             protobuf::serialize_into(&mut serialized, &elem)?;
         }
+        #[cfg(feature = "metrics")]
+        record_bytes_written(handle.name(), serialized.len() as u64, self.name.as_str());
 
         // fill in the length
         // BufMut impl for mutable slices starts at the beginning and shifts the slice, whereas the
@@ -165,7 +177,8 @@ impl VecOps for Sled {
             if storage.is_empty() {
                 return Ok(0);
             }
-
+            #[cfg(feature = "metrics")]
+            record_bytes_read(handle.name(), storage.len() as u64, self.name.as_str());
             let len = fixed_bytes::deserialize_from(&mut storage.as_ref())?;
             Ok(len)
         } else {

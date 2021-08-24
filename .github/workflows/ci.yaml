@@ -60,19 +60,28 @@ jobs:
             os: macos-latest
             experimental: false
     steps:
-      - name: checkout
-        uses: actions/checkout@v2
+      - uses: actions/checkout@v2
       - name: install toolchain
         uses: actions-rs/toolchain@v1
         with:
             toolchain: ${{ env.msrv }}
             default: true
             profile: minimal
-      - name: test
+      - name: Install cargo-hack
+        run: cargo install cargo-hack
+
+      # Run tests with all features on
+      - name: test all --all-features
         uses: actions-rs/cargo@v1
         with:
           command: test
           args: --all --all-features
+
+      # Run tests for each Arcon feature
+      - name: test --each-feature
+        run: cargo hack test --each-feature
+
+      # Verify benches build but does not run
       - name: bench check
         uses: actions-rs/cargo@v1
         with:

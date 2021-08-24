@@ -5,10 +5,9 @@ use crate::{
     application::conf::logger::ArconLogger,
     data::{ArconMessage, Epoch, NodeID, StateID, Watermark},
     error::*,
-    index::{ArconState, HashTable, IndexOps, LocalValue, ValueIndex, EMPTY_STATE_ID},
+    index::{HashTable, IndexOps, LocalValue, ValueIndex, EMPTY_STATE_ID},
     manager::{
         epoch::EpochEvent,
-        query::{QueryManagerMsg, QueryManagerPort, TableRegistration},
         snapshot::{Snapshot, SnapshotEvent, SnapshotManagerPort},
     },
     prelude::OperatorBuilder,
@@ -23,9 +22,10 @@ use arcon_macros::ArconState;
 use arcon_state::Backend;
 use fxhash::FxHashMap;
 use kompact::{component::AbstractComponent, prelude::*};
+
 #[cfg(feature = "metrics")]
 use std::time::Instant;
-use std::{collections::HashSet, sync::Arc};
+use std::{collections::HashSet, fs, sync::Arc};
 
 pub type AbstractNode<IN> = (
     Arc<dyn AbstractComponent<Message = ArconMessage<IN>>>,
@@ -136,8 +136,6 @@ where
     pub(crate) manager_port: ProvidedPort<NodeManagerPort>,
     /// Port for the SnapshotManager component
     pub(crate) snapshot_manager_port: RequiredPort<SnapshotManagerPort>,
-    /// Port for the QueryManager component
-    pub(crate) query_manager_port: RequiredPort<QueryManagerPort>,
     /// Actor Reference to the EpochManager
     epoch_manager: ActorRefStrong<EpochEvent>,
     /// Reference to KompactSystem that the Nodes run on..
@@ -179,13 +177,13 @@ where
         {
             register_gauge!("nodes", "node_manager" => state_id.clone());
             register_histogram!("checkpoint_execution_time_ms", "node_manager" => state_id.clone());
+            register_gauge!("last_checkpoint_size", "node_manager"=> state_id.clone());
         }
         NodeManager {
             ctx: ComponentContext::uninitialised(),
             state_id,
             manager_port: ProvidedPort::uninitialised(),
             snapshot_manager_port: RequiredPort::uninitialised(),
-            query_manager_port: RequiredPort::uninitialised(),
             epoch_manager,
             data_system,
             node_parallelism: num_cpus::get(),
@@ -230,6 +228,12 @@ where
                     self.state_id.clone(),
                     snapshot.clone(),
                 ));
+
+                #[cfg(feature = "metrics")]
+                {
+                    let metadata = fs::metadata(checkpoint_dir.clone())?;
+                    gauge!("last_checkpoint_size", metadata.len() as f64,"node_manager" => self.state_id.clone());
+                }
 
                 self.latest_snapshot = Some(snapshot);
             }
@@ -285,7 +289,6 @@ where
                             .insert((request.id, request.epoch));
 
                         if self.manager_state.checkpoint_acks.len() == self.nodes.len() {
-                            //TODO: here addd shit
                             #[cfg(feature = "metrics")]
                             let start_time = Instant::now();
 
@@ -302,24 +305,6 @@ where
                                     NodeEvent::CheckpointResponse(CheckpointResponse::NoAction),
                                     port_ref,
                                 );
-                            }
-
-                            if OP::OperatorState::has_tables() {
-                                if let Some(snapshot) = &self.latest_snapshot {
-                                    let mut state = OP::OperatorState::restore(
-                                        snapshot.clone(),
-                                        self.builder.state.clone(),
-                                    )?;
-                                    for table in state.tables() {
-                                        let registration = TableRegistration {
-                                            epoch: epoch.epoch,
-                                            table,
-                                        };
-                                        self.query_manager_port.trigger(
-                                            QueryManagerMsg::TableRegistration(registration),
-                                        );
-                                    }
-                                }
                             }
                         }
                     }
@@ -369,16 +354,6 @@ where
 {
     fn handle(&mut self, _: SnapshotEvent) -> Handled {
         Handled::Ok
-    }
-}
-
-impl<OP, B> Require<QueryManagerPort> for NodeManager<OP, B>
-where
-    OP: Operator + 'static,
-    B: Backend,
-{
-    fn handle(&mut self, _: Never) -> Handled {
-        unreachable!("can't be instantiated!");
     }
 }
 

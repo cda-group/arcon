@@ -55,7 +55,7 @@ pub trait ArconState: Send + 'static {
         Self: Sized,
     {
         let snapshot_dir = std::path::Path::new(&snapshot.snapshot_path);
-        let backend = B::restore(snapshot_dir, snapshot_dir)?;
+        let backend = B::restore(snapshot_dir, snapshot_dir, String::from(Self::STATE_ID))?;
         Ok(f(Arc::new(backend)))
     }
 

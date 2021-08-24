@@ -167,6 +167,7 @@ dependencies = [
  "bytes 1.0.1",
  "cc",
  "cfg-if 0.1.10",
+ "metrics",
  "once_cell",
  "prost 0.7.0",
  "rocksdb",

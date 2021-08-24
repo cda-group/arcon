@@ -11,6 +11,9 @@ use crate::{
 use rocksdb::MergeOperands;
 use std::{iter, mem};
 
+#[cfg(feature = "metrics")]
+use crate::metrics_utils::*;
+
 impl VecOps for Rocks {
     fn vec_clear<T: Value, IK: Metakey, N: Metakey>(
         &self,
@@ -31,8 +34,11 @@ impl VecOps for Rocks {
         let mut serialized = Vec::with_capacity(
             <usize as FixedBytes>::SIZE + protobuf::size_hint(&value).unwrap_or(0),
         );
+
         fixed_bytes::serialize_into(&mut serialized, &1usize)?;
         protobuf::serialize_into(&mut serialized, &value)?;
+        #[cfg(feature = "metrics")]
+        record_bytes_written(handle.name(), serialized.len() as u64, self.name.as_str());
 
         let cf = self.get_cf_handle(&handle.id)?;
         // See the vec_merge function in this module. It is set as the merge operator for every
@@ -48,6 +54,8 @@ impl VecOps for Rocks {
     ) -> Result<Vec<T>> {
         let key = handle.serialize_metakeys()?;
         if let Some(serialized) = self.get(&handle.id, &key)? {
+            #[cfg(feature = "metrics")]
+            record_bytes_read(handle.name(), serialized.len() as u64, self.name.as_str());
             // reader is updated to point at the yet unconsumed part of the serialized data
             let mut reader = &serialized[..];
             let len: usize = fixed_bytes::deserialize_from(&mut reader)?;
@@ -118,7 +126,8 @@ impl VecOps for Rocks {
         for elem in value {
             protobuf::serialize_into(&mut storage, &elem)?;
         }
-
+        #[cfg(feature = "metrics")]
+        record_bytes_written(handle.name(), storage.len() as u64, self.name.as_str());
         self.put(&handle.id, key, storage)
     }
 
@@ -148,6 +157,8 @@ impl VecOps for Rocks {
         fixed_bytes::serialize_into(&mut serialized.as_mut_slice(), &len)?;
 
         let cf = self.get_cf_handle(&handle.id)?;
+        #[cfg(feature = "metrics")]
+        record_bytes_written(handle.name(), serialized.len() as u64, self.name.as_str());
         self.db()
             .merge_cf_opt(cf, key, serialized, &default_write_opts())?;
 
@@ -167,7 +178,8 @@ impl VecOps for Rocks {
                 // this is certainly a bug, so let's not bother with a Result
                 panic!("vec stored with partial size?");
             }
-
+            #[cfg(feature = "metrics")]
+            record_bytes_read(handle.name(), storage.len() as u64, self.name.as_str());
             let len = fixed_bytes::deserialize_from(&mut storage.as_ref())?;
             Ok(len)
         } else {

@@ -38,8 +38,12 @@ pub struct OperatorBuilder<OP: Operator, Backend = DefaultBackend> {
 }
 
 impl<OP: Operator, Backend: arcon_state::Backend> OperatorBuilder<OP, Backend> {
-    pub(crate) fn create_backend(&self, state_dir: std::path::PathBuf) -> Arc<Backend> {
-        Arc::new(Backend::create(&state_dir).unwrap())
+    pub(crate) fn create_backend(
+        &self,
+        state_dir: std::path::PathBuf,
+        name: String,
+    ) -> Arc<Backend> {
+        Arc::new(Backend::create(&state_dir, name).unwrap())
     }
     pub(crate) fn state_id(&self) -> StateID {
         let mut state_id = OP::OperatorState::STATE_ID.to_owned();

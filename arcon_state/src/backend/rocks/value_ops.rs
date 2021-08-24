@@ -7,6 +7,9 @@ use crate::{
     Handle, Rocks, ValueOps, ValueState,
 };
 
+#[cfg(feature = "metrics")]
+use crate::metrics_utils::*;
+
 impl ValueOps for Rocks {
     fn value_clear<T: Value, IK: Metakey, N: Metakey>(
         &self,
@@ -23,6 +26,8 @@ impl ValueOps for Rocks {
     ) -> Result<Option<T>> {
         let key = handle.serialize_metakeys()?;
         if let Some(serialized) = self.get(&handle.id, &key)? {
+            #[cfg(feature = "metrics")]
+            record_bytes_read(handle.name(), serialized.len() as u64, self.name.as_str());
             let value = protobuf::deserialize(&serialized)?;
             Ok(Some(value))
         } else {
@@ -43,6 +48,8 @@ impl ValueOps for Rocks {
             None
         };
         let serialized = protobuf::serialize(&value)?;
+        #[cfg(feature = "metrics")]
+        record_bytes_written(handle.name(), serialized.len() as u64, self.name.as_str());
         self.put(&handle.id, key, serialized)?;
         Ok(old)
     }
@@ -54,6 +61,8 @@ impl ValueOps for Rocks {
     ) -> Result<()> {
         let key = handle.serialize_metakeys()?;
         let serialized = protobuf::serialize(&value)?;
+        #[cfg(feature = "metrics")]
+        record_bytes_written(handle.name(), serialized.len() as u64, self.name.as_str());
         self.put(&handle.id, key, serialized)?;
         Ok(())
     }
@@ -65,6 +74,8 @@ impl ValueOps for Rocks {
     ) -> Result<()> {
         let key = handle.serialize_metakeys()?;
         let serialized = protobuf::serialize(value)?;
+        #[cfg(feature = "metrics")]
+        record_bytes_written(handle.name(), serialized.len() as u64, self.name.as_str());
         self.put(&handle.id, key, serialized)?;
         Ok(())
     }
