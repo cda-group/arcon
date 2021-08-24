@@ -20,9 +20,7 @@ use crate::{
         stream::Context,
     },
     manager::{
-        endpoint::{EndpointManager, ENDPOINT_MANAGER_NAME},
         epoch::{EpochEvent, EpochManager},
-        query::{QueryManager, QUERY_MANAGER_NAME},
         snapshot::SnapshotManager,
     },
     prelude::*,
@@ -86,8 +84,6 @@ pub struct Application {
     pub(crate) epoch_manager: Option<Arc<Component<EpochManager>>>,
     /// SnapshotManager component for this application
     pub(crate) snapshot_manager: Arc<Component<SnapshotManager>>,
-    endpoint_manager: Arc<Component<EndpointManager>>,
-    pub(crate) query_manager: Arc<Component<QueryManager>>,
     /// Flag indicating whether to spawn a debug node for the Application
     debug_node_flag: bool,
     // Type erased Arc<Component<DebugNode<A>>>
@@ -124,38 +120,15 @@ impl Application {
             let recorder = LogRecorder {
                 logger: arcon_logger.clone(),
             };
-            metrics::set_boxed_recorder(Box::new(recorder)).unwrap();
+            if let Err(_) = metrics::set_boxed_recorder(Box::new(recorder)) {
+                // for tests, ignore logging this message as it will try to set the recorder multiple times..
+                #[cfg(not(test))]
+                error!(arcon_logger, "metrics recorder has already been set");
+            }
         }
 
         let (ctrl_system, data_system, snapshot_manager, epoch_manager) =
             Self::setup(&conf, &arcon_logger);
-        let endpoint_manager = ctrl_system.create(EndpointManager::new);
-        let query_manager = ctrl_system.create(QueryManager::new);
-
-        let timeout = std::time::Duration::from_millis(500);
-
-        ctrl_system
-            .start_notify(&endpoint_manager)
-            .wait_timeout(timeout)
-            .expect("EndpointManager comp never started!");
-
-        ctrl_system
-            .start_notify(&query_manager)
-            .wait_timeout(timeout)
-            .expect("QueryManager comp never started!");
-
-        biconnect_components(&query_manager, epoch_manager.as_ref().unwrap())
-            .expect("Failed to connect EpochManager and QueryManager");
-
-        if conf.ctrl_system_host.is_some() {
-            ctrl_system
-                .register_by_alias(&endpoint_manager, ENDPOINT_MANAGER_NAME)
-                .wait_expect(timeout, "Registration never completed.");
-
-            ctrl_system
-                .register_by_alias(&query_manager, QUERY_MANAGER_NAME)
-                .wait_expect(timeout, "Registration never completed.");
-        }
 
         Self {
             ctrl_system,
@@ -165,8 +138,6 @@ impl Application {
             snapshot_manager,
             epoch_manager,
             source_manager: None,
-            endpoint_manager,
-            query_manager,
             debug_node_flag: false,
             debug_node: None,
             abstract_debug_node: None,

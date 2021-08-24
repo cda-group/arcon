@@ -161,16 +161,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "arcon_shell"
-version = "0.1.0"
-dependencies = [
- "arcon",
- "clap",
- "prettytable-rs",
- "rustyline",
-]
-
-[[package]]
 name = "arcon_state"
 version = "0.1.1"
 dependencies = [

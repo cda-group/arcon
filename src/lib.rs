@@ -136,10 +136,6 @@ pub mod test_utils {
     }
 }
 
-pub mod client {
-    pub use crate::manager::query::{messages::*, QUERY_MANAGER_NAME};
-}
-
 /// Helper module that imports everything related to arcon into scope
 pub mod prelude {
     pub use crate::{
