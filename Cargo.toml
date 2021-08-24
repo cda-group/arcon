@@ -18,11 +18,8 @@ members = [
     "arcon_examples"
 ]
 
-# TODO fix these later again
 exclude = [
-    "arcon_tui",
     "arcon_shell",
-    "experiments",
 ]
 
 [features]
