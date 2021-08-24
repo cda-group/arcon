@@ -41,9 +41,9 @@ impl<OP: Operator, Backend: arcon_state::Backend> OperatorBuilder<OP, Backend> {
     pub(crate) fn create_backend(
         &self,
         state_dir: std::path::PathBuf,
-        name: &'static str,
+        name: String,
     ) -> Arc<Backend> {
-        Arc::new(Backend::create(&state_dir, String::from(name)).unwrap())
+        Arc::new(Backend::create(&state_dir, name).unwrap())
     }
     pub(crate) fn state_id(&self) -> StateID {
         let mut state_id = OP::OperatorState::STATE_ID.to_owned();

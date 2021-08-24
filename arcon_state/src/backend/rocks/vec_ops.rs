@@ -34,11 +34,11 @@ impl VecOps for Rocks {
         let mut serialized = Vec::with_capacity(
             <usize as FixedBytes>::SIZE + protobuf::size_hint(&value).unwrap_or(0),
         );
-        #[cfg(feature = "metrics")]
-        record_bytes_written(handle.name(), serialized.len() as u64, self.name.as_str());
 
         fixed_bytes::serialize_into(&mut serialized, &1usize)?;
         protobuf::serialize_into(&mut serialized, &value)?;
+        #[cfg(feature = "metrics")]
+        record_bytes_written(handle.name(), serialized.len() as u64, self.name.as_str());
 
         let cf = self.get_cf_handle(&handle.id)?;
         // See the vec_merge function in this module. It is set as the merge operator for every
