@@ -124,16 +124,18 @@ pub trait Backend:
                     epoch = epoch
                 ));
 
-                Self::restore(&state_path, &latest_checkpoint_path)
+                Self::restore(&state_path, &latest_checkpoint_path, id)
             }
-            None => Self::create(&state_path),
+            None => Self::create(&state_path, id),
         }
     }
 
-    fn create(live_path: &Path) -> Result<Self>
+    fn name(&self) -> &str;
+
+    fn create(live_path: &Path, name: String) -> Result<Self>
     where
         Self: Sized;
-    fn restore(live_path: &Path, checkpoint_path: &Path) -> Result<Self>
+    fn restore(live_path: &Path, checkpoint_path: &Path, name: String) -> Result<Self>
     where
         Self: Sized;
 
@@ -269,8 +271,11 @@ pub mod faster;
 #[cfg(all(feature = "faster", target_os = "linux"))]
 pub use self::faster::Faster;
 
+#[cfg(feature = "metrics")]
+pub mod metrics_utils;
 #[cfg(feature = "sled")]
 pub mod sled;
+
 #[cfg(feature = "sled")]
 pub use self::sled::Sled;
 

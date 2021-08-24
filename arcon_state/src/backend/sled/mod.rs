@@ -20,6 +20,7 @@ use std::{
 pub struct Sled {
     db: Db,
     restored: bool,
+    name: String,
 }
 
 impl Sled {
@@ -65,7 +66,11 @@ impl Sled {
 }
 
 impl Backend for Sled {
-    fn create(live_path: &Path) -> Result<Self>
+    fn name(&self) -> &str {
+        self.name.as_str()
+    }
+
+    fn create(live_path: &Path, name: String) -> Result<Self>
     where
         Self: Sized,
     {
@@ -73,11 +78,12 @@ impl Backend for Sled {
         Ok(Sled {
             db,
             restored: false,
+            name,
         })
     }
 
     #[allow(unused_variables)]
-    fn restore(live_path: &Path, checkpoint_path: &Path) -> Result<Self>
+    fn restore(live_path: &Path, checkpoint_path: &Path, name: String) -> Result<Self>
     where
         Self: Sized,
     {
@@ -95,7 +101,7 @@ impl Backend for Sled {
             restored = true;
         }
 
-        Ok(Sled { db, restored })
+        Ok(Sled { db, restored, name })
     }
 
     fn was_restored(&self) -> bool {
@@ -288,7 +294,7 @@ mod tests {
             let mut dir_path = dir.path().to_path_buf();
             dir_path.push("sled");
             fs::create_dir(&dir_path).unwrap();
-            let sled = Sled::create(&dir_path).unwrap();
+            let sled = Sled::create(&dir_path, "testDB".to_string()).unwrap();
             TestDb {
                 sled: Arc::new(sled),
                 dir,
@@ -314,7 +320,7 @@ mod tests {
     #[test]
     fn test_sled_checkpoints() {
         let dir = TempDir::new().unwrap();
-        let sled = Sled::create(dir.path()).unwrap();
+        let sled = Sled::create(dir.path(), "testDB".to_string()).unwrap();
 
         sled.db.insert(b"a", b"1").unwrap();
         sled.db.insert(b"b", b"2").unwrap();
@@ -328,7 +334,8 @@ mod tests {
 
         sled.checkpoint(chkp_dir.path()).unwrap();
 
-        let restored = Sled::restore(restore_dir.path(), chkp_dir.path()).unwrap();
+        let restored =
+            Sled::restore(restore_dir.path(), chkp_dir.path(), "testDB".to_string()).unwrap();
 
         assert!(!sled.was_restored());
         assert!(restored.was_restored());

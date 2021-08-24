@@ -21,7 +21,7 @@ impl<B: Backend> StreamState<B> {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let test_dir = tempfile::tempdir().unwrap();
     let path = test_dir.path();
-    let backend = Arc::new(Sled::create(path).unwrap());
+    let backend = Arc::new(Sled::create(path, "testDB".to_string()).unwrap());
 
     let mut state = StreamState::new(backend);
 

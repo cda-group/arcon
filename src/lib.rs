@@ -132,7 +132,7 @@ pub mod test_utils {
     pub fn temp_backend<B: Backend>() -> B {
         let test_dir = tempfile::tempdir().unwrap();
         let path = test_dir.path();
-        B::create(path).unwrap()
+        B::create(path, "testDB".to_string()).unwrap()
     }
 }
 

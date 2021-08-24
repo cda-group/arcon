@@ -9,6 +9,9 @@ use rocksdb::{merge_operator::MergeFn, MergeOperands};
 pub(crate) const ACCUMULATOR_MARKER: u8 = 0xAC;
 pub(crate) const VALUE_MARKER: u8 = 0x00;
 
+#[cfg(feature = "metrics")]
+use crate::metrics_utils::*;
+
 impl AggregatorOps for Rocks {
     fn aggregator_clear<A: Aggregator, IK: Metakey, N: Metakey>(
         &self,
@@ -28,7 +31,8 @@ impl AggregatorOps for Rocks {
         if let Some(serialized) = self.get(&handle.id, &key)? {
             assert_eq!(serialized[0], ACCUMULATOR_MARKER);
             let serialized = &serialized[1..];
-
+            #[cfg(feature = "metrics")]
+            record_bytes_read(handle.name(), serialized.len() as u64, self.name.as_str());
             let current_accumulator = protobuf::deserialize(serialized)?;
             Ok(handle
                 .extra_data
@@ -49,7 +53,12 @@ impl AggregatorOps for Rocks {
         let mut serialized = Vec::with_capacity(protobuf::size_hint(&value).unwrap_or(0) + 1);
         serialized.push(VALUE_MARKER);
         protobuf::serialize_into(&mut serialized, &value)?;
-
+        #[cfg(feature = "metrics")]
+        record_bytes_written(
+            handle.name(),
+            serialized.len() as u64,
+            self.name.clone().as_str(),
+        );
         let cf = self.get_cf_handle(&handle.id)?;
         // See the make_aggregating_merge function in this module. Its result is set as the
         // merging operator for this state.

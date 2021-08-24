@@ -5,6 +5,9 @@ use crate::backend::*;
 use bytes::BufMut;
 use std::{cell::Cell, sync::Arc};
 
+#[cfg(feature = "metrics")]
+use metrics::register_counter;
+
 pub struct Handle<S, IK = (), N = ()>
 where
     S: StateType,
@@ -225,6 +228,10 @@ impl<S: StateType, IK: Metakey, N: Metakey> Handle<S, IK, N> {
     pub fn metakey_size(&self) -> usize {
         IK::SIZE + N::SIZE
     }
+
+    pub fn name(&self) -> &str {
+        self.id.as_str()
+    }
 }
 //endregion
 
@@ -233,6 +240,12 @@ impl<S: StateType, IK: Metakey, N: Metakey> Handle<S, IK, N> {
     pub fn activate<B: Backend>(self, backend: Arc<B>) -> ActiveHandle<B, S, IK, N> {
         if !self.registered {
             panic!("State handles should be registered before activation!")
+        }
+
+        #[cfg(feature = "metrics")]
+        {
+            register_counter!(format!("{}_bytes_read", self.name()), "backend"=>backend.name().to_string());
+            register_counter!(format!("{}_bytes_written", self.name()), "backend"=>backend.name().to_string());
         }
 
         ActiveHandle {

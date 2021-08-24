@@ -8,6 +8,10 @@ use crate::{
     sled::Sled,
     Handle, Reducer, ReducerOps, ReducerState,
 };
+
+#[cfg(feature = "metrics")]
+use crate::metrics_utils::*;
+
 use sled::MergeOperator;
 use std::iter;
 
@@ -27,6 +31,8 @@ impl ReducerOps for Sled {
     ) -> Result<Option<T>> {
         let key = handle.serialize_metakeys()?;
         if let Some(storage) = self.get(&handle.id, &key)? {
+            #[cfg(feature = "metrics")]
+            record_bytes_read(handle.name(), storage.len() as u64, self.name.as_str());
             let value = protobuf::deserialize(&*storage)?;
             Ok(Some(value))
         } else {
@@ -41,6 +47,8 @@ impl ReducerOps for Sled {
     ) -> Result<()> {
         let key = handle.serialize_metakeys()?;
         let serialized = protobuf::serialize(&value)?;
+        #[cfg(feature = "metrics")]
+        record_bytes_written(handle.name(), serialized.len() as u64, self.name.as_str());
 
         // See the make_reducer_merge function in this module. Its result is set as the merging
         // operator for this state.

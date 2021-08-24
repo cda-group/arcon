@@ -23,9 +23,10 @@ use arcon_macros::ArconState;
 use arcon_state::Backend;
 use fxhash::FxHashMap;
 use kompact::{component::AbstractComponent, prelude::*};
+
 #[cfg(feature = "metrics")]
 use std::time::Instant;
-use std::{collections::HashSet, sync::Arc};
+use std::{collections::HashSet, fs, sync::Arc};
 
 pub type AbstractNode<IN> = (
     Arc<dyn AbstractComponent<Message = ArconMessage<IN>>>,
@@ -179,6 +180,7 @@ where
         {
             register_gauge!("nodes", "node_manager" => state_id.clone());
             register_histogram!("checkpoint_execution_time_ms", "node_manager" => state_id.clone());
+            register_gauge!("last_checkpoint_size", "node_manager"=> state_id.clone());
         }
         NodeManager {
             ctx: ComponentContext::uninitialised(),
@@ -230,6 +232,12 @@ where
                     self.state_id.clone(),
                     snapshot.clone(),
                 ));
+
+                #[cfg(feature = "metrics")]
+                {
+                    let metadata = fs::metadata(checkpoint_dir.clone())?;
+                    gauge!("last_checkpoint_size", metadata.len() as f64,"node_manager" => self.state_id.clone());
+                }
 
                 self.latest_snapshot = Some(snapshot);
             }
@@ -285,7 +293,6 @@ where
                             .insert((request.id, request.epoch));
 
                         if self.manager_state.checkpoint_acks.len() == self.nodes.len() {
-                            //TODO: here addd shit
                             #[cfg(feature = "metrics")]
                             let start_time = Instant::now();
 

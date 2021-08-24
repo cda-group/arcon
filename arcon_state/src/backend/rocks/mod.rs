@@ -7,6 +7,7 @@ use crate::{
     Aggregator, AggregatorState, Backend, Handle, MapState, Reducer, ReducerState, ValueState,
     VecState,
 };
+
 use rocksdb::{
     checkpoint::Checkpoint, ColumnFamily, ColumnFamilyDescriptor, DBPinnableSlice, Options,
     SliceTransform, WriteBatch, WriteOptions, DB,
@@ -26,6 +27,7 @@ pub struct Rocks {
     inner: UnsafeCell<DB>,
     path: PathBuf,
     restored: bool,
+    name: String,
 }
 
 // we use epochs, so WAL is useless for us
@@ -139,7 +141,11 @@ where
 }
 
 impl Backend for Rocks {
-    fn create(path: &Path) -> Result<Self>
+    fn name(&self) -> &str {
+        self.name.as_str()
+    }
+
+    fn create(path: &Path, name: String) -> Result<Self>
     where
         Self: Sized,
     {
@@ -166,15 +172,15 @@ impl Backend for Rocks {
         } else {
             vec![ColumnFamilyDescriptor::new("default", Options::default())]
         };
-
         Ok(Rocks {
             inner: UnsafeCell::new(DB::open_cf_descriptors(&opts, &path, cfds)?),
             path,
             restored: false,
+            name,
         })
     }
 
-    fn restore(live_path: &Path, checkpoint_path: &Path) -> Result<Self>
+    fn restore(live_path: &Path, checkpoint_path: &Path, name: String) -> Result<Self>
     where
         Self: Sized,
     {
@@ -206,7 +212,7 @@ impl Backend for Rocks {
             fs::copy(&source_path, &target_path)?;
         }
 
-        Rocks::create(live_path).map(|mut r| {
+        Rocks::create(live_path, name).map(|mut r| {
             //r.get_mut().restored = true;
             r.restored = true;
             r
@@ -317,7 +323,7 @@ pub mod tests {
             let mut dir_path = dir.path().to_path_buf();
             dir_path.push("rocks");
             fs::create_dir(&dir_path).unwrap();
-            let rocks = Rocks::create(&dir_path).unwrap();
+            let rocks = Rocks::create(&dir_path, "testDB".to_string()).unwrap();
             TestDb {
                 rocks: Arc::new(rocks),
                 dir,
@@ -335,7 +341,8 @@ pub mod tests {
             let dir = TempDir::new().unwrap();
             let mut dir_path = dir.path().to_path_buf();
             dir_path.push("rocks");
-            let rocks = Rocks::restore(&dir_path, checkpoint_dir.as_ref()).unwrap();
+            let rocks =
+                Rocks::restore(&dir_path, checkpoint_dir.as_ref(), "testDB".to_string()).unwrap();
             TestDb {
                 rocks: Arc::new(rocks),
                 dir,
@@ -392,7 +399,7 @@ pub mod tests {
         let mut restore_dir_path = restore_dir.path().to_path_buf();
         restore_dir_path.push("chkp0");
 
-        let db = Rocks::create(dir_path).unwrap();
+        let db = Rocks::create(dir_path, "testDB".to_string()).unwrap();
 
         let key: &[u8] = b"key";
         let initial_value: &[u8] = b"value";
@@ -406,8 +413,12 @@ pub mod tests {
         db.put(column_family, key, new_value)
             .expect("second put failed");
 
-        let db_from_checkpoint = Rocks::restore(&restore_dir_path, &checkpoints_dir_path)
-            .expect("Could not open checkpointed db");
+        let db_from_checkpoint = Rocks::restore(
+            &restore_dir_path,
+            &checkpoints_dir_path,
+            "testDB".to_string(),
+        )
+        .expect("Could not open checkpointed db");
 
         assert_eq!(
             new_value,
