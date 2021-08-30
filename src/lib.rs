@@ -42,12 +42,10 @@
 //!           - targets: ['localhost:9000']
 //!
 //! - `allocator_metrics`
-//!     - This enables recording metrics like total_bytes, bytes_remaining, allocation_counter
-//!     - It is to be noted that without the prometheus_exporter flag the metrics will flow to stdout.
+//!     - With this feature on, the runtime will record allocator metrics (e.g., total_bytes, bytes_remaining, alloc_counter).
 //!
 //! - `state_metrics`
-//!     - If this flag is enabled one can record state metrics like bytes_read, bytes_written which will be respective to the respective backend.
-//!     - One can also record checkpoint related metrics like size of last checkpoint.
+//!     - With this feature on, the runtime will record various state metrics (e.g., bytes in/out, last checkpoint size).
 //!
 //!
 
