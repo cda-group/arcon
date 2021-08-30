@@ -1,0 +1,3 @@
+[submodule "arcon-dashboard"]
+	path = arcon-dashboard
+	url = git@github.com:Sanskar95/arcon-dashboard.git
