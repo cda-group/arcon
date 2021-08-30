@@ -25,7 +25,11 @@ use kompact::{component::AbstractComponent, prelude::*};
 
 #[cfg(feature = "metrics")]
 use std::time::Instant;
-use std::{collections::HashSet, fs, sync::Arc};
+
+#[cfg(feature = "metrics")]
+use std::fs;
+
+use std::{collections::HashSet, sync::Arc};
 
 pub type AbstractNode<IN> = (
     Arc<dyn AbstractComponent<Message = ArconMessage<IN>>>,

@@ -5,6 +5,8 @@ use std::fmt;
 
 #[derive(Deserialize, Clone, Debug)]
 pub enum HardwareCounter {
+    /// The type of hardware metric one wants to record.This is done while building the application and adding HardwareCounter
+    /// enum options to it.
     CpuCycles,
     BranchMisses,
     Instructions,

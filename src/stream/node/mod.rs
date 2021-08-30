@@ -161,6 +161,7 @@ where
         #[cfg(feature = "metrics")]
         {
             register_gauge!("inbound_throughput", "node" => descriptor.clone());
+            register_gauge!("last_watermark_timestamp", "node" => descriptor.clone());
             register_counter!("epoch_counter", "node" => descriptor.clone());
             register_counter!("watermark_counter", "node" => descriptor.clone());
             register_histogram!("batch_execution_time","execution time per events batch","node" => descriptor.clone());
@@ -314,6 +315,9 @@ where
                     let new_watermark = *self.node_state.watermarks().values().min().unwrap();
 
                     if new_watermark.timestamp > self.node_state.current_watermark.timestamp {
+                        #[cfg(feature = "metrics")]
+                        gauge!("last_watermark_timestamp", new_watermark.timestamp as f64, "node" => self.descriptor.clone());
+
                         self.node_state.current_watermark = new_watermark;
 
                         let timeouts = self

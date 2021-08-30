@@ -19,7 +19,6 @@
 //! app.start();
 //! app.await_termination();
 //! ```
-//!
 //! # Feature Flags
 //!
 //! - `rocksdb`
@@ -41,6 +40,14 @@
 //!         scrape_interval: 1s
 //!          static_configs:
 //!           - targets: ['localhost:9000']
+//!
+//! - `allocator_metrics`
+//!     - This enables recording metrics like total_bytes, bytes_remaining, allocation_counter
+//!     - It is to be noted that without the prometheus_exporter flag the metrics will flow to stdout.
+//!
+//! - `state_metrics`
+//!     - If this flag is enabled one can record state metrics like bytes_read, bytes_written which will be respective to the respective backend.
+//!     - One can also record checkpoint related metrics like size of last checkpoint.
 //!
 //!
 
