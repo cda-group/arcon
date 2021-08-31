@@ -54,13 +54,7 @@ impl fmt::Display for HardwareCounter {
     }
 }
 
-#[derive(Deserialize, Clone, Debug, Default)]
-pub struct PerfEvents {
-    pub counters: Vec<HardwareCounter>,
-}
-
 /// Configurable hardware counters that may be added to an Operator's config
-///
 ///```no_run
 /// use arcon::prelude::*;
 /// fn main() {
@@ -85,8 +79,12 @@ pub struct PerfEvents {
 ///     app.start();
 ///     app.await_termination();
 /// }
-
 ///```
+#[derive(Deserialize, Clone, Debug, Default)]
+pub struct PerfEvents {
+    pub counters: Vec<HardwareCounter>,
+}
+
 impl PerfEvents {
     pub fn new() -> PerfEvents {
         PerfEvents { counters: vec![] }
