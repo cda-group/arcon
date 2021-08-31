@@ -3,6 +3,9 @@ use perf_event::events::Hardware;
 use serde::Deserialize;
 use std::fmt;
 
+/// An enum representing supported hardware counters with perf events as enum options
+///
+/// It is a wrapper around [Hardware] in order to support [Deserialize]
 #[derive(Deserialize, Clone, Debug)]
 pub enum HardwareCounter {
     CpuCycles,
@@ -51,6 +54,32 @@ impl fmt::Display for HardwareCounter {
     }
 }
 
+/// Configurable hardware counters that may be added to an Operator's config
+///```no_run
+/// use arcon::prelude::*;
+/// fn main() {
+///     let mut perf_events = PerfEvents::new();
+///     perf_events.add(HardwareCounter::CpuCycles);
+///     perf_events.add(HardwareCounter::BranchMisses);
+///     let mut app = Application::default()
+///         .iterator(0..100, |conf| {
+///             conf.set_arcon_time(ArconTime::Process);
+///         })
+///         .operator(OperatorBuilder {
+///             operator: Arc::new(|| Map::new(|x| x + 10)),
+///             state: Arc::new(|_| EmptyState),
+///             conf: OperatorConf {
+///                 parallelism_strategy: ParallelismStrategy::Static(6),
+///                 perf_events,
+///                 ..Default::default()
+///             },
+///         })
+///         .to_console()
+///         .build();
+///     app.start();
+///     app.await_termination();
+/// }
+///```
 #[derive(Deserialize, Clone, Debug, Default)]
 pub struct PerfEvents {
     pub counters: Vec<HardwareCounter>,

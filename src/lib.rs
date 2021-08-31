@@ -19,7 +19,6 @@
 //! app.start();
 //! app.await_termination();
 //! ```
-//!
 //! # Feature Flags
 //!
 //! - `rocksdb`
@@ -41,6 +40,12 @@
 //!         scrape_interval: 1s
 //!          static_configs:
 //!           - targets: ['localhost:9000']
+//!
+//! - `allocator_metrics`
+//!     - With this feature on, the runtime will record allocator metrics (e.g., total_bytes, bytes_remaining, alloc_counter).
+//!
+//! - `state_metrics`
+//!     - With this feature on, the runtime will record various state metrics (e.g., bytes in/out, last checkpoint size).
 //!
 //!
 

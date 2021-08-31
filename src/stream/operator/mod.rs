@@ -139,22 +139,22 @@ where
     }
 
     #[cfg(feature = "metrics")]
-    pub fn register_gauge(&mut self, name: &'static str) {
+    pub fn register_gauge(&mut self, name: &str) {
         register_gauge!(format!("{}_{}", self.name, name));
     }
 
     #[cfg(feature = "metrics")]
-    pub fn update_gauge(&self, name: &'static str, value: f64) {
+    pub fn update_gauge(&self, name: &str, value: f64) {
         gauge!(format!("{}_{}", self.name, name), value);
     }
 
     #[cfg(feature = "metrics")]
-    pub fn register_counter(&self, name: &'static str) {
+    pub fn register_counter(&self, name: &str) {
         register_counter!(format!("{}_{}", self.name, name));
     }
 
     #[cfg(feature = "metrics")]
-    pub fn increment_counter(&self, name: &'static str) {
+    pub fn increment_counter(&self, name: &str) {
         increment_counter!(format!("{}_{}", self.name, name));
     }
 }
