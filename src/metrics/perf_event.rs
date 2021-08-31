@@ -85,7 +85,6 @@ pub struct PerfEvents {
 ///     app.start();
 ///     app.await_termination();
 /// }
-
 ///```
 impl PerfEvents {
     pub fn new() -> PerfEvents {
