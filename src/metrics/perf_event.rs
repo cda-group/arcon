@@ -2,10 +2,10 @@ use crate::prelude::alloc::fmt::Formatter;
 use perf_event::events::Hardware;
 use serde::Deserialize;
 use std::fmt;
+
 /// An enum representing supported hardware counters with perf events as enum options
 ///
 /// It is a wrapper around [Hardware] in order to support [Deserialize]
-///
 #[derive(Deserialize, Clone, Debug)]
 pub enum HardwareCounter {
     CpuCycles,
