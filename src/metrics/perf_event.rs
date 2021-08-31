@@ -63,48 +63,30 @@ pub struct PerfEvents {
 ///
 ///```no_run
 /// use arcon::prelude::*;
-/// #[derive(Default)]
-/// pub struct MyOperator;
-///
-/// impl Operator for MyOperator {
-///     type IN = u64;
-///     type OUT = u64;
-///     type TimerState = ArconNever;
-///     type OperatorState = EmptyState;
-///     type ElementIterator = std::iter::Once<ArconElement<Self::OUT>>;
-///
-/// fn handle_element(&mut self, element: ArconElement<Self::IN>, ctx: &mut OperatorContext<Self::TimerState, Self::OperatorState>) -> ArconResult<Self::ElementIterator> {
-///         todo!()
-///     }
-///
-/// fn handle_timeout(&mut self, timeout: Self::TimerState, ctx: &mut OperatorContext<Self::TimerState, Self::OperatorState>) -> ArconResult<Option<Self::ElementIterator>> {
-///         todo!()
-///     }
-///
-///
-/// }
-/// let mut perf_events = PerfEvents::new();
-/// perf_events.add(HardwareCounter::CpuCycles);
-/// perf_events.add(HardwareCounter::BranchMisses);
-/// let mut app = Application::default()
-///    .iterator(0..100, |conf| {
-///        conf.set_arcon_time(ArconTime::Process);
-///    }).operator(OperatorBuilder{
-///            operator: Arc::new(|| MyOperator),state: Arc::new(|_| EmptyState),
-///            conf: OperatorConf {
+/// fn main() {
+///     let mut perf_events = PerfEvents::new();
+///     perf_events.add(HardwareCounter::CpuCycles);
+///     perf_events.add(HardwareCounter::BranchMisses);
+///     let mut app = Application::default()
+///         .iterator(0..100, |conf| {
+///             conf.set_arcon_time(ArconTime::Process);
+///         })
+///         .operator(OperatorBuilder {
+///             operator: Arc::new(|| Map::new(|x| x + 10)),
+///             state: Arc::new(|_| EmptyState),
+///             conf: OperatorConf {
 ///                 parallelism_strategy: ParallelismStrategy::Static(6),
 ///                 perf_events,
-///                ..Default::default()
+///                 ..Default::default()
 ///             },
-///
-/// })
-///
-///    .to_console()
-///    .build();
-/// app.start();
-/// app.await_termination();
+///         })
+///         .to_console()
+///         .build();
+///     app.start();
+///     app.await_termination();
+/// }
+
 ///```
-///
 impl PerfEvents {
     pub fn new() -> PerfEvents {
         PerfEvents { counters: vec![] }
