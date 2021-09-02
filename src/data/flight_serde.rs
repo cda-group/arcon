@@ -1,4 +1,3 @@
-
 /// An Enum holding possible serialisation/deserialisation options for in-flight data
 #[derive(Clone)]
 pub enum FlightSerde {
