@@ -1,9 +1,6 @@
 // Copyright (c) 2016 Amanieu d'Antras
 // SPDX-License-Identifier: MIT
 
-// Modifications Copyright (c) KTH Royal Institute of Technology
-// SPDX-License-Identifier: AGPL-3.0-only
-
 use core::{alloc::Layout, hint, iter::FusedIterator, marker::PhantomData, mem, ptr::NonNull};
 use std::alloc::{alloc, dealloc, handle_alloc_error};
 

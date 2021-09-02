@@ -1,6 +1,3 @@
-// Copyright (c) 2020, KTH Royal Institute of Technology.
-// SPDX-License-Identifier: AGPL-3.0-only
-
 use arcon::prelude::{EagerHashTable, HashTable, IndexOps};
 use arcon_state::{serialization::protobuf::serialize, with_backend_type, Backend, BackendType};
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};

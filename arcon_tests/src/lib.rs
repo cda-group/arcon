@@ -1,6 +1,3 @@
-// Copyright (c) 2020, KTH Royal Institute of Technology.
-// SPDX-License-Identifier: AGPL-3.0-only
-
 //! Verifies that Protobuf files can be converted into an Arcon supported format.
 //!
 //! NOTE: Only Protobuf version 3 is being tested at the moment.

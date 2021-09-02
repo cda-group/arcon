@@ -1,5 +1,3 @@
-// Copyright (c) 2020, KTH Royal Institute of Technology.
-// SPDX-License-Identifier: AGPL-3.0-only
 // TODO: may want to investigate hooking up to arcon allocator (all the Vec::with_capacity)
 
 pub mod protobuf {

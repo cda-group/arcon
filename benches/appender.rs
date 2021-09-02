@@ -1,6 +1,3 @@
-// Copyright (c) 2020, KTH Royal Institute of Technology.
-// SPDX-License-Identifier: AGPL-3.0-only
-
 use arcon::prelude::{AppenderIndex, Backend, EagerAppender};
 use arcon_state::{with_backend_type, BackendType};
 use criterion::{criterion_group, criterion_main, Bencher, BenchmarkId, Criterion};

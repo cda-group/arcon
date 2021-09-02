@@ -1,6 +1,3 @@
-// Copyright (c) 2021, KTH Royal Institute of Technology.
-// SPDX-License-Identifier: AGPL-3.0-only
-
 use super::{ArconResult, Error};
 use snafu::Snafu;
 use std::fmt::Debug;

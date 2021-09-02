@@ -1,6 +1,3 @@
-// Copyright (c) 2020, KTH Royal Institute of Technology.
-// SPDX-License-Identifier: AGPL-3.0-only
-
 //! `arcon_state` contains all state management related functionality for the arcon system.
 
 /// State Backend Implementations

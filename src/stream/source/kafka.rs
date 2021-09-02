@@ -1,6 +1,3 @@
-// Copyright (c) 2021, KTH Royal Institute of Technology.
-// SPDX-License-Identifier: AGPL-3.0-only
-
 use super::{schema::SourceSchema, Poll, Source};
 use crate::{
     error::source::{SourceError, SourceResult},

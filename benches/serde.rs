@@ -1,6 +1,3 @@
-// Copyright (c) 2020, KTH Royal Institute of Technology.
-// SPDX-License-Identifier: AGPL-3.0-only
-
 // Benchmarks for serialisation/deserialisation
 
 use abomonation_derive::*;

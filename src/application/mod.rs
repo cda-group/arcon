@@ -1,6 +1,3 @@
-// Copyright (c) 2020, KTH Royal Institute of Technology.
-// SPDX-License-Identifier: AGPL-3.0-only
-
 #[cfg(all(feature = "metrics", not(feature = "prometheus_exporter")))]
 use crate::metrics::log_recorder::LogRecorder;
 #[cfg(feature = "kafka")]

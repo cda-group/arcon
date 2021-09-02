@@ -1,6 +1,3 @@
-// Copyright (c) 2021, KTH Royal Institute of Technology.
-// SPDX-License-Identifier: AGPL-3.0-only
-
 use serde::Deserialize;
 use slog::{o, Drain, Fuse, Logger};
 use slog_async::Async;

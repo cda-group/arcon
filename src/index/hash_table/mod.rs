@@ -1,9 +1,6 @@
 // Copyright (c) 2016 Amanieu d'Antras
 // SPDX-License-Identifier: MIT
 
-// Modifications Copyright (c) 2020, KTH Royal Institute of Technology.
-// SPDX-License-Identifier: AGPL-3.0-only
-
 use std::{
     borrow::Borrow,
     hash::{BuildHasher, Hash, Hasher},
