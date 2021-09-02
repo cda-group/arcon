@@ -1,5 +1,3 @@
-// Copyright (c) 2020, KTH Royal Institute of Technology.
-// SPDX-License-Identifier: AGPL-3.0-only
 #[cfg(feature = "metrics")]
 use metrics::{gauge, increment_counter, register_counter, register_gauge};
 

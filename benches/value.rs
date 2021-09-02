@@ -1,6 +1,3 @@
-// Copyright (c) 2020, KTH Royal Institute of Technology.
-// SPDX-License-Identifier: AGPL-3.0-only
-
 use arcon::prelude::{Aggregator, IndexOps, LocalValue, ValueIndex};
 use arcon_state::{backend::*, with_backend_type};
 use criterion::{criterion_group, criterion_main, Bencher, Criterion, Throughput};

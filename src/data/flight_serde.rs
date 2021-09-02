@@ -1,6 +1,3 @@
-// Copyright (c) 2020, KTH Royal Institute of Technology.
-// SPDX-License-Identifier: AGPL-3.0-only
-
 /// An Enum holding possible serialisation/deserialisation options for in-flight data
 #[derive(Clone)]
 pub enum FlightSerde {

@@ -1,6 +1,3 @@
-// Copyright (c) 2020, KTH Royal Institute of Technology.
-// SPDX-License-Identifier: AGPL-3.0-only
-
 use arcon_allocator::{Alloc, Allocator};
 use criterion::{black_box, criterion_group, criterion_main, Bencher, Criterion};
 

@@ -2,6 +2,7 @@
 name = "arcon_build"
 version = "0.1.0"
 authors = ["Max Meldrum <mmeldrum@kth.se>"]
+repository = "https://github.com/cda-group/arcon"
 edition = "2018"
 
 [features]

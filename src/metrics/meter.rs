@@ -1,5 +1,3 @@
-// Copyright (c) 2020, KTH Royal Institute of Technology.
-// SPDX-License-Identifier: AGPL-3.0-only
 // Based off: https://github.com/infusionsoft/yammer-metrics/blob/master/metrics-core/src/main/java/com/codahale/metrics/Meter.java
 
 use crate::metrics::ewma::EWMA;

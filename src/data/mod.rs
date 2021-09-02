@@ -1,6 +1,3 @@
-// Copyright (c) 2020, KTH Royal Institute of Technology.
-// SPDX-License-Identifier: AGPL-3.0-only
-
 /// Arrow related types
 pub mod arrow;
 /// Serialisers and Deserialiser for in-flight data

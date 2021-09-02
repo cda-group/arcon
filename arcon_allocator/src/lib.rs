@@ -1,6 +1,3 @@
-// Copyright (c) 2020, KTH Royal Institute of Technology.
-// SPDX-License-Identifier: AGPL-3.0-only
-
 use fxhash::FxHashMap;
 use snafu::Snafu;
 use std::alloc::{GlobalAlloc, Layout, System};

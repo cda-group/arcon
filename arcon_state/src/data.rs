@@ -1,6 +1,3 @@
-// Copyright (c) 2020, KTH Royal Institute of Technology.
-// SPDX-License-Identifier: AGPL-3.0-only
-
 use crate::backend::serialization::fixed_bytes::FixedBytes;
 
 pub trait Value: prost::Message + Default + Clone + 'static {}

@@ -1,5 +1,3 @@
-// Copyright (c) 2020, KTH Royal Institute of Technology.
-// SPDX-License-Identifier: AGPL-3.0-only
 use crate::{
     data::Metakey, error::*, rocks::default_write_opts, serialization::protobuf, Aggregator,
     AggregatorOps, AggregatorState, Handle, Rocks,

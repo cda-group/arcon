@@ -1,6 +1,3 @@
-// Copyright (c) 2021, KTH Royal Institute of Technology.
-// SPDX-License-Identifier: AGPL-3.0-only
-
 //! A runtime for writing real-time analytics applications in the Rust programming language.
 //!
 //! # Example

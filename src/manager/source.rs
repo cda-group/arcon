@@ -1,6 +1,3 @@
-// Copyright (c) 2020, KTH Royal Institute of Technology.
-// SPDX-License-Identifier: AGPL-3.0-only
-
 use super::epoch::EpochEvent;
 #[cfg(feature = "metrics")]
 use metrics::{gauge, register_gauge};

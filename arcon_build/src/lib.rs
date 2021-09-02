@@ -1,6 +1,3 @@
-// Copyright (c) 2020, KTH Royal Institute of Technology.
-// SPDX-License-Identifier: AGPL-3.0-only
-
 //! `arcon_build` is a wrapper around `prost-build` that adds the required attributes for it to work in arcon.
 //!
 //! ```toml

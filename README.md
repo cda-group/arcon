@@ -7,7 +7,7 @@
 A runtime for writing real-time analytics applications in the Rust programming language.
 
 ![ci](https://github.com/cda-group/arcon/workflows/ci/badge.svg)
-[![License](https://img.shields.io/badge/License-AGPL--3.0--only-blue)](https://github.com/cda-group/arcon)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/cda-group/arcon)
 
 #### Project Status
 
@@ -84,8 +84,8 @@ More advanced examples can be found [here](arcon_examples/src/bin).
 
 ## License
 
-This project is licensed under the [AGPL-3.0 license](LICENSE).
+This project is licensed under the [Apache-2.0 license](LICENSE).
 
 ## Contribution
 
-Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in Arcon by you shall be licensed as AGPL-3.0, without any additional terms or conditions.
+Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in Arcon by you shall be licensed as Apache-2.0, without any additional terms or conditions.

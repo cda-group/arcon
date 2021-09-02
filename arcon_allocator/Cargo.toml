@@ -2,10 +2,10 @@
 name = "arcon_allocator"
 version = "0.1.0"
 authors = ["Max Meldrum <mmeldrum@kth.se>"]
+repository = "https://github.com/cda-group/arcon"
 edition = "2018"
 
 [dependencies]
 fxhash = "0.2.1"
 snafu = "0.6"
-
 metrics = { version = "0.16.0", optional = true }

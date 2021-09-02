@@ -1,6 +1,3 @@
-// Copyright (c) 2021, KTH Royal Institute of Technology.
-// SPDX-License-Identifier: AGPL-3.0-only
-
 /// A helper macro to indicate a reportable bug
 #[macro_export]
 macro_rules! reportable_error {

@@ -1,5 +1,3 @@
-// Copyright (c) 2020, KTH Royal Institute of Technology.
-// SPDX-License-Identifier: AGPL-3.0-only
 pub use snafu::{ensure, ErrorCompat, OptionExt, ResultExt};
 use snafu::{Backtrace, Snafu};
 #[cfg(feature = "rocks")]
