@@ -165,7 +165,6 @@ name = "arcon_state"
 version = "0.1.1"
 dependencies = [
  "bytes 1.0.1",
- "cc",
  "cfg-if 0.1.10",
  "metrics",
  "once_cell",
@@ -1752,7 +1751,8 @@ dependencies = [
 [[package]]
 name = "librocksdb-sys"
 version = "6.20.3"
-source = "git+https://github.com/rust-rocksdb/rust-rocksdb.git#ee816043b2f41e7bcf86f9067ca15e4f5f94403e"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c309a9d2470844aceb9a4a098cf5286154d20596868b75a6b36357d2bb9ca25d"
 dependencies = [
  "bindgen",
  "cc",
@@ -2874,7 +2874,8 @@ dependencies = [
 [[package]]
 name = "rocksdb"
 version = "0.17.0"
-source = "git+https://github.com/rust-rocksdb/rust-rocksdb.git#ee816043b2f41e7bcf86f9067ca15e4f5f94403e"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a62eca5cacf2c8261128631bed9f045598d40bfbe4b29f5163f0f802f8f44a7"
 dependencies = [
  "libc",
  "librocksdb-sys",

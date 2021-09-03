@@ -13,7 +13,6 @@ State management features for Arcon
 [features]
 default = ["sled", "sled_checkpoints"]
 rocks = ["rocksdb"]
-#faster = ["faster-rs", "serde"]
 sled_checkpoints = ["sled"]
 
 [dependencies]
@@ -25,22 +24,11 @@ cfg-if = "0.1.10"
 sled = { version = "0.34", optional = true }
 metrics = { version = "0.16.0", optional = true }
 
-
-
-# Downgrade cc 
-# https://github.com/rust-rocksdb/rust-rocksdb/issues/474
-[build-dependencies.cc]
-version = "=1.0.61"
-features = ["parallel"]
-
 [dependencies.rocksdb]
 default-features = false
 features = ["lz4"]
-git = "https://github.com/rust-rocksdb/rust-rocksdb.git"
+version = "0.17"
 optional = true
-
-#[target.'cfg(target_os = "linux")'.dependencies]
-#faster-rs = { version = "0.11", optional = true }
 
 [dev-dependencies]
 tempfile = "3"
