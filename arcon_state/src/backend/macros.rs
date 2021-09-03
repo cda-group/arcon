@@ -46,30 +46,6 @@ macro_rules! cfg_if_sled {
         unreachable!()
     };
 }
-
-#[doc(hidden)]
-#[cfg(all(feature = "faster", target_os = "linux"))]
-#[macro_export]
-macro_rules! cfg_if_faster {
-    (@pat $i: pat) => {
-        $i
-    };
-    ($($body:tt)*) => {
-        $($body)*
-    };
-}
-
-#[doc(hidden)]
-#[cfg(not(all(feature = "faster", target_os = "linux")))]
-#[macro_export]
-macro_rules! cfg_if_faster {
-    (@pat $i: pat) => {
-        _
-    };
-    ($($body:tt)*) => {
-        unreachable!()
-    };
-}
 // endregion
 
 /// Runs `$body` with `$type_ident` bound to a concrete state backend type based on the runtime
@@ -101,52 +77,12 @@ macro_rules! with_backend_type {
                     $body
                 }
             }
-            /*
-            InMemory => {
-                type $type_ident = $crate::backend::in_memory::InMemory;
-                $body
-            }
-            MeteredInMemory => {
-                type $type_ident = $crate::metered::Metered<$crate::in_memory::InMemory>;
-                $body
-            }
-            */
             $crate::cfg_if_rocks!(@pat Rocks) => {
                 $crate::cfg_if_rocks! {
                     type $type_ident = $crate::backend::rocks::Rocks;
                     $body
                 }
             }
-            /*
-            $crate::cfg_if_rocks!(@pat MeteredRocks) => {
-                $crate::cfg_if_rocks! {
-                    type $type_ident = $crate::backend::metered::Metered<$crate::rocks::Rocks>;
-                    $body
-                }
-            }
-            */
-            /*
-            $crate::cfg_if_sled!(@pat MeteredSled) => {
-                $crate::cfg_if_sled! {
-                    type $type_ident = $crate::backend::metered::Metered<$crate::sled::Sled>;
-                    $body
-                }
-            }
-            */
-            $crate::cfg_if_faster!(@pat Faster) => {
-                $crate::cfg_if_faster! {
-                    type $type_ident = $crate::backend::faster::Faster;
-                    $body
-                }
-            }
-            /*
-            $crate::cfg_if_faster!(@pat MeteredFaster) => {
-                $crate::cfg_if_faster! {
-                    type $type_ident = $crate::backend::metered::Metered<$crate::faster::Faster>;
-                    $body
-                }
-            }
-            */
         }
     }};
 }

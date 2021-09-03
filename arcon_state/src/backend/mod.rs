@@ -140,20 +140,6 @@ pub trait Backend:
 
     fn checkpoint(&self, checkpoint_path: &Path) -> Result<()>;
 
-    /// should not be called from outside `BackendContainer::session`
-    fn start_session(&mut self) {}
-
-    /// should not be called from outside `BackendContainer::session`
-    fn session_drop_hook(&mut self) -> Option<Box<dyn FnOnce(&mut Self)>> {
-        None
-    }
-
-    /*
-    fn metrics(&mut self) -> Option<&mut Metrics> {
-        None
-    }
-    */
-
     // region handle registration
     fn register_value_handle<T: Value, IK: Metakey, N: Metakey>(
         &self,
@@ -255,18 +241,10 @@ impl<A: Aggregator> Default for AggregatorState<A> {
     }
 }
 
-//pub mod metered;
-//pub use self::metered::Metered;
-
 #[cfg(feature = "rocks")]
 pub mod rocks;
 #[cfg(feature = "rocks")]
 pub use self::rocks::Rocks;
-
-#[cfg(all(feature = "faster", target_os = "linux"))]
-pub mod faster;
-#[cfg(all(feature = "faster", target_os = "linux"))]
-pub use self::faster::Faster;
 
 #[cfg(feature = "metrics")]
 pub mod metrics_utils;
@@ -280,16 +258,8 @@ pub use self::sled::Sled;
 pub enum BackendType {
     #[cfg(feature = "rocks")]
     Rocks,
-    //#[cfg(feature = "rocks")]
-    //MeteredRocks,
     #[cfg(feature = "sled")]
     Sled,
-    //#[cfg(feature = "sled")]
-    //MeteredSled,
-    #[cfg(all(feature = "faster", target_os = "linux"))]
-    Faster,
-    //#[cfg(all(feature = "faster", target_os = "linux"))]
-    //MeteredFaster,
 }
 
 impl fmt::Display for BackendType {
@@ -304,16 +274,8 @@ impl BackendType {
         &[
             #[cfg(feature = "rocks")]
             Rocks,
-            //#[cfg(feature = "rocks")]
-            //MeteredRocks,
             #[cfg(feature = "sled")]
             Sled,
-            //#[cfg(feature = "sled")]
-            //MeteredSled,
-            #[cfg(all(feature = "faster", target_os = "linux"))]
-            Faster,
-            //#[cfg(all(feature = "faster", target_os = "linux"))]
-            //MeteredFaster,
         ]
     };
 
@@ -321,16 +283,8 @@ impl BackendType {
         &[
             #[cfg(feature = "rocks")]
             "Rocks",
-            //#[cfg(feature = "rocks")]
-            //"MeteredRocks",
             #[cfg(feature = "sled")]
             "Sled",
-            //#[cfg(feature = "sled")]
-            //"MeteredSled",
-            #[cfg(all(feature = "faster", target_os = "linux"))]
-            "Faster",
-            //#[cfg(all(feature = "faster", target_os = "linux"))]
-            //"MeteredFaster",
         ]
     };
 }
@@ -344,16 +298,8 @@ impl FromStr for BackendType {
         match s {
             #[cfg(feature = "rocks")]
             x if x.eq_ignore_ascii_case("Rocks") => Ok(Rocks),
-            //#[cfg(feature = "rocks")]
-            //x if x.eq_ignore_ascii_case("MeteredRocks") => Ok(MeteredRocks),
             #[cfg(feature = "sled")]
             x if x.eq_ignore_ascii_case("Sled") => Ok(Sled),
-            //#[cfg(feature = "sled")]
-            //x if x.eq_ignore_ascii_case("MeteredSled") => Ok(MeteredSled),
-            #[cfg(all(feature = "faster", target_os = "linux"))]
-            x if x.eq_ignore_ascii_case("Faster") => Ok(Faster),
-            //#[cfg(all(feature = "faster", target_os = "linux"))]
-            //x if x.eq_ignore_ascii_case("MeteredFaster") => Ok(MeteredFaster),
             _ => Err(format!(
                 "valid values: {}",
                 BackendType::VARIANTS
