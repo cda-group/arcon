@@ -4,5 +4,7 @@ pub mod local_file;
 #[allow(dead_code)]
 pub mod socket;
 
+pub mod measure;
+
 //#[cfg(feature = "kafka")]
 //pub mod kafka;

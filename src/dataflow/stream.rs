@@ -3,7 +3,7 @@ use crate::{
     data::{ArconType, NodeID},
     dataflow::{
         api::OperatorBuilder,
-        conf::ParallelismStrategy,
+        conf::{OperatorConf, ParallelismStrategy},
         constructor::*,
         dfg::{ChannelKind, DFGNode, DFGNodeID, DFGNodeKind, DFG},
     },
@@ -13,6 +13,7 @@ use crate::{
         node::debug::DebugNode,
         operator::{
             function::{Filter, FlatMap, Map, MapInPlace},
+            sink::measure::MeasureSink,
             Operator,
         },
     },
@@ -213,6 +214,23 @@ impl<IN: ArconType> Stream<IN> {
             prev_dfg_id: self.prev_dfg_id,
             ctx: self.ctx,
         }
+    }
+
+    /// Adds a final [MeasureSink] before building an AssembledApplication
+    ///
+    /// `log_frequency` can be used to tune how often (e.g., every 1000000 events) measurements are logged.
+    ///
+    /// Note: For more stable outputs, use a somewhat large loq frequency > 1000000
+    pub fn measure(self, log_frequency: u64) -> AssembledApplication {
+        let stream = self.operator(OperatorBuilder {
+            operator: Arc::new(move || MeasureSink::new(log_frequency)),
+            state: Arc::new(|_| EmptyState),
+            conf: OperatorConf {
+                parallelism_strategy: ParallelismStrategy::Static(1),
+                ..Default::default()
+            },
+        });
+        stream.build()
     }
 
     /// Builds the Dataflow graph
