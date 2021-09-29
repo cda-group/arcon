@@ -17,7 +17,6 @@ pub fn get_system_time() -> u64 {
     since_the_epoch.as_millis() as u64
 }
 
-#[cfg(feature = "metrics")]
 #[inline]
 pub fn get_system_time_nano() -> u64 {
     let start = SystemTime::now();
