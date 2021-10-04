@@ -20,7 +20,9 @@ use crate::{
     data::{flight_serde::reliable_remote::ReliableSerde, RawArconMessage, *},
     error::{ArconResult, *},
     index::{AppenderIndex, ArconState, EagerAppender, IndexOps},
-    manager::node::{NodeManagerEvent::Checkpoint, *},
+    manager::epoch::EpochEvent,
+    manager::node::*,
+    manager::snapshot::{Snapshot, SnapshotEvent},
     reportable_error,
     stream::{
         channel::strategy::ChannelStrategy,
@@ -117,6 +119,12 @@ where
     operator_context: RefCell<OperatorContext<OP::TimerState, OP::OperatorState>>,
     /// Internal Node State
     node_state: NodeState<OP, B>,
+    /// Node's backing state backend
+    backend: Arc<B>,
+    /// Reference to logger
+    logger: ArconLogger,
+    /// Actor Reference to the EpochManager
+    epoch_manager: ActorRefStrong<EpochEvent>,
     #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
     /// Configured hardware counters
     perf_events: PerfEvents,
@@ -140,17 +148,18 @@ where
         node_state: NodeState<OP, B>,
         backend: Arc<B>,
         logger: ArconLogger,
+        epoch_manager: ActorRefStrong<EpochEvent>,
         #[cfg(all(feature = "hardware_counters", target_os = "linux"))]
         #[cfg(not(test))]
         perf_events: PerfEvents,
     ) -> Self {
         let timer_id = format!("_{}_timer", descriptor);
-        let timer = crate::index::timer::Timer::new(timer_id, backend);
+        let timer = crate::index::timer::Timer::new(timer_id, backend.clone());
 
         let operator_context = OperatorContext::new(
             Box::new(timer),
             operator_state,
-            logger,
+            logger.clone(),
             #[cfg(feature = "metrics")]
             descriptor.clone(),
         );
@@ -179,6 +188,9 @@ where
             operator,
             operator_context: RefCell::new(operator_context),
             node_state,
+            backend,
+            logger,
+            epoch_manager,
             #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
             perf_events,
             #[cfg(feature = "metrics")]
@@ -196,7 +208,7 @@ where
 
         if !self.node_state.in_channels.contains(message.sender()) {
             error!(
-                self.operator_context.borrow().logger,
+                self.logger,
                 "Message from invalid sender id {:?}",
                 message.sender()
             );
@@ -279,98 +291,13 @@ where
                     if e.timestamp <= watermark.timestamp {
                         continue 'event_loop;
                     }
-
-                    // Set key for the current element
-                    // TODO: Should use a pre-defined key for Non-Keyed Streams.
-                    let mut context = self.operator_context.borrow_mut();
-                    context.state().set_key(e.data.get_key());
-                    for elem in self.operator.handle_element(e, &mut context)? {
-                        self.add_outgoing_event(ArconEvent::Element(elem))?;
-                    }
+                    self.handle_element(e)?;
                 }
                 ArconEvent::Watermark(w) => {
-                    let watermark = match self.node_state.watermarks().get(&sender) {
-                        Some(wm) => wm,
-                        None => return reportable_error!("Uninitialised watermark"),
-                    };
-                    if w <= *watermark {
-                        continue 'event_loop;
-                    }
-
-                    // Insert the watermark and try early return
-                    if let Some(old) = self.node_state.watermarks().insert(sender, w) {
-                        if old > self.node_state.current_watermark {
-                            continue 'event_loop;
-                        }
-                    }
-
-                    // A different early return
-                    if w <= self.node_state.current_watermark {
-                        continue 'event_loop;
-                    }
-
-                    let new_watermark = *self.node_state.watermarks().values().min().unwrap();
-
-                    if new_watermark.timestamp > self.node_state.current_watermark.timestamp {
-                        #[cfg(feature = "metrics")]
-                        gauge!("last_watermark_timestamp", new_watermark.timestamp as f64, "node" => self.descriptor.clone());
-
-                        self.node_state.current_watermark = new_watermark;
-
-                        let timeouts = self
-                            .operator_context
-                            .borrow_mut()
-                            .timer
-                            .advance_to(new_watermark.timestamp)?;
-                        for timeout in timeouts {
-                            if let Some(elems) = self
-                                .operator
-                                .handle_timeout(timeout, &mut self.operator_context.borrow_mut())?
-                            {
-                                for elem in elems {
-                                    self.add_outgoing_event(ArconEvent::Element(elem))?;
-                                }
-                            }
-                        }
-
-                        #[cfg(feature = "metrics")]
-                        increment_counter!("watermark_counter", "node" => self.descriptor.clone());
-
-                        // Forward the watermark
-                        self.add_outgoing_event(ArconEvent::Watermark(new_watermark))?;
-                    }
+                    self.handle_watermark(w, sender)?;
                 }
                 ArconEvent::Epoch(e) => {
-                    debug!(self.operator_context.borrow().logger, "Got Epoch {:?}", e);
-                    if e < self.node_state.current_epoch {
-                        continue 'event_loop;
-                    }
-
-                    // Add the sender to the blocked set.
-                    self.node_state.blocked_channels().insert(sender);
-
-                    // If all senders blocked we can transition to new Epoch
-                    if self.node_state.blocked_channels().len() == self.node_state.in_channels.len()
-                    {
-                        // persist internal node state for this node
-                        self.node_state.persist()?;
-
-                        // persist possible operator state..
-                        self.operator_context.borrow_mut().state.persist()?;
-
-                        // Create checkpoint request and send it off to the NodeManager
-                        let request = CheckpointRequest::new(
-                            self.node_state.id,
-                            self.node_state.current_epoch,
-                        );
-                        self.node_manager_port.trigger(Checkpoint(request));
-
-                        // Forward the Epoch
-                        self.add_outgoing_event(ArconEvent::Epoch(self.node_state.current_epoch))?;
-
-                        // Update current epoch
-                        self.node_state.current_epoch.epoch += 1;
-                    }
+                    self.handle_epoch(e, sender)?;
                 }
                 ArconEvent::Death(s) => {
                     // We are instructed to shutdown....
@@ -383,23 +310,172 @@ where
         Ok(())
     }
 
+    #[inline(always)]
+    fn handle_element(&mut self, e: ArconElement<OP::IN>) -> ArconResult<()> {
+        // Set key for the current element
+        // TODO: Should use a pre-defined key for Non-Keyed Streams.
+        let mut context = self.operator_context.borrow_mut();
+        context.state().set_key(e.data.get_key());
+        for elem in self.operator.handle_element(e, &mut context)? {
+            self.add_outgoing_event(ArconEvent::Element(elem))?;
+        }
+        Ok(())
+    }
+
+    #[inline]
+    fn handle_watermark(&mut self, w: Watermark, sender: NodeID) -> ArconResult<()> {
+        let watermark = match self.node_state.watermarks().get(&sender) {
+            Some(wm) => wm,
+            None => return reportable_error!("Uninitialised watermark"),
+        };
+        if w <= *watermark {
+            return Ok(());
+        }
+
+        // Insert the watermark and try early return
+        if let Some(old) = self.node_state.watermarks().insert(sender, w) {
+            if old > self.node_state.current_watermark {
+                return Ok(());
+            }
+        }
+
+        // A different early return
+        if w <= self.node_state.current_watermark {
+            return Ok(());
+        }
+
+        let new_watermark = *self.node_state.watermarks().values().min().unwrap();
+
+        if new_watermark.timestamp > self.node_state.current_watermark.timestamp {
+            #[cfg(feature = "metrics")]
+            gauge!("last_watermark_timestamp", new_watermark.timestamp as f64, "node" => self.descriptor.clone());
+
+            self.node_state.current_watermark = new_watermark;
+
+            let timeouts = self
+                .operator_context
+                .borrow_mut()
+                .timer
+                .advance_to(new_watermark.timestamp)?;
+
+            for timeout in timeouts {
+                if let Some(elems) = self
+                    .operator
+                    .handle_timeout(timeout, &mut self.operator_context.borrow_mut())?
+                {
+                    for elem in elems {
+                        self.add_outgoing_event(ArconEvent::Element(elem))?;
+                    }
+                }
+            }
+
+            #[cfg(feature = "metrics")]
+            increment_counter!("watermark_counter", "node" => self.descriptor.clone());
+
+            // Forward the watermark
+            self.add_outgoing_event(ArconEvent::Watermark(new_watermark))?;
+        }
+        Ok(())
+    }
+
+    fn handle_epoch(&mut self, e: Epoch, sender: NodeID) -> ArconResult<()> {
+        debug!(self.logger, "Got Epoch {:?}", e);
+
+        // early return if the epoch is lower
+        if e < self.node_state.current_epoch {
+            return Ok(());
+        }
+
+        // Add the sender to the blocked set.
+        self.node_state.blocked_channels().insert(sender);
+
+        // If all senders blocked we can transition to new Epoch
+        if self.node_state.blocked_channels().len() == self.node_state.in_channels.len() {
+            // Forward the Epoch
+            self.add_outgoing_event(ArconEvent::Epoch(self.node_state.current_epoch))?;
+
+            // persist internal node state for this node
+            self.node_state.persist()?;
+
+            // persist possible operator state..
+            self.operator_context.borrow_mut().state.persist()?;
+
+            // Perform the actual checkpoint
+            self.checkpoint()?;
+
+            // Send Ack to EpochManager
+            self.epoch_manager.tell(EpochEvent::Ack(
+                self.descriptor.clone(),
+                self.node_state.current_epoch,
+            ));
+
+            // Update current epoch
+            self.node_state.current_epoch.epoch += 1;
+
+            #[cfg(feature = "metrics")]
+            increment_counter!("epoch_counter", "node" => self.descriptor.clone());
+
+            // flush the blocked_channels list
+            self.node_state.blocked_channels().clear();
+
+            // Iterate over the message-buffer until empty
+            for message in self.node_state.message_buffer().consume()? {
+                self.handle_events(message.sender, message.events)?;
+            }
+        }
+
+        Ok(())
+    }
+
     #[inline]
     fn add_outgoing_event(&self, event: ArconEvent<OP::OUT>) -> ArconResult<()> {
         let strategy = unsafe { &mut *self.channel_strategy.get() };
         common::add_outgoing_event(event, strategy, self)
     }
 
-    #[inline]
-    fn complete_epoch(&mut self) -> ArconResult<()> {
-        #[cfg(feature = "metrics")]
-        increment_counter!("epoch_counter", "node" => self.descriptor.clone());
+    fn checkpoint(&mut self) -> ArconResult<()> {
+        if let Some(base_dir) = &self.ctx.config()["checkpoint_dir"].as_string() {
+            let checkpoint_dir = format!(
+                "{}/{}/checkpoint_{id}_{epoch}",
+                base_dir,
+                self.descriptor,
+                id = self.descriptor,
+                epoch = self.node_state.current_epoch.epoch,
+            );
 
-        // flush the blocked_channels list
-        self.node_state.blocked_channels().clear();
+            #[cfg(feature = "metrics")]
+            let start_time = Instant::now();
 
-        // Iterate over the message-buffer until empty
-        for message in self.node_state.message_buffer().consume()? {
-            self.handle_events(message.sender, message.events)?;
+            self.backend.checkpoint(checkpoint_dir.as_ref())?;
+
+            #[cfg(feature = "metrics")]
+            {
+                let elapsed = start_time.elapsed();
+                histogram!("checkpoint_execution_time_ms", elapsed.as_millis() as f64, "node" => self.descriptor.clone());
+            }
+
+            #[cfg(feature = "metrics")]
+            {
+                let metadata = std::fs::metadata(checkpoint_dir.clone())?;
+                gauge!("last_checkpoint_size", metadata.len() as f64, "node" => self.descriptor.clone());
+            }
+
+            let snapshot = Snapshot::new(
+                std::any::type_name::<B>().to_string(),
+                self.node_state.current_epoch.epoch,
+                checkpoint_dir.clone(),
+            );
+            self.node_manager_port.trigger(NodeManagerEvent::Checkpoint(
+                self.node_state.id,
+                SnapshotEvent::Snapshot(self.descriptor.clone(), snapshot),
+            ));
+
+            debug!(
+                self.logger,
+                "Completed a Checkpoint to path {}", checkpoint_dir
+            );
+        } else {
+            return reportable_error!("Failed to fetch checkpoint_dir from Config");
         }
 
         Ok(())
@@ -413,19 +489,19 @@ where
 {
     fn on_start(&mut self) -> Handled {
         debug!(
-            self.operator_context.borrow().logger,
+            self.logger,
             "Started Arcon Node {} with Node ID {:?}", self.descriptor, self.node_state.id
         );
+
+        self.epoch_manager
+            .tell(EpochEvent::Register(self.descriptor.clone()));
 
         if self
             .operator
             .on_start(&mut self.operator_context.borrow_mut())
             .is_err()
         {
-            error!(
-                self.operator_context.borrow().logger,
-                "Failed to run startup code"
-            );
+            error!(self.logger, "Failed to run startup code");
         }
 
         Handled::Ok
@@ -437,17 +513,7 @@ where
     OP: Operator + 'static,
     B: Backend,
 {
-    fn handle(&mut self, event: NodeEvent) -> Handled {
-        match event {
-            NodeEvent::CheckpointResponse(_) => {
-                if let Err(error) = self.complete_epoch() {
-                    error!(
-                        self.operator_context.borrow().logger,
-                        "Failed to complete epoch with error {:?}", error
-                    );
-                }
-            }
-        }
+    fn handle(&mut self, _: ()) -> Handled {
         Handled::Ok
     }
 }
@@ -458,11 +524,7 @@ where
     B: Backend,
 {
     fn handle(&mut self, e: NodeManagerEvent) -> Handled {
-        trace!(
-            self.operator_context.borrow().logger,
-            "Ignoring node event: {:?}",
-            e
-        );
+        trace!(self.logger, "Ignoring node event: {:?}", e);
         Handled::Ok
     }
 }
@@ -476,10 +538,7 @@ where
 
     fn receive_local(&mut self, msg: Self::Message) -> Handled {
         if let Err(err) = self.handle_message(MessageContainer::Local(msg)) {
-            error!(
-                self.operator_context.borrow().logger,
-                "Failed to handle message: {}", err
-            );
+            error!(self.logger, "Failed to handle message: {}", err);
         }
         Handled::Ok
     }
@@ -502,16 +561,10 @@ where
         match arcon_msg {
             Ok(m) => {
                 if let Err(err) = self.handle_message(MessageContainer::Raw(m)) {
-                    error!(
-                        self.operator_context.borrow().logger,
-                        "Failed to handle node message: {}", err
-                    );
+                    error!(self.logger, "Failed to handle node message: {}", err);
                 }
             }
-            Err(e) => error!(
-                self.operator_context.borrow().logger,
-                "Error ArconNetworkMessage: {:?}", e
-            ),
+            Err(e) => error!(self.logger, "Error ArconNetworkMessage: {:?}", e),
         }
         Handled::Ok
     }
@@ -585,11 +638,9 @@ mod tests {
             let nm = NodeManager::<OP, B>::new(
                 descriptor.clone(),
                 app.data_system.clone(),
-                epoch_manager_ref,
                 in_channels.clone(),
-                backend.clone(),
                 app.arcon_logger.clone(),
-                builder,
+                Arc::new(builder),
             );
             let node_manager_comp = app.ctrl_system().create(|| nm);
 
@@ -606,6 +657,7 @@ mod tests {
                 NodeState::new(NodeID::new(0), in_channels, backend.clone()),
                 backend,
                 app.arcon_logger.clone(),
+                epoch_manager_ref,
                 #[cfg(not(test))]
                 perf_events,
             );

@@ -2,31 +2,19 @@ use crate::{
     application::conf::logger::ArconLogger,
     data::{ArconMessage, Epoch, NodeID, StateID, Watermark},
     error::*,
-    index::{HashTable, IndexOps, LocalValue, ValueIndex, EMPTY_STATE_ID},
-    manager::{
-        epoch::EpochEvent,
-        snapshot::{Snapshot, SnapshotEvent, SnapshotManagerPort},
-    },
+    index::EMPTY_STATE_ID,
+    manager::snapshot::{Snapshot, SnapshotEvent, SnapshotManagerPort},
     prelude::OperatorBuilder,
-    reportable_error,
     stream::operator::Operator,
 };
 
 #[cfg(feature = "metrics")]
-use metrics::{gauge, histogram, register_gauge, register_histogram};
+use metrics::{gauge, register_gauge, register_histogram};
 
-use arcon_macros::ArconState;
 use arcon_state::Backend;
 use fxhash::FxHashMap;
 use kompact::{component::AbstractComponent, prelude::*};
-
-#[cfg(feature = "metrics")]
-use std::time::Instant;
-
-#[cfg(feature = "metrics")]
-use std::fs;
-
-use std::{collections::HashSet, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
 pub type AbstractNode<IN> = (
     Arc<dyn AbstractComponent<Message = ArconMessage<IN>>>,
@@ -41,67 +29,32 @@ pub struct MetricReport {
     pub(crate) parallelism: usize,
 }
 
-/// Checkpoint Request for a running Node
-#[derive(Clone, Debug)]
-pub struct CheckpointRequest {
-    /// Indicates which Node the request is coming from
-    pub(crate) id: NodeID,
-    /// Which Epoch the request is for
-    pub(crate) epoch: Epoch,
-}
-
-impl CheckpointRequest {
-    pub fn new(id: NodeID, epoch: Epoch) -> Self {
-        Self { id, epoch }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub enum CheckpointResponse {
-    /// Nothing has changed, continue as normal.
-    NoAction,
-}
-
-/// Enum representing events that the Manager may send back to a Node
-#[derive(Clone, Debug)]
-pub enum NodeEvent {
-    CheckpointResponse(CheckpointResponse),
-}
-
 /// Enum representing events that a Node may send to its manager
 #[derive(Clone, Debug)]
 #[allow(dead_code)]
 pub enum NodeManagerEvent {
     Watermark(NodeID, Watermark),
     Epoch(NodeID, Epoch),
-    Checkpoint(CheckpointRequest),
+    Checkpoint(NodeID, SnapshotEvent),
 }
 
 /// A [kompact] port for bidirectional communication between a Node and its NodeManager
 pub struct NodeManagerPort {}
 impl Port for NodeManagerPort {
-    type Indication = NodeEvent;
+    type Indication = ();
     type Request = NodeManagerEvent;
 }
 
-#[derive(ArconState)]
-pub struct NodeManagerState<B: Backend> {
-    watermarks: HashTable<NodeID, Watermark, B>,
-    epochs: HashTable<NodeID, Epoch, B>,
-    current_watermark: LocalValue<Watermark, B>,
-    current_epoch: LocalValue<Epoch, B>,
-    #[ephemeral]
-    checkpoint_acks: HashSet<(NodeID, Epoch)>,
+pub struct NodeManagerState {
+    watermarks: HashMap<NodeID, Watermark>,
+    epochs: HashMap<NodeID, Epoch>,
 }
 
-impl<B: Backend> NodeManagerState<B> {
-    fn new(backend: Arc<B>) -> Self {
+impl NodeManagerState {
+    fn new() -> Self {
         Self {
-            watermarks: HashTable::with_capacity("_watermarks", backend.clone(), 64, 64),
-            epochs: HashTable::with_capacity("_epochs", backend.clone(), 64, 64),
-            current_watermark: LocalValue::new("_curr_watermark", backend.clone()),
-            current_epoch: LocalValue::new("_curr_epoch", backend),
-            checkpoint_acks: HashSet::new(),
+            watermarks: HashMap::new(),
+            epochs: HashMap::new(),
         }
     }
 }
@@ -137,8 +90,6 @@ where
     pub(crate) manager_port: ProvidedPort<NodeManagerPort>,
     /// Port for the SnapshotManager component
     pub(crate) snapshot_manager_port: RequiredPort<SnapshotManagerPort>,
-    /// Actor Reference to the EpochManager
-    epoch_manager: ActorRefStrong<EpochEvent>,
     /// Reference to KompactSystem that the Nodes run on..
     data_system: KompactSystem,
     /// Current Node parallelism
@@ -151,12 +102,10 @@ where
     node_index: u32,
     /// Active Nodes on this NodeManager
     pub(crate) nodes: FxHashMap<NodeID, AbstractNode<OP::IN>>,
-    /// State Backend used to persist data
-    backend: Arc<B>,
     /// Internal manager state
-    manager_state: NodeManagerState<B>,
+    manager_state: NodeManagerState,
     latest_snapshot: Option<Snapshot>,
-    builder: OperatorBuilder<OP, B>,
+    builder: Arc<OperatorBuilder<OP, B>>,
     logger: ArconLogger,
 }
 
@@ -168,11 +117,9 @@ where
     pub fn new(
         state_id: String,
         data_system: KompactSystem,
-        epoch_manager: ActorRefStrong<EpochEvent>,
         in_channels: Vec<NodeID>,
-        backend: Arc<B>,
         logger: ArconLogger,
-        builder: OperatorBuilder<OP, B>,
+        builder: Arc<OperatorBuilder<OP, B>>,
     ) -> Self {
         #[cfg(feature = "metrics")]
         {
@@ -185,80 +132,17 @@ where
             state_id,
             manager_port: ProvidedPort::uninitialised(),
             snapshot_manager_port: RequiredPort::uninitialised(),
-            epoch_manager,
             data_system,
             node_parallelism: num_cpus::get(),
             max_node_parallelism: (num_cpus::get() * 2) as usize,
             node_index: 0,
             in_channels,
             nodes: FxHashMap::default(),
-            manager_state: NodeManagerState::new(backend.clone()),
-            backend,
+            manager_state: NodeManagerState::new(),
             latest_snapshot: None,
             logger,
             builder,
         }
-    }
-
-    #[inline]
-    fn checkpoint(&mut self) -> ArconResult<()> {
-        if let Some(base_dir) = &self.ctx.config()["checkpoint_dir"].as_string() {
-            let curr_epoch = match self.manager_state.current_epoch().get()? {
-                Some(v) => v.as_ref().epoch,
-                None => return reportable_error!("failed to fetch epoch"),
-            };
-
-            let checkpoint_dir = format!(
-                "{}/checkpoint_{id}_{epoch}",
-                base_dir,
-                id = self.state_id,
-                epoch = curr_epoch,
-            );
-
-            self.backend.checkpoint(checkpoint_dir.as_ref())?;
-
-            // Send snapshot to SnapshotManager
-            if self.has_snapshot_state() {
-                let snapshot = Snapshot::new(
-                    std::any::type_name::<B>().to_string(),
-                    curr_epoch,
-                    checkpoint_dir.clone(),
-                );
-
-                self.snapshot_manager_port.trigger(SnapshotEvent::Snapshot(
-                    self.state_id.clone(),
-                    snapshot.clone(),
-                ));
-
-                #[cfg(feature = "metrics")]
-                {
-                    let metadata = fs::metadata(checkpoint_dir.clone())?;
-                    gauge!("last_checkpoint_size", metadata.len() as f64,"node_manager" => self.state_id.clone());
-                }
-
-                self.latest_snapshot = Some(snapshot);
-            }
-
-            // Send Ack to EpochManager
-            self.epoch_manager.tell(EpochEvent::Ack(
-                self.state_id.clone(),
-                Epoch::new(curr_epoch),
-            ));
-
-            // bump epoch
-            self.manager_state.current_epoch().rmw(|e| {
-                e.epoch += 1;
-            })?;
-
-            debug!(
-                self.logger,
-                "Completed a Checkpoint to path {}", checkpoint_dir
-            );
-        } else {
-            return reportable_error!("Failed to fetch checkpoint_dir from Config");
-        }
-
-        Ok(())
     }
 
     /// Helper method to check if the NodeManager is responsible for any state
@@ -273,43 +157,14 @@ where
     fn handle_node_event(&mut self, event: NodeManagerEvent) -> ArconResult<()> {
         match event {
             NodeManagerEvent::Watermark(id, w) => {
-                self.manager_state.watermarks.put(id, w)?;
+                self.manager_state.watermarks.insert(id, w);
             }
             NodeManagerEvent::Epoch(id, e) => {
-                self.manager_state.epochs.put(id, e)?;
+                self.manager_state.epochs.insert(id, e);
             }
-            NodeManagerEvent::Checkpoint(request) => {
-                if self.nodes.contains_key(&request.id) {
-                    let epoch = match self.manager_state.current_epoch().get()? {
-                        Some(v) => v.into_owned(),
-                        None => return reportable_error!("failed to fetch epoch"),
-                    };
-                    if request.epoch == epoch {
-                        self.manager_state
-                            .checkpoint_acks
-                            .insert((request.id, request.epoch));
-
-                        if self.manager_state.checkpoint_acks.len() == self.nodes.len() {
-                            #[cfg(feature = "metrics")]
-                            let start_time = Instant::now();
-
-                            self.checkpoint()?;
-                            #[cfg(feature = "metrics")]
-                            {
-                                let elapsed = start_time.elapsed();
-                                histogram!("checkpoint_execution_time_ms", elapsed.as_millis() as f64,"node_manager" => self.state_id.clone());
-                            }
-                            self.manager_state.checkpoint_acks.clear();
-
-                            for (_, port_ref) in self.nodes.values() {
-                                self.data_system.trigger_i(
-                                    NodeEvent::CheckpointResponse(CheckpointResponse::NoAction),
-                                    port_ref,
-                                );
-                            }
-                        }
-                    }
-                }
+            NodeManagerEvent::Checkpoint(id, s) => {
+                debug!(self.logger, "Reporting Checkpoint from Node ID {:?}", id);
+                self.snapshot_manager_port.trigger(s);
             }
         }
         Ok(())
@@ -331,9 +186,6 @@ where
             self.snapshot_manager_port
                 .trigger(SnapshotEvent::Register(self.state_id.clone()));
         }
-
-        self.epoch_manager
-            .tell(EpochEvent::Register(self.state_id.clone()));
 
         Handled::Ok
     }
@@ -376,22 +228,13 @@ where
     }
 }
 
-impl<OP, B> Require<NodeManagerPort> for NodeManager<OP, B>
-where
-    OP: Operator + 'static,
-    B: Backend,
-{
-    fn handle(&mut self, _: NodeEvent) -> Handled {
-        unreachable!("Not supposed to be called");
-    }
-}
-
 impl<OP, B> Actor for NodeManager<OP, B>
 where
     OP: Operator + 'static,
     B: Backend,
 {
     type Message = Never;
+
     fn receive_local(&mut self, _: Self::Message) -> Handled {
         Handled::Ok
     }

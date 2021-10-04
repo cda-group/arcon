@@ -332,11 +332,9 @@ mod tests {
         let nm = NodeManager::new(
             descriptor.clone(),
             app.data_system.clone(),
-            epoch_manager_ref,
             in_channels.clone(),
-            backend.clone(),
             app.arcon_logger.clone(),
-            builder,
+            Arc::new(builder),
         );
 
         let node_manager_comp = app.ctrl_system().create(|| nm);
@@ -358,6 +356,7 @@ mod tests {
             NodeState::new(NodeID::new(0), in_channels, backend.clone()),
             backend,
             app.arcon_logger.clone(),
+            epoch_manager_ref,
             #[cfg(feature = "hardware_counters")]
             #[cfg(not(test))]
             perf_events,

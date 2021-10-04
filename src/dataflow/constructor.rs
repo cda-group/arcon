@@ -34,7 +34,7 @@ use kompact::{
         RequiredRef, *,
     },
 };
-use std::{any::Any, convert::TryInto, sync::Arc};
+use std::{any::Any, convert::TryInto, path::PathBuf, sync::Arc};
 
 pub type SourceManagerConstructor = Box<
     dyn FnOnce(
@@ -218,9 +218,9 @@ fn create_source_node<S, B>(
 
 pub(crate) fn node_manager_constructor<OP: Operator + 'static, B: Backend>(
     descriptor: String,
+    state_dir: PathBuf,
     data_system: KompactSystem,
-    builder: OperatorBuilder<OP, B>,
-    backend: Arc<B>,
+    builder: Arc<OperatorBuilder<OP, B>>,
     logger: ArconLogger,
 ) -> NodeManagerConstructor {
     Box::new(
@@ -238,6 +238,9 @@ pub(crate) fn node_manager_constructor<OP: Operator + 'static, B: Backend>(
 
             let max_key = app.conf.max_key as usize;
 
+            // create base dir
+            std::fs::create_dir_all(&state_dir).unwrap();
+
             #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
             let perf_events = builder.conf.perf_events.clone();
             // Fetch the Operator constructor from the builder
@@ -249,11 +252,9 @@ pub(crate) fn node_manager_constructor<OP: Operator + 'static, B: Backend>(
             let manager = NodeManager::<OP, B>::new(
                 descriptor.clone(),
                 data_system,
-                epoch_manager_ref,
                 in_channels.clone(),
-                backend.clone(),
                 logger.clone(),
-                builder,
+                builder.clone(),
             );
             // Create the actual NodeManager component
             let manager_comp = app.ctrl_system().create(|| manager);
@@ -272,6 +273,9 @@ pub(crate) fn node_manager_constructor<OP: Operator + 'static, B: Backend>(
             for (curr_node_id, _) in (0..instances).enumerate() {
                 let node_descriptor = format!("{}_{}", descriptor, curr_node_id);
                 let node_id = NodeID::new(curr_node_id.try_into().unwrap());
+                let mut node_dir = state_dir.clone();
+                node_dir.push(&node_descriptor);
+                let backend = builder.create_backend(node_dir, node_descriptor.clone());
 
                 let node = Node::new(
                     node_descriptor,
@@ -287,6 +291,7 @@ pub(crate) fn node_manager_constructor<OP: Operator + 'static, B: Backend>(
                     NodeState::new(node_id, in_channels.clone(), backend.clone()),
                     backend.clone(),
                     app.arcon_logger.clone(),
+                    epoch_manager_ref.clone(),
                     #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
                     perf_events.clone(),
                 );

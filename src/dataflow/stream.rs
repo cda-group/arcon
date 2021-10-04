@@ -169,7 +169,6 @@ impl<IN: ArconType> Stream<IN> {
         let mut state_dir = self.ctx.app.arcon_conf().state_dir();
         let state_id = builder.state_id();
         state_dir.push(state_id.clone());
-        let backend = builder.create_backend(state_dir, state_id.clone());
 
         let outgoing_channels = match builder.conf.parallelism_strategy {
             ParallelismStrategy::Static(num) => num,
@@ -178,9 +177,9 @@ impl<IN: ArconType> Stream<IN> {
 
         let manager_constructor = node_manager_constructor::<OP, _>(
             state_id,
+            state_dir,
             self.ctx.app.data_system.clone(),
-            builder,
-            backend,
+            Arc::new(builder),
             self.ctx.app.arcon_logger.clone(),
         );
 
