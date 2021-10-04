@@ -251,9 +251,11 @@ fn execution_mode_default() -> ExecutionMode {
 
 fn base_dir_default() -> PathBuf {
     #[cfg(test)]
-    let res = tempfile::tempdir().unwrap().into_path();
+    let mut res = tempfile::tempdir().unwrap().into_path();
     #[cfg(not(test))]
-    let res = std::env::temp_dir();
+    let mut res = std::env::temp_dir();
+
+    res.push("arcon");
 
     res
 }
