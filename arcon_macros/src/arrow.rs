@@ -27,6 +27,28 @@ pub fn derive_arrow(input: TokenStream) -> TokenStream {
                 };
                 builders.push(builder_quote);
             }
+
+            let timestamp_pos = builders.len();
+
+            // Add nullable timestamp field
+            let timestamp_quote =
+                quote! { ::arcon::Field::new("_timestamp", ::arcon::DataType::UInt64, true), };
+            arrow_types.push(timestamp_quote);
+
+            // builder quote for the last timestamp column.
+            // assumes there is an timestamp: Option<u64> in scope
+            let builder_quote = quote! {
+                match builder.field_builder::<::arcon::UInt64Builder>(#timestamp_pos) {
+                    Some(b) =>  {
+                        match timestamp {
+                            Some(ts) => b.append_value(ts)?,
+                            None => b.append_null()?,
+                        }
+                    }
+                    None => return Err(::arcon::ArrowError::SchemaError(format!("Failed to downcast Arrow Builder"))),
+                }
+            };
+            builders.push(builder_quote);
         } else {
             panic!("#[derive(Arrow)] requires named fields");
         }
@@ -51,7 +73,7 @@ pub fn derive_arrow(input: TokenStream) -> TokenStream {
                     fn schema() -> ::arcon::Schema {
                         ::arcon::Schema::new(#fields)
                     }
-                    fn append(self, builder: &mut ::arcon::StructBuilder) -> Result<(), ::arcon::ArrowError> {
+                    fn append(self, builder: &mut ::arcon::StructBuilder, timestamp: Option<u64>) -> Result<(), ::arcon::ArrowError> {
                         #(#builders)*
                         Ok(())
                     }

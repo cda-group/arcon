@@ -75,7 +75,7 @@ pub use crate::{
 pub use arrow::{
     array::{
         ArrayBuilder, ArrayData, ArrayDataBuilder, PrimitiveBuilder, StringBuilder, StructArray,
-        StructBuilder, UInt64Array,
+        StructBuilder, UInt64Array, UInt64Builder,
     },
     datatypes::{DataType, Field, Schema},
     error::ArrowError,
