@@ -64,7 +64,7 @@ where
 
     fn on_element(&mut self, element: Self::IN, ctx: WindowContext) -> ArconResult<()> {
         let table = self.map.entry(ctx).or_insert_with(IN::table);
-        table.append(element)?;
+        table.append(element, None)?;
 
         Ok(())
     }

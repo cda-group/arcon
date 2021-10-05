@@ -19,7 +19,7 @@ pub trait ToArrow {
     /// Creates a new MutableTable
     fn table() -> MutableTable;
     /// Used to append `self` to an Arrow StructBuilder
-    fn append(self, builder: &mut StructBuilder) -> Result<(), ArrowError>;
+    fn append(self, builder: &mut StructBuilder, timestamp: Option<u64>) -> Result<(), ArrowError>;
 }
 
 macro_rules! to_arrow {
@@ -42,7 +42,7 @@ macro_rules! to_arrow {
                     stringify!($type)
                 );
             }
-            fn append(self, _: &mut StructBuilder) -> Result<(), ArrowError> {
+            fn append(self, _: &mut StructBuilder, _: Option<u64>) -> Result<(), ArrowError> {
                 unreachable!(
                     "Operation not possible for single value {}",
                     stringify!($type)

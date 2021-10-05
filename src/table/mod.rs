@@ -35,13 +35,13 @@ impl MutableTable {
 
     /// Append a single element to the table
     #[inline]
-    pub fn append(&mut self, elem: impl ToArrow) -> Result<(), ArrowError> {
+    pub fn append(&mut self, elem: impl ToArrow, timestamp: Option<u64>) -> Result<(), ArrowError> {
         if self.builder.len() == RECORD_BATCH_SIZE {
             let batch = self.builder.record_batch()?;
             self.batches.push(batch);
         }
 
-        self.builder.append(elem)?;
+        self.builder.append(elem, timestamp)?;
         Ok(())
     }
     /// Load elements into the table from an Iterator
@@ -51,7 +51,7 @@ impl MutableTable {
         elems: impl IntoIterator<Item = impl ToArrow>,
     ) -> Result<(), ArrowError> {
         for elem in elems {
-            self.append(elem)?;
+            self.append(elem, None)?;
         }
         Ok(())
     }
@@ -108,8 +108,8 @@ impl RecordBatchBuilder {
         }
     }
     #[inline]
-    pub fn append(&mut self, elem: impl ToArrow) -> Result<(), ArrowError> {
-        elem.append(&mut self.builder)?;
+    pub fn append(&mut self, elem: impl ToArrow, timestamp: Option<u64>) -> Result<(), ArrowError> {
+        elem.append(&mut self.builder, timestamp)?;
         self.builder.append(true)
     }
     pub fn name(&self) -> &str {
@@ -306,7 +306,7 @@ mod tests {
                 id: i as u64,
                 data: 1.0,
             };
-            table.append(event).unwrap();
+            table.append(event, None).unwrap();
         }
 
         let immutable: ImmutableTable = table.immutable().unwrap();
