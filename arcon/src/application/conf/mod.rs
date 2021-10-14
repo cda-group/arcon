@@ -5,6 +5,7 @@ use kompact::{
     net::buffers::BufferConfig,
     prelude::{DeadletterBox, KompactConfig, NetworkConfig},
 };
+use uuid::Uuid;
 use logger::{file_logger, term_logger, ArconLogger, LoggerType};
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
@@ -20,12 +21,23 @@ pub struct DistributedConf {
     peers: Vec<String>, // ["192.168.1.1:2000",  "192.168.1.2:2000"]
 }
 
+#[derive(Deserialize, Clone, Debug)]
+pub enum ControlPlaneMode {
+    Embedded,
+    Remote(String),
+}
+
 /// Configuration for an Arcon Application
 #[derive(Deserialize, Clone, Debug)]
 pub struct ApplicationConf {
+    #[serde(default = "app_name_default")]
+    pub app_name: String,
     /// Either a `Local` or `Distributed` Execution Mode
     #[serde(default = "execution_mode_default")]
     pub execution_mode: ExecutionMode,
+    /// Control Plane config
+    #[serde(default = "control_plane_default")]
+    pub control_plane_mode: ControlPlaneMode,
     /// Base directory for the application
     #[serde(default = "base_dir_default")]
     pub base_dir: PathBuf,
@@ -41,6 +53,9 @@ pub struct ApplicationConf {
     /// Generation interval in milliseconds for Watermarks at sources
     #[serde(default = "watermark_interval_default")]
     pub watermark_interval: u64,
+    /// Arcon Process ID
+    #[serde(default)]
+    pub arcon_pid: u64,
     /// The highest possible key value for a keyed stream
     ///
     /// This should not be set too low or ridiculously high
@@ -89,12 +104,15 @@ pub struct ApplicationConf {
 impl Default for ApplicationConf {
     fn default() -> Self {
         ApplicationConf {
+            app_name: app_name_default(),
             execution_mode: execution_mode_default(),
+            control_plane_mode: control_plane_default(),
             base_dir: base_dir_default(),
             arcon_logger_type: Default::default(),
             kompact_logger_type: Default::default(),
             watermark_interval: watermark_interval_default(),
             epoch_interval: epoch_interval_default(),
+            arcon_pid: Default::default(),
             max_key: max_key_default(),
             node_metrics_interval: node_metrics_interval_default(),
             buffer_pool_size: buffer_pool_size_default(),
@@ -244,6 +262,9 @@ impl ApplicationConf {
 }
 
 // Default values
+fn app_name_default() -> String {
+    Uuid::new_v4().to_string()
+}
 
 fn execution_mode_default() -> ExecutionMode {
     ExecutionMode::Local
@@ -258,6 +279,10 @@ fn base_dir_default() -> PathBuf {
     res.push("arcon");
 
     res
+}
+
+fn control_plane_default() -> ControlPlaneMode {
+    ControlPlaneMode::Embedded
 }
 
 fn epoch_interval_default() -> u64 {
