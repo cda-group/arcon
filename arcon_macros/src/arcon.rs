@@ -93,9 +93,7 @@ pub fn derive_arcon(input: TokenStream) -> TokenStream {
             key_quote = hash_fields_stream(fields, hasher_quote);
         }
     } else if let syn::Data::Enum(..) = input.data {
-        if keys.is_some() {
-            panic!("Hashing keys only work for structs");
-        }
+        assert!(keys.is_none(), "Hashing keys only work for structs");
         key_quote = quote! { 0 }; // make get_key return 0
     } else {
         panic!("#[derive(Arcon)] only works for structs/enums");

@@ -24,8 +24,8 @@ pub fn derive_state(input: TokenStream) -> TokenStream {
                     {
                         match get_table(attr, ident) {
                             Ok(Some(quote)) => {
-                                assert_ne!(
-                                    ephemeral, true,
+                                assert!(
+                                    !ephemeral,
                                     "Cannot use ephemeral attribute with table attribute"
                                 );
                                 let table_id = get_table_id(attr).unwrap();

@@ -428,9 +428,8 @@ impl Application {
     where
         A: ArconType,
     {
-        assert_ne!(
-            self.debug_node.is_some(),
-            true,
+        assert!(
+            self.debug_node.is_none(),
             "DebugNode has already been created!"
         );
         let component = self.ctrl_system.create(|| node);

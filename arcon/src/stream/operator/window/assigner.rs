@@ -99,12 +99,8 @@ where
     // Setup method for both sliding and tumbling windows
     fn setup(length: u64, slide: u64, late: u64, keyed: bool) -> Self {
         // Sanity check on slide and length
-        if length < slide {
-            panic!("Window Length lower than slide!");
-        }
-        if length % slide != 0 {
-            panic!("Window Length not divisible by slide!");
-        }
+        assert!(length >= slide, "Window Length lower than slide!");
+        assert!(length % slide == 0, "Window Length not divisible by slide!");
 
         WindowAssigner {
             window_length: length,
