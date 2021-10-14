@@ -6,8 +6,9 @@ use crate::stream::source::{
     schema::SourceSchema,
 };
 use crate::{
-    application::conf::{logger::ArconLogger, ApplicationConf, ExecutionMode},
+    application::conf::{logger::ArconLogger, ApplicationConf, ControlPlaneMode, ExecutionMode},
     buffer::event::PoolInfo,
+    control_plane::{conf::ControlPlaneConf, app::AppRegistration, ControlPlane, ControlPlaneContainer},
     data::ArconMessage,
     dataflow::{
         api::{ParallelSourceBuilder, SourceBuilder, SourceBuilderType},
@@ -81,6 +82,8 @@ pub struct Application {
     pub(crate) epoch_manager: Option<Arc<Component<EpochManager>>>,
     /// SnapshotManager component for this application
     pub(crate) snapshot_manager: Arc<Component<SnapshotManager>>,
+    /// A container holding information about the application's control plane
+    pub(crate) control_plane: ControlPlaneContainer,
     /// Flag indicating whether to spawn a debug node for the Application
     debug_node_flag: bool,
     // Type erased Arc<Component<DebugNode<A>>>
@@ -127,6 +130,17 @@ impl Application {
         let (ctrl_system, data_system, snapshot_manager, epoch_manager) =
             Self::setup(&conf, &arcon_logger);
 
+        let control_plane = match &conf.control_plane_mode {
+            ControlPlaneMode::Embedded => {
+                let mut cp_conf = ControlPlaneConf::default();
+                let mut dir = conf.base_dir.clone();
+                dir.push("control_plane");
+                cp_conf.dir = dir;
+                ControlPlaneContainer::Embedded(ControlPlane::new(cp_conf))
+            }
+            ControlPlaneMode::Remote(addr) => ControlPlaneContainer::Remote(addr.clone()),
+        };
+
         Self {
             ctrl_system,
             data_system,
@@ -135,6 +149,7 @@ impl Application {
             snapshot_manager,
             epoch_manager,
             source_manager: None,
+            control_plane,
             debug_node_flag: false,
             debug_node: None,
             abstract_debug_node: None,
@@ -439,5 +454,24 @@ impl Application {
                 .downcast::<Component<DebugNode<A>>>()
                 .unwrap()
         })
+    }
+
+    // NOTE: this function can be used while we are building up the dataflow.
+    // Basically, we want to send information about this Arcon Process (conf.arcon_pid)
+    // to the ControlPlane. 
+    pub(crate) fn _register_app(&self) {
+        let source_manager: ActorPath = NamedPath::with_system(
+            self.ctrl_system.system_path(),
+            vec!["source_manager".into()],
+        )
+        .into();
+
+        let _app = AppRegistration {
+            name: self.conf.app_name.clone(),
+            arcon_pids: vec![self.conf.arcon_pid], // TODO: all pids..
+            sources: vec![source_manager.to_string()],
+            pid: self.conf.arcon_pid,
+        };
+        // TODO: communicate with a component at the ControlPlane 
     }
 }

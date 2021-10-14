@@ -1,0 +1,8 @@
+[package]
+name = "arcon_control_plane"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+arcon = { path = "../" }
+clap = "2.33"

@@ -14,6 +14,7 @@ A runtime for writing streaming applications
 [workspace]
 members = [
     "arcon_build",
+    "arcon_control_plane",
     "arcon_tests",
     "arcon_examples"
 ]

@@ -152,6 +152,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "arcon_control_plane"
+version = "0.1.0"
+dependencies = [
+ "arcon",
+ "clap",
+]
+
+[[package]]
 name = "arcon_macros"
 version = "0.1.3"
 dependencies = [

@@ -96,6 +96,8 @@ pub mod bench_utils {
 mod application;
 /// Arcon buffer implementations
 mod buffer;
+/// Arcon's Control Plane
+pub mod control_plane;
 /// Arcon data types, serialisers/deserialisers
 mod data;
 /// Dataflow API
