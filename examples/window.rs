@@ -6,7 +6,7 @@ fn window_sum(buffer: &[u64]) -> u64 {
 
 fn main() {
     let mut app = Application::default()
-        .iterator(0u64..100000, |conf| {
+        .iterator(0u64..10, |conf| {
             conf.set_arcon_time(ArconTime::Event);
             conf.set_timestamp_extractor(|x: &u64| *x);
         })
