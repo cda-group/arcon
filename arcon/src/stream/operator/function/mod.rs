@@ -11,6 +11,7 @@ pub use map_in_place::MapInPlace;
 #[cfg(test)]
 mod tests {
     use crate::prelude::*;
+    const WAIT_TIME: u64 = 2000;
 
     fn wait(millis: u64) {
         std::thread::sleep(std::time::Duration::from_millis(millis));
@@ -44,7 +45,7 @@ mod tests {
     // helper to check common result between Map/MapInPlace
     fn check_map_result(mut app: AssembledApplication) {
         app.start();
-        wait(250);
+        wait(WAIT_TIME);
 
         let debug_node = app.get_debug_node::<i32>().unwrap();
 
@@ -66,7 +67,7 @@ mod tests {
 
         app.start();
 
-        wait(250);
+        wait(WAIT_TIME);
 
         let debug_node = app.get_debug_node::<i32>().unwrap();
 
@@ -87,7 +88,7 @@ mod tests {
 
         app.start();
 
-        wait(250);
+        wait(WAIT_TIME);
 
         let debug_node = app.get_debug_node::<i32>().unwrap();
 
