@@ -42,6 +42,9 @@
 //! - `state_metrics`
 //!     - With this feature on, the runtime will record various state metrics (e.g., bytes in/out, last checkpoint size).
 
+#![allow(dead_code)]
+#![allow(unused_variables)]
+
 // Enable use of arcon_macros within this crate
 #[cfg_attr(test, macro_use)]
 extern crate arcon_macros;
@@ -141,7 +144,9 @@ pub mod prelude {
     pub use crate::{
         application::conf::{logger::LoggerType, ApplicationConf},
         application::{Application, AssembledApplication, Stream},
-        data::{ArconElement, ArconNever, ArconType, StateID, VersionId},
+        data::{
+            partition::KeyRange, ArconElement, ArconNever, ArconType, NodeID, StateID, VersionId,
+        },
         dataflow::{
             api::{Assigner, OperatorBuilder, SourceBuilder},
             conf::{OperatorConf, ParallelismStrategy, SourceConf, StreamKind, WindowConf},

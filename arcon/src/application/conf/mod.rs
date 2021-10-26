@@ -5,10 +5,10 @@ use kompact::{
     net::buffers::BufferConfig,
     prelude::{DeadletterBox, KompactConfig, NetworkConfig},
 };
-use uuid::Uuid;
 use logger::{file_logger, term_logger, ArconLogger, LoggerType};
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
+use uuid::Uuid;
 
 /// Types of modes that `arcon` may run in
 #[derive(Deserialize, Clone, Debug)]

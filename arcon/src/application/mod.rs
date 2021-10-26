@@ -8,7 +8,9 @@ use crate::stream::source::{
 use crate::{
     application::conf::{logger::ArconLogger, ApplicationConf, ControlPlaneMode, ExecutionMode},
     buffer::event::PoolInfo,
-    control_plane::{conf::ControlPlaneConf, app::AppRegistration, ControlPlane, ControlPlaneContainer},
+    control_plane::{
+        app::AppRegistration, conf::ControlPlaneConf, ControlPlane, ControlPlaneContainer,
+    },
     data::ArconMessage,
     dataflow::{
         api::{ParallelSourceBuilder, SourceBuilder, SourceBuilderType},
@@ -457,7 +459,7 @@ impl Application {
 
     // NOTE: this function can be used while we are building up the dataflow.
     // Basically, we want to send information about this Arcon Process (conf.arcon_pid)
-    // to the ControlPlane. 
+    // to the ControlPlane.
     pub(crate) fn _register_app(&self) {
         let source_manager: ActorPath = NamedPath::with_system(
             self.ctrl_system.system_path(),
@@ -471,6 +473,6 @@ impl Application {
             sources: vec![source_manager.to_string()],
             pid: self.conf.arcon_pid,
         };
-        // TODO: communicate with a component at the ControlPlane 
+        // TODO: communicate with a component at the ControlPlane
     }
 }

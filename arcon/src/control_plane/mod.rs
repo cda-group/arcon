@@ -1,5 +1,6 @@
 pub mod app;
 pub mod conf;
+pub mod distributed;
 
 use conf::ControlPlaneConf;
 use kompact::prelude::{BufferConfig, DeadletterBox, KompactConfig, KompactSystem, NetworkConfig};

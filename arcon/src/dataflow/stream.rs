@@ -7,6 +7,7 @@ use crate::{
         constructor::*,
         dfg::{ChannelKind, DFGNode, DFGNodeID, DFGNodeKind, DFG},
     },
+    control_plane::distributed::{DeploymentPlan, Layout},
     index::EmptyState,
     prelude::AssembledApplication,
     stream::{
@@ -292,6 +293,12 @@ impl<IN: ArconType> Stream<IN> {
             }
         }
         AssembledApplication::new(self.ctx.app)
+    }
+
+    /// Builds a `DeploymentPlan` using the given layout
+    pub fn build_distributed(mut self, layout: Layout) -> DeploymentPlan {
+        // TODO
+        DeploymentPlan::new()
     }
 
     pub(crate) fn new(ctx: Context) -> Self {

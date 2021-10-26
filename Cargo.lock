@@ -114,6 +114,7 @@ dependencies = [
  "lz4-compression",
  "metrics",
  "metrics-exporter-prometheus",
+ "multimap",
  "num_cpus",
  "once_cell",
  "perf-event",
@@ -1979,6 +1980,9 @@ name = "multimap"
 version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "multiversion"
