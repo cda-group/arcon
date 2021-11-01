@@ -495,12 +495,8 @@ where
 
         // create directory that keeps checkpoints
         match self.ctx.config()["checkpoint_dir"].as_string() {
-            Some(base_dir ) => {
-                let checkpoint_dir = format!(
-                    "{}/{}",
-                    base_dir,
-                    self.descriptor,
-                );
+            Some(base_dir) => {
+                let checkpoint_dir = format!("{}/{}", base_dir, self.descriptor,);
                 std::fs::create_dir_all(checkpoint_dir).unwrap();
             }
             None => {
