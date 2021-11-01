@@ -493,6 +493,22 @@ where
             "Started Arcon Node {} with Node ID {:?}", self.descriptor, self.node_state.id
         );
 
+        // create directory that keeps checkpoints
+        match self.ctx.config()["checkpoint_dir"].as_string() {
+            Some(base_dir ) => {
+                let checkpoint_dir = format!(
+                    "{}/{}",
+                    base_dir,
+                    self.descriptor,
+                );
+                std::fs::create_dir_all(checkpoint_dir).unwrap();
+            }
+            None => {
+                // NOTE: just logging for now, should in the future order a shutdown for the whole application.
+                error!(self.logger, "Failed to locate checkpoint_dir config");
+            }
+        }
+
         self.epoch_manager
             .tell(EpochEvent::Register(self.descriptor.clone()));
 
@@ -501,6 +517,7 @@ where
             .on_start(&mut self.operator_context.borrow_mut())
             .is_err()
         {
+            // NOTE: just logging for now, should in the future order a shutdown for the whole application.
             error!(self.logger, "Failed to run startup code");
         }
 
