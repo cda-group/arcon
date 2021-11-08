@@ -15,7 +15,8 @@ A runtime for writing streaming applications
 members = [
     "arcon_build",
     "arcon_tests",
-    "arcon_examples"
+    "arcon_examples",
+    "arcon_util"
 ]
 
 exclude = [
