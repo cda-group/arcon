@@ -44,6 +44,9 @@ pub(crate) enum ProcessControllerMessage {
 
 impl ComponentLifecycle for ProcessController {
     fn on_start(&mut self) -> Handled {
+        info!(self.ctx.log(), "starting ProcessController with path {:?}, telling ApplicationController {:?}", 
+            self.ctx.actor_path(),
+            self.application_controller);
         self.application_controller
             .tell_serialised(
                 ApplicationControllerMessage::CheckIn(self.pid.clone()),

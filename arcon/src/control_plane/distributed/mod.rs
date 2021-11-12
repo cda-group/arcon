@@ -1,15 +1,16 @@
 use crate::prelude::*;
+use crate::dataflow::dfg::*;
 use application_controller::ApplicationControllerMessage;
-use multimap::MultiMap;
 use fxhash::FxHashMap;
+use multimap::MultiMap;
 use process_controller::ProcessControllerMessage;
 
 pub mod application_controller;
 pub mod process_controller;
 
-pub type ProcessId = String;
-pub type OperatorId = String;
-pub type ApplicationId = String;
+pub type ProcessId = u32;
+pub type OperatorId = u32;
+pub type ApplicationId = u32;
 
 /// Logical Name, can be derived from a DistributedApplication.
 /// Resolveable to an `ActorPath` during runtime.
@@ -54,17 +55,68 @@ impl NodeConfig {
 /// DistributedApplication
 pub struct DistributedApplication {
     /// The Application
-    pub application: Application,
+    // pub application: Application,
+    pub dfg: DFG,
     /// The Layout of the Distributed Application
     pub layout: Layout,
+    pub process_controller_map: FxHashMap<ProcessId, ActorPath>,
+    node_id_paths: Vec<(GlobalNodeId, ActorPath)>,
+    node_configs: Vec<NodeConfig>,
 }
 
 impl DistributedApplication {
-    pub fn build(&mut self) -> DeploymentPlan {
-        DeploymentPlan{
-            node_map: FxHashMap::default(),
+    pub fn new(dfg: DFG, layout: Layout) -> DistributedApplication {
+        DistributedApplication {
+            //application,
+            dfg,
+            layout,
+            process_controller_map: FxHashMap::default(),
+            node_id_paths: Vec::new(),
             node_configs: Vec::new(),
         }
+    }
+    // pub fn get_operator_builder(&self, ) -> dyn Fn(NodeConfig) -> () {}
+
+    pub fn is_ready(&mut self) -> bool {
+        if self.process_controller_map.len() >= self.layout.get_process_count() {
+            self.build_node_configs();
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn insert_pid_path(&mut self, pid: ProcessId, path: ActorPath) {
+        assert!(
+            self.process_controller_map.insert(pid, path).is_none(),
+            "Duplicate pid-path translation inserted"
+        );
+    }
+
+    /// Get a Vec of ProcessId and the given
+    pub fn get_pid_controller_paths(&self) -> Vec<(&ProcessId, &ActorPath)> {
+        self.process_controller_map.iter().collect()
+    }
+
+    /// Returns a Vec where each entry is one GlobalNodeId and its corresponding NamedPath
+    pub fn get_named_paths(&mut self) -> Vec<(GlobalNodeId, ActorPath)> {
+        self.node_id_paths.clone()
+    }
+
+    /// Returns a Vec of (OperatorId, NodeConfig) which should be deployed to the given ProcessId
+    pub fn get_node_configs_for_pid(&self, process_id: &ProcessId) -> Vec<NodeConfig> {
+        let vec = self
+            .node_configs
+            .iter()
+            .filter(|cfg| cfg.id().process_id == *process_id)
+            .cloned()
+            .collect();
+        vec
+    }
+
+    /// Iterates over the given application and constructs a list of Operators and their configs
+    fn build_node_configs(&mut self) {
+        // TODO: Build all operator configs
     }
 }
 
@@ -77,7 +129,7 @@ impl DeploymentPlan {
     pub fn new() -> Self {
         DeploymentPlan {
             node_map: FxHashMap::default(),
-            node_configs: Vec::new()
+            node_configs: Vec::new(),
         }
     }
     pub fn get_node_map_vec(&self) -> Vec<(GlobalNodeId, ActorPath)> {
@@ -91,8 +143,9 @@ impl DeploymentPlan {
     pub fn get_node_configs(&self, process_id: ProcessId) -> Vec<NodeConfig> {
         self.node_configs
             .iter()
-            .filter(|cfg| {cfg.id().process_id == process_id})
-            .cloned().collect()
+            .filter(|cfg| cfg.id().process_id == process_id)
+            .cloned()
+            .collect()
     }
 }
 
@@ -100,12 +153,14 @@ impl DeploymentPlan {
 pub struct Layout {
     /// Maps OperatorName to ProcessId(s): The Operator should be deployed on the ProcessIds it maps to.
     map: MultiMap<OperatorId, ProcessId>,
+    process_count: usize,
 }
 
 impl Layout {
     pub fn new() -> Self {
         Layout {
             map: MultiMap::new(),
+            process_count: 0,
         }
     }
     /// Returns the Operators
@@ -113,8 +168,21 @@ impl Layout {
         self.map.get_vec(operator)
     }
 
+    pub fn get_process_count(&self) -> usize {
+        self.process_count
+    }
+
     pub fn insert_mapping(&mut self, operator: &OperatorId, process_id: &ProcessId) {
-        self.map.insert(operator.clone(), process_id.clone())
+        self.map.insert(operator.clone(), process_id.clone());
+        self.update_process_count();
+    }
+
+    fn update_process_count(&mut self) {
+        let mut pid_vec: Vec<&ProcessId> =
+            self.map.iter().map(|(_, process_id)| process_id).collect();
+        pid_vec.sort();
+        pid_vec.dedup();
+        self.process_count = pid_vec.len();
     }
 }
 
@@ -123,9 +191,9 @@ impl Deserialiser<GlobalNodeId> for GlobalNodeId {
     const SER_ID: SerId = 7003;
     fn deserialise(buf: &mut dyn Buf) -> Result<GlobalNodeId, SerError> {
         Ok(GlobalNodeId {
-            process_id: String::deserialise(buf)?,
-            application_id: String::deserialise(buf)?,
-            operator_id: String::deserialise(buf)?,
+            process_id: buf.get_u32(),
+            application_id: buf.get_u32(),
+            operator_id: buf.get_u32(),
             node_id: NodeID::from(buf.get_u32()),
         })
     }
@@ -137,13 +205,13 @@ impl Serialisable for GlobalNodeId {
     }
 
     fn size_hint(&self) -> Option<usize> {
-        None
+        Some(4*4)
     }
 
     fn serialise(&self, buf: &mut dyn BufMut) -> Result<(), SerError> {
-        self.process_id.serialise(buf)?;
-        self.application_id.serialise(buf)?;
-        self.operator_id.serialise(buf)?;
+        buf.put_u32(self.process_id);
+        buf.put_u32(self.application_id);
+        buf.put_u32(self.operator_id);
         buf.put_u32(self.node_id.id);
         Ok(())
     }
@@ -209,9 +277,9 @@ pub mod test {
 
     fn dummy_global_id() -> GlobalNodeId {
         GlobalNodeId {
-            process_id: "AProcessId".to_string(),
-            application_id: "AnApplicationId".to_string(),
-            operator_id: "AnOperatorId".to_string(),
+            process_id: 0,
+            application_id: 0,
+            operator_id: 0,
             node_id: NodeID::new(0),
         }
     }

@@ -1,49 +1,39 @@
 use super::*;
-use fxhash::FxHashMap;
 
 /// Global coordinator of a Pipeline, coordinates all the processes' (hosts) executing the application/pipeline.
 #[derive(ComponentDefinition)]
 pub(crate) struct ApplicationController {
     /// Component context
     ctx: ComponentContext<Self>,
-    /// The Application
+    // The Application
     application: DistributedApplication,
-    /// The number of processes which the Application Requires
-    remaining_check_ins: u32,
-    /// ActorPath's to the ProcessControllers
-    process_controllers: FxHashMap<ProcessId, ActorPath>,
 }
 
 impl ApplicationController {
     pub fn new(application: DistributedApplication, expected_processes: u32) -> Self {
         ApplicationController {
             ctx: ComponentContext::uninitialised(),
-            application,
-            remaining_check_ins: expected_processes,
-            process_controllers: FxHashMap::default(),
+            application: application,
         }
     }
 
     fn handle_check_in(&mut self, pid: ProcessId, path: ActorPath) {
-        if self.process_controllers.insert(pid, path).is_none() {
-            self.remaining_check_ins -= 1
-        };
-        if self.remaining_check_ins == 0 {
+        self.application.insert_pid_path(pid, path);
+        if self.application.is_ready() {
             self.start_application();
         }
     }
 
     fn start_application(&mut self) {
-        let distribution_plan = self.application.build();
-        for (pid, path) in self.process_controllers.iter() {
-            // self.application.get_node_configs();
+        let node_id_paths = self.application.get_named_paths();
+        for (pid, path) in self.application.get_pid_controller_paths() {
+            info!(self.ctx.log(), "Sending CreateOperators command to {:?}", path);
             path.tell_serialised(
                 ProcessControllerMessage::CreateOperators(
-                    Vec::new(),
-                    Vec::new()
-                ), 
-                self)
-                .ok();
+                    node_id_paths.clone(), self.application.get_node_configs_for_pid(pid)
+                ),
+                self
+            ).ok();
         }
     }
 }
@@ -51,6 +41,7 @@ impl ApplicationController {
 impl ComponentLifecycle for ApplicationController {
     fn on_start(&mut self) -> Handled {
         // Do anything?
+        info!(self.ctx.log(), "Starting ApplicationController {:?}", self.ctx.actor_path());
         Handled::Ok
     }
 }
@@ -68,9 +59,10 @@ impl NetworkActor for ApplicationController {
     type Message = ApplicationControllerMessage;
 
     fn receive(&mut self, sender: Option<ActorPath>, msg: Self::Message) -> Handled {
+        info!(self.ctx.log(), "Received msg: {:?}", msg);
         match msg {
             ApplicationControllerMessage::CheckIn(pid) => {
-                info!(self.ctx.log(), "CheckIn Received: {:?}", pid);
+                info!(self.ctx.log(), "CheckIn Received: {:?}", pid); 
                 if let Some(process_controller) = sender {
                     self.handle_check_in(pid, process_controller);
                 }
@@ -102,9 +94,8 @@ impl Deserialiser<ApplicationControllerMessage> for ApplicationControllerMessage
                 }
                 Ok(ApplicationControllerMessage::CreatedOperators(node_vec))
             }
-            CHECK_IN_ID => Ok(ApplicationControllerMessage::CheckIn(String::deserialise(
-                buf,
-            )?)),
+            CHECK_IN_ID => Ok(ApplicationControllerMessage::CheckIn(
+                buf.get_u32())),
             _ => Err(SerError::InvalidData(
                 "Unable to Deserialise ApplicationControllerMessage".to_string(),
             )),
@@ -132,7 +123,8 @@ impl Serialisable for ApplicationControllerMessage {
                 }
             }
             ApplicationControllerMessage::CheckIn(pid) => {
-                pid.serialise(buf)?;
+                buf.put_u8(CHECK_IN_ID);
+                buf.put_u32(*pid);
             }
         }
         Ok(())

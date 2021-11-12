@@ -7,7 +7,7 @@ use crate::{
         constructor::*,
         dfg::{ChannelKind, DFGNode, DFGNodeID, DFGNodeKind, DFG},
     },
-    control_plane::distributed::{DeploymentPlan, Layout},
+    control_plane::distributed::{DistributedApplication, Layout},
     index::EmptyState,
     prelude::AssembledApplication,
     stream::{
@@ -233,6 +233,34 @@ impl<IN: ArconType> Stream<IN> {
         stream.build()
     }
 
+    /// Builds a Distributable Dataflow-graph
+    pub fn build_distributed(self, layout: Layout) -> (DistributedApplication, Application) {
+        /*
+        let mut target_nodes: Vec<NodeID> = Vec::new();
+
+        // TODO...
+        for dfg_node in self.ctx.dfg.graph.into_iter().rev() {
+            match dfg_node.kind {
+                DFGNodeKind::Source(channel_kind, source_manager_cons) => {
+
+                }
+                DFGNodeKind::Node(manager_cons) => {
+
+                }
+            }
+        }*/
+
+        let Stream{_marker, prev_dfg_id, ctx} = self;
+        let Context{dfg, app, ..} = ctx;
+        (
+            DistributedApplication::new(
+                dfg,
+                layout
+            ), 
+            app
+        )
+    }
+
     /// Builds the Dataflow graph
     ///
     /// Returns a [`AssembledApplication`] where all runtime components
@@ -293,12 +321,6 @@ impl<IN: ArconType> Stream<IN> {
             }
         }
         AssembledApplication::new(self.ctx.app)
-    }
-
-    /// Builds a `DeploymentPlan` using the given layout
-    pub fn build_distributed(mut self, layout: Layout) -> DeploymentPlan {
-        // TODO
-        DeploymentPlan::new()
     }
 
     pub(crate) fn new(ctx: Context) -> Self {

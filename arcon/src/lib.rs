@@ -44,6 +44,7 @@
 
 #![allow(dead_code)]
 #![allow(unused_variables)]
+#![feature(allocator_api)]
 
 // Enable use of arcon_macros within this crate
 #[cfg_attr(test, macro_use)]

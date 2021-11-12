@@ -1,7 +1,11 @@
 use crate::prelude::*;
-//use crate::ArconResult;
+use crate::control_plane::distributed::*;
+use crate::control_plane::distributed::application_controller::*;
+use crate::control_plane::distributed::process_controller::*;
+use std::time::Duration;
 
-const DEFAULT_WAIT_TIME: u64 = 10000;
+const DEFAULT_WAIT_TIME: u64 = 2000;
+const REGISTRATION_TIMEOUT: Duration = Duration::from_millis(2000);
 
 fn wait(millis: u64) {
     std::thread::sleep(std::time::Duration::from_millis(millis));
@@ -26,11 +30,16 @@ fn window_sum(buffer: &[u64]) -> u64 {
     buffer.iter().sum()
 }
 
-#[test]
-fn adam() -> ArconResult<()> {
+/// Builds a simple DistributedApplication with a defined pipeline.
+/// Starts a KompactSystem but does not start any operators or controllers.
+fn simple_distributed_application() -> (DistributedApplication, Application) {
     let input_range = 0u64..=1010;
     let expected_sum = (0u64..=1000).sum::<u64>();
-    let mut app = Application::default()
+
+    let mut app_conf = ApplicationConf::default();
+    app_conf.kompact_network_host = Some("127.0.0.1:0".to_string());
+
+    Application::with_conf(app_conf)
         .with_debug_node()
         .iterator(input_range, |conf| {
             conf.set_arcon_time(ArconTime::Event);
@@ -55,10 +64,39 @@ fn adam() -> ArconResult<()> {
             conf: OperatorConf::default(),
         })
         .to_console()
-        .build();
+        .build_distributed(Layout::new())
+}
 
-    app.start();
+
+#[test]
+fn adam() -> ArconResult<()> {
+    let (distributed_app, mut app) = simple_distributed_application();
+    let (distributed_app_clone, mut app_clone) = simple_distributed_application();
+    
+    // wait(DEFAULT_WAIT_TIME);
+
+    let (app_controller, rf) = app.data_system().create_and_register(|| {
+        ApplicationController::new(distributed_app, 1)
+    });
+    let _ = rf.wait_timeout(REGISTRATION_TIMEOUT).expect("registration failed");
+    
     wait(DEFAULT_WAIT_TIME);
+    
+    app.data_system().start(&app_controller);
+    
+    let app_controller_path = app.data_system().actor_path_for(&app_controller);
+    
+    wait(DEFAULT_WAIT_TIME);
+    
+    let (process_controller, rf) = app_clone.data_system().create_and_register(|| {
+        ProcessController::new(0, app_controller_path, "app_name".to_string())
+    });
+    let _ = rf.wait_timeout(REGISTRATION_TIMEOUT).expect("registration failed");
+
+    app_clone.data_system().start(&process_controller);
+
+    wait(DEFAULT_WAIT_TIME*5);
+    /* app.start();
 
     let debug_node = app.get_debug_node::<u64>().unwrap();
 
@@ -66,6 +104,7 @@ fn adam() -> ArconResult<()> {
         let sum: u64 = cd.data.iter().map(|elem| elem.data).sum();
         assert_eq!(sum, expected_sum);
     });
+    */
 
     Ok(())
 }

@@ -10,6 +10,8 @@ pub struct DFG {
     pub(crate) graph: Vec<DFGNode>,
 }
 
+unsafe impl Send for DFG {}
+
 impl DFG {
     /// Inserts a [`DFGNode`] into the dataflow graph and returns a unique
     /// identifier of it.
