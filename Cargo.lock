@@ -99,6 +99,7 @@ dependencies = [
  "arcon_allocator",
  "arcon_macros",
  "arcon_state",
+ "arcon_util",
  "arrow",
  "bincode",
  "bytes 1.0.1",
