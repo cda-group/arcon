@@ -17,8 +17,7 @@ serde = { version = "1.0.104", features = ["derive"] }
 abomonation = "0.7.3"
 abomonation_derive = "0.5.0"
 tempfile = "3"
-arrow = { version = "4.3", optional = true }
-datafusion = { version = "4.0.0", optional = true }
+#arrow = { version = "4.3", optional = true }
 tokio = { version = "1.0", features = ["macros", "rt", "rt-multi-thread", "sync"] }
 
 [build-dependencies]

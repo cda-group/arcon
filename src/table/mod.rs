@@ -5,12 +5,19 @@ use arrow::{
     error::ArrowError,
     ipc::{
         convert::*,
-        reader::read_record_batch,
-        writer::{DictionaryTracker, IpcDataGenerator, IpcWriteOptions},
+        reader::{read_record_batch, FileReader},
+        writer::{DictionaryTracker, FileWriter, IpcDataGenerator, IpcWriteOptions},
     },
     record_batch::RecordBatch,
 };
 use datafusion::{datasource::MemTable, error::DataFusionError};
+use parquet::arrow::ParquetFileArrowReader;
+use parquet::basic::Compression;
+use parquet::file::properties::WriterProperties;
+use parquet::file::reader::SerializedFileReader;
+use parquet::{arrow::arrow_writer::ArrowWriter, errors::ParquetError};
+use std::fs::File;
+use std::path::Path;
 use std::{convert::TryFrom, sync::Arc};
 
 // Size for each RecordBatch in Arrow
@@ -153,6 +160,9 @@ impl ImmutableTable {
     pub fn name(&self) -> String {
         self.name.clone()
     }
+    pub fn total_rows(&self) -> usize {
+        self.batches.iter().map(|r| r.num_rows()).sum()
+    }
     pub fn schema(&self) -> Arc<Schema> {
         self.schema.clone()
     }
@@ -233,6 +243,15 @@ impl TryFrom<RawTable> for ImmutableTable {
     }
 }
 
+/// A Raw version of an Arrow RecordBatch
+#[derive(prost::Message, Clone)]
+pub struct RawRecordBatch {
+    #[prost(bytes)]
+    pub ipc_message: Vec<u8>,
+    #[prost(bytes)]
+    pub arrow_data: Vec<u8>,
+}
+
 /// A Raw version of [ImmutableTable] that can be persisted to disk or sent over the wire.
 #[derive(prost::Message, Clone)]
 pub struct RawTable {
@@ -276,20 +295,61 @@ impl TryFrom<ImmutableTable> for RawTable {
     }
 }
 
-/// A Raw version of an Arrow RecordBatch
-#[derive(prost::Message, Clone)]
-pub struct RawRecordBatch {
-    #[prost(bytes)]
-    pub ipc_message: Vec<u8>,
-    #[prost(bytes)]
-    pub arrow_data: Vec<u8>,
+#[allow(unused)]
+pub fn write_arrow_file(path: impl AsRef<Path>, table: ImmutableTable) -> Result<(), ArrowError> {
+    let file = File::create(path)?;
+    let mut writer = FileWriter::try_new(file, &table.schema)?;
+    for batch in table.batches {
+        writer.write(&batch)?;
+    }
+    writer.finish()?;
+    Ok(())
+}
+
+#[allow(unused)]
+pub fn arrow_file_reader(path: impl AsRef<Path>) -> Result<FileReader<File>, ArrowError> {
+    let file = File::open(path)?;
+    FileReader::try_new(file)
+}
+
+#[allow(unused)]
+pub fn write_parquet_file(
+    path: impl AsRef<Path>,
+    table: ImmutableTable,
+    compression: bool,
+) -> Result<(), ParquetError> {
+    let file = File::create(path)?;
+    let props = if compression {
+        WriterProperties::builder()
+            .set_compression(Compression::ZSTD)
+            .build()
+    } else {
+        WriterProperties::builder().build()
+    };
+
+    let mut writer = ArrowWriter::try_new(file, table.schema, Some(props))?;
+    for batch in table.batches {
+        writer.write(&batch)?;
+    }
+    writer.close()?;
+    Ok(())
+}
+
+#[allow(unused)]
+pub fn parquet_arrow_reader(
+    path: impl AsRef<Path>,
+) -> Result<ParquetFileArrowReader, ParquetError> {
+    let file = File::open(path)?;
+    let file_reader = SerializedFileReader::new(file)?;
+    Ok(ParquetFileArrowReader::new(Arc::new(file_reader)))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::ToArrow;
-    use datafusion::datasource::TableProvider;
+    use parquet::arrow::ArrowReader;
+    use tempfile::tempdir;
 
     #[derive(Arrow, Clone)]
     pub struct Event {
@@ -297,8 +357,7 @@ mod tests {
         pub data: f32,
     }
 
-    #[test]
-    fn table_serde_test() {
+    fn test_table() -> MutableTable {
         let mut table = Event::table();
         let events = 1548;
         for i in 0..events {
@@ -308,12 +367,56 @@ mod tests {
             };
             table.append(event, None).unwrap();
         }
+        table
+    }
 
+    #[test]
+    fn arrow_file_test() {
+        let table = test_table();
+        let immutable = table.immutable().unwrap();
+        let total_rows = immutable.total_rows();
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("arrow_write");
+        let reader_path = file_path.clone();
+        // verify write
+        assert!(write_arrow_file(file_path, immutable).is_ok());
+
+        // verify rows
+        let reader = arrow_file_reader(reader_path).unwrap();
+        let rows: usize = reader.map(|r| r.unwrap().num_rows()).sum();
+        assert_eq!(rows, total_rows);
+    }
+    #[test]
+    fn parquet_file_test() {
+        let table = test_table();
+        let immutable = table.immutable().unwrap();
+        let schema = immutable.schema();
+        let total_rows = immutable.total_rows();
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("parquet_write");
+        let reader_path = file_path.clone();
+
+        // verify write
+        assert!(write_parquet_file(file_path, immutable, true).is_ok());
+
+        // verify schema
+        let mut reader = parquet_arrow_reader(reader_path).unwrap();
+        let reader_schema = reader.get_schema().unwrap();
+        assert_eq!(schema, Arc::new(reader_schema));
+
+        // verify rows
+        let mut batch_reader = reader.get_record_reader(total_rows).unwrap();
+        let batch = batch_reader.next().unwrap().unwrap();
+        assert_eq!(batch.num_rows(), total_rows);
+    }
+
+    #[test]
+    fn table_serde_test() {
+        let table = test_table();
         let immutable: ImmutableTable = table.immutable().unwrap();
+        let total_rows = immutable.total_rows();
         let raw_table: RawTable = RawTable::try_from(immutable).unwrap();
         let back_to_immutable: ImmutableTable = ImmutableTable::try_from(raw_table).unwrap();
-        // create a mem table and check that we have correct number of rows...
-        let mem_table = back_to_immutable.mem_table().unwrap();
-        assert_eq!(mem_table.statistics().num_rows, Some(1548));
+        assert_eq!(back_to_immutable.total_rows(), total_rows);
     }
 }
