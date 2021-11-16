@@ -313,36 +313,4 @@ impl Application {
     pub fn debug_node_enabled(&self) -> bool {
         self.debug_node_flag
     }
-
-    // internal helper to create a DebugNode from a Stream object
-    pub(crate) fn create_debug_node<A>(&mut self, node: DebugNode<A>)
-    where
-        A: ArconType,
-    {
-        assert!(
-            self.debug_node.is_none(),
-            "DebugNode has already been created!"
-        );
-        let component = self.ctrl_system.create(|| node);
-
-        self.ctrl_system
-            .start_notify(&component)
-            .wait_timeout(std::time::Duration::from_millis(500))
-            .expect("DebugNode comp never started!");
-
-        self.debug_node = Some(component.clone());
-        // define abstract version of the component as the building phase needs it to downcast properly..
-        let comp: Arc<dyn AbstractComponent<Message = ArconMessage<A>>> = component;
-        self.abstract_debug_node = Some(Arc::new(comp) as ErasedComponent);
-    }
-
-    // internal helper to help fetch DebugNode from an AssembledApplication
-    pub(crate) fn get_debug_node<A: ArconType>(&self) -> Option<Arc<Component<DebugNode<A>>>> {
-        self.debug_node.as_ref().map(|erased_comp| {
-            erased_comp
-                .clone()
-                .downcast::<Component<DebugNode<A>>>()
-                .unwrap()
-        })
-    }
 }

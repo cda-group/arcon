@@ -18,7 +18,6 @@ fn main() {
                         slide: Time::seconds(500),
                         late_arrival: Time::seconds(0),
                     },
-                    kind: StreamKind::Keyed,
                 };
                 WindowAssigner::new(conf)
             }),

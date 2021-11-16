@@ -107,22 +107,6 @@ impl DFGNode {
         self.outgoing_channels = outgoing_channels;
     }
 
-    /// Configures the outgoing ChannelKind for this nodes Factory
-    #[allow(dead_code)]
-    pub fn set_channel_kind(&mut self, _channel_kind: ChannelKind) {
-        match &mut self.kind {
-            DFGNodeKind::Source(_source_factory) => {
-                todo!();
-                // mutability issue...
-                //source_factory.set_channel_kind(channel_kind);
-            }
-            DFGNodeKind::Node(_node_factory) => {
-                todo!();
-                // node_factory.set_channel_kind(channel_kind);
-            }
-        }
-    }
-
     /// Returns the ChannelKind
     #[allow(dead_code)]
     pub fn get_channel_kind(&self) -> &ChannelKind {
@@ -138,64 +122,31 @@ impl DFGNode {
 pub enum DFGNodeKind {
     Source(Arc<dyn SourceFactory>),
     Node(Arc<dyn NodeFactory>),
+    Placeholder,
 }
 
 #[derive(Clone, Copy, Debug)]
-#[allow(dead_code)]
 pub enum ChannelKind {
+    /// If Operator A with parallelism P (nodes a1, a2, ..., aP) sends messages
+    /// to Operator B with parallelism P (nodes b1, b2, ..., bP)
+    /// node a1 sends to b1, a2 sends to b2 etc.
     Forward,
+    /// If Operator A with parallelism P (nodes a1, a2, ..., aP) sends messages
+    /// to Operator B with parallelism P (nodes b1, b2, ..., bP)
+    /// all nodes executing A will broadcast each message to all nodes executing B.
     Broadcast,
+    /// Unimplemented
     RoundRobin,
+    /// Hashes elements according to a given key_extractor function and distributes the messages according to the hash.
     Keyed,
+    /// Logs outgoing elements to the console without sending anything
     Console,
+    /// Outgoing messages will be discarded
     Mute,
 }
 
 impl Default for ChannelKind {
     fn default() -> Self {
-        ChannelKind::Keyed
+        ChannelKind::Forward
     }
 }
-
-// TODO: Fix
-/*
-#[test]
-fn create_dfg() {
-    use DFGNodeKind::*;
-    let mut dfg = DFG::default();
-
-    let node0 = dfg.insert(DFGNode::new(
-        Node(Box::new(())),
-        OperatorConfig::default(),
-        vec![],
-    ));
-    let node1 = dfg.insert(DFGNode::new(
-        Node(Box::new(())),
-        OperatorConfig::default(),
-        vec![node0],
-    ));
-    let node2 = dfg.insert(DFGNode::new(
-        Node(Box::new(())),
-        OperatorConfig::default(),
-        vec![node0],
-    ));
-    let node3 = dfg.insert(DFGNode::new(
-        Node(Box::new(())),
-        OperatorConfig::default(),
-        vec![node1, node2],
-    ));
-
-    // Constructs the dataflow graph:
-    //
-    //        +-> node1 -+
-    //        |          |
-    // node0 -+          +-> node3
-    //        |          |
-    //        +-> node2 -+
-
-    assert_eq!(OperatorId(0), node0);
-    assert_eq!(OperatorId(1), node1);
-    assert_eq!(OperatorId(2), node2);
-    assert_eq!(OperatorId(3), node3);
-}
-*/

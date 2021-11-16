@@ -7,6 +7,7 @@ use crate::{
         api::{OperatorBuilder, SourceBuilderType},
         conf::SourceConf,
         dfg::{ChannelKind, GlobalNodeId},
+        stream::KeyBuilder,
     },
     manager::{
         node::{NodeManager, NodeManagerPort},
@@ -34,7 +35,6 @@ use kompact::{
         biconnect_components, biconnect_ports, ActorRefFactory, ActorRefStrong, RequiredRef, *,
     },
 };
-use std::any::type_name;
 use std::{any::Any, path::PathBuf, sync::Arc};
 
 pub type ErasedSourceManager = Arc<dyn AbstractComponent<Message = SourceEvent>>;
@@ -42,35 +42,50 @@ pub type ErasedSourceManager = Arc<dyn AbstractComponent<Message = SourceEvent>>
 pub type ErasedComponent = Arc<dyn Any + Send + Sync>;
 pub type ErasedComponents = Vec<ErasedComponent>;
 
-fn channel_strategy<OUT: ArconType>(
+fn channel_strategy<T: ArconType>(
     mut components: ErasedComponents,
     paths: Vec<ActorPath>,
     node_id: NodeID,
     pool_info: PoolInfo,
-    max_key: u64,
     channel_kind: ChannelKind,
-) -> ChannelStrategy<OUT> {
-    eprintln!(
-        "building channel strategy with {} components and {} paths",
-        components.len(),
-        paths.len()
-    );
-    eprintln!("Building ChannelStrategy {}", type_name::<OUT>());
+    key_builder: Option<KeyBuilder<T>>,
+) -> ChannelStrategy<T> {
+    if components.len() + paths.len() == 0 {
+        return ChannelStrategy::<T>::Mute;
+    }
     match channel_kind {
         ChannelKind::Forward => {
-            assert_eq!(components.len(), 1, "Expected a single component target");
-            let target_node = components
-                .remove(0)
-                .downcast::<Arc<dyn AbstractComponent<Message = ArconMessage<OUT>>>>()
-                .unwrap();
-            let actor_ref = target_node.actor_ref().hold().expect("failed to fetch");
-            ChannelStrategy::Forward(Forward::new(Channel::Local(actor_ref), node_id, pool_info))
+            assert!((components.len() == 1) || (components.len() > node_id.id as usize));
+            if components.len() > 1 {
+                // Use NodeID as Index
+                let target_node = components
+                    .remove(node_id.id as usize)
+                    .downcast::<Arc<dyn AbstractComponent<Message = ArconMessage<T>>>>()
+                    .unwrap();
+                let actor_ref = target_node.actor_ref().hold().expect("failed to fetch");
+                ChannelStrategy::Forward(Forward::new(
+                    Channel::Local(actor_ref),
+                    node_id,
+                    pool_info,
+                ))
+            } else {
+                let target_node = components
+                    .remove(0)
+                    .downcast::<Arc<dyn AbstractComponent<Message = ArconMessage<T>>>>()
+                    .unwrap();
+                let actor_ref = target_node.actor_ref().hold().expect("failed to fetch");
+                ChannelStrategy::Forward(Forward::new(
+                    Channel::Local(actor_ref),
+                    node_id,
+                    pool_info,
+                ))
+            }
         }
         ChannelKind::Keyed => {
             let mut channels = Vec::new();
             for component in components {
                 let target_node = component
-                    .downcast::<Arc<dyn AbstractComponent<Message = ArconMessage<OUT>>>>()
+                    .downcast::<Arc<dyn AbstractComponent<Message = ArconMessage<T>>>>()
                     .unwrap();
                 let actor_ref = target_node.actor_ref().hold().expect("failed to fetch");
                 let channel = Channel::Local(actor_ref);
@@ -79,11 +94,58 @@ fn channel_strategy<OUT: ArconType>(
             for path in paths {
                 channels.push(Channel::Remote(path, FlightSerde::Reliable));
             }
-            ChannelStrategy::Keyed(Keyed::new(max_key, channels, node_id, pool_info))
+            ChannelStrategy::Keyed(Keyed::new(
+                channels,
+                node_id,
+                pool_info,
+                key_builder.expect("Keyed ChannelStrategy must have KeyBuilder"),
+            ))
         }
         ChannelKind::Console => ChannelStrategy::Console,
         ChannelKind::Mute => ChannelStrategy::Mute,
-        _ => unimplemented!(),
+        _ => todo!("Unimplemented ChannelKind {:?}", channel_kind),
+    }
+}
+
+pub(crate) trait TypedNodeFactory<T: ArconType>: NodeFactory {
+    fn set_key_builder(&mut self, key_builder: KeyBuilder<T>);
+    fn set_channel_kind(&mut self, channel_kind: ChannelKind);
+    fn untype(self: Arc<Self>) -> Arc<dyn NodeFactory>;
+}
+
+impl<OP: Operator<OUT = T>, B: Backend, T: ArconType> TypedNodeFactory<T>
+    for NodeConstructor<OP, B>
+{
+    fn set_key_builder(&mut self, key_builder: KeyBuilder<T>) {
+        self.out_key_builder = Some(key_builder);
+        self.channel_kind = ChannelKind::Keyed;
+    }
+    fn set_channel_kind(&mut self, channel_kind: ChannelKind) {
+        self.channel_kind = channel_kind;
+    }
+    fn untype(self: Arc<Self>) -> Arc<dyn NodeFactory> {
+        self
+    }
+}
+
+pub(crate) trait TypedSourceFactory<T: ArconType>: SourceFactory {
+    fn set_key_builder(&mut self, key_builder: KeyBuilder<T>);
+    fn set_channel_kind(&mut self, channel_kind: ChannelKind);
+    fn untype(self: Arc<Self>) -> Arc<dyn SourceFactory>;
+}
+
+impl<S: Source<Item = T>, B: Backend, T: ArconType> TypedSourceFactory<T>
+    for SourceConstructor<S, B>
+{
+    fn set_key_builder(&mut self, key_builder: KeyBuilder<T>) {
+        self.key_builder = Some(key_builder);
+        self.channel_kind = ChannelKind::Keyed;
+    }
+    fn set_channel_kind(&mut self, channel_kind: ChannelKind) {
+        self.channel_kind = channel_kind;
+    }
+    fn untype(self: Arc<Self>) -> Arc<dyn SourceFactory> {
+        self
     }
 }
 
@@ -96,8 +158,6 @@ pub trait NodeFactory {
         paths: Vec<ActorPath>,
         application: &mut AssembledApplication,
     ) -> Vec<(GlobalNodeId, ErasedComponent)>;
-
-    fn set_channel_kind(&mut self, channel_kind: ChannelKind);
 }
 
 pub trait SourceFactory {
@@ -107,8 +167,6 @@ pub trait SourceFactory {
         paths: Vec<ActorPath>,
         application: &mut AssembledApplication,
     ) -> ErasedSourceManager;
-
-    fn set_channel_kind(&mut self, channel_kind: ChannelKind);
 }
 
 impl<OP: Operator + 'static, B: Backend> NodeFactory for NodeConstructor<OP, B> {
@@ -121,7 +179,6 @@ impl<OP: Operator + 'static, B: Backend> NodeFactory for NodeConstructor<OP, B> 
         application: &mut AssembledApplication,
     ) -> Vec<(GlobalNodeId, ErasedComponent)> {
         // Initialize state and manager
-        eprintln!("Initializing State Directory");
         self.init_state_dir();
         let node_manager = self.create_node_manager(application, &in_channels);
 
@@ -137,8 +194,8 @@ impl<OP: Operator + 'static, B: Backend> NodeFactory for NodeConstructor<OP, B> 
                 paths.clone(),
                 node_id.node_id,
                 application.app.get_pool_info().clone(),
-                application.app.conf.max_key,
                 self.channel_kind,
+                self.out_key_builder.clone(),
             );
 
             // Build the Node
@@ -154,12 +211,11 @@ impl<OP: Operator + 'static, B: Backend> NodeFactory for NodeConstructor<OP, B> 
                 #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
                 builder.conf.perf_events.clone(),
                 node_id,
+                self.in_key_builder.clone(),
             );
-            eprintln!("Creating the Node Component");
             // Create the node and connect it to the NodeManager
             self.create_node_component(application, node, &node_manager);
         }
-        eprintln!("Starting the NodeManager");
         // Start NodeManager
         application
             .ctrl_system()
@@ -176,10 +232,6 @@ impl<OP: Operator + 'static, B: Backend> NodeFactory for NodeConstructor<OP, B> 
                 .collect()
         })
     }
-
-    fn set_channel_kind(&mut self, channel_kind: ChannelKind) {
-        self.channel_kind = channel_kind;
-    }
 }
 
 #[derive(Clone)]
@@ -189,7 +241,8 @@ pub(crate) struct NodeConstructor<OP: Operator + 'static, B: Backend> {
     logger: ArconLogger,
     channel_kind: ChannelKind,
     builder: Arc<OperatorBuilder<OP, B>>,
-    // node_manager: Option<Arc<Component<NodeManager<OP, B>>>>,
+    in_key_builder: Option<KeyBuilder<OP::IN>>,
+    out_key_builder: Option<KeyBuilder<OP::OUT>>,
 }
 
 impl<OP: Operator + 'static, B: Backend> NodeConstructor<OP, B> {
@@ -198,6 +251,7 @@ impl<OP: Operator + 'static, B: Backend> NodeConstructor<OP, B> {
         state_dir: PathBuf,
         builder: Arc<OperatorBuilder<OP, B>>,
         logger: ArconLogger,
+        in_key_builder: Option<KeyBuilder<OP::IN>>,
     ) -> NodeConstructor<OP, B> {
         NodeConstructor {
             descriptor,
@@ -205,7 +259,8 @@ impl<OP: Operator + 'static, B: Backend> NodeConstructor<OP, B> {
             logger,
             channel_kind: ChannelKind::default(),
             builder,
-            // node_manager: None,
+            in_key_builder,
+            out_key_builder: None,
         }
     }
 
@@ -233,11 +288,9 @@ impl<OP: Operator + 'static, B: Backend> NodeConstructor<OP, B> {
             // Insert the created Node into the NodeManager
             cd.nodes.insert(node_id, (node_comp.clone(), required_ref));
         });
-        // node_comp
     }
 
     fn create_debug_node(&self, application: &mut AssembledApplication) -> ErasedComponent {
-        eprintln!("Building DebugNode {}", type_name::<OP::OUT>());
         let debug_node = DebugNode::<OP::OUT>::new();
         let debug_component = application.data_system().create(|| debug_node);
         application
@@ -268,7 +321,6 @@ impl<OP: Operator + 'static, B: Backend> NodeConstructor<OP, B> {
         application: &mut AssembledApplication,
         in_channels: &[NodeID],
     ) -> Arc<Component<NodeManager<OP, B>>> {
-        // if self.node_manager.is_none() {
         // Define the NodeManager
         let manager = NodeManager::<OP, B>::new(
             self.descriptor.clone(),
@@ -287,8 +339,6 @@ impl<OP: Operator + 'static, B: Backend> NodeConstructor<OP, B> {
             });
         });
         manager_comp
-        //    self.node_manager = Some(manager_comp);
-        // }
     }
 
     fn init_state_dir(&self) {
@@ -305,6 +355,7 @@ pub(crate) struct SourceConstructor<S: Source + 'static, B: Backend> {
     watermark_interval: u64,
     time: ArconTime,
     channel_kind: ChannelKind,
+    key_builder: Option<KeyBuilder<S::Item>>,
 }
 
 impl<S: Source + 'static, B: Backend> SourceConstructor<S, B> {
@@ -322,6 +373,7 @@ impl<S: Source + 'static, B: Backend> SourceConstructor<S, B> {
             watermark_interval,
             time,
             channel_kind: ChannelKind::default(),
+            key_builder: None,
         }
     }
 
@@ -378,12 +430,18 @@ impl<S: Source + 'static, B: Backend> SourceFactory for SourceConstructor<S, B> 
                 let source_conf = builder.conf.clone();
                 let source_index = 0;
                 let source = source_cons(self.backend.clone());
+                let channel_strategy = channel_strategy(
+                    components.clone(),
+                    paths,
+                    NodeID::new(source_index as u32),
+                    application.app.get_pool_info(),
+                    self.channel_kind,
+                    self.key_builder.clone(),
+                );
                 create_source_node(
                     application,
+                    channel_strategy,
                     source_index,
-                    components,
-                    paths,
-                    self.channel_kind,
                     source,
                     source_conf,
                     &source_manager,
@@ -394,13 +452,19 @@ impl<S: Source + 'static, B: Backend> SourceFactory for SourceConstructor<S, B> 
                 let parallelism = builder.parallelism;
                 for source_index in 0..builder.parallelism {
                     let source_conf = builder.conf.clone();
-                    let source = source_cons(self.backend.clone(), source_index, parallelism); // todo
-                    create_source_node(
-                        application,
-                        source_index,
+                    let source = source_cons(self.backend.clone(), source_index, parallelism);
+                    let channel_strategy = channel_strategy(
                         components.clone(),
                         paths.clone(),
+                        NodeID::new(source_index as u32),
+                        application.app.get_pool_info(),
                         self.channel_kind,
+                        self.key_builder.clone(),
+                    );
+                    create_source_node(
+                        application,
+                        channel_strategy,
+                        source_index,
                         source,
                         source_conf,
                         &source_manager,
@@ -411,19 +475,13 @@ impl<S: Source + 'static, B: Backend> SourceFactory for SourceConstructor<S, B> 
         self.start_source_manager(&source_manager, application);
         source_manager
     }
-
-    fn set_channel_kind(&mut self, channel_kind: ChannelKind) {
-        self.channel_kind = channel_kind;
-    }
 }
 
 // helper function to create source node..
 fn create_source_node<S, B>(
     app: &mut AssembledApplication,
+    channel_strategy: ChannelStrategy<S::Item>,
     source_index: usize,
-    components: ErasedComponents,
-    paths: Vec<ActorPath>,
-    channel_kind: ChannelKind,
     source: S,
     source_conf: SourceConf<S::Item>,
     source_manager_comp: &Arc<Component<SourceManager<B>>>,
@@ -431,16 +489,6 @@ fn create_source_node<S, B>(
     S: Source,
     B: Backend,
 {
-    let pool_info = app.app.get_pool_info();
-    let max_key = app.app.conf.max_key;
-    let channel_strategy = channel_strategy(
-        components.clone(),
-        paths,
-        NodeID::new(source_index as u32),
-        pool_info,
-        max_key,
-        channel_kind,
-    );
     let source_node = SourceNode::new(
         source_index,
         source,

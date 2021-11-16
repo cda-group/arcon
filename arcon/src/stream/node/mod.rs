@@ -19,6 +19,7 @@ use crate::data::flight_serde::unsafe_remote::UnsafeSerde;
 use crate::{
     data::{flight_serde::reliable_remote::ReliableSerde, RawArconMessage, *},
     dataflow::dfg::GlobalNodeId,
+    dataflow::stream::KeyBuilder,
     error::{ArconResult, *},
     index::{AppenderIndex, ArconState, EagerAppender, IndexOps},
     manager::epoch::EpochEvent,
@@ -133,6 +134,7 @@ where
     /// Struct holding metrics information
     node_metrics: NodeMetrics,
     pub node_id: GlobalNodeId,
+    in_key_builder: Option<KeyBuilder<OP::IN>>,
 }
 
 impl<OP, B> Node<OP, B>
@@ -155,6 +157,7 @@ where
         #[cfg(not(test))]
         perf_events: PerfEvents,
         node_id: GlobalNodeId,
+        in_key_builder: Option<KeyBuilder<OP::IN>>,
     ) -> Self {
         let timer_id = format!("_{}_timer", descriptor);
         let timer = crate::index::timer::Timer::new(timer_id, backend.clone());
@@ -199,6 +202,7 @@ where
             #[cfg(feature = "metrics")]
             node_metrics: NodeMetrics::new(),
             node_id,
+            in_key_builder,
         }
     }
 
@@ -314,12 +318,19 @@ where
         Ok(())
     }
 
+    fn get_in_key(&self, e: &OP::IN) -> u64 {
+        if let Some(key_builder) = &self.in_key_builder {
+            key_builder.get_key(e)
+        } else {
+            0
+        }
+    }
+
     #[inline(always)]
     fn handle_element(&mut self, e: ArconElement<OP::IN>) -> ArconResult<()> {
         // Set key for the current element
-        // TODO: Should use a pre-defined key for Non-Keyed Streams.
         let mut context = self.operator_context.borrow_mut();
-        context.current_key = e.data.get_key();
+        context.current_key = self.get_in_key(&e.data);
         for elem in self.operator.handle_element(e, &mut context)? {
             self.add_outgoing_event(ArconEvent::Element(elem))?;
         }
@@ -678,6 +689,7 @@ mod tests {
                 #[cfg(not(test))]
                 perf_events,
                 GlobalNodeId::null(),
+                None,
             );
 
             let filter_comp = app.data_system().create(|| node);

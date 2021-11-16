@@ -122,5 +122,4 @@ impl<S: ArconType> Default for SourceConf<S> {
 #[derive(Clone, Copy)]
 pub struct WindowConf {
     pub assigner: Assigner,
-    pub kind: StreamKind,
 }

@@ -144,6 +144,8 @@ pub mod prelude {
         dataflow::{
             api::{Assigner, OperatorBuilder, SourceBuilder},
             conf::{OperatorConf, ParallelismStrategy, SourceConf, StreamKind, WindowConf},
+            dfg::ChannelKind,
+            stream::KeyBuilder,
         },
         manager::snapshot::Snapshot,
         stream::{

@@ -1,13 +1,11 @@
 use super::WindowContext;
-use crate::dataflow::{
-    api::Assigner,
-    conf::{StreamKind, WindowConf},
-};
+use crate::dataflow::{api::Assigner, conf::WindowConf};
 use crate::index::WindowIndex;
+use crate::prelude::EagerValue;
 use crate::{
-    data::{ArconElement, ArconType},
+    data::ArconElement,
     error::*,
-    index::{EagerHashTable, IndexOps},
+    index::{EagerHashTable, IndexOps, ValueIndex},
     reportable_error,
     stream::operator::{Operator, OperatorContext},
 };
@@ -44,7 +42,7 @@ impl WindowEvent {
 
 #[derive(ArconState)]
 pub struct WindowState<I: WindowIndex, B: Backend> {
-    window_start: EagerHashTable<Key, Timestamp, B>,
+    window_start: EagerValue<Timestamp, B>,
     active_windows: EagerHashTable<WindowContext, (), B>,
     index: I,
 }
@@ -52,7 +50,7 @@ pub struct WindowState<I: WindowIndex, B: Backend> {
 impl<I: WindowIndex, B: Backend> WindowState<I, B> {
     pub fn new(index: I, backend: Arc<B>) -> Self {
         Self {
-            window_start: EagerHashTable::new("_window_start", backend.clone()),
+            window_start: EagerValue::new("_window_start", backend.clone()),
             active_windows: EagerHashTable::new("_active_windows", backend),
             index,
         }
@@ -69,7 +67,6 @@ where
     window_length: u64,
     window_slide: u64,
     late_arrival_time: u64,
-    keyed: bool,
     _marker: PhantomData<(I, B)>,
 }
 
@@ -79,25 +76,21 @@ where
     B: Backend,
 {
     pub fn new(conf: WindowConf) -> Self {
-        let keyed = match conf.kind {
-            StreamKind::Keyed => true,
-            StreamKind::Local => false,
-        };
         match conf.assigner {
             Assigner::Sliding {
                 length,
                 slide,
                 late_arrival,
-            } => Self::setup(length.0, slide.0, late_arrival.0, keyed),
+            } => Self::setup(length.0, slide.0, late_arrival.0),
             Assigner::Tumbling {
                 length,
                 late_arrival,
-            } => Self::setup(length.0, length.0, late_arrival.0, keyed),
+            } => Self::setup(length.0, length.0, late_arrival.0),
         }
     }
 
     // Setup method for both sliding and tumbling windows
-    fn setup(length: u64, slide: u64, late: u64, keyed: bool) -> Self {
+    fn setup(length: u64, slide: u64, late: u64) -> Self {
         // Sanity check on slide and length
         if length < slide {
             panic!("Window Length lower than slide!");
@@ -110,7 +103,6 @@ where
             window_length: length,
             window_slide: slide,
             late_arrival_time: late,
-            keyed,
             _marker: Default::default(),
         }
     }
@@ -121,8 +113,8 @@ where
         window_ctx: WindowContext,
         ctx: &mut OperatorContext<WindowEvent, WindowState<I, B>>,
     ) -> ArconResult<()> {
-        let window_start = match ctx.state().window_start().get(&window_ctx.key)? {
-            Some(start) => start,
+        let window_start = match ctx.state().window_start().get()? {
+            Some(start) => *start,
             None => {
                 return reportable_error!(
                     "Unexpected failure, could not find window start for existing key"
@@ -132,24 +124,19 @@ where
 
         let ts = window_start + (window_ctx.index * self.window_slide) + self.window_length;
 
+        let current_key = ctx.current_key;
+        ctx.current_key = 0; // the "global" key
         let request = ctx.schedule_at(
             ts + self.late_arrival_time,
             WindowEvent::new(window_ctx.key, window_ctx.index, ts),
         )?;
+        ctx.current_key = current_key;
 
         if let Err(expired) = request {
             // For now just log the error..
             error!(ctx.log(), "{}", expired);
         }
         Ok(())
-    }
-
-    #[inline]
-    fn get_key(&self, e: &ArconElement<I::IN>) -> u64 {
-        if !self.keyed {
-            return 0;
-        }
-        e.data.get_key()
     }
 }
 
@@ -180,15 +167,14 @@ where
             return Ok(None);
         }
 
-        let key = self.get_key(&element);
-        let start = match ctx.state().window_start().get(&key)? {
-            Some(start) => start,
+        let start = match ctx.state().window_start().get()? {
+            Some(start) => *start,
             None => {
                 if ts < self.late_arrival_time {
                     0
                 } else {
                     let start = ts - self.late_arrival_time;
-                    ctx.state().window_start().put(key, start)?;
+                    ctx.state().window_start().put(start)?;
                     start
                 }
             }
@@ -202,7 +188,10 @@ where
 
         // For all windows, insert element....
         for index in floor..=ceil {
-            let window_ctx = WindowContext { key, index };
+            let window_ctx = WindowContext {
+                key: ctx.current_key,
+                index,
+            };
             ctx.state()
                 .index()
                 .on_element(element.data.clone(), window_ctx)?;
@@ -230,13 +219,12 @@ where
             index,
             timestamp,
         } = timeout;
-
+        ctx.current_key = key;
         let window_ctx = WindowContext::new(key, index);
 
         let state = ctx.state();
         let result = state.index().result(window_ctx)?;
         state.index().clear(window_ctx)?;
-
         state.active_windows().remove(&window_ctx)?;
 
         Ok(Some(Some(ArconElement::with_timestamp(result, timestamp))))
@@ -255,7 +243,7 @@ mod tests {
         dataflow::dfg::GlobalNodeId,
         index::AppenderWindow,
         manager::node::{NodeManager, NodeManagerPort},
-        prelude::OperatorBuilder,
+        prelude::{KeyBuilder, OperatorBuilder},
         stream::{
             channel::{
                 strategy::{forward::Forward, ChannelStrategy},
@@ -274,6 +262,7 @@ mod tests {
         length: u64,
         slide: u64,
         late: u64,
+        keyed: bool,
     ) -> (
         ActorRefStrong<ArconMessage<u64>>,
         Arc<Component<DebugNode<u64>>>,
@@ -315,7 +304,6 @@ mod tests {
                         slide: Time::seconds(slide),
                         late_arrival: Time::seconds(late),
                     },
-                    kind: StreamKind::Keyed,
                 };
                 WindowAssigner::new(conf)
             }),
@@ -348,7 +336,15 @@ mod tests {
         #[cfg(not(test))]
         let mut perf_events = PerfEvents::new();
 
-        let node = Node::new(
+        let key_builder: Option<KeyBuilder<u64>> = if keyed {
+            Some(KeyBuilder {
+                extractor: Arc::new(|d: &u64| *d),
+            })
+        } else {
+            None
+        };
+
+        let node: Node<_, _> = Node::new(
             descriptor,
             channel_strategy,
             operator(),
@@ -361,6 +357,7 @@ mod tests {
             #[cfg(not(test))]
             perf_events,
             GlobalNodeId::null(),
+            key_builder,
         );
 
         let window_comp = app.data_system().create(|| node);
@@ -409,7 +406,7 @@ mod tests {
     // Tests:
     #[test]
     fn window_by_key() {
-        let (assigner_ref, sink) = window_assigner_test_setup(10, 5, 0);
+        let (assigner_ref, sink) = window_assigner_test_setup(10, 5, 0, true);
         wait(1);
         let moment = now();
         assigner_ref.tell(timestamped_keyed_event(moment, 1));
@@ -438,7 +435,7 @@ mod tests {
     fn window_discard_late_arrival() {
         // Send 2 messages on time, a watermark and a late arrival which is not allowed
 
-        let (assigner_ref, sink) = window_assigner_test_setup(10, 10, 0);
+        let (assigner_ref, sink) = window_assigner_test_setup(10, 10, 0, false);
         wait(1);
         // Send messages
         let moment = now();
@@ -459,7 +456,7 @@ mod tests {
     #[test]
     fn window_too_late_late_arrival() {
         // Send 2 messages on time, and then 1 message which is too late
-        let (assigner_ref, sink) = window_assigner_test_setup(10, 10, 10);
+        let (assigner_ref, sink) = window_assigner_test_setup(10, 10, 10, false);
         wait(1);
         // Send messages
         let moment = now();
@@ -481,7 +478,7 @@ mod tests {
     #[test]
     fn window_allow_late_arrival() {
         // Send 2 messages on time, and then 1 message which is too late
-        let (assigner_ref, sink) = window_assigner_test_setup(10, 10, 10);
+        let (assigner_ref, sink) = window_assigner_test_setup(10, 10, 10, false);
         wait(1);
         // Send messages
         let moment = now();
@@ -507,7 +504,7 @@ mod tests {
     #[test]
     fn window_very_long_windows_1() {
         // Use long windows to check for timer not going out of sync in ms conversion
-        let (assigner_ref, sink) = window_assigner_test_setup(10000, 10000, 0);
+        let (assigner_ref, sink) = window_assigner_test_setup(10000, 10000, 0, false);
         wait(1);
         let moment = now();
 
@@ -529,7 +526,7 @@ mod tests {
     #[test]
     fn window_very_long_windows_2() {
         // Use long windows to check for timer not going out of alignment
-        let (assigner_ref, sink) = window_assigner_test_setup(10000, 10000, 0);
+        let (assigner_ref, sink) = window_assigner_test_setup(10000, 10000, 0, false);
         wait(1);
         let moment = now();
 
@@ -553,7 +550,7 @@ mod tests {
     #[test]
     fn window_overlapping() {
         // Use overlapping windows (slide = length/2), check that messages appear correctly
-        let (assigner_ref, sink) = window_assigner_test_setup(10, 5, 2);
+        let (assigner_ref, sink) = window_assigner_test_setup(10, 5, 2, false);
         wait(1);
         // Send messages
         let moment = now();
@@ -575,7 +572,7 @@ mod tests {
     #[test]
     fn window_empty() {
         // check that we receive correct number windows from fast forwarding
-        let (assigner_ref, sink) = window_assigner_test_setup(5, 5, 0);
+        let (assigner_ref, sink) = window_assigner_test_setup(5, 5, 0, false);
         wait(1);
         assigner_ref.tell(watermark(now() + 1));
         assigner_ref.tell(watermark(now() + 7));
