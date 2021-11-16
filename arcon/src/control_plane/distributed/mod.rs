@@ -116,7 +116,23 @@ impl DistributedApplication {
 
     /// Iterates over the given application and constructs a list of Operators and their configs
     fn build_node_configs(&mut self) {
-        // TODO: Build all operator configs
+        // TODO: Build all node configs
+        /*
+        for dfg_node in self.dfg.graph.into_iter().rev() {
+            match dfg_node.kind {
+                DFGNodeKind::Source(channel_kind, source_manager_cons) => {
+                    // let nodes = target_nodes.take().unwrap();
+                    // let source_manager =
+                    //    source_manager_cons(nodes, channel_kind, &mut self.app);
+
+                    // self.app.source_manager = Some(source_manager);
+                }
+                DFGNodeKind::Node(manager_cons) => {
+
+                }
+            }
+        }
+        */
     }
 }
 
