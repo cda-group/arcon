@@ -9,7 +9,7 @@ use crate::{
     application::conf::{logger::ArconLogger, ApplicationConf, ControlPlaneMode, ExecutionMode},
     buffer::event::PoolInfo,
     control_plane::{
-        app::AppRegistration, conf::ControlPlaneConf, ControlPlane, ControlPlaneContainer,
+        app::AppRegistration, conf::ControlPlaneConf, ControlPlane, ControlPlaneContainer, distributed::Layout, distributed::ProcessId,
     },
     data::ArconMessage,
     dataflow::{
@@ -33,7 +33,7 @@ use arcon_allocator::Allocator;
 use kompact::{component::AbstractComponent, prelude::KompactSystem};
 use std::sync::{Arc, Mutex};
 
-mod assembled;
+pub(crate) mod assembled;
 pub mod conf;
 
 pub use crate::dataflow::stream::Stream;
@@ -70,20 +70,12 @@ use metrics_exporter_prometheus::PrometheusBuilder;
 /// ```
 #[derive(Clone)]
 pub struct Application {
-    /// [`KompactSystem`] for Control Components
-    pub(crate) ctrl_system: KompactSystem,
-    /// [`KompactSystem`] for Data Processing Components
-    pub(crate) data_system: KompactSystem,
     /// Configuration for this application
     pub(crate) conf: ApplicationConf,
     /// Arcon allocator for this application
     pub(crate) allocator: Arc<Mutex<Allocator>>,
     /// SourceManager component for this application
     pub(crate) source_manager: Option<Arc<dyn AbstractComponent<Message = SourceEvent>>>,
-    /// EpochManager component for this application
-    pub(crate) epoch_manager: Option<Arc<Component<EpochManager>>>,
-    /// SnapshotManager component for this application
-    pub(crate) snapshot_manager: Arc<Component<SnapshotManager>>,
     /// A container holding information about the application's control plane
     pub(crate) control_plane: ControlPlaneContainer,
     /// Flag indicating whether to spawn a debug node for the Application
@@ -94,6 +86,12 @@ pub struct Application {
     pub(crate) abstract_debug_node: Option<ErasedComponent>,
     /// Configured Logger for the Application
     pub(crate) arcon_logger: ArconLogger,
+    /// Path to the ApplicationController
+    pub (crate) application_controller: Option<ActorPath>,
+    /// The Layout of the application (only relevant to the ApplicationController in distributed applications)
+    pub (crate) layout: Option<Layout>,
+    /// The ProcessId of the local process running this application (only relevant to distributed applications)
+    pub (crate) process_id: ProcessId,
 }
 
 impl Default for Application {
@@ -129,9 +127,6 @@ impl Application {
             }
         }
 
-        let (ctrl_system, data_system, snapshot_manager, epoch_manager) =
-            Self::setup(&conf, &arcon_logger);
-
         let control_plane = match &conf.control_plane_mode {
             ControlPlaneMode::Embedded => {
                 let mut cp_conf = ControlPlaneConf::default();
@@ -144,18 +139,17 @@ impl Application {
         };
 
         Self {
-            ctrl_system,
-            data_system,
             conf,
             allocator,
-            snapshot_manager,
-            epoch_manager,
             source_manager: None,
             control_plane,
             debug_node_flag: false,
             debug_node: None,
             abstract_debug_node: None,
             arcon_logger,
+            application_controller: None,
+            layout: None,
+            process_id: 0,
         }
     }
 
@@ -164,56 +158,16 @@ impl Application {
         Self::new(conf)
     }
 
-    /// Helper function to set up internals of the application
-    #[allow(clippy::type_complexity)]
-    fn setup(
-        arcon_conf: &ApplicationConf,
-        logger: &ArconLogger,
-    ) -> (
-        KompactSystem,
-        KompactSystem,
-        Arc<Component<SnapshotManager>>,
-        Option<Arc<Component<EpochManager>>>,
-    ) {
-        let data_system = arcon_conf
-            .data_system_conf()
-            .build()
-            .expect("KompactSystem");
-        let ctrl_system = arcon_conf
-            .ctrl_system_conf()
-            .build()
-            .expect("KompactSystem");
+    pub fn set_layout(&mut self, layout: Layout) {
+        self.layout = Some(layout);
+    }
 
-        let timeout = std::time::Duration::from_millis(500);
+    pub fn set_application_controller(&mut self, path: ActorPath) {
+        self.application_controller = Some(path);
+    }
 
-        let snapshot_manager = ctrl_system.create(SnapshotManager::new);
-
-        let epoch_manager = match arcon_conf.execution_mode {
-            ExecutionMode::Local => {
-                let snapshot_manager_ref = snapshot_manager.actor_ref().hold().expect("fail");
-                let epoch_manager = ctrl_system.create(|| {
-                    EpochManager::new(
-                        arcon_conf.epoch_interval,
-                        snapshot_manager_ref,
-                        logger.clone(),
-                    )
-                });
-                ctrl_system
-                    .start_notify(&epoch_manager)
-                    .wait_timeout(timeout)
-                    .expect("EpochManager comp never started!");
-
-                Some(epoch_manager)
-            }
-            ExecutionMode::Distributed(_) => None,
-        };
-
-        ctrl_system
-            .start_notify(&snapshot_manager)
-            .wait_timeout(timeout)
-            .expect("SnapshotManager comp never started!");
-
-        (ctrl_system, data_system, snapshot_manager, epoch_manager)
+    pub fn get_application_controller(&self) -> Option<ActorPath> {
+        self.application_controller.clone()
     }
 
     /// Create a parallel data source
@@ -390,61 +344,13 @@ impl Application {
         )
     }
 
-    // TODO: Remove
-    pub fn shutdown(self) {
-        let _ = self.data_system.shutdown();
-        let _ = self.ctrl_system.shutdown();
-    }
-
-    pub(crate) fn data_system(&mut self) -> &mut KompactSystem {
-        &mut self.data_system
-    }
-
-    pub(crate) fn ctrl_system(&mut self) -> &mut KompactSystem {
-        &mut self.ctrl_system
-    }
-
     /// Give out a reference to the ApplicationConf of the application
     pub(crate) fn arcon_conf(&self) -> &ApplicationConf {
         &self.conf
     }
 
-    pub(crate) fn epoch_manager(&self) -> ActorRefStrong<EpochEvent> {
-        if let Some(epoch_manager) = &self.epoch_manager {
-            epoch_manager
-                .actor_ref()
-                .hold()
-                .expect("Failed to fetch actor ref")
-        } else {
-            panic!(
-                "Only local reference supported for now. should really be an ActorPath later on"
-            );
-        }
-    }
     pub fn debug_node_enabled(&self) -> bool {
         self.debug_node_flag
-    }
-
-    // internal helper to create a DebugNode from a Stream object
-    pub(crate) fn create_debug_node<A>(&mut self, node: DebugNode<A>)
-    where
-        A: ArconType,
-    {
-        assert!(
-            self.debug_node.is_none(),
-            "DebugNode has already been created!"
-        );
-        let component = self.ctrl_system.create(|| node);
-
-        self.ctrl_system
-            .start_notify(&component)
-            .wait_timeout(std::time::Duration::from_millis(500))
-            .expect("DebugNode comp never started!");
-
-        self.debug_node = Some(component.clone());
-        // define abstract version of the component as the building phase needs it to downcast properly..
-        let comp: Arc<dyn AbstractComponent<Message = ArconMessage<A>>> = component;
-        self.abstract_debug_node = Some(Arc::new(comp) as ErasedComponent);
     }
 
     // internal helper to help fetch DebugNode from an AssembledApplication

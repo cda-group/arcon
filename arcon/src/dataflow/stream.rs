@@ -1,5 +1,5 @@
 use crate::{
-    application::Application,
+    application::{Application, assembled::RuntimeComponents},
     data::{ArconType, NodeID},
     dataflow::{
         api::OperatorBuilder,
@@ -7,9 +7,9 @@ use crate::{
         constructor::*,
         dfg::{ChannelKind, DFGNode, DFGNodeID, DFGNodeKind, DFG},
     },
-    control_plane::distributed::{DistributedApplication, Layout},
+    control_plane::distributed::{Layout, ApplicationController, ProcessController},
     index::EmptyState,
-    prelude::AssembledApplication,
+    prelude::{AssembledApplication, ActorPath},
     stream::{
         node::debug::DebugNode,
         operator::{
@@ -20,7 +20,8 @@ use crate::{
     },
     util::ArconFnBounds,
 };
-use std::{marker::PhantomData, sync::Arc};
+use std::{marker::PhantomData, sync::Arc, time::Duration};
+const REGISTRATION_TIMEOUT: Duration = Duration::from_millis(2000);
 
 #[derive(Default)]
 pub struct Context {
@@ -233,34 +234,6 @@ impl<IN: ArconType> Stream<IN> {
         stream.build()
     }
 
-    /// Builds a Distributable Dataflow-graph
-    pub fn build_distributed(self, layout: Layout) -> (DistributedApplication, Application) {
-        /*
-        let mut target_nodes: Vec<NodeID> = Vec::new();
-
-        // TODO...
-        for dfg_node in self.ctx.dfg.graph.into_iter().rev() {
-            match dfg_node.kind {
-                DFGNodeKind::Source(channel_kind, source_manager_cons) => {
-
-                }
-                DFGNodeKind::Node(manager_cons) => {
-
-                }
-            }
-        }*/
-
-        let Stream{_marker, prev_dfg_id, ctx} = self;
-        let Context{dfg, app, ..} = ctx;
-        (
-            DistributedApplication::new(
-                dfg,
-                layout
-            ), 
-            app
-        )
-    }
-
     /// Builds the Dataflow graph
     ///
     /// Returns a [`AssembledApplication`] where all runtime components
@@ -271,6 +244,22 @@ impl<IN: ArconType> Stream<IN> {
     pub fn build(mut self) -> AssembledApplication {
         let mut target_nodes: Option<Vec<Arc<dyn std::any::Any + Send + Sync>>> = None;
 
+        let mut runtime = self.build_runtime();
+
+        // Build graph description
+        
+        // Spawn ApplicationController (if needed)
+        self.init_application_controller(&mut runtime);
+
+        // Spawn ProcessController
+        let (process_controller, rf) = runtime.ctrl_system.create_and_register(|| {
+            ProcessController::new(self.ctx.app)
+        });
+        let _ = rf.wait_timeout(REGISTRATION_TIMEOUT).expect("registration failed");
+
+        AssembledApplication::new(self.ctx.app, runtime)
+
+        /*
         for dfg_node in self.ctx.dfg.graph.into_iter().rev() {
             match dfg_node.kind {
                 DFGNodeKind::Source(channel_kind, source_manager_cons) => {
@@ -320,7 +309,22 @@ impl<IN: ArconType> Stream<IN> {
                 }
             }
         }
-        AssembledApplication::new(self.ctx.app)
+        */
+    }
+
+    fn build_runtime(&mut self) -> RuntimeComponents {
+        RuntimeComponents::new(self.ctx.app.arcon_conf(), &self.ctx.app.arcon_logger)
+    }
+
+    fn init_application_controller(&mut self, runtime: &mut RuntimeComponents) {
+        if self.ctx.app.application_controller.is_none() {
+            let (application_controller, rf) = runtime.ctrl_system.create_and_register(|| {
+                ApplicationController::new(self.ctx.app, 0)
+            });
+            let _ = rf.wait_timeout(REGISTRATION_TIMEOUT).expect("registration failed");
+            let path = runtime.ctrl_system.actor_path_for(&application_controller);
+            self.ctx.app.set_application_controller(path.clone());
+        }
     }
 
     pub(crate) fn new(ctx: Context) -> Self {

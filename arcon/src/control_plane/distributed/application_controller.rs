@@ -6,11 +6,11 @@ pub(crate) struct ApplicationController {
     /// Component context
     ctx: ComponentContext<Self>,
     // The Application
-    application: DistributedApplication,
+    application: Application,
 }
 
 impl ApplicationController {
-    pub fn new(application: DistributedApplication, expected_processes: u32) -> Self {
+    pub fn new(application: Application, expected_processes: u32) -> Self {
         ApplicationController {
             ctx: ComponentContext::uninitialised(),
             application: application,
@@ -18,13 +18,16 @@ impl ApplicationController {
     }
 
     fn handle_check_in(&mut self, pid: ProcessId, path: ActorPath) {
+        /*
         self.application.insert_pid_path(pid, path);
         if self.application.is_ready() {
             self.start_application();
         }
+        */
     }
 
     fn start_application(&mut self) {
+        /*
         let node_id_paths = self.application.get_named_paths();
         for (pid, path) in self.application.get_pid_controller_paths() {
             info!(self.ctx.log(), "Sending CreateOperators command to {:?}", path);
@@ -34,7 +37,7 @@ impl ApplicationController {
                 ),
                 self
             ).ok();
-        }
+        } */
     }
 }
 

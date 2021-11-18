@@ -1,12 +1,14 @@
 use crate::prelude::*;
 use crate::dataflow::dfg::*;
-use application_controller::ApplicationControllerMessage;
+// use application_controller::ApplicationControllerMessage;
 use fxhash::FxHashMap;
 use multimap::MultiMap;
-use process_controller::ProcessControllerMessage;
+// use process_controller::ProcessControllerMessage;
+pub(crate) mod application_controller;
+pub(crate) mod process_controller;
 
-pub mod application_controller;
-pub mod process_controller;
+pub(crate) use application_controller::*;
+pub(crate) use process_controller::*;
 
 pub type ProcessId = u32;
 pub type OperatorId = u32;
@@ -166,6 +168,7 @@ impl DeploymentPlan {
 }
 
 /// Simple Layout Describing the deployment of a distributed pipeline, maps Operator Names to ProcessId's
+#[derive(Clone)]
 pub struct Layout {
     /// Maps OperatorName to ProcessId(s): The Operator should be deployed on the ProcessIds it maps to.
     map: MultiMap<OperatorId, ProcessId>,

@@ -16,21 +16,32 @@ pub(crate) struct ProcessController {
     named_path_map: FxHashMap<NodeID, NamedPath>,
     /// ApplicationController path
     application_controller: ActorPath,
+    /// The Application 
+    application: Application,
 }
 
 impl ProcessController {
     pub fn new(
-        pid: ProcessId,
-        application_controller: ActorPath,
-        application_name: String,
+        application: Application,
     ) -> Self {
         ProcessController {
             ctx: ComponentContext::uninitialised(),
-            pid,
-            application_controller,
+            pid: application.process_id,
+            application_controller: application.get_application_controller().expect("No Application Controller ActorPath"),
             operator_paths: Vec::new(),
             sources_paths: Vec::new(),
             named_path_map: FxHashMap::default(),
+            application,
+        }
+    }
+
+    pub fn create_operators(&self, node_map: Vec<(GlobalNodeId, ActorPath)>, config_vec: Vec<NodeConfig>) {
+        for config in config_vec {
+            /*
+            if let Some(builder) = self.application.get_operator_builder(config.id) {
+                builder(config, node_map);
+            }
+            */
         }
     }
 }
@@ -67,6 +78,7 @@ impl NetworkActor for ProcessController {
                     self.ctx.log(),
                     "CreateOperators Received: {:?}, {:?}", node_map, config_vec
                 );
+                self.create_operators(node_map, config_vec);
             }
             ProcessControllerMessage::StartSources => {
                 info!(self.ctx.log(), "StartSources Received");
