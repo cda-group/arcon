@@ -21,7 +21,6 @@ use crate::{
     util::ArconFnBounds,
 };
 use std::{marker::PhantomData, sync::Arc, time::Duration};
-const REGISTRATION_TIMEOUT: Duration = Duration::from_millis(2000);
 
 #[derive(Default)]
 pub struct Context {
@@ -243,20 +242,14 @@ impl<IN: ArconType> Stream<IN> {
 
         let mut runtime = self.build_runtime();
 
-        // Build graph description
-        // let mut dfg = self.ctx.app.dfg;
-
-        // Spawn ApplicationController (if needed)
-        self.init_application_controller(&mut runtime);
+        let mut assembled = AssembledApplication::new(self.ctx.app, runtime);
+        
+        assembled.init_application_controller();
 
         // Spawn ProcessController
-        let (process_controller, rf) = runtime.ctrl_system.create_and_register(|| {
-            ProcessController::new(self.ctx.app.clone())
-        });
-        let _ = rf.wait_timeout(REGISTRATION_TIMEOUT).expect("registration failed");
-        runtime.ctrl_system.start(&process_controller);
+        assembled.spawn_process_controller();
 
-        AssembledApplication::new(self.ctx.app, runtime)
+        assembled
 
         /*
         for dfg_node in self.ctx.app.dfg.graph.into_iter().rev() {
@@ -313,18 +306,6 @@ impl<IN: ArconType> Stream<IN> {
 
     fn build_runtime(&mut self) -> RuntimeComponents {
         RuntimeComponents::new(self.ctx.app.arcon_conf(), &self.ctx.app.arcon_logger)
-    }
-
-    fn init_application_controller(&mut self, runtime: &mut RuntimeComponents) {
-        if self.ctx.app.application_controller.is_none() {
-            let (application_controller, rf) = runtime.ctrl_system.create_and_register(|| {
-                ApplicationController::new(self.ctx.app.clone(), 0)
-            });
-            let _ = rf.wait_timeout(REGISTRATION_TIMEOUT).expect("registration failed");
-            let path = runtime.ctrl_system.actor_path_for(&application_controller);
-            self.ctx.app.set_application_controller(path.clone());
-            runtime.ctrl_system.start(&application_controller);
-        }
     }
 
     pub(crate) fn new(ctx: Context) -> Self {

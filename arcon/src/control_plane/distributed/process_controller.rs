@@ -17,16 +17,16 @@ pub(crate) struct ProcessController {
     /// ApplicationController path
     application_controller: ActorPath,
     /// The Application 
-    application: Application,
+    application: AssembledApplication,
 }
 
 impl ProcessController {
     pub fn new(
-        application: Application,
+        application: AssembledApplication,
     ) -> Self {
         ProcessController {
             ctx: ComponentContext::uninitialised(),
-            pid: application.process_id,
+            pid: application.app.process_id,
             application_controller: application.get_application_controller().expect("No Application Controller ActorPath"),
             operator_paths: Vec::new(),
             sources_paths: Vec::new(),

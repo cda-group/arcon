@@ -6,11 +6,11 @@ pub(crate) struct ApplicationController {
     /// Component context
     ctx: ComponentContext<Self>,
     // The Application
-    application: Application,
+    application: AssembledApplication,
 }
 
 impl ApplicationController {
-    pub fn new(application: Application, expected_processes: u32) -> Self {
+    pub fn new(application: AssembledApplication, expected_processes: u32) -> Self {
         ApplicationController {
             ctx: ComponentContext::uninitialised(),
             application: application,

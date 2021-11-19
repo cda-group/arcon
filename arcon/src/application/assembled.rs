@@ -7,13 +7,16 @@ use crate::{
         epoch::{EpochManager, EpochEvent},
         snapshot::SnapshotManager,
     },
-    control_plane::app::AppRegistration,
+    control_plane::{app::AppRegistration, distributed::{ProcessController, ApplicationController}},
     dataflow::constructor::ErasedComponent,
 };
 use kompact::{prelude::{ActorRefFactory, Component, ActorPath, KompactSystem, ActorRefStrong, NamedPath}, component::AbstractComponent};
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
+
+const REGISTRATION_TIMEOUT: Duration = Duration::from_millis(2000);
 
 /// An [`Application`] that has been fully assembled
+#[derive(Clone)]
 pub struct AssembledApplication {
     pub(crate) app: Application,
     start_flag: bool,
@@ -93,7 +96,7 @@ impl AssembledApplication {
         }
     }
 
-    /// Helper function to quickly set up a DefaultApplication (no Nodes/Pipeline defined)
+    /// Helper function to quickly set up a DefaultApplication (no Nodes/Pipelinedefined)
     pub(crate) fn default() -> Self {
         let app = Application::default();
         let runtime = RuntimeComponents::new(&app.conf, &app.arcon_logger);
@@ -156,6 +159,26 @@ impl AssembledApplication {
                 .downcast::<Component<DebugNode<A>>>()
                 .unwrap()
         })
+    }
+
+    pub(crate) fn init_application_controller(&mut self) {
+        if self.app.application_controller.is_none() {
+            let (application_controller, rf) = self.runtime.ctrl_system.create_and_register(|| {
+                ApplicationController::new(self.clone(), 0)
+            });
+            let _ = rf.wait_timeout(REGISTRATION_TIMEOUT).expect("registration failed");
+            let path = self.runtime.ctrl_system.actor_path_for(&application_controller);
+            self.app.set_application_controller(path.clone());
+            self.runtime.ctrl_system.start(&application_controller);
+        }
+    }
+
+    pub(crate) fn spawn_process_controller(&mut self) {
+        let (process_controller, rf) = self.runtime.ctrl_system.create_and_register(|| {
+            ProcessController::new(self.clone())
+        });
+        let _ = rf.wait_timeout(REGISTRATION_TIMEOUT).expect("registration failed");
+        self.runtime.ctrl_system.start(&process_controller);
     }
 }
 
