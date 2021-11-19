@@ -274,8 +274,8 @@ mod tests {
         ActorRefStrong<ArconMessage<u64>>,
         Arc<Component<DebugNode<u64>>>,
     ) {
-        let mut app = Application::default();
-        let pool_info = app.get_pool_info();
+        let mut app = AssembledApplication::default();
+        let pool_info = app.app.get_pool_info();
         let epoch_manager_ref = app.epoch_manager();
 
         // Create a sink
@@ -327,9 +327,9 @@ mod tests {
 
         let nm = NodeManager::new(
             descriptor.clone(),
-            app.data_system.clone(),
+            app.data_system().clone(),
             in_channels.clone(),
-            app.arcon_logger.clone(),
+            app.app.arcon_logger.clone(),
             Arc::new(builder),
         );
 
@@ -351,7 +351,7 @@ mod tests {
             operator_state(backend.clone()),
             NodeState::new(NodeID::new(0), in_channels, backend.clone()),
             backend,
-            app.arcon_logger.clone(),
+            app.app.arcon_logger.clone(),
             epoch_manager_ref,
             #[cfg(feature = "hardware_counters")]
             #[cfg(not(test))]

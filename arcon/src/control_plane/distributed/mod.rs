@@ -58,20 +58,16 @@ impl NodeConfig {
 pub struct DistributedApplication {
     /// The Application
     // pub application: Application,
-    pub dfg: DFG,
-    /// The Layout of the Distributed Application
-    pub layout: Layout,
+    pub application: AssembledApplication,
     pub process_controller_map: FxHashMap<ProcessId, ActorPath>,
     node_id_paths: Vec<(GlobalNodeId, ActorPath)>,
     node_configs: Vec<NodeConfig>,
 }
 
 impl DistributedApplication {
-    pub fn new(dfg: DFG, layout: Layout) -> DistributedApplication {
+    pub fn new(application: AssembledApplication) -> DistributedApplication {
         DistributedApplication {
-            //application,
-            dfg,
-            layout,
+            application,
             process_controller_map: FxHashMap::default(),
             node_id_paths: Vec::new(),
             node_configs: Vec::new(),
@@ -80,12 +76,14 @@ impl DistributedApplication {
     // pub fn get_operator_builder(&self, ) -> dyn Fn(NodeConfig) -> () {}
 
     pub fn is_ready(&mut self) -> bool {
-        if self.process_controller_map.len() >= self.layout.get_process_count() {
+        true
+        /*
+        if self.process_controller_map.len() >= self.application.app.layout.get_process_count() {
             self.build_node_configs();
             true
         } else {
             false
-        }
+        } */
     }
 
     pub fn insert_pid_path(&mut self, pid: ProcessId, path: ActorPath) {

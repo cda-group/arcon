@@ -4,19 +4,24 @@ use crate::{
     stream::node::{debug::DebugNode, source::SourceEvent},
     application::{ArconLogger, conf::ApplicationConf, conf::ExecutionMode},
     manager::{
-        epoch::{EpochManager},
+        epoch::{EpochManager, EpochEvent},
         snapshot::SnapshotManager,
     },
+    control_plane::app::AppRegistration,
     dataflow::constructor::ErasedComponent,
 };
-use kompact::{prelude::{ActorRefFactory, Component, ActorPath, KompactSystem}, component::AbstractComponent};
+use kompact::{prelude::{ActorRefFactory, Component, ActorPath, KompactSystem, ActorRefStrong, NamedPath}, component::AbstractComponent};
 use std::sync::Arc;
 
 /// An [`Application`] that has been fully assembled
 pub struct AssembledApplication {
-    app: Application,
+    pub(crate) app: Application,
     start_flag: bool,
-    runtime: RuntimeComponents,
+    pub(crate) runtime: RuntimeComponents,
+    // Type erased Arc<Component<DebugNode<A>>>
+    pub(crate) debug_node: Option<ErasedComponent>,
+    // Type erased Arc<dyn AbstractComponent<Message = ArconMessage<A>>>
+    pub(crate) abstract_debug_node: Option<ErasedComponent>,
 }
 
 #[derive(Clone)]
@@ -83,7 +88,74 @@ impl AssembledApplication {
             app,
             start_flag: false,
             runtime,
+            debug_node: None,
+            abstract_debug_node: None,
         }
+    }
+
+    /// Helper function to quickly set up a DefaultApplication (no Nodes/Pipeline defined)
+    pub(crate) fn default() -> Self {
+        let app = Application::default();
+        let runtime = RuntimeComponents::new(&app.conf, &app.arcon_logger);
+        AssembledApplication::new(app, runtime)
+    }
+
+    pub(crate) fn epoch_manager(&self) -> ActorRefStrong<EpochEvent> {
+        if let Some(epoch_manager) = &self.runtime.epoch_manager {
+            epoch_manager
+                .actor_ref()
+                .hold()
+                .expect("Failed to fetch actor ref")
+        } else {
+            panic!(
+                "Only local reference supported for now. should really be an ActorPath later on"
+            );
+        }
+    }
+
+    pub(crate) fn data_system(&mut self) -> &mut KompactSystem {
+        &mut self.runtime.data_system
+    }
+
+    pub(crate) fn ctrl_system(&mut self) -> &mut KompactSystem {
+        &mut self.runtime.ctrl_system
+    }
+
+    pub(crate) fn snapshot_manager(&mut self) -> &mut Arc<Component<SnapshotManager>> {
+        &mut self.runtime.snapshot_manager
+    }
+
+    // NOTE: this function can be used while we are building up the dataflow.
+    // Basically, we want to send information about this Arcon Process (conf.arcon_pid)
+    // to the ControlPlane.
+    pub(crate) fn _register_app(&mut self) {
+        let source_manager: ActorPath = NamedPath::with_system(
+            self.ctrl_system().system_path(),
+            vec!["source_manager".into()],
+        )
+        .into();
+
+        let _app = AppRegistration {
+            name: self.app.conf.app_name.clone(),
+            arcon_pids: vec![self.app.conf.arcon_pid], // TODO: all pids..
+            sources: vec![source_manager.to_string()],
+            pid: self.app.conf.arcon_pid,
+        };
+        // TODO: communicate with a component at the ControlPlane
+    }
+
+
+    /// Fetch DebugNode component of the [Application]
+    ///
+    /// Returns `None` if the [Application] was not configured with a DebugNode.
+    /// Note that it is up to the user to make sure `A` is of correct type.
+    pub(crate) fn get_debug_node<A: ArconType>(&self) -> Option<Arc<Component<DebugNode<A>>>> {
+        self.debug_node.as_ref().map(|erased_comp| {
+            erased_comp
+                .clone()
+                .downcast::<Component<DebugNode<A>>>()
+                .unwrap()
+        })
     }
 }
 
@@ -123,17 +195,6 @@ impl AssembledApplication {
         self.app.get_application_controller()
     }
 
-    /// Fetch DebugNode component of the [Application]
-    ///
-    /// Returns `None` if the [Application] was not configured with a DebugNode.
-    /// Note that it is up to the user to make sure `A` is of correct type.
-    pub fn get_debug_node<A>(&self) -> Option<Arc<Component<DebugNode<A>>>>
-    where
-        A: ArconType,
-    {
-        self.app.get_debug_node()
-    }
-
     /// Awaits termination from the application
     ///
     /// Note that this blocks the current thread
@@ -164,7 +225,7 @@ impl AssembledApplication {
             .wait_timeout(std::time::Duration::from_millis(500))
             .expect("DebugNode comp never started!");
 
-        self.runtime.debug_node = Some(component.clone());
+        self.debug_node = Some(component.clone());
         // define abstract version of the component as the building phase needs it to downcast properly..
         let comp: Arc<dyn AbstractComponent<Message = ArconMessage<A>>> = component;
         self.abstract_debug_node = Some(Arc::new(comp) as ErasedComponent);

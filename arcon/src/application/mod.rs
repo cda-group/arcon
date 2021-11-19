@@ -15,7 +15,7 @@ use crate::{
     dataflow::{
         api::{ParallelSourceBuilder, SourceBuilder, SourceBuilderType},
         conf::SourceConf,
-        constructor::{source_manager_constructor, ErasedComponent},
+        constructor::{SourceManagerConstructor, ErasedComponent},
         dfg::*,
         stream::Context,
     },
@@ -72,6 +72,8 @@ use metrics_exporter_prometheus::PrometheusBuilder;
 pub struct Application {
     /// Configuration for this application
     pub(crate) conf: ApplicationConf,
+    /// The DFG of this application
+    pub(crate) dfg: DFG,
     /// Arcon allocator for this application
     pub(crate) allocator: Arc<Mutex<Allocator>>,
     /// SourceManager component for this application
@@ -80,10 +82,6 @@ pub struct Application {
     pub(crate) control_plane: ControlPlaneContainer,
     /// Flag indicating whether to spawn a debug node for the Application
     debug_node_flag: bool,
-    // Type erased Arc<Component<DebugNode<A>>>
-    pub(crate) debug_node: Option<ErasedComponent>,
-    // Type erased Arc<dyn AbstractComponent<Message = ArconMessage<A>>>
-    pub(crate) abstract_debug_node: Option<ErasedComponent>,
     /// Configured Logger for the Application
     pub(crate) arcon_logger: ArconLogger,
     /// Path to the ApplicationController
@@ -140,12 +138,11 @@ impl Application {
 
         Self {
             conf,
+            dfg: DFG::default(),
             allocator,
             source_manager: None,
             control_plane,
             debug_node_flag: false,
-            debug_node: None,
-            abstract_debug_node: None,
             arcon_logger,
             application_controller: None,
             layout: None,
@@ -201,7 +198,7 @@ impl Application {
         state_dir.push("source_manager");
         let backend = Arc::new(B::create(&state_dir, String::from("source_manager")).unwrap());
         let time = builder_type.time();
-        let manager_constructor = source_manager_constructor::<S, B>(
+        let manager_constructor = SourceManagerConstructor::new(
             String::from("source_manager"),
             builder_type,
             backend,
@@ -209,11 +206,11 @@ impl Application {
             time,
         );
         let mut ctx = Context::new(self);
-        let kind = DFGNodeKind::Source(Default::default(), manager_constructor);
+        let kind = DFGNodeKind::Source(Default::default(), Arc::new(manager_constructor));
         let incoming_channels = 0; // sources have 0 incoming channels..
         let outgoing_channels = parallelism;
         let dfg_node = DFGNode::new(kind, outgoing_channels, incoming_channels, vec![]);
-        ctx.dfg.insert(dfg_node);
+        ctx.app.dfg.insert(dfg_node);
         Stream::new(ctx)
     }
 
@@ -351,34 +348,5 @@ impl Application {
 
     pub fn debug_node_enabled(&self) -> bool {
         self.debug_node_flag
-    }
-
-    // internal helper to help fetch DebugNode from an AssembledApplication
-    pub(crate) fn get_debug_node<A: ArconType>(&self) -> Option<Arc<Component<DebugNode<A>>>> {
-        self.debug_node.as_ref().map(|erased_comp| {
-            erased_comp
-                .clone()
-                .downcast::<Component<DebugNode<A>>>()
-                .unwrap()
-        })
-    }
-
-    // NOTE: this function can be used while we are building up the dataflow.
-    // Basically, we want to send information about this Arcon Process (conf.arcon_pid)
-    // to the ControlPlane.
-    pub(crate) fn _register_app(&self) {
-        let source_manager: ActorPath = NamedPath::with_system(
-            self.ctrl_system.system_path(),
-            vec!["source_manager".into()],
-        )
-        .into();
-
-        let _app = AppRegistration {
-            name: self.conf.app_name.clone(),
-            arcon_pids: vec![self.conf.arcon_pid], // TODO: all pids..
-            sources: vec![source_manager.to_string()],
-            pid: self.conf.arcon_pid,
-        };
-        // TODO: communicate with a component at the ControlPlane
     }
 }

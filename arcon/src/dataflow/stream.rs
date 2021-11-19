@@ -25,15 +25,13 @@ const REGISTRATION_TIMEOUT: Duration = Duration::from_millis(2000);
 
 #[derive(Default)]
 pub struct Context {
-    pub(crate) dfg: DFG,
-    app: Application,
+    pub(crate) app: Application,
     console_output: bool,
 }
 
 impl Context {
     pub fn new(app: Application) -> Self {
         Self {
-            dfg: Default::default(),
             app,
             console_output: false,
         }
@@ -177,19 +175,18 @@ impl<IN: ArconType> Stream<IN> {
             _ => unreachable!("Managed Parallelism not Supported yet"),
         };
 
-        let manager_constructor = node_manager_constructor::<OP, _>(
+        let manager_constructor = NodeManagerConstructor::new::<OP, _>(
             state_id,
             state_dir,
-            self.ctx.app.data_system.clone(),
             Arc::new(builder),
             self.ctx.app.arcon_logger.clone(),
         );
 
-        let prev_dfg_node = self.ctx.dfg.get_mut(&self.prev_dfg_id);
+        let prev_dfg_node = self.ctx.app.dfg.get_mut(&self.prev_dfg_id);
         let incoming_channels = prev_dfg_node.outgoing_channels;
 
-        let next_dfg_id = self.ctx.dfg.insert(DFGNode::new(
-            DFGNodeKind::Node(manager_constructor),
+        let next_dfg_id = self.ctx.app.dfg.insert(DFGNode::new(
+            DFGNodeKind::Node(Arc::new(manager_constructor)),
             outgoing_channels,
             incoming_channels,
             vec![self.prev_dfg_id],
@@ -247,20 +244,22 @@ impl<IN: ArconType> Stream<IN> {
         let mut runtime = self.build_runtime();
 
         // Build graph description
-        
+        // let mut dfg = self.ctx.app.dfg;
+
         // Spawn ApplicationController (if needed)
         self.init_application_controller(&mut runtime);
 
         // Spawn ProcessController
         let (process_controller, rf) = runtime.ctrl_system.create_and_register(|| {
-            ProcessController::new(self.ctx.app)
+            ProcessController::new(self.ctx.app.clone())
         });
         let _ = rf.wait_timeout(REGISTRATION_TIMEOUT).expect("registration failed");
+        runtime.ctrl_system.start(&process_controller);
 
         AssembledApplication::new(self.ctx.app, runtime)
 
         /*
-        for dfg_node in self.ctx.dfg.graph.into_iter().rev() {
+        for dfg_node in self.ctx.app.dfg.graph.into_iter().rev() {
             match dfg_node.kind {
                 DFGNodeKind::Source(channel_kind, source_manager_cons) => {
                     let nodes = target_nodes.take().unwrap();
@@ -319,11 +318,12 @@ impl<IN: ArconType> Stream<IN> {
     fn init_application_controller(&mut self, runtime: &mut RuntimeComponents) {
         if self.ctx.app.application_controller.is_none() {
             let (application_controller, rf) = runtime.ctrl_system.create_and_register(|| {
-                ApplicationController::new(self.ctx.app, 0)
+                ApplicationController::new(self.ctx.app.clone(), 0)
             });
             let _ = rf.wait_timeout(REGISTRATION_TIMEOUT).expect("registration failed");
             let path = runtime.ctrl_system.actor_path_for(&application_controller);
             self.ctx.app.set_application_controller(path.clone());
+            runtime.ctrl_system.start(&application_controller);
         }
     }
 

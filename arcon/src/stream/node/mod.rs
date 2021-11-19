@@ -619,8 +619,8 @@ mod tests {
         ) -> (ActorRef<ArconMessage<i32>>, Arc<Component<DebugNode<i32>>>) {
             // Returns a filter Node with input channels: sender1..sender3
             // And a debug sink receiving its results
-            let mut app = Application::default();
-            let pool_info = app.get_pool_info();
+            let mut app = AssembledApplication::default();
+            let pool_info = app.app.get_pool_info();
             let epoch_manager_ref = app.epoch_manager();
 
             let sink = app.data_system().create(DebugNode::<i32>::new);
@@ -650,9 +650,9 @@ mod tests {
 
             let nm = NodeManager::<OP, B>::new(
                 descriptor.clone(),
-                app.data_system.clone(),
+                app.data_system().clone(),
                 in_channels.clone(),
-                app.arcon_logger.clone(),
+                app.app.arcon_logger.clone(),
                 Arc::new(builder),
             );
             let node_manager_comp = app.ctrl_system().create(|| nm);
@@ -669,7 +669,7 @@ mod tests {
                 operator_state(backend.clone()),
                 NodeState::new(NodeID::new(0), in_channels, backend.clone()),
                 backend,
-                app.arcon_logger.clone(),
+                app.app.arcon_logger.clone(),
                 epoch_manager_ref,
                 #[cfg(not(test))]
                 perf_events,

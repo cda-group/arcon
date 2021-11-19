@@ -1,9 +1,10 @@
 use super::constructor::*;
+use crate::prelude::Arc;
 
 /// A logical dataflow-graph.
 #[allow(dead_code)]
 #[allow(clippy::upper_case_acronyms)]
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct DFG {
     /// The graph is represented as a Vec for maximum space-efficiency.
     /// This works since nodes are never deleted from the graph.
@@ -40,6 +41,7 @@ pub struct DFGNodeID(pub usize);
 
 /// A logical node in the dataflow graph.
 #[allow(dead_code)]
+#[derive(Clone)]
 pub struct DFGNode {
     pub(crate) kind: DFGNodeKind,
     pub(crate) outgoing_channels: usize,
@@ -66,9 +68,10 @@ impl DFGNode {
     }
 }
 
+#[derive(Clone)]
 pub enum DFGNodeKind {
-    Source(ChannelKind, SourceManagerConstructor),
-    Node(NodeManagerConstructor),
+    Source(ChannelKind, Arc<SourceManagerConstructor>),
+    Node(Arc<NodeManagerConstructor>),
 }
 
 #[allow(dead_code)]
