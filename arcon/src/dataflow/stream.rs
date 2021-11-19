@@ -1,26 +1,22 @@
 use crate::{
-    application::{Application, assembled::RuntimeComponents},
-    data::{ArconType, NodeID},
+    application::{assembled::RuntimeComponents, Application},
+    data::ArconType,
     dataflow::{
         api::OperatorBuilder,
         conf::{OperatorConf, ParallelismStrategy},
         constructor::*,
-        dfg::{ChannelKind, DFGNode, DFGNodeID, DFGNodeKind, DFG},
+        dfg::{DFGNode, DFGNodeID, DFGNodeKind},
     },
-    control_plane::distributed::{Layout, ApplicationController, ProcessController},
     index::EmptyState,
-    prelude::{AssembledApplication, ActorPath},
-    stream::{
-        node::debug::DebugNode,
-        operator::{
-            function::{Filter, FlatMap, Map, MapInPlace},
-            sink::measure::MeasureSink,
-            Operator,
-        },
+    prelude::AssembledApplication,
+    stream::operator::{
+        function::{Filter, FlatMap, Map, MapInPlace},
+        sink::measure::MeasureSink,
+        Operator,
     },
     util::ArconFnBounds,
 };
-use std::{marker::PhantomData, sync::Arc, time::Duration};
+use std::{marker::PhantomData, sync::Arc};
 
 #[derive(Default)]
 pub struct Context {
@@ -238,12 +234,12 @@ impl<IN: ArconType> Stream<IN> {
     /// Note that this method only builds the application. In order
     /// to start it, see the following [method](AssembledApplication::start).
     pub fn build(mut self) -> AssembledApplication {
-        let mut target_nodes: Option<Vec<Arc<dyn std::any::Any + Send + Sync>>> = None;
+        let target_nodes: Option<Vec<Arc<dyn std::any::Any + Send + Sync>>> = None;
 
-        let mut runtime = self.build_runtime();
+        let runtime = self.build_runtime();
 
         let mut assembled = AssembledApplication::new(self.ctx.app, runtime);
-        
+
         assembled.init_application_controller();
 
         // Spawn ProcessController

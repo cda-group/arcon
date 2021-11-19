@@ -6,31 +6,27 @@ use crate::stream::source::{
     schema::SourceSchema,
 };
 use crate::{
-    application::conf::{logger::ArconLogger, ApplicationConf, ControlPlaneMode, ExecutionMode},
+    application::conf::{logger::ArconLogger, ApplicationConf, ControlPlaneMode},
     buffer::event::PoolInfo,
     control_plane::{
-        app::AppRegistration, conf::ControlPlaneConf, ControlPlane, ControlPlaneContainer, distributed::Layout, distributed::ProcessId,
+        conf::ControlPlaneConf, distributed::Layout, distributed::ProcessId, ControlPlane,
+        ControlPlaneContainer,
     },
-    data::ArconMessage,
     dataflow::{
         api::{ParallelSourceBuilder, SourceBuilder, SourceBuilderType},
         conf::SourceConf,
-        constructor::{SourceManagerConstructor, ErasedComponent},
+        constructor::SourceManagerConstructor,
         dfg::*,
         stream::Context,
     },
-    manager::{
-        epoch::{EpochEvent, EpochManager},
-        snapshot::SnapshotManager,
-    },
     prelude::*,
     stream::{
-        node::{debug::DebugNode, source::SourceEvent},
+        node::source::SourceEvent,
         source::{local_file::LocalFileSource, Source},
     },
 };
 use arcon_allocator::Allocator;
-use kompact::{component::AbstractComponent, prelude::KompactSystem};
+use kompact::component::AbstractComponent;
 use std::sync::{Arc, Mutex};
 
 pub(crate) mod assembled;
@@ -85,11 +81,11 @@ pub struct Application {
     /// Configured Logger for the Application
     pub(crate) arcon_logger: ArconLogger,
     /// Path to the ApplicationController
-    pub (crate) application_controller: Option<ActorPath>,
+    pub(crate) application_controller: Option<ActorPath>,
     /// The Layout of the application (only relevant to the ApplicationController in distributed applications)
-    pub (crate) layout: Option<Layout>,
+    pub(crate) layout: Option<Layout>,
     /// The ProcessId of the local process running this application (only relevant to distributed applications)
-    pub (crate) process_id: ProcessId,
+    pub(crate) process_id: ProcessId,
 }
 
 impl Default for Application {

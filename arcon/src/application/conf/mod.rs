@@ -3,7 +3,7 @@ pub mod logger;
 use hocon::HoconLoader;
 use kompact::{
     net::buffers::BufferConfig,
-    prelude::{DeadletterBox, KompactConfig, NetworkConfig, LocalDispatcher},
+    prelude::{DeadletterBox, KompactConfig, NetworkConfig},
 };
 use logger::{file_logger, term_logger, ArconLogger, LoggerType};
 use serde::Deserialize;
@@ -249,10 +249,7 @@ impl ApplicationConf {
                 NetworkConfig::with_buffer_config(sock_addr, buffer_config).build(),
             );
         } else {
-            cfg.system_components(
-                DeadletterBox::new,
-                NetworkConfig::default().build(),
-            );
+            cfg.system_components(DeadletterBox::new, NetworkConfig::default().build());
         }
 
         cfg

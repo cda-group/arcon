@@ -1,7 +1,6 @@
-use crate::prelude::*;
 use crate::control_plane::distributed::*;
-use crate::control_plane::distributed::application_controller::*;
-use crate::control_plane::distributed::process_controller::*;
+use crate::prelude::*;
+
 use std::time::Duration;
 
 const DEFAULT_WAIT_TIME: u64 = 2000;
@@ -71,7 +70,6 @@ fn simple_pipeline(application: Application) -> AssembledApplication {
         .build()
 }
 
-
 #[test]
 fn adam() -> ArconResult<()> {
     let mut controlling_app = application();
@@ -81,24 +79,26 @@ fn adam() -> ArconResult<()> {
 
     controlling_app.set_layout(layout.clone());
     worker_app.set_layout(layout);
-    
+
     let assembled_controlling_app = simple_pipeline(controlling_app);
     wait(DEFAULT_WAIT_TIME);
-    
-    if let Some(application_controller_path) = assembled_controlling_app.get_application_controller() {
+
+    if let Some(application_controller_path) =
+        assembled_controlling_app.get_application_controller()
+    {
         assert!(true);
         worker_app.set_application_controller(application_controller_path);
         let assembled_worker_app = simple_pipeline(worker_app);
     }
     wait(DEFAULT_WAIT_TIME);
-    
+
     /*
     app.data_system().start(&app_controller);
-    
+
     let app_controller_path = app.data_system().actor_path_for(&app_controller);
-    
+
     wait(DEFAULT_WAIT_TIME);
-    
+
     let (process_controller, rf) = app_clone.data_system().create_and_register(|| {
         ProcessController::new(0, app_controller_path, "app_name".to_string())
     });

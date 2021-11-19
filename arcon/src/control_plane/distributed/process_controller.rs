@@ -16,18 +16,18 @@ pub(crate) struct ProcessController {
     named_path_map: FxHashMap<NodeID, NamedPath>,
     /// ApplicationController path
     application_controller: ActorPath,
-    /// The Application 
+    /// The Application
     application: AssembledApplication,
 }
 
 impl ProcessController {
-    pub fn new(
-        application: AssembledApplication,
-    ) -> Self {
+    pub fn new(application: AssembledApplication) -> Self {
         ProcessController {
             ctx: ComponentContext::uninitialised(),
             pid: application.app.process_id,
-            application_controller: application.get_application_controller().expect("No Application Controller ActorPath"),
+            application_controller: application
+                .get_application_controller()
+                .expect("No Application Controller ActorPath"),
             operator_paths: Vec::new(),
             sources_paths: Vec::new(),
             named_path_map: FxHashMap::default(),
@@ -35,7 +35,11 @@ impl ProcessController {
         }
     }
 
-    pub fn create_operators(&self, node_map: Vec<(GlobalNodeId, ActorPath)>, config_vec: Vec<NodeConfig>) {
+    pub fn create_operators(
+        &self,
+        node_map: Vec<(GlobalNodeId, ActorPath)>,
+        config_vec: Vec<NodeConfig>,
+    ) {
         for config in config_vec {
             /*
             if let Some(builder) = self.application.get_operator_builder(config.id) {
@@ -55,9 +59,12 @@ pub(crate) enum ProcessControllerMessage {
 
 impl ComponentLifecycle for ProcessController {
     fn on_start(&mut self) -> Handled {
-        info!(self.ctx.log(), "starting ProcessController with path {:?}, telling ApplicationController {:?}", 
+        info!(
+            self.ctx.log(),
+            "starting ProcessController with path {:?}, telling ApplicationController {:?}",
             self.ctx.actor_path(),
-            self.application_controller);
+            self.application_controller
+        );
         self.application_controller
             .tell_serialised(
                 ApplicationControllerMessage::CheckIn(self.pid.clone()),

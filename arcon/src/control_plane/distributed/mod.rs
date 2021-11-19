@@ -1,5 +1,5 @@
 use crate::prelude::*;
-use crate::dataflow::dfg::*;
+
 // use application_controller::ApplicationControllerMessage;
 use fxhash::FxHashMap;
 use multimap::MultiMap;
@@ -222,7 +222,7 @@ impl Serialisable for GlobalNodeId {
     }
 
     fn size_hint(&self) -> Option<usize> {
-        Some(4*4)
+        Some(4 * 4)
     }
 
     fn serialise(&self, buf: &mut dyn BufMut) -> Result<(), SerError> {

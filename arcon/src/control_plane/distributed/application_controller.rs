@@ -13,7 +13,7 @@ impl ApplicationController {
     pub fn new(application: AssembledApplication, expected_processes: u32) -> Self {
         ApplicationController {
             ctx: ComponentContext::uninitialised(),
-            application: application,
+            application,
         }
     }
 
@@ -44,7 +44,11 @@ impl ApplicationController {
 impl ComponentLifecycle for ApplicationController {
     fn on_start(&mut self) -> Handled {
         // Do anything?
-        info!(self.ctx.log(), "Starting ApplicationController {:?}", self.ctx.actor_path());
+        info!(
+            self.ctx.log(),
+            "Starting ApplicationController {:?}",
+            self.ctx.actor_path()
+        );
         Handled::Ok
     }
 }
@@ -65,7 +69,7 @@ impl NetworkActor for ApplicationController {
         info!(self.ctx.log(), "Received msg: {:?}", msg);
         match msg {
             ApplicationControllerMessage::CheckIn(pid) => {
-                info!(self.ctx.log(), "CheckIn Received: {:?}", pid); 
+                info!(self.ctx.log(), "CheckIn Received: {:?}", pid);
                 if let Some(process_controller) = sender {
                     self.handle_check_in(pid, process_controller);
                 }
@@ -97,8 +101,7 @@ impl Deserialiser<ApplicationControllerMessage> for ApplicationControllerMessage
                 }
                 Ok(ApplicationControllerMessage::CreatedOperators(node_vec))
             }
-            CHECK_IN_ID => Ok(ApplicationControllerMessage::CheckIn(
-                buf.get_u32())),
+            CHECK_IN_ID => Ok(ApplicationControllerMessage::CheckIn(buf.get_u32())),
             _ => Err(SerError::InvalidData(
                 "Unable to Deserialise ApplicationControllerMessage".to_string(),
             )),

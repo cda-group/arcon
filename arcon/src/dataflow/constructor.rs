@@ -84,7 +84,14 @@ fn channel_strategy<OUT: ArconType>(
 }
 
 pub struct NodeManagerConstructor {
-    constructor: Box<dyn FnOnce(Vec<NodeID>, ErasedComponents, ChannelKind, &mut AssembledApplication) -> ErasedComponents>,
+    constructor: Box<
+        dyn FnOnce(
+            Vec<NodeID>,
+            ErasedComponents,
+            ChannelKind,
+            &mut AssembledApplication,
+        ) -> ErasedComponents,
+    >,
 }
 
 impl NodeManagerConstructor {
@@ -107,9 +114,9 @@ impl NodeManagerConstructor {
         NodeManagerConstructor {
             constructor: Box::new(
                 move |in_channels: Vec<NodeID>,
-                    components: ErasedComponents,
-                    channel_kind: ChannelKind,
-                    app: &mut AssembledApplication| {
+                      components: ErasedComponents,
+                      channel_kind: ChannelKind,
+                      app: &mut AssembledApplication| {
                     let epoch_manager_ref = app.epoch_manager();
 
                     // How many instances of this Operator we are initially creating
@@ -174,7 +181,11 @@ impl NodeManagerConstructor {
                             backend.clone(),
                             app.app.arcon_logger.clone(),
                             epoch_manager_ref.clone(),
-                            #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
+                            #[cfg(all(
+                                feature = "hardware_counters",
+                                target_os = "linux",
+                                not(test)
+                            ))]
                             perf_events.clone(),
                         );
 
@@ -213,18 +224,19 @@ impl NodeManagerConstructor {
 
                     nodes
                 },
-            )
+            ),
         }
     }
-
 }
 
 pub struct SourceManagerConstructor {
-    constructor: Box<dyn FnOnce(
-        Vec<Arc<dyn Any + Send + Sync>>,
-        ChannelKind,
-        &mut AssembledApplication,
-    ) -> ErasedSourceManager>,
+    constructor: Box<
+        dyn FnOnce(
+            Vec<Arc<dyn Any + Send + Sync>>,
+            ChannelKind,
+            &mut AssembledApplication,
+        ) -> ErasedSourceManager,
+    >,
 }
 
 impl SourceManagerConstructor {
@@ -244,11 +256,11 @@ impl SourceManagerConstructor {
         watermark_interval: u64,
         time: ArconTime,
     ) -> Self {
-        SourceManagerConstructor{
+        SourceManagerConstructor {
             constructor: Box::new(
                 move |components: Vec<Arc<dyn std::any::Any + Send + Sync>>,
-                    channel_kind: ChannelKind,
-                    app: &mut AssembledApplication| {
+                      channel_kind: ChannelKind,
+                      app: &mut AssembledApplication| {
                     let epoch_manager_ref = app.epoch_manager();
 
                     let manager = SourceManager::new(
@@ -282,7 +294,8 @@ impl SourceManagerConstructor {
                             let parallelism = builder.parallelism;
                             for source_index in 0..builder.parallelism {
                                 let source_conf = builder.conf.clone();
-                                let source = source_cons(backend.clone(), source_index, parallelism); // todo
+                                let source =
+                                    source_cons(backend.clone(), source_index, parallelism); // todo
                                 create_source_node(
                                     app,
                                     source_index,
@@ -312,7 +325,7 @@ impl SourceManagerConstructor {
 
                     source_manager_comp
                 },
-            )
+            ),
         }
     }
 }

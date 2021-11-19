@@ -1,16 +1,22 @@
 use super::Application;
 use crate::{
-    data::{ArconType, ArconMessage},
-    stream::node::{debug::DebugNode, source::SourceEvent},
-    application::{ArconLogger, conf::ApplicationConf, conf::ExecutionMode},
+    application::{conf::ApplicationConf, conf::ExecutionMode, ArconLogger},
+    control_plane::{
+        app::AppRegistration,
+        distributed::{ApplicationController, ProcessController},
+    },
+    data::{ArconMessage, ArconType},
+    dataflow::constructor::ErasedComponent,
     manager::{
-        epoch::{EpochManager, EpochEvent},
+        epoch::{EpochEvent, EpochManager},
         snapshot::SnapshotManager,
     },
-    control_plane::{app::AppRegistration, distributed::{ProcessController, ApplicationController}},
-    dataflow::constructor::ErasedComponent,
+    stream::node::{debug::DebugNode, source::SourceEvent},
 };
-use kompact::{prelude::{ActorRefFactory, Component, ActorPath, KompactSystem, ActorRefStrong, NamedPath}, component::AbstractComponent};
+use kompact::{
+    component::AbstractComponent,
+    prelude::{ActorPath, ActorRefFactory, ActorRefStrong, Component, KompactSystem, NamedPath},
+};
 use std::{sync::Arc, time::Duration};
 
 const REGISTRATION_TIMEOUT: Duration = Duration::from_millis(2000);
@@ -81,7 +87,12 @@ impl RuntimeComponents {
             .wait_timeout(timeout)
             .expect("SnapshotManager comp never started!");
 
-        RuntimeComponents{ctrl_system, data_system, snapshot_manager, epoch_manager}
+        RuntimeComponents {
+            ctrl_system,
+            data_system,
+            snapshot_manager,
+            epoch_manager,
+        }
     }
 }
 
@@ -147,7 +158,6 @@ impl AssembledApplication {
         // TODO: communicate with a component at the ControlPlane
     }
 
-
     /// Fetch DebugNode component of the [Application]
     ///
     /// Returns `None` if the [Application] was not configured with a DebugNode.
@@ -163,21 +173,30 @@ impl AssembledApplication {
 
     pub(crate) fn init_application_controller(&mut self) {
         if self.app.application_controller.is_none() {
-            let (application_controller, rf) = self.runtime.ctrl_system.create_and_register(|| {
-                ApplicationController::new(self.clone(), 0)
-            });
-            let _ = rf.wait_timeout(REGISTRATION_TIMEOUT).expect("registration failed");
-            let path = self.runtime.ctrl_system.actor_path_for(&application_controller);
+            let (application_controller, rf) = self
+                .runtime
+                .ctrl_system
+                .create_and_register(|| ApplicationController::new(self.clone(), 0));
+            let _ = rf
+                .wait_timeout(REGISTRATION_TIMEOUT)
+                .expect("registration failed");
+            let path = self
+                .runtime
+                .ctrl_system
+                .actor_path_for(&application_controller);
             self.app.set_application_controller(path.clone());
             self.runtime.ctrl_system.start(&application_controller);
         }
     }
 
     pub(crate) fn spawn_process_controller(&mut self) {
-        let (process_controller, rf) = self.runtime.ctrl_system.create_and_register(|| {
-            ProcessController::new(self.clone())
-        });
-        let _ = rf.wait_timeout(REGISTRATION_TIMEOUT).expect("registration failed");
+        let (process_controller, rf) = self
+            .runtime
+            .ctrl_system
+            .create_and_register(|| ProcessController::new(self.clone()));
+        let _ = rf
+            .wait_timeout(REGISTRATION_TIMEOUT)
+            .expect("registration failed");
         self.runtime.ctrl_system.start(&process_controller);
     }
 }
@@ -243,7 +262,8 @@ impl AssembledApplication {
         );
         let component = self.runtime.ctrl_system.create(|| node);
 
-        self.runtime.ctrl_system
+        self.runtime
+            .ctrl_system
             .start_notify(&component)
             .wait_timeout(std::time::Duration::from_millis(500))
             .expect("DebugNode comp never started!");
