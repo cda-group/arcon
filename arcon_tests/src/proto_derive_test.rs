@@ -26,12 +26,8 @@ mod basic {
 /// Test basic functionality with Arcon.
 #[cfg(test)]
 mod with_arcon {
-    use arcon::prelude::Arcon;
 
     #[arcon::proto]
-    #[cfg_attr(feature = "arcon_serde", derive(serde::Serialize, serde::Deserialize))]
-    #[derive(Arcon, Clone, abomonation_derive::Abomonation)]
-    #[arcon(reliable_ser_id = 1, unsafe_ser_id = 2, version = 1)]
     struct Point {
         x: i32,
         y: i32,

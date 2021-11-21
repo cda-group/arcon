@@ -61,7 +61,7 @@ pub mod reliable_remote {
 #[cfg(feature = "unsafe_flight")]
 /// Module containing the [kompact] serialiser/deserialiser implementation for [FlightSerde::Unsafe]
 pub mod unsafe_remote {
-    use crate::data::{ArconType, BufMutWriter, RawArconMessage, VersionId};
+    use crate::data::{ArconType, RawArconMessage};
     use kompact::prelude::*;
 
     #[derive(Clone, Debug)]
@@ -80,21 +80,7 @@ pub mod unsafe_remote {
                 );
                 return Err(SerError::InvalidData(err));
             }
-
-            // TODO: improve
-            // But might need a BufMut rather than a Buf...
-            let bytes = buf.chunk();
-            let mut tmp_buf: Vec<u8> = Vec::with_capacity(bytes.len());
-            tmp_buf.put_slice(bytes);
-            if let Some((msg, _)) =
-                unsafe { abomonation::decode::<RawArconMessage<A>>(&mut tmp_buf) }
-            {
-                Ok(msg.clone())
-            } else {
-                Err(SerError::InvalidData(
-                    "Failed to decode flight data".to_string(),
-                ))
-            }
+            todo!("https://github.com/cda-group/arcon/issues/266");
         }
     }
 
@@ -103,19 +89,11 @@ pub mod unsafe_remote {
             A::UNSAFE_SER_ID
         }
         fn size_hint(&self) -> Option<usize> {
-            let size = std::mem::size_of::<VersionId>() + abomonation::measure(&self.0);
-            Some(size)
+            None
         }
         fn serialise(&self, buf: &mut dyn BufMut) -> Result<(), SerError> {
             buf.put_u32(A::VERSION_ID);
-
-            unsafe {
-                let mut writer = BufMutWriter::new(buf);
-                abomonation::encode(&self.0, &mut writer).map_err(|_| {
-                    SerError::InvalidData("Failed to encode unsafe flight data".to_string())
-                })?;
-            };
-            Ok(())
+            todo!("https://github.com/cda-group/arcon/issues/266");
         }
         fn local(self: Box<Self>) -> Result<Box<dyn Any + Send>, Box<dyn Serialisable>> {
             Ok(self)
@@ -138,8 +116,6 @@ mod test {
             node::debug::DebugNode,
         },
     };
-    #[cfg(feature = "unsafe_flight")]
-    use abomonation_derive::*;
     use kompact::prelude::*;
     use once_cell::sync::Lazy;
     use std::time::Duration;
@@ -149,8 +125,6 @@ mod test {
     const ID: u32 = 1;
 
     // The flight_serde application will always send data of ArconDataTest
-    #[cfg_attr(feature = "arcon_serde", derive(serde::Serialize, serde::Deserialize))]
-    #[cfg_attr(feature = "unsafe_flight", derive(Abomonation))]
     #[derive(Arcon, prost::Message, Clone)]
     #[arcon(unsafe_ser_id = 104, reliable_ser_id = 105, version = 1)]
     pub struct ArconDataTest {
@@ -164,8 +138,6 @@ mod test {
 
     // Down below are different structs the unit tests may attempt to deserialise into
 
-    #[cfg_attr(feature = "arcon_serde", derive(serde::Serialize, serde::Deserialize))]
-    #[cfg_attr(feature = "unsafe_flight", derive(Abomonation))]
     #[derive(Arcon, prost::Message, Clone)]
     #[arcon(unsafe_ser_id = 104, reliable_ser_id = 105, version = 2)]
     pub struct UpdatedVer {
@@ -177,8 +149,6 @@ mod test {
         pub price: u32,
     }
 
-    #[cfg_attr(feature = "arcon_serde", derive(serde::Serialize, serde::Deserialize))]
-    #[cfg_attr(feature = "unsafe_flight", derive(Abomonation))]
     #[derive(Arcon, prost::Message, Clone)]
     #[arcon(unsafe_ser_id = 204, reliable_ser_id = 205, version = 2)]
     pub struct UpdatedSerId {
@@ -190,8 +160,6 @@ mod test {
         pub price: u32,
     }
 
-    #[cfg_attr(feature = "arcon_serde", derive(serde::Serialize, serde::Deserialize))]
-    #[cfg_attr(feature = "unsafe_flight", derive(Abomonation))]
     #[derive(Arcon, prost::Message, Clone)]
     #[arcon(unsafe_ser_id = 104, reliable_ser_id = 105, version = 1)]
     pub struct RemovedField {
@@ -201,8 +169,6 @@ mod test {
         pub items: Vec<u32>,
     }
 
-    #[cfg_attr(feature = "arcon_serde", derive(serde::Serialize, serde::Deserialize))]
-    #[cfg_attr(feature = "unsafe_flight", derive(Abomonation))]
     #[derive(Arcon, prost::Message, Clone)]
     #[arcon(unsafe_ser_id = 104, reliable_ser_id = 105, version = 1)]
     pub struct AddedField {
@@ -216,8 +182,6 @@ mod test {
         pub bytes: Vec<u8>,
     }
 
-    #[cfg_attr(feature = "arcon_serde", derive(serde::Serialize, serde::Deserialize))]
-    #[cfg_attr(feature = "unsafe_flight", derive(Abomonation))]
     #[derive(Arcon, prost::Message, Clone)]
     #[arcon(unsafe_ser_id = 104, reliable_ser_id = 105, version = 1)]
     pub struct RearrangedFieldOrder {
@@ -251,6 +215,7 @@ mod test {
     }
 
     #[cfg(feature = "unsafe_flight")]
+    #[should_panic]
     #[test]
     fn unsafe_serde_test() {
         let data = flight_test::<ArconDataTest>(FlightSerde::Unsafe);

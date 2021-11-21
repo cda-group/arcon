@@ -1,8 +1,6 @@
 use arcon::prelude::*;
 use std::sync::Arc;
 
-#[cfg_attr(feature = "arcon_serde", derive(serde::Deserialize, serde::Serialize))]
-#[cfg_attr(feature = "unsafe_flight", derive(abomonation_derive::Abomonation))]
 #[derive(Arcon, Arrow, prost::Message, Copy, Clone)]
 #[arcon(unsafe_ser_id = 12, reliable_ser_id = 13, version = 1, keys = "id")]
 pub struct Event {

@@ -1,0 +1,34 @@
+[package]
+name = "examples"
+version = "0.0.0"
+authors = ["Max Meldrum <mmeldrum@kth.se>"]
+edition = "2018"
+publish = false
+
+[features]
+kafka = ["arcon/kafka"]
+
+[dev-dependencies]
+arcon = { path = "../arcon" }
+prost = "0.7"
+
+[[example]]
+name = "custom_operator"
+path = "custom_operator.rs"
+
+[[example]]
+name = "stateful"
+path = "stateful.rs"
+
+[[example]]
+name = "window"
+path = "window.rs"
+
+[[example]]
+name = "kafka_source"
+path = "kafka_source.rs"
+required-features = ["kafka"]
+
+[[example]]
+name = "file"
+path = "file.rs"
