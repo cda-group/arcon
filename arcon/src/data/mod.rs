@@ -8,57 +8,28 @@ pub mod partition;
 mod ser_id;
 
 use crate::buffer::event::BufferReader;
-#[cfg(feature = "unsafe_flight")]
-use abomonation::Abomonation;
-#[cfg(feature = "unsafe_flight")]
-use abomonation_derive::*;
 use kompact::prelude::*;
-use prost::{Message as PMessage, Oneof as POneof};
-#[cfg(feature = "arcon_serde")]
-use serde::{Deserialize, Serialize};
+use prost::{Message, Oneof};
 use std::{
     fmt,
     hash::{Hash, Hasher},
     ops::Deref,
 };
 
-cfg_if::cfg_if! {
-    if #[cfg(feature = "unsafe_flight")] {
-        pub trait ArconTypeBoundsNoSerde:
-            Clone + fmt::Debug + Sync + Send + PMessage + Abomonation + Default + 'static
-        {
-        }
-        impl<T> ArconTypeBoundsNoSerde for T where
-            T: Clone + fmt::Debug + Sync + Send + PMessage + Abomonation + Default + 'static
-        {
-        }
-    } else {
-        pub trait ArconTypeBoundsNoSerde:
-            Clone + fmt::Debug + Sync + Send + PMessage + Default + 'static
-        {
-        }
-        impl<T> ArconTypeBoundsNoSerde for T where
-            T: Clone + fmt::Debug + Sync + Send + PMessage + Default + 'static
-        {
-        }
-    }
-}
-
-cfg_if::cfg_if! {
-    if #[cfg(feature = "arcon_serde")] {
-        pub trait ArconTypeBounds: ArconTypeBoundsNoSerde + Serialize + for<'de> Deserialize<'de> {}
-        impl<T> ArconTypeBounds for T where T: ArconTypeBoundsNoSerde + Serialize + for<'de> Deserialize<'de> {}
-    } else {
-        pub trait ArconTypeBounds: ArconTypeBoundsNoSerde {}
-        impl<T> ArconTypeBounds for T where T: ArconTypeBoundsNoSerde {}
-    }
-}
-
 /// A type alias for registered state within Arcon
 pub type StateID = String;
 
 /// A type alias for an ArconType version id
 pub type VersionId = u32;
+
+pub trait ArconTypeBounds:
+    Clone + fmt::Debug + Sync + Send + prost::Message + Default + 'static
+{
+}
+impl<T> ArconTypeBounds for T where
+    T: Clone + fmt::Debug + Sync + Send + prost::Message + Default + 'static
+{
+}
 
 /// Type that can be passed through the Arcon runtime
 pub trait ArconType: ArconTypeBounds
@@ -78,10 +49,7 @@ where
 }
 
 /// An Enum containing all possible stream events that may occur in an execution
-#[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
-#[cfg_attr(feature = "unsafe_flight", derive(Abomonation))]
-#[derive(POneof, Clone)]
-#[cfg_attr(feature = "arcon_serde", serde(bound = "A: ArconType"))]
+#[derive(Oneof, Clone)]
 pub enum ArconEvent<A: ArconType> {
     /// A stream element containing some data of type [ArconType] and an optional timestamp [u64]
     #[prost(message, tag = "1")]
@@ -102,10 +70,7 @@ pub enum ArconEvent<A: ArconType> {
 // prost::Message. Unfortunately protobuf also doesn't allow for required oneof fields, so the inner
 // value has to be optional. In practice we expect it to always be Some.
 
-#[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
-#[cfg_attr(feature = "unsafe_flight", derive(Abomonation))]
-#[derive(PMessage, Clone)]
-#[cfg_attr(feature = "arcon_serde", serde(bound = "A: ArconType"))]
+#[derive(Message, Clone)]
 pub struct ArconEventWrapper<A: ArconType> {
     #[prost(oneof = "ArconEvent::<A>", tags = "1, 2, 3, 4")]
     inner: Option<ArconEvent<A>>,
@@ -131,10 +96,7 @@ impl<A: ArconType> From<ArconEvent<A>> for ArconEventWrapper<A> {
 }
 
 /// A Stream element containing some data and timestamp
-#[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
-#[cfg_attr(feature = "unsafe_flight", derive(Abomonation))]
-#[derive(PMessage, Clone)]
-#[cfg_attr(feature = "arcon_serde", serde(bound = "A: ArconType"))]
+#[derive(Message, Clone)]
 pub struct ArconElement<A: ArconType> {
     #[prost(message, required, tag = "1")]
     pub data: A,
@@ -155,9 +117,7 @@ impl<A: ArconType> ArconElement<A> {
 }
 
 /// Watermark message containing a [u64] timestamp
-#[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
-#[cfg_attr(feature = "unsafe_flight", derive(Abomonation))]
-#[derive(PMessage, Clone, Copy, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Message, Clone, Copy, Ord, PartialOrd, Eq, PartialEq)]
 pub struct Watermark {
     #[prost(uint64, tag = "1")]
     pub timestamp: u64,
@@ -170,9 +130,7 @@ impl Watermark {
 }
 
 /// Epoch marker message
-#[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
-#[cfg_attr(feature = "unsafe_flight", derive(Abomonation))]
-#[derive(PMessage, Clone, Hash, Copy, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Message, Clone, Hash, Copy, Ord, PartialOrd, Eq, PartialEq)]
 pub struct Epoch {
     #[prost(uint64, tag = "1")]
     pub epoch: u64,
@@ -233,10 +191,7 @@ pub struct ArconMessage<A: ArconType> {
 }
 
 /// A raw ArconMessage for serialisation
-#[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
-#[cfg_attr(feature = "unsafe_flight", derive(Abomonation))]
-#[derive(PMessage, Clone)]
-#[cfg_attr(feature = "arcon_serde", serde(bound = "A: ArconType"))]
+#[derive(Message, Clone)]
 pub struct RawArconMessage<A: ArconType> {
     /// Batch of ArconEvents
     #[prost(message, repeated, tag = "1")]
@@ -297,9 +252,7 @@ impl<A: ArconType> ArconMessage<A> {
 }
 
 /// A NodeID is used to identify a message sender
-#[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
-#[cfg_attr(feature = "unsafe_flight", derive(Abomonation))]
-#[derive(PMessage, PartialEq, Eq, PartialOrd, Ord, Hash, Copy, Clone)]
+#[derive(Message, PartialEq, Eq, PartialOrd, Ord, Hash, Copy, Clone)]
 pub struct NodeID {
     #[prost(uint32, tag = "1")]
     pub id: u32,
@@ -405,9 +358,7 @@ fn calc_hash<T: std::hash::Hash>(t: &T) -> u64 {
 /// Float wrapper for f32 in order to impl Hash [std::hash::Hash]
 ///
 /// The `Hash` impl rounds the floats down to an integer and then hashes it.
-#[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
-#[cfg_attr(feature = "unsafe_flight", derive(Abomonation))]
-#[derive(Clone, PMessage)]
+#[derive(Clone, Message)]
 #[repr(transparent)]
 pub struct ArconF32 {
     #[prost(float, tag = "1")]
@@ -457,9 +408,7 @@ impl PartialEq for ArconF32 {
 /// Float wrapper for f64 in order to impl Hash [std::hash::Hash]
 ///
 /// The `Hash` impl rounds the floats down to an integer and then hashes it.
-#[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
-#[cfg_attr(feature = "unsafe_flight", derive(Abomonation))]
-#[derive(Clone, PMessage)]
+#[derive(Clone, Message)]
 #[repr(transparent)]
 pub struct ArconF64 {
     #[prost(double, tag = "1")]
@@ -507,7 +456,6 @@ impl PartialEq for ArconF64 {
 }
 
 /// Arcon variant of the `Never` (or `!`) type which fulfills `ArconType` requirements
-#[cfg_attr(feature = "arcon_serde", derive(Serialize, Deserialize))]
 #[derive(Clone, PartialEq, Eq)]
 pub enum ArconNever {}
 impl ArconNever {
@@ -556,36 +504,8 @@ impl prost::Message for ArconNever {
     }
 }
 
-#[cfg(feature = "unsafe_flight")]
-impl Abomonation for ArconNever {}
-
 impl Default for ArconNever {
     fn default() -> Self {
         unreachable!(ArconNever::IS_UNREACHABLE);
-    }
-}
-
-cfg_if::cfg_if! {
-    if #[cfg(feature = "unsafe_flight")] {
-        pub struct BufMutWriter<'a> {
-            buf: &'a mut dyn BufMut,
-        }
-        impl<'a> BufMutWriter<'a> {
-            pub fn new(buf: &'a mut dyn BufMut) -> Self {
-                BufMutWriter { buf }
-            }
-        }
-        impl<'a> std::io::Write for BufMutWriter<'a> {
-            fn write(&mut self, src: &[u8]) -> std::io::Result<usize> {
-                let n = std::cmp::min(self.buf.remaining_mut(), src.len());
-
-                self.buf.put_slice(&src[..n]);
-                Ok(n)
-            }
-
-            fn flush(&mut self) -> std::io::Result<()> {
-                Ok(())
-            }
-        }
     }
 }

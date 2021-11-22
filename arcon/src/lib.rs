@@ -20,8 +20,6 @@
 //!
 //! - `rocksdb`
 //!     - Enables RocksDB to be used as a Backend
-//! - `arcon_serde`
-//!     - Adds serde support for Arcon Types
 //! - `metrics'
 //!     - Records internal runtime metrics and allows users to register custom metrics from an Operator
 //!     - If no exporter (e.g., prometheus_exporter) is enabled, the metrics will be logged by the runtime.
@@ -43,8 +41,6 @@
 //!
 //! - `state_metrics`
 //!     - With this feature on, the runtime will record various state metrics (e.g., bytes in/out, last checkpoint size).
-//!
-//!
 
 // Enable use of arcon_macros within this crate
 #[cfg_attr(test, macro_use)]
@@ -200,10 +196,6 @@ pub mod prelude {
     };
 
     pub use prost::*;
-
-    #[cfg(feature = "rayon")]
-    pub use rayon::prelude::*;
-
     pub use std::sync::Arc;
 
     #[cfg(all(feature = "hardware_counters", target_os = "linux"))]

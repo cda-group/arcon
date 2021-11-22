@@ -46,17 +46,7 @@ where
     P: AsRef<Path>,
 {
     let mut config = prost_build::Config::new();
-    config.type_attribute(
-        ".",
-        "#[cfg_attr(feature = \"arcon_serde\", derive(serde::Serialize, serde::Deserialize))]",
-    );
-
-    config.type_attribute(
-        ".",
-        "#[cfg_attr(feature = \"unsafe_flight\", derive(abomonation_derive::Abomonation))]",
-    );
 
     config.type_attribute(".", "#[derive(arcon::Arcon)]");
-
     config.compile_protos(protos, includes)
 }

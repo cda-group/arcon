@@ -5,9 +5,5 @@ authors = ["Max Meldrum <mmeldrum@kth.se>"]
 repository = "https://github.com/cda-group/arcon"
 edition = "2018"
 
-[features]
-arcon_serde = []
-unsafe_flight = []
-
 [dependencies]
-prost-build = "0.6"
+prost-build = "0.7"

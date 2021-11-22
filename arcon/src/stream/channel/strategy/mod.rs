@@ -101,11 +101,6 @@ pub(crate) fn send<A: ArconType>(
 
 #[cfg(test)]
 pub mod tests {
-    #[cfg(feature = "unsafe_flight")]
-    use abomonation_derive::*;
-
-    #[cfg_attr(feature = "arcon_serde", derive(serde::Serialize, serde::Deserialize))]
-    #[cfg_attr(feature = "unsafe_flight", derive(Abomonation))]
     #[derive(Arcon, prost::Message, Clone)]
     #[arcon(unsafe_ser_id = 12, reliable_ser_id = 13, version = 1)]
     pub struct Input {
