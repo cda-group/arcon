@@ -5,15 +5,19 @@ use super::*;
 pub(crate) struct ApplicationController {
     /// Component context
     ctx: ComponentContext<Self>,
-    // The Application
+    /// The Application
     application: AssembledApplication,
+    /// The Deployment, constructed and managed by the ApplicationController
+    deployment: Deployment,
 }
 
 impl ApplicationController {
     pub fn new(application: AssembledApplication, expected_processes: u32) -> Self {
+        let deployment = Deployment::new(&application);
         ApplicationController {
             ctx: ComponentContext::uninitialised(),
             application,
+            deployment,
         }
     }
 

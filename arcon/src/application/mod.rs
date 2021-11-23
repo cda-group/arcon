@@ -80,7 +80,7 @@ pub struct Application {
     debug_node_flag: bool,
     /// Configured Logger for the Application
     pub(crate) arcon_logger: ArconLogger,
-    /// Path to the ApplicationController
+    /// Path to the ApplicationController (only relevant to the workers in distributed applications)
     pub(crate) application_controller: Option<ActorPath>,
     /// The Layout of the application (only relevant to the ApplicationController in distributed applications)
     pub(crate) layout: Option<Layout>,

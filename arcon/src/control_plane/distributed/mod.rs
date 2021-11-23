@@ -14,7 +14,7 @@ pub type ProcessId = u32;
 pub type OperatorId = u32;
 pub type ApplicationId = u32;
 
-/// Logical Name, can be derived from a DistributedApplication.
+/// Logical Name, can be derived from a Deployment.
 /// Resolveable to an `ActorPath` during runtime.
 #[derive(Debug, Clone, PartialEq)]
 pub struct GlobalNodeId {
@@ -33,11 +33,11 @@ pub struct NodeConfig {
 }
 
 impl NodeConfig {
-    pub fn new(id: GlobalNodeId) -> Self {
+    pub fn new(id: GlobalNodeId, input_channels: Option<Vec<NodeID>>, output_channels: Option<Vec<(KeyRange, NodeID)>>) -> Self {
         Self {
             id,
-            input_channels: Vec::new(),
-            output_channels: Vec::new(),
+            input_channels: input_channels.
+            output_channels,
         }
     }
 
@@ -54,24 +54,104 @@ impl NodeConfig {
     }
 }
 
-/// DistributedApplication
-pub struct DistributedApplication {
+/// Deployment
+pub struct Deployment {
     /// The Application
-    // pub application: Application,
-    pub application: AssembledApplication,
+    // pub application: AssembledApplication,
     pub process_controller_map: FxHashMap<ProcessId, ActorPath>,
     node_id_paths: Vec<(GlobalNodeId, ActorPath)>,
     node_configs: Vec<NodeConfig>,
 }
 
-impl DistributedApplication {
-    pub fn new(application: AssembledApplication) -> DistributedApplication {
-        DistributedApplication {
-            application,
+impl Deployment {
+    pub fn new(application: &AssembledApplication) -> Deployment {
+        let deployment = Deployment {
             process_controller_map: FxHashMap::default(),
             node_id_paths: Vec::new(),
             node_configs: Vec::new(),
+        };
+        let layout = &application.app.layout.expect("No layout found when building deployment");
+        
+        // Enter build loop: 
+        let mut output_channels: Option<Vec<(KeyRange, NodeID)>> = None;
+        let mut input_channels: Option<Vec<NodeID>> = None;
+        let mut global_node_id: Option<Vec<GlobalNodeId>> = None;
+        
+        
+        for dfg_node in application.app.dfg.graph.into_iter().rev() {
+            if let Some(id_vec) = global_node_id.take() {
+                let in = input_channels.take();
+                let out = output_channels.take();
+                for id in id_vec {
+                    deployment.insert_node_config(NodeConfig::new(id, in.clone(), out.clone()))
+                }
+                
+                // Create output channels from the id_vec
+                // let output_channels_vec = Shard::get_shards(id_vec.length());
+                
+            }
+            input_channels = Some(dfg_node.get_input_channels());
+            // set the list of global_node_id ...
+            // need to use layout...
+            /*
+            match dfg_node.kind {
+                DFGNodeKind::Source(channel_kind, source_manager_cons) => {
+                    let nodes = target_nodes.take().unwrap();
+                    let source_manager =
+                        source_manager_cons(nodes, channel_kind, &mut self.ctx.app);
+
+                    self.ctx.app.source_manager = Some(source_manager);
+                }
+                DFGNodeKind::Node(manager_cons) => {
+                    let (channel_kind, components) = {
+                        match target_nodes {
+                            Some(comps) => (dfg_node.channel_kind, comps),
+                            None => {
+                                // At the end of the graph....
+                                if self.ctx.app.debug_node_enabled() {
+                                    let node: DebugNode<IN> = DebugNode::new();
+                                    self.ctx.app.create_debug_node(node);
+                                }
+
+                                match self.ctx.app.abstract_debug_node {
+                                    Some(ref debug_node) => {
+                                        (ChannelKind::Forward, vec![debug_node.clone()])
+                                    }
+                                    None => (
+                                        if self.ctx.console_output {
+                                            ChannelKind::Console
+                                        } else {
+                                            ChannelKind::Mute
+                                        },
+                                        vec![],
+                                    ),
+                                }
+                            }
+                        }
+                    };
+
+                    // Create expected incoming channels ids
+                    let in_channels: Vec<NodeID> = (0..dfg_node.ingoing_channels)
+                        .map(|i| NodeID::new(i as u32))
+                        .collect();
+
+                    let nodes =
+                        manager_cons(in_channels, components, channel_kind, &mut self.ctx.app);
+
+                    target_nodes = Some(nodes);
+                }
+            }
+            */
         }
+        // Last element of the iterator must also be inserted
+        if let Some(id) = global_node_id.take() {
+                deployment.insert_node_config(NodeConfig::new(id, input_channels.take(), output_channels.take()))
+        }
+        deployment
+    }
+
+    fn insert_node_config(&mut self, node_config: NodeConfig) {
+        self.node_configs.push(node_config);
     }
     // pub fn get_operator_builder(&self, ) -> dyn Fn(NodeConfig) -> () {}
 

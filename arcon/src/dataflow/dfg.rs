@@ -1,5 +1,6 @@
 use super::constructor::*;
 use crate::prelude::Arc;
+use crate::data::NodeID;
 
 /// A logical dataflow-graph.
 #[allow(dead_code)]
@@ -65,6 +66,12 @@ impl DFGNode {
             ingoing,
             channel_kind: Default::default(),
         }
+    }
+
+    pub fn get_input_channels(&self) -> Vec<NodeID> {
+        (0..self.ingoing_channels)
+            .map(|i| NodeID::new(i as u32))
+            .collect()
     }
 }
 

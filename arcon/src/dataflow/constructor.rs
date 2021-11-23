@@ -114,8 +114,8 @@ impl NodeManagerConstructor {
         NodeManagerConstructor {
             constructor: Box::new(
                 move |in_channels: Vec<NodeID>,
-                      components: ErasedComponents,
-                      channel_kind: ChannelKind,
+                      components: ErasedComponents, // TODO ?
+                      channel_kind: ChannelKind, // ??
                       app: &mut AssembledApplication| {
                     let epoch_manager_ref = app.epoch_manager();
 
