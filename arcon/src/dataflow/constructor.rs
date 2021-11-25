@@ -82,6 +82,16 @@ fn channel_strategy<OUT: ArconType>(
         _ => unimplemented!(),
     }
 }
+/*
+pub trait Constructor {
+    pub fn build(self,
+        in_channels: Vec<NodeID>,
+        components: Vec<Arc<dyn Any + Send + Sync>>,
+        channel_kind: ChannelKind,
+        application: &mut AssembledApplication
+    ) -> ErasedComponents
+}
+*/
 
 pub struct NodeManagerConstructor {
     constructor: Box<
@@ -115,7 +125,7 @@ impl NodeManagerConstructor {
             constructor: Box::new(
                 move |in_channels: Vec<NodeID>,
                       components: ErasedComponents, // TODO ?
-                      channel_kind: ChannelKind, // ??
+                      channel_kind: ChannelKind,    // ??
                       app: &mut AssembledApplication| {
                     let epoch_manager_ref = app.epoch_manager();
 

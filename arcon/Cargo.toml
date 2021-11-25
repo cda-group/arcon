@@ -37,6 +37,7 @@ num_cpus = "1.0"
 hierarchical_hash_wheel_timer = "1.1"
 hocon = { version = "0.3", default-features = false, features = ["serde-support"] }
 snafu = "0.6"
+multimap = "0.8"
 
 # Logging
 slog = "2"

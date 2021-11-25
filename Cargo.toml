@@ -3,7 +3,6 @@ members = [
     "arcon",
     "arcon_build",
     "arcon_util",
-    "arcon_control_plane",
     "arcon_tests",
     "examples"
 ]

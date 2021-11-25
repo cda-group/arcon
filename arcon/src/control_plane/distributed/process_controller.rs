@@ -17,7 +17,7 @@ pub(crate) struct ProcessController {
     /// ApplicationController path
     application_controller: ActorPath,
     /// The Application
-    application: AssembledApplication,
+    deployment: Deployment,
 }
 
 impl ProcessController {
@@ -31,21 +31,21 @@ impl ProcessController {
             operator_paths: Vec::new(),
             sources_paths: Vec::new(),
             named_path_map: FxHashMap::default(),
-            application,
+            deployment: Deployment::new(application),
         }
     }
 
     pub fn create_operators(
-        &self,
+        &mut self,
         node_map: Vec<(GlobalNodeId, ActorPath)>,
         config_vec: Vec<NodeConfig>,
     ) {
+        for (id, path) in node_map {
+            self.deployment.insert_node_id_path(id, path);
+        }
+
         for config in config_vec {
-            /*
-            if let Some(builder) = self.application.get_operator_builder(config.id) {
-                builder(config, node_map);
-            }
-            */
+            todo!();
         }
     }
 }

@@ -1,6 +1,7 @@
 use super::constructor::*;
+use crate::control_plane::distributed::OperatorId;
+use crate::data::{partition::KeyRange, NodeID};
 use crate::prelude::Arc;
-use crate::data::NodeID;
 
 /// A logical dataflow-graph.
 #[allow(dead_code)]
@@ -44,12 +45,12 @@ pub struct DFGNodeID(pub usize);
 #[allow(dead_code)]
 #[derive(Clone)]
 pub struct DFGNode {
-    pub(crate) kind: DFGNodeKind,
-    pub(crate) outgoing_channels: usize,
-    pub(crate) ingoing_channels: usize,
+    kind: DFGNodeKind,
+    outgoing_channels: usize,
+    ingoing_channels: usize,
     /// Ingoing edges to a node.
-    pub(crate) ingoing: Vec<DFGNodeID>,
-    pub(crate) channel_kind: ChannelKind,
+    ingoing: Vec<DFGNodeID>,
+    channel_kind: ChannelKind,
 }
 
 impl DFGNode {
@@ -68,10 +69,32 @@ impl DFGNode {
         }
     }
 
+    /// Returns a vector of NodeID's which this node will receive messages from
     pub fn get_input_channels(&self) -> Vec<NodeID> {
         (0..self.ingoing_channels)
             .map(|i| NodeID::new(i as u32))
             .collect()
+    }
+
+    /// Returns a vector of NodeID's for this node
+    pub fn get_node_ids(&self) -> Vec<NodeID> {
+        (0..self.ingoing_channels)
+            .map(|i| NodeID::new(i as u32))
+            .collect()
+    }
+
+    /// Returns the number of outgoing channels from this node
+    pub fn get_num_outgoing_channels(&self) -> usize {
+        self.outgoing_channels
+    }
+
+    /// Creates output channels which is used to send TO this node
+    pub fn create_output_channels(&self) -> Vec<(KeyRange, NodeID)> {
+        todo!()
+    }
+
+    pub fn get_operator_id(&self) -> OperatorId {
+        todo!()
     }
 }
 

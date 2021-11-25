@@ -6,42 +6,44 @@ pub(crate) struct ApplicationController {
     /// Component context
     ctx: ComponentContext<Self>,
     /// The Application
-    application: AssembledApplication,
+    // application: AssembledApplication,
     /// The Deployment, constructed and managed by the ApplicationController
     deployment: Deployment,
 }
 
 impl ApplicationController {
-    pub fn new(application: AssembledApplication, expected_processes: u32) -> Self {
-        let deployment = Deployment::new(&application);
+    pub fn new(application: AssembledApplication) -> Self {
+        let deployment = Deployment::new(application);
         ApplicationController {
             ctx: ComponentContext::uninitialised(),
-            application,
+            // application,
             deployment,
         }
     }
 
     fn handle_check_in(&mut self, pid: ProcessId, path: ActorPath) {
-        /*
-        self.application.insert_pid_path(pid, path);
-        if self.application.is_ready() {
+        self.deployment.insert_pid_path(pid, path);
+        if self.deployment.is_ready() {
             self.start_application();
         }
-        */
     }
 
     fn start_application(&mut self) {
-        /*
-        let node_id_paths = self.application.get_named_paths();
-        for (pid, path) in self.application.get_pid_controller_paths() {
-            info!(self.ctx.log(), "Sending CreateOperators command to {:?}", path);
+        let node_id_paths = self.deployment.get_named_paths();
+        for (pid, path) in self.deployment.get_pid_controller_paths() {
+            info!(
+                self.ctx.log(),
+                "Sending CreateOperators command to {:?}", path
+            );
             path.tell_serialised(
                 ProcessControllerMessage::CreateOperators(
-                    node_id_paths.clone(), self.application.get_node_configs_for_pid(pid)
+                    node_id_paths.clone(),
+                    self.deployment.get_node_configs_for_pid(pid),
                 ),
-                self
-            ).ok();
-        } */
+                self,
+            )
+            .ok();
+        }
     }
 }
 

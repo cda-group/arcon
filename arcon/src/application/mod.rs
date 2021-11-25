@@ -83,7 +83,7 @@ pub struct Application {
     /// Path to the ApplicationController (only relevant to the workers in distributed applications)
     pub(crate) application_controller: Option<ActorPath>,
     /// The Layout of the application (only relevant to the ApplicationController in distributed applications)
-    pub(crate) layout: Option<Layout>,
+    pub(crate) layout: Layout,
     /// The ProcessId of the local process running this application (only relevant to distributed applications)
     pub(crate) process_id: ProcessId,
 }
@@ -141,7 +141,7 @@ impl Application {
             debug_node_flag: false,
             arcon_logger,
             application_controller: None,
-            layout: None,
+            layout: Layout::new(),
             process_id: 0,
         }
     }
@@ -152,7 +152,7 @@ impl Application {
     }
 
     pub fn set_layout(&mut self, layout: Layout) {
-        self.layout = Some(layout);
+        self.layout = layout;
     }
 
     pub fn set_application_controller(&mut self, path: ActorPath) {

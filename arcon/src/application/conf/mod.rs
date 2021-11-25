@@ -1,5 +1,6 @@
 pub mod logger;
 
+use crate::control_plane::distributed::ApplicationId;
 use hocon::HoconLoader;
 use kompact::{
     net::buffers::BufferConfig,
@@ -32,6 +33,9 @@ pub enum ControlPlaneMode {
 pub struct ApplicationConf {
     #[serde(default = "app_name_default")]
     pub app_name: String,
+    /// Identifier of this specific application, used when multiple pipelines are deployed
+    #[serde(default = "application_id_default")]
+    pub application_id: ApplicationId,
     /// Either a `Local` or `Distributed` Execution Mode
     #[serde(default = "execution_mode_default")]
     pub execution_mode: ExecutionMode,
@@ -105,6 +109,7 @@ impl Default for ApplicationConf {
     fn default() -> Self {
         ApplicationConf {
             app_name: app_name_default(),
+            application_id: application_id_default(),
             execution_mode: execution_mode_default(),
             control_plane_mode: control_plane_default(),
             base_dir: base_dir_default(),
@@ -292,6 +297,10 @@ fn control_plane_default() -> ControlPlaneMode {
 fn epoch_interval_default() -> u64 {
     // in milliseconds
     25000
+}
+
+fn application_id_default() -> ApplicationId {
+    0
 }
 
 fn watermark_interval_default() -> u64 {

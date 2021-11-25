@@ -178,7 +178,7 @@ impl<IN: ArconType> Stream<IN> {
         );
 
         let prev_dfg_node = self.ctx.app.dfg.get_mut(&self.prev_dfg_id);
-        let incoming_channels = prev_dfg_node.outgoing_channels;
+        let incoming_channels = prev_dfg_node.get_num_outgoing_channels();
 
         let next_dfg_id = self.ctx.app.dfg.insert(DFGNode::new(
             DFGNodeKind::Node(Arc::new(manager_constructor)),

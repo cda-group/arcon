@@ -1,10 +1,7 @@
 use super::Application;
 use crate::{
     application::{conf::ApplicationConf, conf::ExecutionMode, ArconLogger},
-    control_plane::{
-        app::AppRegistration,
-        distributed::{ApplicationController, ProcessController},
-    },
+    control_plane::{app::AppRegistration, distributed::*},
     data::{ArconMessage, ArconType},
     dataflow::constructor::ErasedComponent,
     manager::{
@@ -176,7 +173,7 @@ impl AssembledApplication {
             let (application_controller, rf) = self
                 .runtime
                 .ctrl_system
-                .create_and_register(|| ApplicationController::new(self.clone(), 0));
+                .create_and_register(|| ApplicationController::new(self.clone()));
             let _ = rf
                 .wait_timeout(REGISTRATION_TIMEOUT)
                 .expect("registration failed");
@@ -272,5 +269,13 @@ impl AssembledApplication {
         // define abstract version of the component as the building phase needs it to downcast properly..
         let comp: Arc<dyn AbstractComponent<Message = ArconMessage<A>>> = component;
         self.abstract_debug_node = Some(Arc::new(comp) as ErasedComponent);
+    }
+
+    pub(crate) fn get_process_ids_for_operator(&self, operator_id: &OperatorId) -> Vec<ProcessId> {
+        if let Some(process_ids) = self.app.layout.get_process_ids(operator_id) {
+            process_ids.to_vec()
+        } else {
+            vec![self.app.process_id]
+        }
     }
 }
