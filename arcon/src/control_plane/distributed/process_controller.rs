@@ -41,7 +41,7 @@ impl ProcessController {
         config_vec: Vec<NodeConfig>,
     ) {
         for (id, path) in node_map {
-            self.deployment.insert_node_id_path(id, path);
+            self.deployment.insert_node_id_path(&id, path);
         }
 
         for config in config_vec {

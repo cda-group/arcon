@@ -1,11 +1,12 @@
 use super::*;
+use kompact::prelude::{NamedPath, SystemField};
 
 /// Deployment
 pub struct Deployment {
     /// The Application
     pub application: AssembledApplication,
     pub process_controller_map: FxHashMap<ProcessId, ActorPath>,
-    node_id_paths: Vec<(GlobalNodeId, ActorPath)>,
+    named_path_map: FxHashMap<GlobalNodeId, ActorPath>,
     node_configs: Vec<NodeConfig>,
 }
 
@@ -14,11 +15,10 @@ impl Deployment {
         let mut deployment = Deployment {
             application: application.clone(),
             process_controller_map: FxHashMap::default(),
-            node_id_paths: Vec::new(),
+            named_path_map: FxHashMap::default(),
             node_configs: Vec::new(),
         };
 
-        // Build node_configs:
         let mut output_channels: Vec<(KeyRange, NodeID)> = Vec::new();
         let mut input_channels: Vec<NodeID>;
         let mut global_node_ids: Vec<GlobalNodeId>;
@@ -32,7 +32,7 @@ impl Deployment {
                 application_id,
             );
             input_channels = dfg_node.get_input_channels();
-            deployment.create_and_insert_node_configs(
+            deployment.create_and_insert_node_config_set(
                 &global_node_ids,
                 &input_channels,
                 &output_channels,
@@ -41,6 +41,22 @@ impl Deployment {
             output_channels = dfg_node.create_output_channels();
         }
         deployment
+    }
+
+    // Create multiple node configs with the same input/output set
+    fn create_and_insert_node_config_set(
+        &mut self,
+        global_node_ids: &Vec<GlobalNodeId>,
+        input_channels: &Vec<NodeID>,
+        output_channels: &Vec<(KeyRange, NodeID)>,
+    ) {
+        for global_node_id in global_node_ids {
+            self.insert_node_config(NodeConfig {
+                id: global_node_id.clone(),
+                input_channels: input_channels.clone(),
+                output_channels: output_channels.clone(),
+            });
+        }
     }
 
     /// Creates global_node_ids from a list of NodeID's and ProcessId's,
@@ -69,41 +85,30 @@ impl Deployment {
         global_node_ids
     }
 
-    fn insert_node_config(&mut self, node_config: NodeConfig) {
-        self.node_configs.push(node_config);
-    }
-
-    // helper function to create multiple node configs with the same input/output set
-    fn create_and_insert_node_configs(
-        &mut self,
-        global_node_ids: &Vec<GlobalNodeId>,
-        input_channels: &Vec<NodeID>,
-        output_channels: &Vec<(KeyRange, NodeID)>,
-    ) {
-        for global_node_id in global_node_ids {
-            self.insert_node_config(NodeConfig {
-                id: global_node_id.clone(),
-                input_channels: input_channels.clone(),
-                output_channels: output_channels.clone(),
-            });
-        }
-    }
-
     pub fn is_ready(&mut self) -> bool {
         self.process_controller_map.len() >= self.application.app.layout.get_process_count()
     }
 
+    fn insert_node_config(&mut self, node_config: NodeConfig) {
+        self.node_configs.push(node_config);
+    }
+
     pub fn insert_pid_path(&mut self, pid: ProcessId, path: ActorPath) {
+        // Build and insert NamedPaths for the ProcessId
+        for node_cfg in self.get_node_configs_for_pid(&pid) {
+            self.insert_node_id_path(node_cfg.id(), node_cfg.id().to_actor_path(&path.system()));
+        }
         assert!(
             self.process_controller_map.insert(pid, path).is_none(),
             "Duplicate pid-path translation inserted"
         );
-        // Build and insert NamedPaths for the ProcessId
-        todo!();
     }
 
-    pub fn insert_node_id_path(&mut self, global_node_id: GlobalNodeId, actor_path: ActorPath) {
-        self.node_id_paths.push((global_node_id, actor_path));
+    pub fn insert_node_id_path(&mut self, global_node_id: &GlobalNodeId, actor_path: ActorPath) {
+        assert!(self
+            .named_path_map
+            .insert(global_node_id.clone(), actor_path.clone())
+            .is_none());
     }
 
     /// Get a Vec of ProcessId and the given
@@ -113,10 +118,13 @@ impl Deployment {
 
     /// Returns a Vec where each entry is one GlobalNodeId and its corresponding NamedPath
     pub fn get_named_paths(&mut self) -> Vec<(GlobalNodeId, ActorPath)> {
-        self.node_id_paths.clone()
+        self.named_path_map
+            .iter()
+            .map(|(id, path)| (id.clone(), path.clone()))
+            .collect()
     }
 
-    /// Returns a Vec of (OperatorId, NodeConfig) which should be deployed to the given ProcessId
+    /// Returns a Vec of NodeConfigs which belong to the given ProcessId
     pub fn get_node_configs_for_pid(&self, process_id: &ProcessId) -> Vec<NodeConfig> {
         let vec = self
             .node_configs

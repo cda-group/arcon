@@ -1,6 +1,7 @@
 use crate::data::partition::{create_shards, Shard};
 use crate::prelude::*;
 use fxhash::FxHashMap;
+use kompact::prelude::{ActorPath, NamedPath, SystemPath};
 use multimap::MultiMap;
 // use process_controller::ProcessControllerMessage;
 pub(crate) mod application_controller;
@@ -17,12 +18,22 @@ pub type ApplicationId = u32;
 
 /// Logical Name, can be derived from a Deployment.
 /// Resolveable to an `ActorPath` during runtime.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, std::cmp::Eq, std::hash::Hash)]
 pub struct GlobalNodeId {
     pub process_id: ProcessId,
     pub application_id: ApplicationId,
     pub operator_id: OperatorId,
     pub node_id: NodeID,
+}
+
+impl GlobalNodeId {
+    pub fn to_actor_path(&self, system_path: &SystemPath) -> ActorPath {
+        let name = format!(
+            "{}_{}_{}_{}",
+            self.process_id, self.application_id, self.operator_id, self.node_id.id
+        );
+        ActorPath::Named(NamedPath::with_system(system_path.clone(), vec![name]))
+    }
 }
 
 /// NodeConfig Sufficient to start a Node instance of a known Operator
