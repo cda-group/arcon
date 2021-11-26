@@ -18,38 +18,38 @@ unsafe impl Send for DFG {}
 impl DFG {
     /// Inserts a [`DFGNode`] into the dataflow graph and returns a unique
     /// identifier of it.
-    pub fn insert(&mut self, node: DFGNode) -> DFGNodeID {
-        let id = DFGNodeID(self.graph.len());
+    pub fn insert(&mut self, node: DFGNode) -> OperatorId {
+        let id = self.graph.len();
         self.graph.push(node);
         id
     }
 
-    /// Returns a reference to the [`DFGNode`] associated to a [`DFGNodeID`].
+    /// Returns a reference to the [`DFGNode`] associated to a [`OperatorId`].
     #[allow(dead_code)]
-    pub fn get(&self, id: &DFGNodeID) -> &DFGNode {
-        self.graph.get(id.0).unwrap()
+    pub fn get(&self, id: &OperatorId) -> &DFGNode {
+        self.graph.get(*id).unwrap()
     }
 
-    /// Returns a mutable reference to the [`DFGNode`] associated to a [`DFGNodeID`].
+    /// Returns a mutable reference to the [`DFGNode`] associated to a [`OperatorId`].
     #[allow(dead_code)]
-    pub fn get_mut(&mut self, id: &DFGNodeID) -> &mut DFGNode {
-        self.graph.get_mut(id.0).unwrap()
+    pub fn get_mut(&mut self, id: &OperatorId) -> &mut DFGNode {
+        self.graph.get_mut(*id).unwrap()
     }
 }
 
-/// The ID of a [`DFGNode`] in the dataflow graph.
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
-pub struct DFGNodeID(pub usize);
+// /// The ID of a [`DFGNode`] in the dataflow graph.
+// #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+// pub struct OperatorId(pub usize);
 
 /// A logical node in the dataflow graph.
 #[allow(dead_code)]
 #[derive(Clone)]
 pub struct DFGNode {
-    kind: DFGNodeKind,
+    pub kind: DFGNodeKind,
     outgoing_channels: usize,
     ingoing_channels: usize,
     /// Ingoing edges to a node.
-    ingoing: Vec<DFGNodeID>,
+    ingoing: Vec<OperatorId>,
     channel_kind: ChannelKind,
 }
 
@@ -58,7 +58,7 @@ impl DFGNode {
         kind: DFGNodeKind,
         outgoing_channels: usize,
         ingoing_channels: usize,
-        ingoing: Vec<DFGNodeID>,
+        ingoing: Vec<OperatorId>,
     ) -> Self {
         Self {
             kind,
@@ -163,9 +163,9 @@ fn create_dfg() {
     //        |          |
     //        +-> node2 -+
 
-    assert_eq!(DFGNodeID(0), node0);
-    assert_eq!(DFGNodeID(1), node1);
-    assert_eq!(DFGNodeID(2), node2);
-    assert_eq!(DFGNodeID(3), node3);
+    assert_eq!(OperatorId(0), node0);
+    assert_eq!(OperatorId(1), node1);
+    assert_eq!(OperatorId(2), node2);
+    assert_eq!(OperatorId(3), node3);
 }
 */

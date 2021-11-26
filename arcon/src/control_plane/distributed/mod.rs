@@ -13,7 +13,7 @@ pub(crate) use deployment::*;
 pub(crate) use process_controller::*;
 
 pub type ProcessId = u32;
-pub type OperatorId = u32;
+pub type OperatorId = usize;
 pub type ApplicationId = u32;
 
 /// Logical Name, can be derived from a Deployment.
@@ -111,7 +111,7 @@ impl Deserialiser<GlobalNodeId> for GlobalNodeId {
         Ok(GlobalNodeId {
             process_id: buf.get_u32(),
             application_id: buf.get_u32(),
-            operator_id: buf.get_u32(),
+            operator_id: buf.get_u32() as usize,
             node_id: NodeID::from(buf.get_u32()),
         })
     }
@@ -129,7 +129,7 @@ impl Serialisable for GlobalNodeId {
     fn serialise(&self, buf: &mut dyn BufMut) -> Result<(), SerError> {
         buf.put_u32(self.process_id);
         buf.put_u32(self.application_id);
-        buf.put_u32(self.operator_id);
+        buf.put_u32(self.operator_id as u32);
         buf.put_u32(self.node_id.id);
         Ok(())
     }

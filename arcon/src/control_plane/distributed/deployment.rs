@@ -1,4 +1,5 @@
 use super::*;
+use crate::dataflow::dfg::*;
 use kompact::prelude::{NamedPath, SystemField};
 
 /// Deployment
@@ -87,6 +88,21 @@ impl Deployment {
 
     pub fn is_ready(&mut self) -> bool {
         self.process_controller_map.len() >= self.application.app.layout.get_process_count()
+    }
+
+    pub fn build_node(&mut self, node_config: NodeConfig) -> () {
+        // todo!();
+        let dfg_node = self.application.app.dfg.get(&node_config.id().operator_id);
+        match &dfg_node.kind {
+            DFGNodeKind::Source(channel_kind, source_manager_cons) => {
+
+                // self.ctx.app.source_manager = Some(source_manager);
+            }
+            DFGNodeKind::Node(manager_cons) => {
+
+                // target_nodes = Some(nodes);
+            }
+        }
     }
 
     fn insert_node_config(&mut self, node_config: NodeConfig) {

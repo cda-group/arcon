@@ -1,11 +1,12 @@
 use crate::{
     application::{assembled::RuntimeComponents, Application},
+    control_plane::distributed::OperatorId,
     data::ArconType,
     dataflow::{
         api::OperatorBuilder,
         conf::{OperatorConf, ParallelismStrategy},
         constructor::*,
-        dfg::{DFGNode, DFGNodeID, DFGNodeKind},
+        dfg::{DFGNode, DFGNodeKind},
     },
     index::EmptyState,
     prelude::AssembledApplication,
@@ -37,7 +38,7 @@ impl Context {
 pub struct Stream<IN: ArconType> {
     _marker: PhantomData<IN>,
     // ID of the node which outputs this stream.
-    prev_dfg_id: DFGNodeID,
+    prev_dfg_id: OperatorId,
     ctx: Context,
 }
 
@@ -307,7 +308,7 @@ impl<IN: ArconType> Stream<IN> {
     pub(crate) fn new(ctx: Context) -> Self {
         Self {
             _marker: PhantomData,
-            prev_dfg_id: DFGNodeID(0),
+            prev_dfg_id: 0,
             ctx,
         }
     }
