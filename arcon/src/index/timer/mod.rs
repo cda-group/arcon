@@ -9,17 +9,15 @@ use arcon_state::{
         handles::{ActiveHandle, Handle},
         Backend, ValueState,
     },
-    data::{Key, Value},
+    data::Value,
     error::Result,
 };
+use core::time::Duration;
 use hierarchical_hash_wheel_timer::{
     wheels::{quad_wheel::*, *},
     *,
 };
 use std::sync::Arc;
-
-use core::time::Duration;
-use std::{cmp::Eq, hash::Hash};
 
 #[derive(prost::Message, PartialEq, Clone)]
 pub struct TimerEvent<E: Value> {
@@ -41,18 +39,21 @@ impl<E: Value> TimerEvent<E> {
     }
 }
 
+#[derive(prost::Message, PartialEq, Clone)]
+pub struct TimeoutId {
+    #[prost(uint64, tag = "1")]
+    key: u64,
+    #[prost(uint64, tag = "2")]
+    timestamp: u64,
+}
+
 pub trait ArconTimer: Send {
-    type Key: Eq + Hash;
     type Value: std::fmt::Debug;
 
-    fn schedule_at(
-        &mut self,
-        id: Self::Key,
-        time: u64,
-        entry: Self::Value,
-    ) -> TimerResult<Self::Value>;
+    fn schedule_at(&mut self, time: u64, entry: Self::Value) -> TimerResult<Self::Value>;
     fn advance_to(&mut self, ts: u64) -> Result<Vec<Self::Value>>;
     fn get_time(&self) -> Result<u64>;
+    fn active_key(&mut self, key: u64);
 }
 
 /// An Index for Stream Timers
@@ -60,20 +61,19 @@ pub trait ArconTimer: Send {
 /// The Index utilises the [QuadWheelWithOverflow] data structure
 /// in order to manage the timers. The remaining state is kept in
 /// other indexes such as Map/Value.
-pub struct Timer<K, V, B>
+pub struct Timer<V, B>
 where
-    K: Key + Eq + Hash,
     V: Value,
     B: Backend,
 {
-    timer: QuadWheelWithOverflow<K>,
-    timeouts: EagerHashTable<K, TimerEvent<V>, B>,
+    timer: QuadWheelWithOverflow<TimeoutId>,
+    current_key: u64,
+    timeouts: EagerHashTable<TimeoutId, TimerEvent<V>, B>,
     time_handle: ActiveHandle<B, ValueState<u64>>,
 }
 
-impl<K, V, B> Timer<K, V, B>
+impl<V, B> Timer<V, B>
 where
-    K: Key + Eq + Hash,
     V: Value,
     B: Backend,
 {
@@ -89,6 +89,7 @@ where
 
         let mut timer = Self {
             timer: QuadWheelWithOverflow::default(),
+            current_key: 0,
             timeouts: EagerHashTable::new(timeouts_id, backend),
             time_handle,
         };
@@ -171,7 +172,7 @@ where
 
     // Lookup id, remove from storage, and return Executable action
     #[inline(always)]
-    fn take_entry(&mut self, id: K) -> Option<V> {
+    fn take_entry(&mut self, id: TimeoutId) -> Option<V> {
         self.timeouts
             .remove(&id)
             .expect("no timeout found for id") // this wouldn't necessarily be an error anymore if we add a cancellation API at some point
@@ -179,7 +180,7 @@ where
     }
 
     #[inline(always)]
-    pub fn schedule_after(&mut self, id: K, delay: u64, entry: V) -> TimerResult<V> {
+    pub fn schedule_after(&mut self, id: TimeoutId, delay: u64, entry: V) -> TimerResult<V> {
         match self
             .timer
             .insert_with_delay(id.clone(), Duration::from_millis(delay))
@@ -199,23 +200,24 @@ where
     }
 }
 
-impl<K, V, B> ArconTimer for Timer<K, V, B>
+impl<V, B> ArconTimer for Timer<V, B>
 where
-    K: Key + Eq + Hash,
     V: Value,
     B: Backend,
 {
-    type Key = K;
     type Value = V;
 
+    fn active_key(&mut self, key: u64) {
+        self.current_key = key;
+    }
+
     #[inline]
-    fn schedule_at(
-        &mut self,
-        id: Self::Key,
-        time: u64,
-        entry: Self::Value,
-    ) -> TimerResult<Self::Value> {
+    fn schedule_at(&mut self, time: u64, entry: Self::Value) -> TimerResult<Self::Value> {
         let curr_time = self.current_time().unwrap();
+        let timeout_id = TimeoutId {
+            key: self.current_key,
+            timestamp: time,
+        };
         // Check for expired target time
         if time <= curr_time {
             Ok(Err(TimerExpiredError {
@@ -225,7 +227,7 @@ where
             }))
         } else {
             let delay = time - curr_time;
-            self.schedule_after(id, delay, entry)
+            self.schedule_after(timeout_id, delay, entry)
         }
     }
 
@@ -253,9 +255,8 @@ where
     }
 }
 
-impl<K, V, B> IndexOps for Timer<K, V, B>
+impl<V, B> IndexOps for Timer<V, B>
 where
-    K: Key + Eq + Hash,
     V: Value,
     B: Backend,
 {
@@ -263,7 +264,9 @@ where
         self.timeouts.persist()?;
         Ok(())
     }
-    fn set_key(&mut self, _: u64) {}
+    fn set_key(&mut self, key: u64) {
+        self.current_key = key;
+    }
     fn table(&mut self) -> ArconResult<Option<ImmutableTable>> {
         Ok(None)
     }
@@ -282,8 +285,10 @@ mod tests {
         let mut timer = Timer::new("mytimer", backend);
 
         // Timer per key...
-        let _ = timer.schedule_at(1, 1000, 10).unwrap();
-        let _ = timer.schedule_at(2, 1600, 10).unwrap();
+        timer.active_key(1);
+        let _ = timer.schedule_at(1000, 10).unwrap();
+        timer.active_key(2);
+        let _ = timer.schedule_at(1600, 10).unwrap();
         let evs = timer.advance_to(1500).unwrap();
         assert_eq!(evs.len(), 1);
         let evs = timer.advance_to(2000).unwrap();
