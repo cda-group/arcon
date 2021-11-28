@@ -315,7 +315,7 @@ where
         // Set key for the current element
         // TODO: Should use a pre-defined key for Non-Keyed Streams.
         let mut context = self.operator_context.borrow_mut();
-        context.state().set_key(e.data.get_key());
+        context.current_key = e.data.get_key();
         for elem in self.operator.handle_element(e, &mut context)? {
             self.add_outgoing_event(ArconEvent::Element(elem))?;
         }

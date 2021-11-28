@@ -133,7 +133,6 @@ where
         let ts = window_start + (window_ctx.index * self.window_slide) + self.window_length;
 
         let request = ctx.schedule_at(
-            window_ctx,
             ts + self.late_arrival_time,
             WindowEvent::new(window_ctx.key, window_ctx.index, ts),
         )?;

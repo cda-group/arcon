@@ -73,11 +73,13 @@ where
     OperatorState: ArconState,
 {
     /// A Timer that can be used to schedule event timers
-    pub(crate) timer: Box<dyn ArconTimer<Key = u64, Value = TimerState>>,
+    pub(crate) timer: Box<dyn ArconTimer<Value = TimerState>>,
     /// State of the Operator
     pub(crate) state: OperatorState,
     /// Reference to logger
     pub(crate) logger: ArconLogger,
+    /// Active key that is set by the runtime
+    pub(crate) current_key: u64,
     #[cfg(feature = "metrics")]
     name: String,
 }
@@ -89,7 +91,7 @@ where
 {
     #[inline]
     pub(crate) fn new(
-        timer: Box<dyn ArconTimer<Key = u64, Value = TimerState>>,
+        timer: Box<dyn ArconTimer<Value = TimerState>>,
         state: OperatorState,
         logger: ArconLogger,
         #[cfg(feature = "metrics")] name: String,
@@ -98,12 +100,14 @@ where
             timer,
             state,
             logger,
+            current_key: 0,
             #[cfg(feature = "metrics")]
             name,
         }
     }
     #[inline]
     pub fn state(&mut self) -> &mut OperatorState {
+        self.state.set_key(self.current_key);
         &mut self.state
     }
 
@@ -126,13 +130,9 @@ where
     /// Returns Ok if the entry was scheduled successfully
     /// or `Err(entry)` if it has already expired.
     #[inline]
-    pub fn schedule_at<I: Into<u64>>(
-        &mut self,
-        key: I,
-        time: u64,
-        entry: TimerState,
-    ) -> TimerResult<TimerState> {
-        self.timer.schedule_at(key.into(), time, entry)
+    pub fn schedule_at(&mut self, time: u64, entry: TimerState) -> TimerResult<TimerState> {
+        self.timer.active_key(self.current_key);
+        self.timer.schedule_at(time, entry)
     }
 
     #[cfg(feature = "metrics")]

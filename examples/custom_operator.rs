@@ -70,10 +70,9 @@ impl Operator for TimerOperator {
         ctx: &mut OperatorContext<Self::TimerState, Self::OperatorState>,
     ) -> ArconResult<Self::ElementIterator> {
         let current_time = ctx.current_time()?;
-        let key = element.data.get_key();
         let time = current_time + 1000;
 
-        if let Err(err) = ctx.schedule_at(key, time, element.data.id)? {
+        if let Err(err) = ctx.schedule_at(time, element.data.id)? {
             error!(ctx.log(), "Failed to schedule timer with err {}", err);
         }
 
