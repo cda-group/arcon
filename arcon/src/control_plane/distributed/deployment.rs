@@ -1,5 +1,5 @@
 use super::*;
-use crate::dataflow::{dfg::*, constructor::ErasedComponents};
+use crate::dataflow::{dfg::*, constructor::{ErasedComponents, ErasedComponent}};
 use kompact::prelude::{SystemField};
 
 /// Deployment
@@ -18,10 +18,11 @@ impl Deployment {
             application: application.clone(),
             process_controller_map: FxHashMap::default(),
             named_path_map: FxHashMap::default(),
+            local_nodes: FxHashMap::default(),
             node_configs: Vec::new(),
         };
 
-        let mut output_channels: Vec<NodeID> = Vec::new();
+        let mut output_channels: Vec<GlobalNodeId> = Vec::new();
         let mut input_channels: Vec<NodeID>;
         let mut global_node_ids: Vec<GlobalNodeId>;
         let application_id = application.app.conf.application_id;
@@ -40,7 +41,7 @@ impl Deployment {
                 &output_channels,
             );
             // Create the output_channels for the next iteration
-            output_channels = dfg_node.create_output_channels();
+            output_channels = global_node_ids.clone();
         }
         deployment
     }
@@ -50,7 +51,7 @@ impl Deployment {
         &mut self,
         global_node_ids: &Vec<GlobalNodeId>,
         input_channels: &Vec<NodeID>,
-        output_channels: &Vec<NodeID>,
+        output_channels: &Vec<GlobalNodeId>,
     ) {
         for global_node_id in global_node_ids {
             self.insert_node_config(NodeConfig {
@@ -98,37 +99,41 @@ impl Deployment {
         let channel_kind = dfg_node.get_channel_kind().clone();
         match dfg_node.kind {
             DFGNodeKind::Source(channel_kind, source_manager_cons) => {
-                let source_manager = *source_manager_cons.build(
+                let sources = source_manager_cons.build(
                     local_receivers,
                     remote_receivers,
                     channel_kind,
                     &mut self.application,
                 );
-                todo!(); // use the source_manager
+                
+                // todo!(); // use the source_manager
             }
             DFGNodeKind::Node(manager_cons) => {
-                let node_manager = *manager_cons.build(
+                let component = manager_cons.build(
+                    node_config.id.node_id,
                     node_config.input_channels,
                     local_receivers,
                     remote_receivers,
                     channel_kind,
                     &mut self.application,
                 );
-                todo!(); // use the node_manager
+                self.local_nodes.insert(node_config.id, component);
+                // todo!(); // use the node_manager
             }
         }
+
     }
 
     fn make_receivers(&self, node_config: &NodeConfig) -> (ErasedComponents, Vec<ActorPath>) {
-        let local = Vec::new();
-        let remote = Vec::new();
-        for output_channels in node_config.get_output_channels() {
-            if let Some(component) self.local_nodes.get(output_channel) {
-                local.push(component);
+        let mut local = Vec::new();
+        let mut remote = Vec::new();
+        for output_channel in node_config.get_output_channels() {
+            if let Some(components) = self.local_nodes.get(output_channel) {
+                local = components.clone();
             } else {
                 remote.push(
                     self.named_path_map.get(output_channel)
-                        .expect("No channel found for {:?}", output_channel)
+                        .expect("No channel found for").clone()
                 );
             }
         }

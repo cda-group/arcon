@@ -2,7 +2,7 @@ use crate::{
     application::conf::logger::ArconLogger,
     application::AssembledApplication,
     buffer::event::PoolInfo,
-    data::{ArconMessage, ArconType, NodeID},
+    data::{ArconMessage, ArconType, NodeID, flight_serde::FlightSerde},
     dataflow::{
         api::{OperatorBuilder, SourceBuilderType},
         conf::{ParallelismStrategy, SourceConf},
@@ -37,7 +37,7 @@ use kompact::{
 use std::{any::Any, convert::TryInto, path::PathBuf, sync::Arc};
 
 pub type SourceConstructor = Box<
-    dyn FnOnce(
+    dyn Fn(
         Vec<Arc<dyn Any + Send + Sync>>,
         ChannelKind,
         &mut KompactSystem,
@@ -76,6 +76,9 @@ fn channel_strategy<OUT: ArconType>(
                 let channel = Channel::Local(actor_ref);
                 channels.push(channel);
             }
+            for path in paths {
+                channels.push(Channel::Remote(path, FlightSerde::Reliable));
+            }
             ChannelStrategy::Keyed(Keyed::new(max_key, channels, node_id, pool_info))
         }
         ChannelKind::Console => ChannelStrategy::Console,
@@ -94,9 +97,10 @@ pub trait Constructor {
 }
 */
 
-pub struct NodeManagerConstructor {
+pub struct NodeConstructor {
     constructor: Box<
-        dyn FnOnce(
+        dyn Fn(
+            NodeID,
             Vec<NodeID>,
             ErasedComponents,
             Vec<ActorPath>,
@@ -106,16 +110,17 @@ pub struct NodeManagerConstructor {
     >,
 }
 
-impl NodeManagerConstructor {
+impl NodeConstructor {
     pub(crate) fn build(
-        self,
+        &self,
+        node_id: NodeID,
         in_channels: Vec<NodeID>,
         components: ErasedComponents,
         paths: Vec<ActorPath>,
         channel_kind: ChannelKind,
         application: &mut AssembledApplication,
     ) -> ErasedComponents {
-        (self.constructor)(in_channels, components, paths, channel_kind, application)
+        (self.constructor)(node_id, in_channels, components, paths, channel_kind, application)
     }
 
     pub(crate) fn new<OP: Operator + 'static, B: Backend>(
@@ -123,10 +128,11 @@ impl NodeManagerConstructor {
         state_dir: PathBuf,
         builder: Arc<OperatorBuilder<OP, B>>,
         logger: ArconLogger,
-    ) -> NodeManagerConstructor {
-        NodeManagerConstructor {
+    ) -> NodeConstructor {
+        NodeConstructor {
             constructor: Box::new(
-                move |in_channels: Vec<NodeID>,
+                move |node_id: NodeID,
+                      in_channels: Vec<NodeID>,
                       components: ErasedComponents,
                       paths: Vec<ActorPath>,
                       channel_kind: ChannelKind,
@@ -246,7 +252,7 @@ impl NodeManagerConstructor {
 
 pub struct SourceManagerConstructor {
     constructor: Box<
-        dyn FnOnce(
+        dyn Fn(
             ErasedComponents,
             Vec<ActorPath>,
             ChannelKind,
@@ -257,7 +263,7 @@ pub struct SourceManagerConstructor {
 
 impl SourceManagerConstructor {
     pub(crate) fn build(
-        self,
+        &self,
         components: ErasedComponents,
         paths: Vec<ActorPath>,
         channel_kind: ChannelKind,
@@ -282,7 +288,7 @@ impl SourceManagerConstructor {
                     let epoch_manager_ref = app.epoch_manager();
 
                     let manager = SourceManager::new(
-                        descriptor,
+                        descriptor.clone(),
                         time,
                         watermark_interval,
                         epoch_manager_ref,
@@ -291,10 +297,10 @@ impl SourceManagerConstructor {
                     );
                     let source_manager_comp = app.ctrl_system().create(|| manager);
 
-                    match builder_type {
+                    match &builder_type {
                         SourceBuilderType::Single(builder) => {
-                            let source_cons = builder.constructor;
-                            let source_conf = builder.conf;
+                            let source_cons = builder.constructor.clone();
+                            let source_conf = builder.conf.clone();
                             let source_index = 0;
                             let source = source_cons(backend.clone());
                             create_source_node(
@@ -309,7 +315,7 @@ impl SourceManagerConstructor {
                             );
                         }
                         SourceBuilderType::Parallel(builder) => {
-                            let source_cons = builder.constructor;
+                            let source_cons = builder.constructor.clone();
                             let parallelism = builder.parallelism;
                             for source_index in 0..builder.parallelism {
                                 let source_conf = builder.conf.clone();

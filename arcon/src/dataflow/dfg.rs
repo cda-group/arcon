@@ -106,7 +106,7 @@ impl DFGNode {
 #[derive(Clone)]
 pub enum DFGNodeKind {
     Source(ChannelKind, Arc<SourceManagerConstructor>),
-    Node(Arc<NodeManagerConstructor>),
+    Node(Arc<NodeConstructor>),
 }
 
 #[allow(dead_code)]

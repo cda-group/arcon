@@ -72,8 +72,6 @@ pub struct Application {
     pub(crate) dfg: DFG,
     /// Arcon allocator for this application
     pub(crate) allocator: Arc<Mutex<Allocator>>,
-    /// SourceManager component for this application
-    pub(crate) source_manager: Option<Arc<dyn AbstractComponent<Message = SourceEvent>>>,
     /// A container holding information about the application's control plane
     pub(crate) control_plane: ControlPlaneContainer,
     /// Flag indicating whether to spawn a debug node for the Application
@@ -136,7 +134,6 @@ impl Application {
             conf,
             dfg: DFG::default(),
             allocator,
-            source_manager: None,
             control_plane,
             debug_node_flag: false,
             arcon_logger,

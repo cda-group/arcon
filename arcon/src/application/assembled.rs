@@ -3,7 +3,7 @@ use crate::{
     application::{conf::ApplicationConf, conf::ExecutionMode, ArconLogger},
     control_plane::{app::AppRegistration, distributed::*},
     data::{ArconMessage, ArconType},
-    dataflow::constructor::ErasedComponent,
+    dataflow::constructor::{ErasedComponent, ErasedSourceManager},
     manager::{
         epoch::{EpochEvent, EpochManager},
         snapshot::SnapshotManager,
@@ -28,6 +28,9 @@ pub struct AssembledApplication {
     pub(crate) debug_node: Option<ErasedComponent>,
     // Type erased Arc<dyn AbstractComponent<Message = ArconMessage<A>>>
     pub(crate) abstract_debug_node: Option<ErasedComponent>,
+    /// SourceManager component for this application
+    pub(crate) source_manager: Option<ErasedSourceManager>,
+
 }
 
 #[derive(Clone)]
@@ -101,6 +104,7 @@ impl AssembledApplication {
             runtime,
             debug_node: None,
             abstract_debug_node: None,
+            source_manager: None,
         }
     }
 
@@ -109,6 +113,10 @@ impl AssembledApplication {
         let app = Application::default();
         let runtime = RuntimeComponents::new(&app.conf, &app.arcon_logger);
         AssembledApplication::new(app, runtime)
+    }
+
+    pub(crate) fn set_source_manager(&mut self, source_manager: ErasedSourceManager) {
+        self.source_manager = Some(source_manager);
     }
 
     pub(crate) fn epoch_manager(&self) -> ActorRefStrong<EpochEvent> {
@@ -211,7 +219,7 @@ impl AssembledApplication {
         );
 
         // Send start message to manager component
-        match &self.app.source_manager {
+        match &self.source_manager {
             Some(source_manager) => {
                 source_manager.actor_ref().tell(SourceEvent::Start);
             }

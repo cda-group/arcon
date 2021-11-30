@@ -171,7 +171,7 @@ impl<IN: ArconType> Stream<IN> {
             _ => unreachable!("Managed Parallelism not Supported yet"),
         };
 
-        let manager_constructor = NodeManagerConstructor::new::<OP, _>(
+        let manager_constructor = NodeConstructor::new::<OP, _>(
             state_id,
             state_dir,
             Arc::new(builder),
