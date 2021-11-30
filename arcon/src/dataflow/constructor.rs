@@ -50,6 +50,7 @@ pub type ErasedComponents = Vec<ErasedComponent>;
 
 fn channel_strategy<OUT: ArconType>(
     mut components: ErasedComponents,
+    paths: Vec<ActorPath>,
     node_id: NodeID,
     pool_info: PoolInfo,
     max_key: u64,
@@ -98,6 +99,7 @@ pub struct NodeManagerConstructor {
         dyn FnOnce(
             Vec<NodeID>,
             ErasedComponents,
+            Vec<ActorPath>,
             ChannelKind,
             &mut AssembledApplication,
         ) -> ErasedComponents,
@@ -108,11 +110,12 @@ impl NodeManagerConstructor {
     pub(crate) fn build(
         self,
         in_channels: Vec<NodeID>,
-        components: Vec<Arc<dyn Any + Send + Sync>>,
+        components: ErasedComponents,
+        paths: Vec<ActorPath>,
         channel_kind: ChannelKind,
         application: &mut AssembledApplication,
     ) -> ErasedComponents {
-        (self.constructor)(in_channels, components, channel_kind, application)
+        (self.constructor)(in_channels, components, paths, channel_kind, application)
     }
 
     pub(crate) fn new<OP: Operator + 'static, B: Backend>(
@@ -124,8 +127,9 @@ impl NodeManagerConstructor {
         NodeManagerConstructor {
             constructor: Box::new(
                 move |in_channels: Vec<NodeID>,
-                      components: ErasedComponents, // TODO ?
-                      channel_kind: ChannelKind,    // ??
+                      components: ErasedComponents,
+                      paths: Vec<ActorPath>,
+                      channel_kind: ChannelKind,
                       app: &mut AssembledApplication| {
                     let epoch_manager_ref = app.epoch_manager();
 
@@ -180,6 +184,7 @@ impl NodeManagerConstructor {
                             node_descriptor,
                             channel_strategy(
                                 components.clone(),
+                                paths.clone(),
                                 node_id,
                                 pool_info.clone(),
                                 max_key as u64,
@@ -242,7 +247,8 @@ impl NodeManagerConstructor {
 pub struct SourceManagerConstructor {
     constructor: Box<
         dyn FnOnce(
-            Vec<Arc<dyn Any + Send + Sync>>,
+            ErasedComponents,
+            Vec<ActorPath>,
             ChannelKind,
             &mut AssembledApplication,
         ) -> ErasedSourceManager,
@@ -252,11 +258,12 @@ pub struct SourceManagerConstructor {
 impl SourceManagerConstructor {
     pub(crate) fn build(
         self,
-        components: Vec<Arc<dyn Any + Send + Sync>>,
+        components: ErasedComponents,
+        paths: Vec<ActorPath>,
         channel_kind: ChannelKind,
         application: &mut AssembledApplication,
     ) -> ErasedSourceManager {
-        (self.constructor)(components, channel_kind, application)
+        (self.constructor)(components, paths, channel_kind, application)
     }
 
     pub(crate) fn new<S: Source + 'static, B: Backend>(
@@ -268,7 +275,8 @@ impl SourceManagerConstructor {
     ) -> Self {
         SourceManagerConstructor {
             constructor: Box::new(
-                move |components: Vec<Arc<dyn std::any::Any + Send + Sync>>,
+                move |components: ErasedComponents,
+                      paths: Vec<ActorPath>,
                       channel_kind: ChannelKind,
                       app: &mut AssembledApplication| {
                     let epoch_manager_ref = app.epoch_manager();
@@ -293,6 +301,7 @@ impl SourceManagerConstructor {
                                 app,
                                 source_index,
                                 components.clone(),
+                                paths,
                                 channel_kind,
                                 source,
                                 source_conf,
@@ -310,6 +319,7 @@ impl SourceManagerConstructor {
                                     app,
                                     source_index,
                                     components.clone(),
+                                    paths.clone(),
                                     channel_kind,
                                     source,
                                     source_conf,
@@ -344,7 +354,8 @@ impl SourceManagerConstructor {
 fn create_source_node<S, B>(
     app: &mut AssembledApplication,
     source_index: usize,
-    components: Vec<Arc<dyn std::any::Any + Send + Sync>>,
+    components: ErasedComponents,
+    paths: Vec<ActorPath>,
     channel_kind: ChannelKind,
     source: S,
     source_conf: SourceConf<S::Item>,
@@ -357,6 +368,7 @@ fn create_source_node<S, B>(
     let max_key = app.app.conf.max_key;
     let channel_strategy = channel_strategy(
         components.clone(),
+        paths,
         NodeID::new(source_index as u32),
         pool_info,
         max_key,

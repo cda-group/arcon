@@ -88,8 +88,13 @@ impl DFGNode {
         self.outgoing_channels
     }
 
+    /// Returns the ChannelKind
+    pub fn get_channel_kind(&self) -> &ChannelKind {
+        &self.channel_kind
+    }
+
     /// Creates output channels which is used to send TO this node
-    pub fn create_output_channels(&self) -> Vec<(KeyRange, NodeID)> {
+    pub fn create_output_channels(&self) -> Vec<NodeID> {
         todo!()
     }
 

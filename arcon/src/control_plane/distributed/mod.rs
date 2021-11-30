@@ -1,5 +1,6 @@
-use crate::data::partition::{create_shards, Shard};
+
 use crate::prelude::*;
+use crate::dataflow::dfg::ChannelKind;
 use fxhash::FxHashMap;
 use kompact::prelude::{ActorPath, NamedPath, SystemPath};
 use multimap::MultiMap;
@@ -41,7 +42,7 @@ impl GlobalNodeId {
 pub struct NodeConfig {
     id: GlobalNodeId,
     input_channels: Vec<NodeID>,
-    output_channels: Vec<(KeyRange, NodeID)>,
+    output_channels: Vec<NodeID>,
 }
 
 impl NodeConfig {
@@ -61,8 +62,8 @@ impl NodeConfig {
         self.input_channels.push(node_id);
     }
 
-    pub fn add_output_channel(&mut self, range: KeyRange, node_id: NodeID) {
-        self.output_channels.push((range, node_id));
+    pub fn add_output_channel(&mut self, node_id: NodeID) {
+        self.output_channels.push(node_id);
     }
 }
 
@@ -150,10 +151,7 @@ impl Deserialiser<NodeConfig> for NodeConfig {
         }
         let output_channels_length = buf.get_u32();
         for _ in 0..output_channels_length {
-            config.add_output_channel(
-                KeyRange::new(buf.get_u32(), buf.get_u32()),
-                NodeID::from(buf.get_u32()),
-            )
+            config.add_output_channel(NodeID::from(buf.get_u32()))
         }
         Ok(config)
     }
@@ -175,9 +173,7 @@ impl Serialisable for NodeConfig {
             buf.put_u32(input_channel.id);
         }
         buf.put_u32(self.output_channels.len() as u32);
-        for (range, node_id) in self.output_channels.iter() {
-            buf.put_u32(range.start);
-            buf.put_u32(range.end);
+        for node_id in self.output_channels.iter() {
             buf.put_u32(node_id.id);
         }
         Ok(())
