@@ -42,7 +42,7 @@ impl GlobalNodeId {
 pub struct NodeConfig {
     id: GlobalNodeId,
     input_channels: Vec<NodeID>,
-    output_channels: Vec<NodeID>,
+    output_channels: Vec<GlobalNodeId>,
 }
 
 impl NodeConfig {
@@ -62,8 +62,12 @@ impl NodeConfig {
         self.input_channels.push(node_id);
     }
 
-    pub fn add_output_channel(&mut self, node_id: NodeID) {
+    pub fn add_output_channel(&mut self, node_id: GlobalNodeId) {
         self.output_channels.push(node_id);
+    }
+
+    pub fn get_output_channels(&self) -> &Vec<GlobalNodeId> {
+        &self.output_channels
     }
 }
 
@@ -151,7 +155,7 @@ impl Deserialiser<NodeConfig> for NodeConfig {
         }
         let output_channels_length = buf.get_u32();
         for _ in 0..output_channels_length {
-            config.add_output_channel(NodeID::from(buf.get_u32()))
+            config.add_output_channel(GlobalNodeId::deserialise(buf)?);
         }
         Ok(config)
     }
@@ -174,7 +178,7 @@ impl Serialisable for NodeConfig {
         }
         buf.put_u32(self.output_channels.len() as u32);
         for node_id in self.output_channels.iter() {
-            buf.put_u32(node_id.id);
+            node_id.serialise(buf)?;
         }
         Ok(())
     }

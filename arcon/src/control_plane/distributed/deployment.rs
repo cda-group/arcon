@@ -8,6 +8,7 @@ pub struct Deployment {
     pub application: AssembledApplication,
     pub process_controller_map: FxHashMap<ProcessId, ActorPath>,
     named_path_map: FxHashMap<GlobalNodeId, ActorPath>,
+    local_nodes: FxHashMap<GlobalNodeId, ErasedComponents>,
     node_configs: Vec<NodeConfig>,
 }
 
@@ -92,13 +93,12 @@ impl Deployment {
     }
 
     pub fn build_node(&mut self, node_config: NodeConfig) -> () {
-        let local_receivers = self.get_local_receivers(&node_config);
-        let remote_receivers = self.get_remote_receivers(&node_config);
+        let (local_receivers, remote_receivers) = self.make_receivers(&node_config);
         let dfg_node = self.application.app.dfg.get(&node_config.id().operator_id).clone();
         let channel_kind = dfg_node.get_channel_kind().clone();
         match dfg_node.kind {
             DFGNodeKind::Source(channel_kind, source_manager_cons) => {
-                let source_manager = source_manager_cons.build(
+                let source_manager = *source_manager_cons.build(
                     local_receivers,
                     remote_receivers,
                     channel_kind,
@@ -107,7 +107,7 @@ impl Deployment {
                 todo!(); // use the source_manager
             }
             DFGNodeKind::Node(manager_cons) => {
-                let node_manager = manager_cons.build(
+                let node_manager = *manager_cons.build(
                     node_config.input_channels,
                     local_receivers,
                     remote_receivers,
@@ -119,16 +119,20 @@ impl Deployment {
         }
     }
 
-    fn get_local_receivers(&self, node_config: &NodeConfig) -> ErasedComponents {
-        todo!();
-        for receivers in node_config.input_channels {
+    fn make_receivers(&self, node_config: &NodeConfig) -> (ErasedComponents, Vec<ActorPath>) {
+        let local = Vec::new();
+        let remote = Vec::new();
+        for output_channels in node_config.get_output_channels() {
+            if let Some(component) self.local_nodes.get(output_channel) {
+                local.push(component);
+            } else {
+                remote.push(
+                    self.named_path_map.get(output_channel)
+                        .expect("No channel found for {:?}", output_channel)
+                );
+            }
         }
-    }
-
-    fn get_remote_receivers(&self, node_config: &NodeConfig) -> Vec<ActorPath> {
-        todo!();
-        for receivers in node_config.input_channels {
-        }
+        (local, remote)
     }
 
     fn insert_node_config(&mut self, node_config: NodeConfig) {
