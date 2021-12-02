@@ -21,12 +21,11 @@ use crate::{
     },
     prelude::*,
     stream::{
-        node::source::SourceEvent,
         source::{local_file::LocalFileSource, Source},
     },
 };
 use arcon_allocator::Allocator;
-use kompact::component::AbstractComponent;
+
 use std::sync::{Arc, Mutex};
 
 pub(crate) mod assembled;

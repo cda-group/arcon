@@ -1,6 +1,6 @@
 use super::*;
 use crate::dataflow::{
-    constructor::{ErasedComponent, ErasedComponents},
+    constructor::{ErasedComponents},
     dfg::*,
 };
 use kompact::prelude::SystemField;

@@ -6,7 +6,7 @@ use crate::{
     data::{flight_serde::FlightSerde, ArconMessage, ArconType, NodeID},
     dataflow::{
         api::{OperatorBuilder, SourceBuilderType},
-        conf::{ParallelismStrategy, SourceConf},
+        conf::{SourceConf},
         dfg::ChannelKind,
     },
     manager::{
@@ -35,7 +35,7 @@ use kompact::{
         RequiredRef, *,
     },
 };
-use std::{any::Any, convert::TryInto, path::PathBuf, sync::Arc};
+use std::{any::Any, path::PathBuf, sync::Arc};
 
 pub type SourceConstructor = Box<
     dyn Fn(
