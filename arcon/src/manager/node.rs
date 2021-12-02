@@ -1,5 +1,6 @@
 use crate::{
     application::conf::logger::ArconLogger,
+    control_plane::distributed::GlobalNodeId,
     data::{ArconMessage, Epoch, NodeID, StateID, Watermark},
     error::*,
     index::EMPTY_STATE_ID,
@@ -101,7 +102,7 @@ where
     /// Monotonically increasing Node ID index
     node_index: u32,
     /// Active Nodes on this NodeManager
-    pub(crate) nodes: FxHashMap<NodeID, AbstractNode<OP::IN>>,
+    pub(crate) nodes: FxHashMap<GlobalNodeId, AbstractNode<OP::IN>>,
     /// Internal manager state
     manager_state: NodeManagerState,
     latest_snapshot: Option<Snapshot>,

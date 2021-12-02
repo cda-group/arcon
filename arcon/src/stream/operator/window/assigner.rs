@@ -248,6 +248,7 @@ mod tests {
     use crate::metrics::perf_event::{HardwareCounter, PerfEvents};
     use crate::{
         application::*,
+        control_plane::distributed::GlobalNodeId,
         data::{ArconMessage, NodeID},
         index::AppenderWindow,
         manager::node::{NodeManager, NodeManagerPort},
@@ -356,6 +357,7 @@ mod tests {
             #[cfg(feature = "hardware_counters")]
             #[cfg(not(test))]
             perf_events,
+            GlobalNodeId::null(),
         );
 
         let window_comp = app.data_system().create(|| node);
@@ -376,7 +378,7 @@ mod tests {
 
         node_manager_comp.on_definition(|cd| {
             // Insert the created Node into the NodeManager
-            cd.nodes.insert(NodeID::new(0), (window_comp, required_ref));
+            cd.nodes.insert(GlobalNodeId::null(), (window_comp, required_ref));
         });
 
         (win_ref, sink)

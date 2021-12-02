@@ -166,7 +166,7 @@ impl<IN: ArconType> Stream<IN> {
         let state_id = builder.state_id();
         state_dir.push(state_id.clone());
 
-        let outgoing_channels = match builder.conf.parallelism_strategy {
+        let paralellism = match builder.conf.parallelism_strategy {
             ParallelismStrategy::Static(num) => num,
             _ => unreachable!("Managed Parallelism not Supported yet"),
         };
@@ -180,14 +180,16 @@ impl<IN: ArconType> Stream<IN> {
         );
 
         let prev_dfg_node = self.ctx.app.dfg.get_mut(&self.prev_dfg_id);
-        let incoming_channels = prev_dfg_node.get_num_outgoing_channels();
-
-        let next_dfg_id = self.ctx.app.dfg.insert(DFGNode::new(
+        let incoming_channels = prev_dfg_node.get_node_ids();
+        let operator_id = prev_dfg_node.get_operator_id() + 1;
+        let dfg_node = DFGNode::new(
             DFGNodeKind::Node(Arc::new(manager_constructor)),
-            outgoing_channels,
+            operator_id,
+            paralellism,
             incoming_channels,
-            vec![self.prev_dfg_id],
-        ));
+        );
+        prev_dfg_node.set_outgoing_channels(dfg_node.get_node_ids());
+        let next_dfg_id = self.ctx.app.dfg.insert(dfg_node);
 
         self.prev_dfg_id = next_dfg_id;
         Stream {

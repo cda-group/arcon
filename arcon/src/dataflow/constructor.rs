@@ -96,7 +96,7 @@ pub trait NodeFactory {
         components: ErasedComponents,
         paths: Vec<ActorPath>,
         application: &mut AssembledApplication,
-    ) -> ErasedComponents;
+    ) -> Vec<(GlobalNodeId, ErasedComponent)>;
 }
 
 impl<OP: Operator + 'static, B: Backend> NodeFactory for NodeConstructor<OP, B> {
@@ -107,7 +107,7 @@ impl<OP: Operator + 'static, B: Backend> NodeFactory for NodeConstructor<OP, B> 
         components: ErasedComponents,
         paths: Vec<ActorPath>,
         application: &mut AssembledApplication,
-    ) -> ErasedComponents {
+    ) -> Vec<(GlobalNodeId, ErasedComponent)> {
         // Initialize state and manager
         self.init_state_dir();
         self.init_node_manager(application, &in_channels);
@@ -158,8 +158,8 @@ impl<OP: Operator + 'static, B: Backend> NodeFactory for NodeConstructor<OP, B> 
         // for the next stage..
         manager_comp.on_definition(|cd| {
             cd.nodes
-                .values()
-                .map(|(comp, _)| Arc::new(comp.clone()) as ErasedComponent)
+                .iter()
+                .map(|(id, (comp, _))| (id.clone(), Arc::new(comp.clone()) as ErasedComponent))
                 .collect()
         })
     }
@@ -192,7 +192,7 @@ impl<OP: Operator + 'static, B: Backend> NodeConstructor<OP, B> {
     }
 
     fn create_node_component(&mut self, application: &mut AssembledApplication, node: Node<OP, B>) {
-        let node_id = node.node_id.node_id;
+        let node_id = node.node_id;
         let node_comp = application.data_system().create(|| node);
         let required_ref: RequiredRef<NodeManagerPort> = node_comp.required_ref();
 

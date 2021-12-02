@@ -51,46 +51,46 @@ impl DFG {
 #[derive(Clone)]
 pub struct DFGNode {
     pub kind: DFGNodeKind,
-    outgoing_channels: usize,
-    ingoing_channels: usize,
+    operator_id: OperatorId,
+    paralellism: usize,
+    outgoing_channels: Vec<NodeID>,
     /// Ingoing edges to a node.
-    ingoing: Vec<OperatorId>,
+    ingoing: Vec<NodeID>,
     channel_kind: ChannelKind,
 }
 
 impl DFGNode {
     pub fn new(
         kind: DFGNodeKind,
-        outgoing_channels: usize,
-        ingoing_channels: usize,
-        ingoing: Vec<OperatorId>,
+        operator_id: OperatorId,
+        paralellism: usize,
+        ingoing: Vec<NodeID>,
     ) -> Self {
         Self {
             kind,
-            outgoing_channels,
-            ingoing_channels,
+            operator_id,
+            paralellism,
+            outgoing_channels: Vec::new(),
             ingoing,
             channel_kind: Default::default(),
         }
     }
 
     /// Returns a vector of NodeID's which this node will receive messages from
-    pub fn get_input_channels(&self) -> Vec<NodeID> {
-        (0..self.ingoing_channels)
-            .map(|i| NodeID::new(i as u32))
-            .collect()
+    pub fn get_input_channels(&self) -> &Vec<NodeID> {
+        &self.ingoing
     }
 
     /// Returns a vector of NodeID's for this node
     pub fn get_node_ids(&self) -> Vec<NodeID> {
-        (0..self.ingoing_channels)
+        (0..self.paralellism)
             .map(|i| NodeID::new(i as u32))
             .collect()
     }
 
     /// Returns the number of outgoing channels from this node
-    pub fn get_num_outgoing_channels(&self) -> usize {
-        self.outgoing_channels
+    pub fn set_outgoing_channels(&mut self, outgoing_channels: Vec<NodeID>) {
+        self.outgoing_channels = outgoing_channels;
     }
 
     /// Returns the ChannelKind
@@ -98,13 +98,8 @@ impl DFGNode {
         &self.channel_kind
     }
 
-    /// Creates output channels which is used to send TO this node
-    pub fn create_output_channels(&self) -> Vec<NodeID> {
-        todo!()
-    }
-
     pub fn get_operator_id(&self) -> OperatorId {
-        todo!()
+        self.operator_id
     }
 }
 

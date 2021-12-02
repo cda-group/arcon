@@ -3,7 +3,6 @@ use crate::prelude::*;
 use fxhash::FxHashMap;
 use kompact::prelude::{ActorPath, NamedPath, SystemPath};
 use multimap::MultiMap;
-// use process_controller::ProcessControllerMessage;
 pub(crate) mod application_controller;
 pub(crate) mod deployment;
 pub(crate) mod process_controller;
@@ -18,7 +17,7 @@ pub type ApplicationId = u32;
 
 /// Logical Name, can be derived from a Deployment.
 /// Resolveable to an `ActorPath` during runtime.
-#[derive(Debug, Clone, PartialEq, std::cmp::Eq, std::hash::Hash)]
+#[derive(Debug, Clone, PartialEq, std::cmp::Eq, std::hash::Hash, Copy)]
 pub struct GlobalNodeId {
     pub process_id: ProcessId,
     pub application_id: ApplicationId,
@@ -27,6 +26,15 @@ pub struct GlobalNodeId {
 }
 
 impl GlobalNodeId {
+    // Helper function to make place-holder GlobalNodeId (used in testing etc.)
+    pub fn null() -> GlobalNodeId {
+        GlobalNodeId{
+            process_id: 0,
+            application_id: 0,
+            operator_id: 0,
+            node_id: NodeID::new(0),
+        }
+    }
     pub fn to_actor_path(&self, system_path: &SystemPath) -> ActorPath {
         let name = format!(
             "{}_{}_{}_{}",
@@ -56,6 +64,52 @@ impl NodeConfig {
     pub fn id(&self) -> &GlobalNodeId {
         &self.id
     }
+}
+
+/// NodeConfigSet Sufficient config to start a Node instance of a known Operator
+#[derive(Debug, Clone)]
+pub struct NodeConfigSet {
+    pub process_id: ProcessId,
+    pub application_id: ApplicationId,
+    pub operator_id: OperatorId,
+    pub node_ids: Vec<NodeID>,
+    input_channels: Vec<NodeID>,
+    output_channels: Vec<GlobalNodeId>,
+}
+
+impl NodeConfigSet {
+    pub fn new(
+        process_id: ProcessId,
+        application_id: ApplicationId,
+        operator_id: OperatorId,
+        input_channels: Vec<NodeID>,
+        output_channels: Vec<GlobalNodeId>,
+    ) -> NodeConfigSet {
+        Self {
+            process_id,
+            application_id,
+            operator_id,
+            node_ids: Vec::new(),
+            input_channels,
+            output_channels
+        }
+    }
+
+    pub fn add_node_id(&mut self, node_id: NodeID) {
+        self.node_ids.push(node_id);
+    }
+
+
+    pub fn get_node_ids(&self) -> Vec<GlobalNodeId> {
+        self.node_ids.iter().map(|node_id| {
+            GlobalNodeId{
+                process_id: self.process_id,
+                application_id: self.application_id,
+                operator_id: self.operator_id,
+                node_id: node_id.clone(),
+            }
+        }).collect()
+    }
 
     pub fn add_input_channel(&mut self, node_id: NodeID) {
         self.input_channels.push(node_id);
@@ -67,6 +121,10 @@ impl NodeConfig {
 
     pub fn get_output_channels(&self) -> &Vec<GlobalNodeId> {
         &self.output_channels
+    }
+
+    pub fn get_input_channels(&self) -> &Vec<NodeID> {
+        &self.input_channels
     }
 }
 
@@ -143,24 +201,33 @@ impl Serialisable for GlobalNodeId {
     }
 }
 
-impl Deserialiser<NodeConfig> for NodeConfig {
+impl Deserialiser<NodeConfigSet> for NodeConfigSet {
     const SER_ID: SerId = 7001;
-    fn deserialise(buf: &mut dyn Buf) -> Result<NodeConfig, SerError> {
-        let id = GlobalNodeId::deserialise(buf)?;
-        let mut config = NodeConfig::new(id);
+    fn deserialise(buf: &mut dyn Buf) -> Result<NodeConfigSet, SerError> {
+        let process_id = buf.get_u32();
+        let application_id = buf.get_u32();
+        let operator_id = buf.get_u32() as usize;
+        let mut set = NodeConfigSet::new(process_id, application_id, operator_id, Vec::new(), Vec::new());
+
+        let node_id_length = buf.get_u32();
+        for _ in 0..node_id_length {
+            set.add_node_id(NodeID::new(buf.get_u32()));
+        }
+
         let input_channels_length = buf.get_u32();
         for _ in 0..input_channels_length {
-            config.add_input_channel(NodeID::from(buf.get_u32()));
+            set.add_input_channel(NodeID::from(buf.get_u32()));
         }
+
         let output_channels_length = buf.get_u32();
         for _ in 0..output_channels_length {
-            config.add_output_channel(GlobalNodeId::deserialise(buf)?);
+            set.add_output_channel(GlobalNodeId::deserialise(buf)?);
         }
-        Ok(config)
+        Ok(set)
     }
 }
 
-impl Serialisable for NodeConfig {
+impl Serialisable for NodeConfigSet {
     fn ser_id(&self) -> SerId {
         Self::SER_ID
     }
@@ -170,11 +237,20 @@ impl Serialisable for NodeConfig {
     }
 
     fn serialise(&self, buf: &mut dyn BufMut) -> Result<(), SerError> {
-        self.id.serialise(buf)?;
+        buf.put_u32(self.process_id);
+        buf.put_u32(self.application_id);
+        buf.put_u32(self.operator_id as u32);
+
+        buf.put_u32(self.node_ids.len() as u32);
+        for node_id in &self.node_ids {
+            buf.put_u32(node_id.id);
+        }
+
         buf.put_u32(self.input_channels.len() as u32);
         for &input_channel in &self.input_channels {
             buf.put_u32(input_channel.id);
         }
+
         buf.put_u32(self.output_channels.len() as u32);
         for node_id in self.output_channels.iter() {
             node_id.serialise(buf)?;
@@ -192,25 +268,16 @@ pub mod test {
     use super::*;
     use bytes::BytesMut;
 
-    fn dummy_global_id() -> GlobalNodeId {
-        GlobalNodeId {
-            process_id: 0,
-            application_id: 0,
-            operator_id: 0,
-            node_id: NodeID::new(0),
-        }
-    }
-
-    fn dummy_node_config() -> NodeConfig {
-        let mut cfg = NodeConfig::new(dummy_global_id());
+    fn dummy_node_config() -> NodeConfigSet {
+        let mut cfg = NodeConfigSet::new(0, 0, 0, Vec::new(), Vec::new());
         cfg.add_input_channel(NodeID::new(4));
         cfg.add_input_channel(NodeID::new(8));
         cfg.add_input_channel(NodeID::new(15));
         cfg.add_input_channel(NodeID::new(16));
         cfg.add_input_channel(NodeID::new(23));
         cfg.add_input_channel(NodeID::new(42));
-        cfg.add_output_channel(KeyRange::new(0, 32), NodeID::new(1337));
-        cfg.add_output_channel(KeyRange::new(33, 64), NodeID::new(666));
+        cfg.add_output_channel(GlobalNodeId::null());
+        cfg.add_output_channel(GlobalNodeId::null());
         cfg
     }
 
@@ -220,8 +287,8 @@ pub mod test {
         let node_config = dummy_node_config();
 
         node_config.serialise(&mut buffer).ok();
-        let deserialised = NodeConfig::deserialise(&mut buffer).unwrap();
-        assert_eq!(deserialised.id(), node_config.id());
+        let deserialised = NodeConfigSet::deserialise(&mut buffer).unwrap();
+        assert_eq!(deserialised.get_node_ids(), node_config.get_node_ids());
         assert_eq!(deserialised.input_channels, node_config.input_channels);
         assert_eq!(deserialised.output_channels, node_config.output_channels);
     }

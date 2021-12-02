@@ -678,6 +678,7 @@ mod tests {
                 epoch_manager_ref,
                 #[cfg(not(test))]
                 perf_events,
+                GlobalNodeId::null(),
             );
 
             let filter_comp = app.data_system().create(|| node);
@@ -695,7 +696,7 @@ mod tests {
 
             node_manager_comp.on_definition(|cd| {
                 // Insert the created Node into the NodeManager
-                cd.nodes.insert(NodeID::new(0), (filter_comp, required_ref));
+                cd.nodes.insert(GlobalNodeId::null(), (filter_comp, required_ref));
             });
 
             (filter_ref, sink)

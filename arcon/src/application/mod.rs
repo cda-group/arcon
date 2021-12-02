@@ -200,8 +200,9 @@ impl Application {
         let mut ctx = Context::new(self);
         let kind = DFGNodeKind::Source(Default::default(), Arc::new(manager_constructor));
         let incoming_channels = 0; // sources have 0 incoming channels..
+        let operator_id = 0; // source is the first operator
         let outgoing_channels = parallelism;
-        let dfg_node = DFGNode::new(kind, outgoing_channels, incoming_channels, vec![]);
+        let dfg_node = DFGNode::new(kind, operator_id, parallelism, vec![]);
         ctx.app.dfg.insert(dfg_node);
         Stream::new(ctx)
     }

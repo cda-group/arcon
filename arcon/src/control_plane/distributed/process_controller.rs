@@ -38,7 +38,7 @@ impl ProcessController {
     pub fn create_operators(
         &mut self,
         node_map: Vec<(GlobalNodeId, ActorPath)>,
-        config_vec: Vec<NodeConfig>,
+        config_vec: Vec<NodeConfigSet>,
     ) {
         for (id, path) in node_map {
             self.deployment.insert_node_id_path(&id, path);
@@ -52,7 +52,7 @@ impl ProcessController {
 #[derive(Debug, Clone)]
 pub(crate) enum ProcessControllerMessage {
     /// Contains GlobalNodeId -> ActorPath and OperatorName -> NodeConfig
-    CreateOperators(Vec<(GlobalNodeId, ActorPath)>, Vec<NodeConfig>),
+    CreateOperators(Vec<(GlobalNodeId, ActorPath)>, Vec<NodeConfigSet>),
     StartSources,
 }
 
@@ -116,7 +116,7 @@ impl Deserialiser<ProcessControllerMessage> for ProcessControllerMessage {
                 }
                 let config_vec_length = buf.get_u32();
                 for _ in 0..config_vec_length {
-                    let node_config = NodeConfig::deserialise(buf)?;
+                    let node_config = NodeConfigSet::deserialise(buf)?;
                     config_vec.push(node_config);
                 }
                 Ok(ProcessControllerMessage::CreateOperators(
