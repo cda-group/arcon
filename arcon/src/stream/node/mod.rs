@@ -17,6 +17,7 @@ use crate::application::conf::logger::ArconLogger;
 #[cfg(feature = "unsafe_flight")]
 use crate::data::flight_serde::unsafe_remote::UnsafeSerde;
 use crate::{
+    control_plane::distributed::GlobalNodeId,
     data::{flight_serde::reliable_remote::ReliableSerde, RawArconMessage, *},
     error::{ArconResult, *},
     index::{AppenderIndex, ArconState, EagerAppender, IndexOps},
@@ -131,6 +132,8 @@ where
     #[cfg(feature = "metrics")]
     /// Struct holding metrics information
     node_metrics: NodeMetrics,
+    /// The ID of this Node, its logical address
+    pub node_id: GlobalNodeId,
 }
 
 impl<OP, B> Node<OP, B>
@@ -152,6 +155,7 @@ where
         #[cfg(all(feature = "hardware_counters", target_os = "linux"))]
         #[cfg(not(test))]
         perf_events: PerfEvents,
+        node_id: GlobalNodeId,
     ) -> Self {
         let timer_id = format!("_{}_timer", descriptor);
         let timer = crate::index::timer::Timer::new(timer_id, backend.clone());
@@ -195,6 +199,7 @@ where
             perf_events,
             #[cfg(feature = "metrics")]
             node_metrics: NodeMetrics::new(),
+            node_id,
         }
     }
 

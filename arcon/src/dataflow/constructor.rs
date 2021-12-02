@@ -2,6 +2,7 @@ use crate::{
     application::conf::logger::ArconLogger,
     application::AssembledApplication,
     buffer::event::PoolInfo,
+    control_plane::distributed::GlobalNodeId,
     data::{ArconMessage, ArconType, NodeID, flight_serde::FlightSerde},
     dataflow::{
         api::{OperatorBuilder, SourceBuilderType},
@@ -86,17 +87,162 @@ fn channel_strategy<OUT: ArconType>(
         _ => unimplemented!(),
     }
 }
-/*
-pub trait Constructor {
-    pub fn build(self,
-        in_channels: Vec<NodeID>,
-        components: Vec<Arc<dyn Any + Send + Sync>>,
-        channel_kind: ChannelKind,
-        application: &mut AssembledApplication
-    ) -> ErasedComponents
-}
-*/
 
+pub(crate) struct NodeConstructor<OP: Operator + 'static, B: Backend> {
+    descriptor: String,
+    state_dir: PathBuf,
+    logger: ArconLogger,
+    channel_kind: ChannelKind,
+    builder: Arc<OperatorBuilder<OP, B>>,
+    node_manager: Option<Arc<Component<NodeManager<OP, B>>>>,
+}
+
+impl<OP: Operator + 'static, B: Backend> NodeConstructor<OP, B> {
+    pub fn new(
+        descriptor: String,
+        state_dir: PathBuf,
+        builder: Arc<OperatorBuilder<OP, B>>,
+        logger: ArconLogger,
+        channel_kind: ChannelKind,
+    ) -> NodeConstructor<OP, B> {
+        NodeConstructor{
+            descriptor,
+            state_dir,
+            logger,
+            channel_kind,
+            builder,
+            node_manager: None,
+        }
+    }
+
+    pub fn build_nodes(&mut self,
+        node_ids: Vec<GlobalNodeId>,
+        in_channels: Vec<NodeID>,
+        components: ErasedComponents,
+        paths: Vec<ActorPath>,
+        application: &mut AssembledApplication
+    ) -> ErasedComponents {
+        // Initialize state and manager
+        self.init_state_dir();
+        self.init_node_manager(application, &in_channels);
+
+        let nodes = node_ids.iter().map(|node_id| {
+            // Create the Nodes arguments
+            let node_descriptor = format!("{}_{}", self.descriptor, node_id.id);
+            let backend = self.create_backend(node_descriptor.clone());
+            let channel_strategy = channel_strategy(
+                components,
+                paths,
+                node_id.node_id,
+                application.app.get_pool_info().clone(),
+                application.app.conf.max_key,
+                self.channel_kind,
+            );
+
+            // Build the Node
+            let node = Node::new(
+                node_descriptor,
+                channel_strategy,
+                self.builder.operator.clone()(),
+                self.builder.state.clone()(backend.clone()),
+                NodeState::new(node_id, in_channels.clone(), backend.clone()),
+                backend.clone(),
+                self.logger,
+                application.epoch_manager().clone(),
+                #[cfg(all(
+                    feature = "hardware_counters",
+                    target_os = "linux",
+                    not(test)
+                ))]
+                builder.conf.perf_events.clone(),
+                node_id,
+            );
+
+            // Create the node and connect it to the NodeManager
+            self.create_node_component(application, node);
+        });
+        // Start NodeManager
+        let manager_comp = self.node_manager.expect("NodeManager must be initialized to spawn node");
+        application.ctrl_system()
+            .start_notify(&manager_comp)
+            .wait_timeout(std::time::Duration::from_millis(2000))
+            .expect("Failed to start NodeManager");
+
+        // Fetch all created Nodes on this NodeManager and return them as Erased
+        // for the next stage..
+        manager_comp.on_definition(|cd| {
+            cd.nodes
+                .values()
+                .map(|(comp, _)| Arc::new(comp.clone()) as ErasedComponent)
+                .collect()
+        })
+    }
+
+    fn start_node_manager(&mut self) {
+        let manager_comp = self.node_manager.expect("NodeManager must be initialized to spawn node");
+
+    }
+//  -> Arc<dyn AbstractComponent<Message = ArconMessage<OP::IN>>> 
+    fn create_node_component(&mut self, application: &mut AssembledApplication, node: Node<OP, B>) {
+        let node_id = node.node_id.node_id;
+        let node_comp = application.data_system().create(|| node);
+        let required_ref: RequiredRef<NodeManagerPort> = node_comp.required_ref();
+        
+        let manager_comp = self.node_manager.expect("NodeManager must be initialized to spawn node");
+        biconnect_components::<NodeManagerPort, _, _>(&manager_comp, &node_comp)
+            .expect("fail");
+
+        let node_comp: Arc<dyn AbstractComponent<Message = ArconMessage<OP::IN>>> =
+            node_comp;
+
+        application.data_system()
+            .start_notify(&node_comp)
+            .wait_timeout(std::time::Duration::from_millis(2000))
+            .expect("Failed to start Node Component");
+
+        manager_comp.on_definition(|cd| {
+            // Insert the created Node into the NodeManager
+            cd.nodes.insert(node_id, (node_comp.clone(), required_ref));
+        });
+        // node_comp
+    }
+
+    fn create_backend(&mut self, node_descriptor: String) -> Arc<B> {
+        let mut node_dir = self.state_dir.clone();
+        node_dir.push(&node_descriptor);
+        self.builder.create_backend(node_dir, node_descriptor.clone())
+    }
+
+    /// Initializes things like state directory and NodeManager
+    fn init_node_manager(&mut self, application: &mut AssembledApplication, in_channels: &Vec<NodeID>) {
+        if self.node_manager.is_none() {
+            // Define the NodeManager
+            let manager = NodeManager::<OP, B>::new(
+                self.descriptor.clone(),
+                application.data_system().clone(),
+                in_channels.clone(),
+                self.logger.clone(),
+                self.builder.clone(),
+            );
+            // Create the actual NodeManager component
+            let manager_comp = application.ctrl_system().create(|| manager);
+
+            // Connect NodeManager to the SnapshotManager of the application
+            application.snapshot_manager().on_definition(|scd| {
+                manager_comp.on_definition(|cd| {
+                    biconnect_ports(&mut scd.manager_port, &mut cd.snapshot_manager_port);
+                });
+            });
+            self.node_manager = Some(manager_comp);
+        }
+    }
+
+    fn init_state_dir(&mut self) {
+        // Ensure there's a state_directory
+        std::fs::create_dir_all(&self.state_dir).unwrap();
+    }
+}
+/*
 pub struct NodeConstructor {
     constructor: Box<
         dyn Fn(
@@ -208,6 +354,7 @@ impl NodeConstructor {
                                 not(test)
                             ))]
                             perf_events.clone(),
+                            node_id,
                         );
 
                         let node_comp = app.data_system().create(|| node);
@@ -249,6 +396,7 @@ impl NodeConstructor {
         }
     }
 }
+*/
 
 pub struct SourceManagerConstructor {
     constructor: Box<

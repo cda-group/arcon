@@ -1,7 +1,12 @@
 use super::constructor::*;
 use crate::control_plane::distributed::OperatorId;
-use crate::data::{partition::KeyRange, NodeID};
+use crate::data::{partition::KeyRange, NodeID, ArconElement, ArconType};
 use crate::prelude::Arc;
+use crate::stream::operator::Operator;
+use crate::index::{timer::ArconTimer, ArconState};
+use std::any::Any;
+use arcon_state::Backend;
+use prost::Message;
 
 /// A logical dataflow-graph.
 #[allow(dead_code)]
@@ -106,7 +111,19 @@ impl DFGNode {
 #[derive(Clone)]
 pub enum DFGNodeKind {
     Source(ChannelKind, Arc<SourceManagerConstructor>),
-    Node(Arc<NodeConstructor>),
+    Node(Arc<NodeConstructor<
+        dyn Operator<
+            IN = dyn ArconType, 
+            OUT = dyn ArconType, 
+            TimerState = dyn Message,
+            OperatorState = dyn ArconState,
+            ElementIterator = dyn IntoIterator<
+                Item = ArconElement<dyn ArconType>,
+                IntoIter = dyn ArconType,
+            >
+        > + 'static, 
+        dyn Backend
+        >>),
 }
 
 #[allow(dead_code)]

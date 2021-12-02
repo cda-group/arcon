@@ -6,7 +6,7 @@ use crate::{
         api::OperatorBuilder,
         conf::{OperatorConf, ParallelismStrategy},
         constructor::*,
-        dfg::{DFGNode, DFGNodeKind},
+        dfg::{DFGNode, DFGNodeKind, ChannelKind},
     },
     index::EmptyState,
     prelude::AssembledApplication,
@@ -171,11 +171,12 @@ impl<IN: ArconType> Stream<IN> {
             _ => unreachable!("Managed Parallelism not Supported yet"),
         };
 
-        let manager_constructor = NodeConstructor::new::<OP, _>(
-            state_id,
+        let manager_constructor = NodeConstructor::new(
+            "Operator".to_string(),
             state_dir,
             Arc::new(builder),
             self.ctx.app.arcon_logger.clone(),
+            ChannelKind::default(),
         );
 
         let prev_dfg_node = self.ctx.app.dfg.get_mut(&self.prev_dfg_id);
