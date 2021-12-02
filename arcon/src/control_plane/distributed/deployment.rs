@@ -1,6 +1,9 @@
 use super::*;
-use crate::dataflow::{dfg::*, constructor::{ErasedComponents, ErasedComponent}};
-use kompact::prelude::{SystemField};
+use crate::dataflow::{
+    constructor::{ErasedComponent, ErasedComponents},
+    dfg::*,
+};
+use kompact::prelude::SystemField;
 
 /// Deployment
 pub struct Deployment {
@@ -58,7 +61,6 @@ impl Deployment {
                 id: global_node_id.clone(),
                 input_channels: input_channels.clone(),
                 output_channels: output_channels.clone(),
-                
             });
         }
     }
@@ -95,7 +97,12 @@ impl Deployment {
 
     pub fn build_node(&mut self, node_config: NodeConfig) -> () {
         let (local_receivers, remote_receivers) = self.make_receivers(&node_config);
-        let dfg_node = self.application.app.dfg.get(&node_config.id().operator_id).clone();
+        let dfg_node = self
+            .application
+            .app
+            .dfg
+            .get(&node_config.id().operator_id)
+            .clone();
         let channel_kind = dfg_node.get_channel_kind().clone();
         match dfg_node.kind {
             DFGNodeKind::Source(channel_kind, source_manager_cons) => {
@@ -105,11 +112,11 @@ impl Deployment {
                     channel_kind,
                     &mut self.application,
                 );
-                
+
                 // todo!(); // use the source_manager
             }
             DFGNodeKind::Node(manager_cons) => {
-                let component = manager_cons.build(
+                /*let components = manager_cons.build_nodes(
                     node_config.id.node_id,
                     node_config.input_channels,
                     local_receivers,
@@ -118,10 +125,10 @@ impl Deployment {
                     &mut self.application,
                 );
                 self.local_nodes.insert(node_config.id, component);
-                // todo!(); // use the node_manager
+                */
+                todo!(); // use the node_manager
             }
         }
-
     }
 
     fn make_receivers(&self, node_config: &NodeConfig) -> (ErasedComponents, Vec<ActorPath>) {
@@ -132,8 +139,10 @@ impl Deployment {
                 local = components.clone();
             } else {
                 remote.push(
-                    self.named_path_map.get(output_channel)
-                        .expect("No channel found for").clone()
+                    self.named_path_map
+                        .get(output_channel)
+                        .expect("No channel found for")
+                        .clone(),
                 );
             }
         }

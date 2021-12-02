@@ -30,7 +30,6 @@ pub struct AssembledApplication {
     pub(crate) abstract_debug_node: Option<ErasedComponent>,
     /// SourceManager component for this application
     pub(crate) source_manager: Option<ErasedSourceManager>,
-
 }
 
 #[derive(Clone)]

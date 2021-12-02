@@ -1,6 +1,5 @@
-
-use crate::prelude::*;
 use crate::dataflow::dfg::ChannelKind;
+use crate::prelude::*;
 use fxhash::FxHashMap;
 use kompact::prelude::{ActorPath, NamedPath, SystemPath};
 use multimap::MultiMap;
