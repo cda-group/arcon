@@ -117,8 +117,8 @@ impl Deployment {
                     channel_kind,
                     &mut self.application,
                 );
-
-                // todo!(); // use the source_manager ? 
+                self.application.set_source_manager(sources);
+                // todo!(); // use the source_manager !
             }
             DFGNodeKind::Node(mut constructor) => {
                 let components = Arc::get_mut(&mut constructor).expect("Failed to make NodeFactory mutable").build_nodes(

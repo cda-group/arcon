@@ -202,6 +202,7 @@ impl AssembledApplication {
             .wait_timeout(REGISTRATION_TIMEOUT)
             .expect("registration failed");
         self.runtime.ctrl_system.start(&process_controller);
+        // await readyness
     }
 }
 
