@@ -293,9 +293,9 @@ where
         let hash = make_hash(&self.hash_builder, key);
         // In best case, we find the record in the RawTable's MOD lane
         // and modify the record in place.
-        if let Some(mut entry) = self.table_find_mod_lane(key, hash) {
+        if let Some(entry) = self.table_find_mod_lane(key, hash) {
             // run the udf on the data
-            f(&mut entry);
+            f(entry);
             return Ok(());
         }
 

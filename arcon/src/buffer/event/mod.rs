@@ -117,19 +117,13 @@ pub struct BufferWriter<T> {
     buffer: Arc<EventBuffer<T>>,
     /// Current writer index
     len: usize,
-    /// Capacity of the allocated buffer
-    capacity: usize,
 }
 
 impl<T> BufferWriter<T> {
     /// Creates a new BufferWriter
     #[inline]
-    pub fn new(buffer: Arc<EventBuffer<T>>, len: usize, capacity: usize) -> BufferWriter<T> {
-        BufferWriter {
-            buffer,
-            len,
-            capacity,
-        }
+    pub fn new(buffer: Arc<EventBuffer<T>>, len: usize) -> BufferWriter<T> {
+        BufferWriter { buffer, len }
     }
     /// Pushes an item onto the buffer
     ///
@@ -298,7 +292,6 @@ impl<T> From<Vec<T>> for BufferReader<T> {
         let mut writer = BufferWriter {
             buffer: Arc::new(event_buffer),
             len: 0,
-            capacity: v.len(),
         };
         for value in v.into_iter() {
             writer.push(value);
@@ -312,21 +305,14 @@ impl<T> From<Vec<T>> for BufferReader<T> {
 pub struct PoolInfo {
     pub(crate) buffer_size: usize,
     pub(crate) capacity: usize,
-    pub(crate) limit: usize,
     pub(crate) allocator: Arc<Mutex<Allocator>>,
 }
 
 impl PoolInfo {
-    pub fn new(
-        buffer_size: usize,
-        capacity: usize,
-        limit: usize,
-        allocator: Arc<Mutex<Allocator>>,
-    ) -> PoolInfo {
+    pub fn new(buffer_size: usize, capacity: usize, allocator: Arc<Mutex<Allocator>>) -> PoolInfo {
         PoolInfo {
             buffer_size,
             capacity,
-            limit,
             allocator,
         }
     }
@@ -376,7 +362,7 @@ impl<T> BufferPool<T> {
         let buf = &self.buffers[self.curr_buffer];
         let mut opt = None;
         if buf.try_reserve() {
-            opt = Some(BufferWriter::new(buf.clone(), 0, buf.capacity()))
+            opt = Some(BufferWriter::new(buf.clone(), 0))
         }
 
         self.index_incr();
@@ -440,7 +426,6 @@ mod tests {
             let mut writer = BufferWriter {
                 buffer: Arc::new(buffer),
                 len: 0,
-                capacity: items.len(),
             };
 
             for item in items.clone() {

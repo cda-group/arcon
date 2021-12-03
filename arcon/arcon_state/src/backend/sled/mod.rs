@@ -282,7 +282,6 @@ mod tests {
     #[derive(Debug)]
     pub struct TestDb {
         sled: Arc<Sled>,
-        dir: TempDir,
     }
 
     impl TestDb {
@@ -294,7 +293,6 @@ mod tests {
             let sled = Sled::create(&dir_path, "testDB".to_string()).unwrap();
             TestDb {
                 sled: Arc::new(sled),
-                dir,
             }
         }
     }

@@ -367,7 +367,6 @@ impl Application {
         PoolInfo::new(
             self.conf.channel_batch_size,
             self.conf.buffer_pool_size,
-            self.conf.buffer_pool_limit,
             self.allocator.clone(),
         )
     }
@@ -412,9 +411,8 @@ impl Application {
     where
         A: ArconType,
     {
-        assert_ne!(
-            self.debug_node.is_some(),
-            true,
+        assert!(
+            self.debug_node.is_none(),
             "DebugNode has already been created!"
         );
         let component = self.ctrl_system.create(|| node);
