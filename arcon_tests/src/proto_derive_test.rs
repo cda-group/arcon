@@ -28,6 +28,13 @@ mod basic {
 mod with_arcon {
 
     #[arcon::proto]
+    struct Advanced {
+        option: Option<u64>,
+        bytes: Vec<u8>,
+        repeated: Vec<Point>,
+    }
+
+    #[arcon::proto]
     struct Point {
         x: i32,
         y: i32,
@@ -42,6 +49,11 @@ mod with_arcon {
     #[test]
     fn test() {
         let _p = Point { x: 0, y: 1 };
+        let _advanced = Advanced {
+            option: Some(1),
+            bytes: Vec::new(),
+            repeated: vec![_p],
+        };
         let _f = Foo {
             this: Some(FooEnum::Bar(5)),
         };

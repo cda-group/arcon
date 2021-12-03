@@ -60,12 +60,12 @@ pub fn arcon_decoder(delimiter: TokenStream, input: TokenStream) -> TokenStream 
 /// Makes a struct or enum prost-compatible.
 ///
 /// ```rust,ignore
-/// #[arcon_macros::prost]
+/// #[arcon_macros::proto]
 /// struct Event {
 ///     s: String,
 ///     p: Point,
 /// }
-/// #[arcon_macros::prost]
+/// #[arcon_macros::proto]
 /// struct Point {
 ///     x: i32,
 ///     y: i32,
