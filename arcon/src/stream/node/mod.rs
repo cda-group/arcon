@@ -627,7 +627,7 @@ mod tests {
 
             app.data_system()
                 .start_notify(&sink)
-                .wait_timeout(std::time::Duration::from_millis(100))
+                .wait_timeout(std::time::Duration::from_millis(1000))
                 .expect("started");
 
             // Construct Channel to the Debug sink
@@ -659,7 +659,7 @@ mod tests {
 
             app.ctrl_system()
                 .start_notify(&node_manager_comp)
-                .wait_timeout(std::time::Duration::from_millis(100))
+                .wait_timeout(std::time::Duration::from_millis(1000))
                 .expect("started");
 
             let node = Node::<OP, _>::new(
@@ -683,7 +683,7 @@ mod tests {
 
             app.data_system()
                 .start_notify(&filter_comp)
-                .wait_timeout(std::time::Duration::from_millis(100))
+                .wait_timeout(std::time::Duration::from_millis(1000))
                 .expect("started");
 
             let filter_ref = filter_comp.actor_ref();
