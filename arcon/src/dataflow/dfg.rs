@@ -1,12 +1,8 @@
 use super::constructor::*;
 use crate::control_plane::distributed::OperatorId;
-use crate::data::{NodeID};
+use crate::data::NodeID;
 
 use crate::prelude::Arc;
-
-
-
-
 
 /// A logical dataflow-graph.
 #[allow(dead_code)]
@@ -88,9 +84,24 @@ impl DFGNode {
             .collect()
     }
 
-    /// Returns the number of outgoing channels from this node
+    /// Sets the number of outgoing channels from this node
     pub fn set_outgoing_channels(&mut self, outgoing_channels: Vec<NodeID>) {
         self.outgoing_channels = outgoing_channels;
+    }
+
+    /// Configures the outgoing ChannelKind for this nodes Factory
+    pub fn set_channel_kind(&mut self, channel_kind: ChannelKind) {
+        match &mut self.kind {
+            DFGNodeKind::Source(source_factory) => {
+                todo!();
+                // mutability issue...
+                //source_factory.set_channel_kind(channel_kind);
+            }
+            DFGNodeKind::Node(node_factory) => {
+                todo!();
+                // node_factory.set_channel_kind(channel_kind);
+            }
+        }
     }
 
     /// Returns the ChannelKind
@@ -105,15 +116,16 @@ impl DFGNode {
 
 #[derive(Clone)]
 pub enum DFGNodeKind {
-    Source(ChannelKind, Arc<SourceManagerConstructor>),
+    Source(Arc<dyn SourceFactory>),
     Node(Arc<dyn NodeFactory>),
 }
-
+/*
 #[allow(dead_code)]
 pub enum SourceKind {
     Single(SourceConstructor),
     Parallel,
 }
+*/
 
 #[derive(Clone, Copy, Debug)]
 #[allow(dead_code)]

@@ -5,8 +5,8 @@ use crate::{
     control_plane::distributed::GlobalNodeId,
     data::{flight_serde::FlightSerde, ArconMessage, ArconType, NodeID},
     dataflow::{
-        api::{OperatorBuilder, SourceBuilderType},
-        conf::{SourceConf},
+        api::{OperatorBuilder, ParallelSourceBuilder, SourceBuilder, SourceBuilderType},
+        conf::SourceConf,
         dfg::ChannelKind,
     },
     manager::{
@@ -37,13 +37,13 @@ use kompact::{
 };
 use std::{any::Any, path::PathBuf, sync::Arc};
 
-pub type SourceConstructor = Box<
+/*pub type SourceConstructor = Box<
     dyn Fn(
         Vec<Arc<dyn Any + Send + Sync>>,
         ChannelKind,
         &mut KompactSystem,
     ) -> Arc<dyn AbstractComponent<Message = SourceEvent>>,
->;
+>; */
 pub type ErasedSourceManager = Arc<dyn AbstractComponent<Message = SourceEvent>>;
 
 pub type ErasedComponent = Arc<dyn Any + Send + Sync>;
@@ -97,6 +97,19 @@ pub trait NodeFactory {
         paths: Vec<ActorPath>,
         application: &mut AssembledApplication,
     ) -> Vec<(GlobalNodeId, ErasedComponent)>;
+
+    fn set_channel_kind(&mut self, channel_kind: ChannelKind);
+}
+
+pub trait SourceFactory {
+    fn build_source(
+        &mut self,
+        components: ErasedComponents,
+        paths: Vec<ActorPath>,
+        application: &mut AssembledApplication,
+    ) -> ErasedSourceManager;
+
+    fn set_channel_kind(&mut self, channel_kind: ChannelKind);
 }
 
 impl<OP: Operator + 'static, B: Backend> NodeFactory for NodeConstructor<OP, B> {
@@ -163,6 +176,10 @@ impl<OP: Operator + 'static, B: Backend> NodeFactory for NodeConstructor<OP, B> 
                 .collect()
         })
     }
+
+    fn set_channel_kind(&mut self, channel_kind: ChannelKind) {
+        self.channel_kind = channel_kind;
+    }
 }
 pub(crate) struct NodeConstructor<OP: Operator + 'static, B: Backend> {
     descriptor: String,
@@ -179,13 +196,12 @@ impl<OP: Operator + 'static, B: Backend> NodeConstructor<OP, B> {
         state_dir: PathBuf,
         builder: Arc<OperatorBuilder<OP, B>>,
         logger: ArconLogger,
-        channel_kind: ChannelKind,
     ) -> NodeConstructor<OP, B> {
         NodeConstructor {
             descriptor,
             state_dir,
             logger,
-            channel_kind,
+            channel_kind: ChannelKind::default(),
             builder,
             node_manager: None,
         }
@@ -258,6 +274,125 @@ impl<OP: Operator + 'static, B: Backend> NodeConstructor<OP, B> {
     }
 }
 
+pub(crate) struct SourceConstructor<S: Source + 'static, B: Backend> {
+    descriptor: String,
+    builder_type: SourceBuilderType<S, B>,
+    backend: Arc<B>,
+    watermark_interval: u64,
+    time: ArconTime,
+    channel_kind: ChannelKind,
+}
+
+impl<S: Source + 'static, B: Backend> SourceConstructor<S, B> {
+    pub(crate) fn new(
+        descriptor: String,
+        builder_type: SourceBuilderType<S, B>,
+        backend: Arc<B>,
+        watermark_interval: u64,
+        time: ArconTime,
+    ) -> Self {
+        SourceConstructor {
+            descriptor,
+            builder_type,
+            backend,
+            watermark_interval,
+            time,
+            channel_kind: ChannelKind::default(),
+        }
+    }
+
+    // Source Manager needs to be (re-)inserted after calling this function
+    fn create_source_manager(
+        &mut self,
+        application: &mut AssembledApplication,
+    ) -> Arc<Component<SourceManager<B>>> {
+        let manager = SourceManager::new(
+            self.descriptor.clone(),
+            self.time,
+            self.watermark_interval,
+            application.epoch_manager(),
+            self.backend.clone(),
+            application.app.arcon_logger.clone(),
+        );
+        application.ctrl_system().create(|| manager)
+    }
+
+    fn start_source_manager(
+        &mut self,
+        source_manager: &Arc<Component<SourceManager<B>>>,
+        application: &mut AssembledApplication,
+    ) {
+        let source_ref: ActorRefStrong<SourceEvent> =
+            source_manager.actor_ref().hold().expect("fail");
+        // Set source reference at the EpochManager
+        if let Some(epoch_manager) = &application.runtime.epoch_manager {
+            epoch_manager.on_definition(|cd| {
+                cd.source_manager = Some(source_ref);
+            });
+        }
+
+        application
+            .ctrl_system()
+            .start_notify(&source_manager)
+            .wait_timeout(std::time::Duration::from_millis(2000))
+            .expect("Failed to start SourceManager");
+    }
+}
+
+impl<S: Source + 'static, B: Backend> SourceFactory for SourceConstructor<S, B> {
+    fn build_source(
+        &mut self,
+        components: ErasedComponents,
+        paths: Vec<ActorPath>,
+        application: &mut AssembledApplication,
+    ) -> ErasedSourceManager {
+        let source_manager = self.create_source_manager(application);
+
+        match &self.builder_type {
+            SourceBuilderType::Single(builder) => {
+                let source_cons = builder.constructor.clone();
+                let source_conf = builder.conf.clone();
+                let source_index = 0;
+                let source = source_cons(self.backend.clone());
+                create_source_node(
+                    application,
+                    source_index,
+                    components,
+                    paths,
+                    self.channel_kind,
+                    source,
+                    source_conf,
+                    &source_manager,
+                );
+            }
+            SourceBuilderType::Parallel(builder) => {
+                let source_cons = builder.constructor.clone();
+                let parallelism = builder.parallelism;
+                for source_index in 0..builder.parallelism {
+                    let source_conf = builder.conf.clone();
+                    let source = source_cons(self.backend.clone(), source_index, parallelism); // todo
+                    create_source_node(
+                        application,
+                        source_index,
+                        components.clone(),
+                        paths.clone(),
+                        self.channel_kind,
+                        source,
+                        source_conf,
+                        &source_manager,
+                    );
+                }
+            }
+        }
+        self.start_source_manager(&source_manager, application);
+        source_manager
+    }
+
+    fn set_channel_kind(&mut self, channel_kind: ChannelKind) {
+        self.channel_kind = channel_kind;
+    }
+}
+/*
 pub struct SourceManagerConstructor {
     constructor: Box<
         dyn Fn(
@@ -363,7 +498,7 @@ impl SourceManagerConstructor {
         }
     }
 }
-
+*/
 // helper function to create source node..
 fn create_source_node<S, B>(
     app: &mut AssembledApplication,

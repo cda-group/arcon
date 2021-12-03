@@ -378,7 +378,8 @@ mod tests {
 
         node_manager_comp.on_definition(|cd| {
             // Insert the created Node into the NodeManager
-            cd.nodes.insert(GlobalNodeId::null(), (window_comp, required_ref));
+            cd.nodes
+                .insert(GlobalNodeId::null(), (window_comp, required_ref));
         });
 
         (win_ref, sink)

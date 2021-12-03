@@ -15,14 +15,12 @@ use crate::{
     dataflow::{
         api::{ParallelSourceBuilder, SourceBuilder, SourceBuilderType},
         conf::SourceConf,
-        constructor::SourceManagerConstructor,
+        constructor::SourceConstructor,
         dfg::*,
         stream::Context,
     },
     prelude::*,
-    stream::{
-        source::{local_file::LocalFileSource, Source},
-    },
+    stream::source::{local_file::LocalFileSource, Source},
 };
 use arcon_allocator::Allocator;
 
@@ -190,7 +188,7 @@ impl Application {
         state_dir.push("source_manager");
         let backend = Arc::new(B::create(&state_dir, String::from("source_manager")).unwrap());
         let time = builder_type.time();
-        let manager_constructor = SourceManagerConstructor::new(
+        let manager_constructor = SourceConstructor::new(
             String::from("source_manager"),
             builder_type,
             backend,
@@ -198,7 +196,7 @@ impl Application {
             time,
         );
         let mut ctx = Context::new(self);
-        let kind = DFGNodeKind::Source(Default::default(), Arc::new(manager_constructor));
+        let kind = DFGNodeKind::Source(Arc::new(manager_constructor));
         let incoming_channels = 0; // sources have 0 incoming channels..
         let operator_id = 0; // source is the first operator
         let outgoing_channels = parallelism;

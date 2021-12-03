@@ -42,7 +42,9 @@ impl Deployment {
             );
             deployment.node_configs.append(&mut config_sets.clone());
             output_channels.clear();
-            config_sets.iter().for_each(|set| output_channels.append(&mut set.get_node_ids()));
+            config_sets
+                .iter()
+                .for_each(|set| output_channels.append(&mut set.get_node_ids()));
         }
         deployment
     }
@@ -84,7 +86,7 @@ impl Deployment {
                 application_id,
                 operator_id,
                 input_channels.clone(),
-                output_channels.clone()
+                output_channels.clone(),
             );
             for _ in 0..nodes_per_process {
                 if let Some(node_id) = node_id_iter.next() {
@@ -101,7 +103,8 @@ impl Deployment {
     }
 
     pub fn build_node(&mut self, node_config_set: NodeConfigSet) -> () {
-        let (local_receivers, remote_receivers) = self.make_receivers(&node_config_set.get_output_channels());
+        let (local_receivers, remote_receivers) =
+            self.make_receivers(&node_config_set.get_output_channels());
         let dfg_node = self
             .application
             .app
@@ -110,32 +113,34 @@ impl Deployment {
             .clone();
         let channel_kind = dfg_node.get_channel_kind().clone();
         match dfg_node.kind {
-            DFGNodeKind::Source(channel_kind, source_manager_cons) => {
-                let sources = source_manager_cons.build(
-                    local_receivers,
-                    remote_receivers,
-                    channel_kind,
-                    &mut self.application,
-                );
+            DFGNodeKind::Source(mut source_factory) => {
+                let sources = Arc::get_mut(&mut source_factory)
+                    .expect("Failed to make SourceFactory mutable")
+                    .build_source(local_receivers, remote_receivers, &mut self.application);
                 self.application.set_source_manager(sources);
-                // todo!(); // use the source_manager !
+                todo!(); // use the source_manager !
             }
             DFGNodeKind::Node(mut constructor) => {
-                let components = Arc::get_mut(&mut constructor).expect("Failed to make NodeFactory mutable").build_nodes(
-                    node_config_set.get_node_ids(),
-                    node_config_set.get_input_channels().clone(),
-                    local_receivers,
-                    remote_receivers,
-                    &mut self.application,
-                );
-                components.iter().cloned().for_each(
-                    |(id, component)| {self.local_nodes.insert(id, component);}
-                );
+                let components = Arc::get_mut(&mut constructor)
+                    .expect("Failed to make NodeFactory mutable")
+                    .build_nodes(
+                        node_config_set.get_node_ids(),
+                        node_config_set.get_input_channels().clone(),
+                        local_receivers,
+                        remote_receivers,
+                        &mut self.application,
+                    );
+                components.iter().cloned().for_each(|(id, component)| {
+                    self.local_nodes.insert(id, component);
+                });
             }
         }
     }
 
-    fn make_receivers(&self, output_channels: &Vec<GlobalNodeId>) -> (ErasedComponents, Vec<ActorPath>) {
+    fn make_receivers(
+        &self,
+        output_channels: &Vec<GlobalNodeId>,
+    ) -> (ErasedComponents, Vec<ActorPath>) {
         let mut local = Vec::new();
         let mut remote = Vec::new();
         for output_channel in output_channels {

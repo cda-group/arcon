@@ -176,7 +176,6 @@ impl<IN: ArconType> Stream<IN> {
             state_dir,
             Arc::new(builder),
             self.ctx.app.arcon_logger.clone(),
-            ChannelKind::default(),
         );
 
         let prev_dfg_node = self.ctx.app.dfg.get_mut(&self.prev_dfg_id);

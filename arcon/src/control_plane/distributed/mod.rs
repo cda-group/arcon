@@ -1,4 +1,3 @@
-
 use crate::prelude::*;
 use fxhash::FxHashMap;
 use kompact::prelude::{ActorPath, NamedPath, SystemPath};
@@ -28,7 +27,7 @@ pub struct GlobalNodeId {
 impl GlobalNodeId {
     // Helper function to make place-holder GlobalNodeId (used in testing etc.)
     pub fn null() -> GlobalNodeId {
-        GlobalNodeId{
+        GlobalNodeId {
             process_id: 0,
             application_id: 0,
             operator_id: 0,
@@ -91,7 +90,7 @@ impl NodeConfigSet {
             operator_id,
             node_ids: Vec::new(),
             input_channels,
-            output_channels
+            output_channels,
         }
     }
 
@@ -99,16 +98,16 @@ impl NodeConfigSet {
         self.node_ids.push(node_id);
     }
 
-
     pub fn get_node_ids(&self) -> Vec<GlobalNodeId> {
-        self.node_ids.iter().map(|node_id| {
-            GlobalNodeId{
+        self.node_ids
+            .iter()
+            .map(|node_id| GlobalNodeId {
                 process_id: self.process_id,
                 application_id: self.application_id,
                 operator_id: self.operator_id,
                 node_id: node_id.clone(),
-            }
-        }).collect()
+            })
+            .collect()
     }
 
     pub fn add_input_channel(&mut self, node_id: NodeID) {
@@ -207,7 +206,13 @@ impl Deserialiser<NodeConfigSet> for NodeConfigSet {
         let process_id = buf.get_u32();
         let application_id = buf.get_u32();
         let operator_id = buf.get_u32() as usize;
-        let mut set = NodeConfigSet::new(process_id, application_id, operator_id, Vec::new(), Vec::new());
+        let mut set = NodeConfigSet::new(
+            process_id,
+            application_id,
+            operator_id,
+            Vec::new(),
+            Vec::new(),
+        );
 
         let node_id_length = buf.get_u32();
         for _ in 0..node_id_length {
