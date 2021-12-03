@@ -22,7 +22,6 @@ unsafe impl Sync for Rocks {}
 #[derive(Debug)]
 pub struct Rocks {
     inner: UnsafeCell<DB>,
-    path: PathBuf,
     restored: bool,
     name: String,
 }
@@ -171,7 +170,6 @@ impl Backend for Rocks {
         };
         Ok(Rocks {
             inner: UnsafeCell::new(DB::open_cf_descriptors(&opts, &path, cfds)?),
-            path,
             restored: false,
             name,
         })
@@ -210,7 +208,6 @@ impl Backend for Rocks {
         }
 
         Rocks::create(live_path, name).map(|mut r| {
-            //r.get_mut().restored = true;
             r.restored = true;
             r
         })

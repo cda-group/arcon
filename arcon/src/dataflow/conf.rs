@@ -22,7 +22,7 @@ cfg_if::cfg_if! {
 
 /// Defines how the runtime will manage the
 /// parallelism for a specific Arcon Operator.
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Deserialize, Copy, Clone, Debug)]
 pub enum ParallelismStrategy {
     /// Use a static number of Arcon nodes
     Static(usize),
@@ -40,7 +40,7 @@ impl Default for ParallelismStrategy {
 /// Defines whether a stream is Keyed or Local
 ///
 /// Streams are by default Keyed in Arcon.
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Deserialize, Clone, Copy, Debug)]
 pub enum StreamKind {
     Keyed,
     Local,
@@ -119,7 +119,7 @@ impl<S: ArconType> Default for SourceConf<S> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct WindowConf {
     pub assigner: Assigner,
     pub kind: StreamKind,

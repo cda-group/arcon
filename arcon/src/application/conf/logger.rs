@@ -10,7 +10,7 @@ pub const ARCON_LOG_NAME: &str = "arcon.log";
 pub const KOMPACT_LOG_NAME: &str = "kompact.log";
 
 /// Defines a logger type
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Deserialize, Clone, Copy, Debug)]
 pub enum LoggerType {
     /// Logs output directly to the terminal
     Terminal,

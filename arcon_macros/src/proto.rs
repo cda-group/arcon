@@ -1,6 +1,7 @@
 use proc_macro as pm;
 use proc_macro2 as pm2;
 use quote::quote;
+use syn::PathSegment;
 
 pub fn derive_proto(item: pm::TokenStream) -> pm::TokenStream {
     let item: syn::Item = syn::parse_macro_input!(item as syn::Item);
@@ -73,6 +74,13 @@ fn rewrite_struct(mut item: syn::ItemStruct) -> pm::TokenStream {
     .into()
 }
 
+#[derive(Debug)]
+enum FieldKind {
+    Required,
+    Repeated,
+    Option,
+}
+
 /// Synthesizes a prost field-attribute with an optional tag from a Rust type.
 /// For example:
 ///
@@ -84,10 +92,11 @@ fn rewrite_struct(mut item: syn::ItemStruct) -> pm::TokenStream {
 ///
 /// For prost-type conversions, see: https://github.com/danburkert/prost#fields.
 fn get_prost_field_attr(ty: &syn::Type, tag: Option<usize>) -> syn::Attribute {
-    let ty = match &ty {
+    let (ty, kind) = match &ty {
         syn::Type::Path(ty) => {
             let seg = ty.path.segments.iter().next().unwrap();
-            match seg.ident.to_string().as_str() {
+            let rust_field = seg.ident.to_string();
+            let proto_field = match rust_field.as_str() {
                 "i32" => "int32",
                 "i64" => "int64",
                 "bool" => "bool",
@@ -99,10 +108,13 @@ fn get_prost_field_attr(ty: &syn::Type, tag: Option<usize>) -> syn::Attribute {
                 // This case covers messages which are wrapped in Box<T> as well
                 _ => "message",
             }
-            .to_string()
+            .to_string();
+
+            let kind = parse_field_kind(&rust_field, seg);
+            (proto_field, kind)
         }
         // unit-type
-        syn::Type::Tuple(ty) if ty.elems.is_empty() => "message".to_string(),
+        syn::Type::Tuple(ty) if ty.elems.is_empty() => ("message".to_string(), FieldKind::Required),
         _ => panic!("#[proto] expects all types to be mangled and de-aliased."),
     };
     let ident = syn::Ident::new(&ty, pm2::Span::call_site());
@@ -110,6 +122,39 @@ fn get_prost_field_attr(ty: &syn::Type, tag: Option<usize>) -> syn::Attribute {
         let lit = syn::LitStr::new(&format!("{}", tag), pm2::Span::call_site());
         syn::parse_quote!(#[prost(#ident, tag = #lit)])
     } else {
-        syn::parse_quote!(#[prost(#ident, required)])
+        match kind {
+            FieldKind::Required => syn::parse_quote!(#[prost(#ident, required)]),
+            FieldKind::Repeated => syn::parse_quote!(#[prost(#ident, repeated)]),
+            FieldKind::Option => syn::parse_quote!(#[prost(#ident)]),
+        }
+    }
+}
+
+/// Figure out which FieldKind to apply (Required, Option, Repeated)
+fn parse_field_kind(rust_field: &str, seg: &PathSegment) -> FieldKind {
+    if rust_field == "Option" {
+        FieldKind::Option
+    } else if rust_field == "Vec" {
+        let kind = if let syn::PathArguments::AngleBracketed(ag) = &seg.arguments {
+            if let syn::GenericArgument::Type(syn::Type::Path(tp)) = ag.args.iter().next().unwrap()
+            {
+                let inner_seg = tp.path.segments.iter().next().unwrap();
+                // Vec<u8> is built-in for Prost == Required
+                // Vec<Message> == Repeated
+                if inner_seg.ident == "u8" {
+                    FieldKind::Required
+                } else {
+                    FieldKind::Repeated
+                }
+            } else {
+                panic!("Unable to parse FieldKind");
+            }
+        } else {
+            panic!("Unable to parse FieldKind");
+        };
+
+        kind
+    } else {
+        FieldKind::Required
     }
 }

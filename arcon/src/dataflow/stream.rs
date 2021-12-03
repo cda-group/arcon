@@ -215,7 +215,7 @@ impl<IN: ArconType> Stream<IN> {
         }
     }
 
-    /// Adds a final [MeasureSink] before building an AssembledApplication
+    /// Adds a final MeasureSink before building an AssembledApplication
     ///
     /// `log_frequency` can be used to tune how often (e.g., every 1000000 events) measurements are logged.
     ///

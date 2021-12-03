@@ -15,7 +15,7 @@ Arcon is in development and should be considered experimental until further noti
 
 #### Rust Version
 
-Arcon builds against the latest stable release and the current MSRV is 1.53.0.
+Arcon builds against the latest stable release and the current MSRV is 1.56.1
 
 ### Roadmap
 

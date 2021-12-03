@@ -21,14 +21,6 @@ pub type AbstractNode<IN> = (
     RequiredRef<NodeManagerPort>,
 );
 
-#[cfg(feature = "metrics")]
-#[derive(Debug, Clone)]
-pub struct MetricReport {
-    pub(crate) descriptor: String,
-    pub(crate) id: NodeID,
-    pub(crate) parallelism: usize,
-}
-
 /// Enum representing events that a Node may send to its manager
 #[derive(Clone, Debug)]
 #[allow(dead_code)]

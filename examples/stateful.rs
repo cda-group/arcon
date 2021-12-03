@@ -1,12 +1,11 @@
 use arcon::prelude::*;
 use std::sync::Arc;
 
-#[derive(Arcon, Arrow, prost::Message, Copy, Clone)]
+#[arcon::proto]
+#[derive(Arcon, Arrow, Copy, Clone)]
 #[arcon(unsafe_ser_id = 12, reliable_ser_id = 13, version = 1, keys = "id")]
 pub struct Event {
-    #[prost(uint64)]
     pub id: u64,
-    #[prost(float)]
     pub data: f32,
 }
 

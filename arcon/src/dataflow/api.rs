@@ -107,7 +107,7 @@ pub struct ParallelSourceBuilder<S: Source, Backend = DefaultBackend> {
 }
 
 /// Enum containing different window assigner types
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub enum Assigner {
     Sliding {
         length: Time,

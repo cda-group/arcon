@@ -16,6 +16,7 @@ pub enum ExecutionMode {
     Distributed(DistributedConf),
 }
 #[derive(Deserialize, Clone, Debug)]
+#[allow(dead_code)]
 pub struct DistributedConf {
     peers: Vec<String>, // ["192.168.1.1:2000",  "192.168.1.2:2000"]
 }

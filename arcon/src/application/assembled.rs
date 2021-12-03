@@ -28,8 +28,8 @@ impl AssembledApplication {
     ///
     /// The function will panic if no sources have been created
     pub fn start(&mut self) {
-        assert_ne!(
-            self.start_flag, true,
+        assert!(
+            !self.start_flag,
             "The AssembledApplication has already been started"
         );
 

@@ -39,7 +39,6 @@ pub use assembled::AssembledApplication;
 #[cfg(all(feature = "prometheus_exporter", feature = "metrics", not(test)))]
 use metrics_exporter_prometheus::PrometheusBuilder;
 
-/// A Pipeline is the starting point of all Arcon applications.
 /// An Application is the starting point of all Arcon applications.
 /// It contains all necessary runtime components, configuration,
 /// and a custom allocator.
@@ -368,7 +367,6 @@ impl Application {
         PoolInfo::new(
             self.conf.channel_batch_size,
             self.conf.buffer_pool_size,
-            self.conf.buffer_pool_limit,
             self.allocator.clone(),
         )
     }
@@ -413,9 +411,8 @@ impl Application {
     where
         A: ArconType,
     {
-        assert_ne!(
-            self.debug_node.is_some(),
-            true,
+        assert!(
+            self.debug_node.is_none(),
             "DebugNode has already been created!"
         );
         let component = self.ctrl_system.create(|| node);

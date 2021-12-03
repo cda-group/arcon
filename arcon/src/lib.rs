@@ -20,7 +20,7 @@
 //!
 //! - `rocksdb`
 //!     - Enables RocksDB to be used as a Backend
-//! - `metrics'
+//! - `metrics`
 //!     - Records internal runtime metrics and allows users to register custom metrics from an Operator
 //!     - If no exporter (e.g., prometheus_exporter) is enabled, the metrics will be logged by the runtime.
 //! - `hardware_counters`
@@ -84,6 +84,7 @@ pub use kompact::prelude::SerId;
 pub use twox_hash::XxHash64;
 
 // exposed for benching
+#[doc(hidden)]
 pub mod bench_utils {
     pub use crate::buffer::event::{BufferPool, BufferReader};
 }
