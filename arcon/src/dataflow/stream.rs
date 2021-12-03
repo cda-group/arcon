@@ -6,7 +6,7 @@ use crate::{
         api::OperatorBuilder,
         conf::{OperatorConf, ParallelismStrategy},
         constructor::*,
-        dfg::{ChannelKind, DFGNode, DFGNodeKind},
+        dfg::{DFGNode, DFGNodeKind},
     },
     index::EmptyState,
     prelude::AssembledApplication,

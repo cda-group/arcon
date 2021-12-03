@@ -5,7 +5,7 @@ use crate::{
     control_plane::distributed::GlobalNodeId,
     data::{flight_serde::FlightSerde, ArconMessage, ArconType, NodeID},
     dataflow::{
-        api::{OperatorBuilder, ParallelSourceBuilder, SourceBuilder, SourceBuilderType},
+        api::{OperatorBuilder, SourceBuilderType},
         conf::SourceConf,
         dfg::ChannelKind,
     },
@@ -31,19 +31,12 @@ use arcon_state::Backend;
 use kompact::{
     component::AbstractComponent,
     prelude::{
-        biconnect_components, biconnect_ports, ActorRefFactory, ActorRefStrong, KompactSystem,
+        biconnect_components, biconnect_ports, ActorRefFactory, ActorRefStrong,
         RequiredRef, *,
     },
 };
 use std::{any::Any, path::PathBuf, sync::Arc};
 
-/*pub type SourceConstructor = Box<
-    dyn Fn(
-        Vec<Arc<dyn Any + Send + Sync>>,
-        ChannelKind,
-        &mut KompactSystem,
-    ) -> Arc<dyn AbstractComponent<Message = SourceEvent>>,
->; */
 pub type ErasedSourceManager = Arc<dyn AbstractComponent<Message = SourceEvent>>;
 
 pub type ErasedComponent = Arc<dyn Any + Send + Sync>;
@@ -392,113 +385,7 @@ impl<S: Source + 'static, B: Backend> SourceFactory for SourceConstructor<S, B> 
         self.channel_kind = channel_kind;
     }
 }
-/*
-pub struct SourceManagerConstructor {
-    constructor: Box<
-        dyn Fn(
-            ErasedComponents,
-            Vec<ActorPath>,
-            ChannelKind,
-            &mut AssembledApplication,
-        ) -> ErasedSourceManager,
-    >,
-}
 
-impl SourceManagerConstructor {
-    pub(crate) fn build(
-        &self,
-        components: ErasedComponents,
-        paths: Vec<ActorPath>,
-        channel_kind: ChannelKind,
-        application: &mut AssembledApplication,
-    ) -> ErasedSourceManager {
-        (self.constructor)(components, paths, channel_kind, application)
-    }
-
-    pub(crate) fn new<S: Source + 'static, B: Backend>(
-        descriptor: String,
-        builder_type: SourceBuilderType<S, B>,
-        backend: Arc<B>,
-        watermark_interval: u64,
-        time: ArconTime,
-    ) -> Self {
-        SourceManagerConstructor {
-            constructor: Box::new(
-                move |components: ErasedComponents,
-                      paths: Vec<ActorPath>,
-                      channel_kind: ChannelKind,
-                      app: &mut AssembledApplication| {
-                    let epoch_manager_ref = app.epoch_manager();
-
-                    let manager = SourceManager::new(
-                        descriptor.clone(),
-                        time,
-                        watermark_interval,
-                        epoch_manager_ref,
-                        backend.clone(),
-                        app.app.arcon_logger.clone(),
-                    );
-                    let source_manager_comp = app.ctrl_system().create(|| manager);
-
-                    match &builder_type {
-                        SourceBuilderType::Single(builder) => {
-                            let source_cons = builder.constructor.clone();
-                            let source_conf = builder.conf.clone();
-                            let source_index = 0;
-                            let source = source_cons(backend.clone());
-                            create_source_node(
-                                app,
-                                source_index,
-                                components.clone(),
-                                paths,
-                                channel_kind,
-                                source,
-                                source_conf,
-                                &source_manager_comp,
-                            );
-                        }
-                        SourceBuilderType::Parallel(builder) => {
-                            let source_cons = builder.constructor.clone();
-                            let parallelism = builder.parallelism;
-                            for source_index in 0..builder.parallelism {
-                                let source_conf = builder.conf.clone();
-                                let source =
-                                    source_cons(backend.clone(), source_index, parallelism); // todo
-                                create_source_node(
-                                    app,
-                                    source_index,
-                                    components.clone(),
-                                    paths.clone(),
-                                    channel_kind,
-                                    source,
-                                    source_conf,
-                                    &source_manager_comp,
-                                );
-                            }
-                        }
-                    }
-                    let source_ref: ActorRefStrong<SourceEvent> =
-                        source_manager_comp.actor_ref().hold().expect("fail");
-
-                    // Set source reference at the EpochManager
-                    if let Some(epoch_manager) = &app.runtime.epoch_manager {
-                        epoch_manager.on_definition(|cd| {
-                            cd.source_manager = Some(source_ref);
-                        });
-                    }
-
-                    app.ctrl_system()
-                        .start_notify(&source_manager_comp)
-                        .wait_timeout(std::time::Duration::from_millis(2000))
-                        .expect("Failed to start SourceManager");
-
-                    source_manager_comp
-                },
-            ),
-        }
-    }
-}
-*/
 // helper function to create source node..
 fn create_source_node<S, B>(
     app: &mut AssembledApplication,

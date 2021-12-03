@@ -56,7 +56,7 @@ mod tests {
 
     #[test]
     fn filter_test() {
-        let mut app = Application::default()
+        let app = Application::default()
             .with_debug_node()
             .iterator(0..10, |conf| {
                 conf.set_arcon_time(ArconTime::Process);
