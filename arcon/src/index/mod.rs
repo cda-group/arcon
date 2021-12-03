@@ -73,6 +73,7 @@ pub trait ArconState: Send + 'static {
 pub const EMPTY_STATE_ID: &str = "!";
 
 /// Struct used to signal an empty ArconState implementation
+#[derive(Clone, Copy)]
 pub struct EmptyState;
 
 impl ArconState for EmptyState {

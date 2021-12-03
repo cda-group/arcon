@@ -39,7 +39,7 @@ impl<E: Value> TimerEvent<E> {
     }
 }
 
-#[derive(prost::Message, PartialEq, Clone)]
+#[derive(prost::Message, PartialEq, Clone, Copy)]
 pub struct TimeoutId {
     #[prost(uint64, tag = "1")]
     key: u64,
@@ -183,7 +183,7 @@ where
     pub fn schedule_after(&mut self, id: TimeoutId, delay: u64, entry: V) -> TimerResult<V> {
         match self
             .timer
-            .insert_with_delay(id.clone(), Duration::from_millis(delay))
+            .insert_with_delay(id, Duration::from_millis(delay))
         {
             Ok(_) => {
                 let event = TimerEvent::new(self.current_time().unwrap(), delay, entry);

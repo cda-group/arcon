@@ -456,7 +456,7 @@ impl PartialEq for ArconF64 {
 }
 
 /// Arcon variant of the `Never` (or `!`) type which fulfills `ArconType` requirements
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ArconNever {}
 impl ArconNever {
     pub const IS_UNREACHABLE: &'static str = "The ArconNever type cannot be instantiated!";

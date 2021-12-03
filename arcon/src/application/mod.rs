@@ -39,7 +39,6 @@ pub use assembled::AssembledApplication;
 #[cfg(all(feature = "prometheus_exporter", feature = "metrics", not(test)))]
 use metrics_exporter_prometheus::PrometheusBuilder;
 
-/// A Pipeline is the starting point of all Arcon applications.
 /// An Application is the starting point of all Arcon applications.
 /// It contains all necessary runtime components, configuration,
 /// and a custom allocator.
