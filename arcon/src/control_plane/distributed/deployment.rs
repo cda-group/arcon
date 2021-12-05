@@ -1,6 +1,6 @@
 use super::*;
 use crate::dataflow::{
-    constructor::{ErasedComponent, ErasedComponents},
+    constructor::{ErasedComponent, ErasedComponents, ErasedSourceManager},
     dfg::*,
 };
 use kompact::prelude::SystemField;
@@ -103,6 +103,7 @@ impl Deployment {
     }
 
     pub fn build_node(&mut self, node_config_set: NodeConfigSet) -> () {
+        eprintln!("Building DFGNode");
         let (local_receivers, remote_receivers) =
             self.make_receivers(&node_config_set.get_output_channels());
         let dfg_node = self
@@ -113,16 +114,16 @@ impl Deployment {
             .clone();
         let channel_kind = dfg_node.get_channel_kind().clone();
         match dfg_node.kind {
-            DFGNodeKind::Source(mut source_factory) => {
-                let sources = Arc::get_mut(&mut source_factory)
-                    .expect("Failed to make SourceFactory mutable")
+            DFGNodeKind::Source(source_factory) => {
+                eprintln!("Building a Source");
+                let sources = source_factory
                     .build_source(local_receivers, remote_receivers, &mut self.application);
                 self.application.set_source_manager(sources);
-                todo!(); // use the source_manager !
+                eprintln!("Source Built");
             }
-            DFGNodeKind::Node(mut constructor) => {
-                let components = Arc::get_mut(&mut constructor)
-                    .expect("Failed to make NodeFactory mutable")
+            DFGNodeKind::Node(constructor) => {
+                eprintln!("Building a Node");
+                let components = constructor
                     .build_nodes(
                         node_config_set.get_node_ids(),
                         node_config_set.get_input_channels().clone(),
@@ -130,11 +131,16 @@ impl Deployment {
                         remote_receivers,
                         &mut self.application,
                     );
+                eprintln!("Node Built");
                 components.iter().cloned().for_each(|(id, component)| {
                     self.local_nodes.insert(id, component);
                 });
             }
         }
+    }
+
+    pub(crate) fn get_source_manager(&self) -> Option<ErasedSourceManager> {
+        self.application.source_manager.clone()
     }
 
     fn make_receivers(

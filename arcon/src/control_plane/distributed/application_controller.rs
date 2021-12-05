@@ -22,6 +22,7 @@ impl ApplicationController {
     }
 
     fn handle_check_in(&mut self, pid: ProcessId, path: ActorPath) {
+        eprintln!("Handling Check-in");
         self.deployment.insert_pid_path(pid, path);
         if self.deployment.is_ready() {
             self.start_application();
@@ -29,6 +30,7 @@ impl ApplicationController {
     }
 
     fn start_application(&mut self) {
+        eprintln!("Starting Application");
         let node_id_paths = self.deployment.get_named_paths();
         for (pid, path) in self.deployment.get_pid_controller_paths() {
             info!(

@@ -12,7 +12,7 @@ use crate::{
 };
 use kompact::{
     component::AbstractComponent,
-    prelude::{ActorPath, ActorRefFactory, ActorRefStrong, Component, KompactSystem, NamedPath},
+    prelude::{KFuture, KPromise, ActorPath, ActorRefFactory, ActorRefStrong, Component, KompactSystem, NamedPath},
 };
 use std::{sync::Arc, time::Duration};
 
@@ -23,31 +23,32 @@ const REGISTRATION_TIMEOUT: Duration = Duration::from_millis(2000);
 pub struct AssembledApplication {
     pub(crate) app: Application,
     start_flag: bool,
-    pub(crate) runtime: RuntimeComponents,
+    pub(crate) runtime: Runtime,
     // Type erased Arc<Component<DebugNode<A>>>
     pub(crate) debug_node: Option<ErasedComponent>,
     // Type erased Arc<dyn AbstractComponent<Message = ArconMessage<A>>>
     pub(crate) abstract_debug_node: Option<ErasedComponent>,
     /// SourceManager component for this application
     pub(crate) source_manager: Option<ErasedSourceManager>,
-}
-
-#[derive(Clone)]
-pub struct RuntimeComponents {
-    /// [`KompactSystem`] for Control Components
-    pub(crate) ctrl_system: KompactSystem,
-    /// [`KompactSystem`] for Data Processing Components
-    pub(crate) data_system: KompactSystem,
     /// EpochManager component for this application
     pub(crate) epoch_manager: Option<Arc<Component<EpochManager>>>,
     /// SnapshotManager component for this application
     pub(crate) snapshot_manager: Arc<Component<SnapshotManager>>,
 }
 
-impl RuntimeComponents {
+#[derive(Clone)]
+pub struct Runtime {
+    /// [`KompactSystem`] for Control Components
+    pub(crate) ctrl_system: KompactSystem,
+    /// [`KompactSystem`] for Data Processing Components
+    pub(crate) data_system: KompactSystem,
+
+}
+
+impl Runtime {
     /// Helper function to set up internals of the application
     #[allow(clippy::type_complexity)]
-    pub(crate) fn new(arcon_conf: &ApplicationConf, logger: &ArconLogger) -> RuntimeComponents {
+    pub(crate) fn new(arcon_conf: &ApplicationConf, logger: &ArconLogger) -> Runtime {
         let data_system = arcon_conf
             .data_system_conf()
             .build()
@@ -57,21 +58,30 @@ impl RuntimeComponents {
             .build()
             .expect("KompactSystem");
 
+        Runtime {
+            ctrl_system,
+            data_system,
+        }
+    }
+}
+
+impl AssembledApplication {
+    pub(crate) fn new(app: Application, runtime: Runtime) -> Self {
         let timeout = std::time::Duration::from_millis(500);
 
-        let snapshot_manager = ctrl_system.create(SnapshotManager::new);
+        let snapshot_manager = runtime.ctrl_system.create(SnapshotManager::new);
 
-        let epoch_manager = match arcon_conf.execution_mode {
+        let epoch_manager = match app.conf.execution_mode {
             ExecutionMode::Local => {
                 let snapshot_manager_ref = snapshot_manager.actor_ref().hold().expect("fail");
-                let epoch_manager = ctrl_system.create(|| {
+                let epoch_manager = runtime.ctrl_system.create(|| {
                     EpochManager::new(
-                        arcon_conf.epoch_interval,
+                        app.conf.epoch_interval,
                         snapshot_manager_ref,
-                        logger.clone(),
+                        app.arcon_logger.clone(),
                     )
                 });
-                ctrl_system
+                runtime.ctrl_system
                     .start_notify(&epoch_manager)
                     .wait_timeout(timeout)
                     .expect("EpochManager comp never started!");
@@ -81,22 +91,10 @@ impl RuntimeComponents {
             ExecutionMode::Distributed(_) => None,
         };
 
-        ctrl_system
+        runtime.ctrl_system
             .start_notify(&snapshot_manager)
             .wait_timeout(timeout)
             .expect("SnapshotManager comp never started!");
-
-        RuntimeComponents {
-            ctrl_system,
-            data_system,
-            snapshot_manager,
-            epoch_manager,
-        }
-    }
-}
-
-impl AssembledApplication {
-    pub(crate) fn new(app: Application, runtime: RuntimeComponents) -> Self {
         Self {
             app,
             start_flag: false,
@@ -104,13 +102,15 @@ impl AssembledApplication {
             debug_node: None,
             abstract_debug_node: None,
             source_manager: None,
+            snapshot_manager,
+            epoch_manager,
         }
     }
 
     /// Helper function to quickly set up a DefaultApplication (no Nodes/Pipelinedefined)
     pub(crate) fn default() -> Self {
         let app = Application::default();
-        let runtime = RuntimeComponents::new(&app.conf, &app.arcon_logger);
+        let runtime = Runtime::new(&app.conf, &app.arcon_logger);
         AssembledApplication::new(app, runtime)
     }
 
@@ -119,7 +119,7 @@ impl AssembledApplication {
     }
 
     pub(crate) fn epoch_manager(&self) -> ActorRefStrong<EpochEvent> {
-        if let Some(epoch_manager) = &self.runtime.epoch_manager {
+        if let Some(epoch_manager) = &self.epoch_manager {
             epoch_manager
                 .actor_ref()
                 .hold()
@@ -131,16 +131,16 @@ impl AssembledApplication {
         }
     }
 
-    pub(crate) fn data_system(&mut self) -> &mut KompactSystem {
-        &mut self.runtime.data_system
+    pub(crate) fn data_system(&self) -> &KompactSystem {
+        &self.runtime.data_system
     }
 
-    pub(crate) fn ctrl_system(&mut self) -> &mut KompactSystem {
-        &mut self.runtime.ctrl_system
+    pub(crate) fn ctrl_system(&self) -> &KompactSystem {
+        &self.runtime.ctrl_system
     }
 
-    pub(crate) fn snapshot_manager(&mut self) -> &mut Arc<Component<SnapshotManager>> {
-        &mut self.runtime.snapshot_manager
+    pub(crate) fn snapshot_manager(&self) -> &Arc<Component<SnapshotManager>> {
+        &self.snapshot_manager
     }
 
     // NOTE: this function can be used while we are building up the dataflow.
@@ -193,16 +193,18 @@ impl AssembledApplication {
         }
     }
 
-    pub(crate) fn spawn_process_controller(&mut self) {
-        let (process_controller, rf) = self
+    pub(crate) fn spawn_process_controller(&mut self) -> KFuture<Option<ErasedSourceManager>> {
+        let mut process_controller = ProcessController::new(self.clone());
+        let future = process_controller.create_source_manager_future();
+        let (process_controller_comp, rf) = self
             .runtime
             .ctrl_system
-            .create_and_register(|| ProcessController::new(self.clone()));
+            .create_and_register(|| process_controller);
         let _ = rf
             .wait_timeout(REGISTRATION_TIMEOUT)
             .expect("registration failed");
-        self.runtime.ctrl_system.start(&process_controller);
-        // await readyness
+        self.runtime.ctrl_system.start(&process_controller_comp);
+        future
     }
 }
 
@@ -227,7 +229,7 @@ impl AssembledApplication {
         }
 
         // Start epoch manager to begin the injection of epochs into the application.
-        if let Some(epoch_manager) = &self.runtime.epoch_manager {
+        if let Some(epoch_manager) = &self.epoch_manager {
             self.runtime
                 .ctrl_system
                 .start_notify(epoch_manager)

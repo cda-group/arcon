@@ -1,5 +1,7 @@
 use super::*;
 use fxhash::FxHashMap;
+use crate::dataflow::constructor::ErasedSourceManager;
+use kompact::prelude::{KPromise, KFuture, promise};
 
 /// Local coordinator of all executors within a process (host)
 #[derive(ComponentDefinition)]
@@ -18,6 +20,8 @@ pub(crate) struct ProcessController {
     application_controller: ActorPath,
     /// The Application
     deployment: Deployment,
+    /// 
+    source_manager_promise: Option<KPromise<Option<ErasedSourceManager>>>,
 }
 
 impl ProcessController {
@@ -32,19 +36,34 @@ impl ProcessController {
             sources_paths: Vec::new(),
             named_path_map: FxHashMap::default(),
             deployment: Deployment::new(application),
+            source_manager_promise: None,
         }
     }
 
-    pub fn create_operators(
+    pub fn create_source_manager_future(&mut self) -> KFuture<Option<ErasedSourceManager>> {
+        let (promise, future) = promise();
+        self.source_manager_promise = Some(promise);
+        eprintln!("Returning Source Manager Future!!");
+        future
+    }
+
+    fn create_operators(
         &mut self,
         node_map: Vec<(GlobalNodeId, ActorPath)>,
         config_vec: Vec<NodeConfigSet>,
     ) {
+        eprintln!("Creating {} Operators", config_vec.len());
         for (id, path) in node_map {
             self.deployment.insert_node_id_path(&id, path);
         }
         for config in config_vec {
             self.deployment.build_node(config);
+        }
+        eprintln!("Operators created!");
+        if let Some(promise) = self.source_manager_promise.take() {
+            eprintln!("Fulfilling Source Manager Promise");
+            promise.fulfil(self.deployment.get_source_manager())
+                .expect("Unable to fulfill SourceManager promise");
         }
     }
 }

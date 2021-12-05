@@ -56,14 +56,13 @@ mod tests {
 
     #[test]
     fn filter_test() {
-        let app = Application::default()
+        let mut app = Application::default()
             .with_debug_node()
             .iterator(0..10, |conf| {
                 conf.set_arcon_time(ArconTime::Process);
             })
             .filter(|x| *x < 5)
             .build();
-        todo!(); // Need to Deploy the Application
         app.start();
 
         wait(DEFAULT_WAIT_TIME);

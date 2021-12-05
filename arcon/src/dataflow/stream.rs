@@ -1,5 +1,5 @@
 use crate::{
-    application::{assembled::RuntimeComponents, Application},
+    application::{assembled::Runtime, Application},
     control_plane::distributed::OperatorId,
     data::ArconType,
     dataflow::{
@@ -17,7 +17,10 @@ use crate::{
     },
     util::ArconFnBounds,
 };
-use std::{marker::PhantomData, sync::Arc};
+use kompact::prelude::KFuture;
+use std::{marker::PhantomData, sync::Arc, time::Duration};
+
+const BUILD_TIMEOUT: Duration = Duration::from_secs(60);
 
 #[derive(Default)]
 pub struct Context {
@@ -246,65 +249,15 @@ impl<IN: ArconType> Stream<IN> {
         assembled.init_application_controller();
 
         // Spawn ProcessController
-        assembled.spawn_process_controller();
-
-        assembled
-
-        /*
-        for dfg_node in self.ctx.app.dfg.graph.into_iter().rev() {
-            match dfg_node.kind {
-                DFGNodeKind::Source(channel_kind, source_manager_cons) => {
-                    let nodes = target_nodes.take().unwrap();
-                    let source_manager =
-                        source_manager_cons(nodes, channel_kind, &mut self.ctx.app);
-
-                    self.ctx.app.source_manager = Some(source_manager);
-                }
-                DFGNodeKind::Node(manager_cons) => {
-                    let (channel_kind, components) = {
-                        match target_nodes {
-                            Some(comps) => (dfg_node.channel_kind, comps),
-                            None => {
-                                // At the end of the graph....
-                                if self.ctx.app.debug_node_enabled() {
-                                    let node: DebugNode<IN> = DebugNode::new();
-                                    self.ctx.app.create_debug_node(node);
-                                }
-
-                                match self.ctx.app.abstract_debug_node {
-                                    Some(ref debug_node) => {
-                                        (ChannelKind::Forward, vec![debug_node.clone()])
-                                    }
-                                    None => (
-                                        if self.ctx.console_output {
-                                            ChannelKind::Console
-                                        } else {
-                                            ChannelKind::Mute
-                                        },
-                                        vec![],
-                                    ),
-                                }
-                            }
-                        }
-                    };
-
-                    // Create expected incoming channels ids
-                    let in_channels: Vec<NodeID> = (0..dfg_node.ingoing_channels)
-                        .map(|i| NodeID::new(i as u32))
-                        .collect();
-
-                    let nodes =
-                        manager_cons(in_channels, components, channel_kind, &mut self.ctx.app);
-
-                    target_nodes = Some(nodes);
-                }
-            }
+        let source_manager_future = assembled.spawn_process_controller();
+        if let Some(source_manager) = source_manager_future.wait_timeout(BUILD_TIMEOUT).expect("Process Controller Build Timeout") {
+            assembled.set_source_manager(source_manager);
         }
-        */
+        assembled
     }
 
-    fn build_runtime(&mut self) -> RuntimeComponents {
-        RuntimeComponents::new(self.ctx.app.arcon_conf(), &self.ctx.app.arcon_logger)
+    fn build_runtime(&mut self) -> Runtime {
+        Runtime::new(self.ctx.app.arcon_conf(), &self.ctx.app.arcon_logger)
     }
 
     pub(crate) fn new(ctx: Context) -> Self {

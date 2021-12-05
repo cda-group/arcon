@@ -119,13 +119,6 @@ pub enum DFGNodeKind {
     Source(Arc<dyn SourceFactory>),
     Node(Arc<dyn NodeFactory>),
 }
-/*
-#[allow(dead_code)]
-pub enum SourceKind {
-    Single(SourceConstructor),
-    Parallel,
-}
-*/
 
 #[derive(Clone, Copy, Debug)]
 #[allow(dead_code)]

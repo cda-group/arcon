@@ -83,7 +83,7 @@ fn channel_strategy<OUT: ArconType>(
 
 pub trait NodeFactory {
     fn build_nodes(
-        &mut self,
+        &self,
         node_ids: Vec<GlobalNodeId>,
         in_channels: Vec<NodeID>,
         components: ErasedComponents,
@@ -96,7 +96,7 @@ pub trait NodeFactory {
 
 pub trait SourceFactory {
     fn build_source(
-        &mut self,
+        &self,
         components: ErasedComponents,
         paths: Vec<ActorPath>,
         application: &mut AssembledApplication,
@@ -107,7 +107,7 @@ pub trait SourceFactory {
 
 impl<OP: Operator + 'static, B: Backend> NodeFactory for NodeConstructor<OP, B> {
     fn build_nodes(
-        &mut self,
+        &self,
         node_ids: Vec<GlobalNodeId>,
         in_channels: Vec<NodeID>,
         components: ErasedComponents,
@@ -115,8 +115,9 @@ impl<OP: Operator + 'static, B: Backend> NodeFactory for NodeConstructor<OP, B> 
         application: &mut AssembledApplication,
     ) -> Vec<(GlobalNodeId, ErasedComponent)> {
         // Initialize state and manager
+        eprintln!("Initializing State Directory");
         self.init_state_dir();
-        self.init_node_manager(application, &in_channels);
+        let node_manager = self.create_node_manager(application, &in_channels);
 
         for node_id in node_ids {
             // Create the Nodes arguments
@@ -145,24 +146,21 @@ impl<OP: Operator + 'static, B: Backend> NodeFactory for NodeConstructor<OP, B> 
                 builder.conf.perf_events.clone(),
                 node_id.clone(),
             );
-
+            eprintln!("Creating the Node Component");
             // Create the node and connect it to the NodeManager
-            self.create_node_component(application, node);
+            self.create_node_component(application, node, &node_manager);
         }
+        eprintln!("Starting the NodeManager");
         // Start NodeManager
-        let manager_comp = self
-            .node_manager
-            .as_ref()
-            .expect("NodeManager must be initialized to spawn node");
         application
             .ctrl_system()
-            .start_notify(&manager_comp)
+            .start_notify(&node_manager)
             .wait_timeout(std::time::Duration::from_millis(2000))
             .expect("Failed to start NodeManager");
 
         // Fetch all created Nodes on this NodeManager and return them as Erased
         // for the next stage..
-        manager_comp.on_definition(|cd| {
+        node_manager.on_definition(|cd| {
             cd.nodes
                 .iter()
                 .map(|(id, (comp, _))| (id.clone(), Arc::new(comp.clone()) as ErasedComponent))
@@ -174,13 +172,15 @@ impl<OP: Operator + 'static, B: Backend> NodeFactory for NodeConstructor<OP, B> 
         self.channel_kind = channel_kind;
     }
 }
+
+#[derive(Clone)]
 pub(crate) struct NodeConstructor<OP: Operator + 'static, B: Backend> {
     descriptor: String,
     state_dir: PathBuf,
     logger: ArconLogger,
     channel_kind: ChannelKind,
     builder: Arc<OperatorBuilder<OP, B>>,
-    node_manager: Option<Arc<Component<NodeManager<OP, B>>>>,
+    // node_manager: Option<Arc<Component<NodeManager<OP, B>>>>,
 }
 
 impl<OP: Operator + 'static, B: Backend> NodeConstructor<OP, B> {
@@ -196,37 +196,33 @@ impl<OP: Operator + 'static, B: Backend> NodeConstructor<OP, B> {
             logger,
             channel_kind: ChannelKind::default(),
             builder,
-            node_manager: None,
+            // node_manager: None,
         }
     }
 
-    fn create_node_component(&mut self, application: &mut AssembledApplication, node: Node<OP, B>) {
+    fn create_node_component(&self, application: &mut AssembledApplication, node: Node<OP, B>, node_manager: &Arc<Component<NodeManager<OP, B>>>) {
         let node_id = node.node_id;
         let node_comp = application.data_system().create(|| node);
         let required_ref: RequiredRef<NodeManagerPort> = node_comp.required_ref();
 
-        let manager_comp = self
-            .node_manager
-            .as_ref()
-            .expect("NodeManager must be initialized to spawn node");
-        biconnect_components::<NodeManagerPort, _, _>(&manager_comp, &node_comp).expect("fail");
+        biconnect_components::<NodeManagerPort, _, _>(node_manager, &node_comp).expect("fail");
 
         let node_comp: Arc<dyn AbstractComponent<Message = ArconMessage<OP::IN>>> = node_comp;
 
         application
             .data_system()
             .start_notify(&node_comp)
-            .wait_timeout(std::time::Duration::from_millis(2000))
+            .wait_timeout(std::time::Duration::from_millis(5000))
             .expect("Failed to start Node Component");
 
-        manager_comp.on_definition(|cd| {
+        node_manager.on_definition(|cd| {
             // Insert the created Node into the NodeManager
             cd.nodes.insert(node_id, (node_comp.clone(), required_ref));
         });
         // node_comp
     }
 
-    fn create_backend(&mut self, node_descriptor: String) -> Arc<B> {
+    fn create_backend(&self, node_descriptor: String) -> Arc<B> {
         let mut node_dir = self.state_dir.clone();
         node_dir.push(&node_descriptor);
         self.builder
@@ -234,12 +230,12 @@ impl<OP: Operator + 'static, B: Backend> NodeConstructor<OP, B> {
     }
 
     /// Initializes things like state directory and NodeManager
-    fn init_node_manager(
-        &mut self,
+    fn create_node_manager(
+        &self,
         application: &mut AssembledApplication,
         in_channels: &Vec<NodeID>,
-    ) {
-        if self.node_manager.is_none() {
+    ) -> Arc<Component<NodeManager<OP, B>>> {
+        // if self.node_manager.is_none() {
             // Define the NodeManager
             let manager = NodeManager::<OP, B>::new(
                 self.descriptor.clone(),
@@ -257,16 +253,18 @@ impl<OP: Operator + 'static, B: Backend> NodeConstructor<OP, B> {
                     biconnect_ports(&mut scd.manager_port, &mut cd.snapshot_manager_port);
                 });
             });
-            self.node_manager = Some(manager_comp);
-        }
+            manager_comp
+        //    self.node_manager = Some(manager_comp);
+        // }
     }
 
-    fn init_state_dir(&mut self) {
+    fn init_state_dir(&self) {
         // Ensure there's a state_directory
         std::fs::create_dir_all(&self.state_dir).unwrap();
     }
 }
 
+#[derive(Clone)]
 pub(crate) struct SourceConstructor<S: Source + 'static, B: Backend> {
     descriptor: String,
     builder_type: SourceBuilderType<S, B>,
@@ -296,7 +294,7 @@ impl<S: Source + 'static, B: Backend> SourceConstructor<S, B> {
 
     // Source Manager needs to be (re-)inserted after calling this function
     fn create_source_manager(
-        &mut self,
+        &self,
         application: &mut AssembledApplication,
     ) -> Arc<Component<SourceManager<B>>> {
         let manager = SourceManager::new(
@@ -311,14 +309,14 @@ impl<S: Source + 'static, B: Backend> SourceConstructor<S, B> {
     }
 
     fn start_source_manager(
-        &mut self,
+        &self,
         source_manager: &Arc<Component<SourceManager<B>>>,
         application: &mut AssembledApplication,
     ) {
         let source_ref: ActorRefStrong<SourceEvent> =
             source_manager.actor_ref().hold().expect("fail");
         // Set source reference at the EpochManager
-        if let Some(epoch_manager) = &application.runtime.epoch_manager {
+        if let Some(epoch_manager) = &application.epoch_manager {
             epoch_manager.on_definition(|cd| {
                 cd.source_manager = Some(source_ref);
             });
@@ -334,7 +332,7 @@ impl<S: Source + 'static, B: Backend> SourceConstructor<S, B> {
 
 impl<S: Source + 'static, B: Backend> SourceFactory for SourceConstructor<S, B> {
     fn build_source(
-        &mut self,
+        &self,
         components: ErasedComponents,
         paths: Vec<ActorPath>,
         application: &mut AssembledApplication,
