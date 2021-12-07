@@ -1,7 +1,7 @@
 use super::*;
-use fxhash::FxHashMap;
 use crate::dataflow::constructor::ErasedSourceManager;
-use kompact::prelude::{KPromise, KFuture, promise};
+use fxhash::FxHashMap;
+use kompact::prelude::{promise, KFuture, KPromise};
 
 /// Local coordinator of all executors within a process (host)
 #[derive(ComponentDefinition)]
@@ -20,7 +20,7 @@ pub(crate) struct ProcessController {
     application_controller: ActorPath,
     /// The Application
     deployment: Deployment,
-    /// 
+    ///
     source_manager_promise: Option<KPromise<Option<ErasedSourceManager>>>,
 }
 
@@ -62,7 +62,8 @@ impl ProcessController {
         eprintln!("Operators created!");
         if let Some(promise) = self.source_manager_promise.take() {
             eprintln!("Fulfilling Source Manager Promise");
-            promise.fulfil(self.deployment.get_source_manager())
+            promise
+                .fulfil(self.deployment.get_source_manager())
                 .expect("Unable to fulfill SourceManager promise");
         }
     }

@@ -12,7 +12,10 @@ use crate::{
 };
 use kompact::{
     component::AbstractComponent,
-    prelude::{KFuture, KPromise, ActorPath, ActorRefFactory, ActorRefStrong, Component, KompactSystem, NamedPath},
+    prelude::{
+        ActorPath, ActorRefFactory, ActorRefStrong, Component, KFuture, KPromise, KompactSystem,
+        NamedPath,
+    },
 };
 use std::{sync::Arc, time::Duration};
 
@@ -42,7 +45,6 @@ pub struct Runtime {
     pub(crate) ctrl_system: KompactSystem,
     /// [`KompactSystem`] for Data Processing Components
     pub(crate) data_system: KompactSystem,
-
 }
 
 impl Runtime {
@@ -81,7 +83,8 @@ impl AssembledApplication {
                         app.arcon_logger.clone(),
                     )
                 });
-                runtime.ctrl_system
+                runtime
+                    .ctrl_system
                     .start_notify(&epoch_manager)
                     .wait_timeout(timeout)
                     .expect("EpochManager comp never started!");
@@ -91,7 +94,8 @@ impl AssembledApplication {
             ExecutionMode::Distributed(_) => None,
         };
 
-        runtime.ctrl_system
+        runtime
+            .ctrl_system
             .start_notify(&snapshot_manager)
             .wait_timeout(timeout)
             .expect("SnapshotManager comp never started!");

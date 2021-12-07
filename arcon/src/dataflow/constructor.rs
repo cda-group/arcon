@@ -31,8 +31,7 @@ use arcon_state::Backend;
 use kompact::{
     component::AbstractComponent,
     prelude::{
-        biconnect_components, biconnect_ports, ActorRefFactory, ActorRefStrong,
-        RequiredRef, *,
+        biconnect_components, biconnect_ports, ActorRefFactory, ActorRefStrong, RequiredRef, *,
     },
 };
 use std::{any::Any, path::PathBuf, sync::Arc};
@@ -50,6 +49,11 @@ fn channel_strategy<OUT: ArconType>(
     max_key: u64,
     channel_kind: ChannelKind,
 ) -> ChannelStrategy<OUT> {
+    eprintln!(
+        "building channel strategy with {} components and {} paths",
+        components.len(),
+        paths.len()
+    );
     match channel_kind {
         ChannelKind::Forward => {
             assert_eq!(components.len(), 1, "Expected a single component target");
@@ -119,6 +123,13 @@ impl<OP: Operator + 'static, B: Backend> NodeFactory for NodeConstructor<OP, B> 
         self.init_state_dir();
         let node_manager = self.create_node_manager(application, &in_channels);
 
+        if components.is_empty() && paths.is_empty() {
+            application.app.debug_node_enabled() {
+                todo!(); // create debug node and make sure the node is built sending to it.
+            } else {
+                panic!("Faulty Pipeline. No output channels for a Node.");
+            }
+        } 
         for node_id in node_ids {
             // Create the Nodes arguments
             let node_descriptor = format!("{}_{}", self.descriptor, node_id.node_id.id);
@@ -200,7 +211,12 @@ impl<OP: Operator + 'static, B: Backend> NodeConstructor<OP, B> {
         }
     }
 
-    fn create_node_component(&self, application: &mut AssembledApplication, node: Node<OP, B>, node_manager: &Arc<Component<NodeManager<OP, B>>>) {
+    fn create_node_component(
+        &self,
+        application: &mut AssembledApplication,
+        node: Node<OP, B>,
+        node_manager: &Arc<Component<NodeManager<OP, B>>>,
+    ) {
         let node_id = node.node_id;
         let node_comp = application.data_system().create(|| node);
         let required_ref: RequiredRef<NodeManagerPort> = node_comp.required_ref();
@@ -236,24 +252,24 @@ impl<OP: Operator + 'static, B: Backend> NodeConstructor<OP, B> {
         in_channels: &Vec<NodeID>,
     ) -> Arc<Component<NodeManager<OP, B>>> {
         // if self.node_manager.is_none() {
-            // Define the NodeManager
-            let manager = NodeManager::<OP, B>::new(
-                self.descriptor.clone(),
-                application.data_system().clone(),
-                in_channels.clone(),
-                self.logger.clone(),
-                self.builder.clone(),
-            );
-            // Create the actual NodeManager component
-            let manager_comp = application.ctrl_system().create(|| manager);
+        // Define the NodeManager
+        let manager = NodeManager::<OP, B>::new(
+            self.descriptor.clone(),
+            application.data_system().clone(),
+            in_channels.clone(),
+            self.logger.clone(),
+            self.builder.clone(),
+        );
+        // Create the actual NodeManager component
+        let manager_comp = application.ctrl_system().create(|| manager);
 
-            // Connect NodeManager to the SnapshotManager of the application
-            application.snapshot_manager().on_definition(|scd| {
-                manager_comp.on_definition(|cd| {
-                    biconnect_ports(&mut scd.manager_port, &mut cd.snapshot_manager_port);
-                });
+        // Connect NodeManager to the SnapshotManager of the application
+        application.snapshot_manager().on_definition(|scd| {
+            manager_comp.on_definition(|cd| {
+                biconnect_ports(&mut scd.manager_port, &mut cd.snapshot_manager_port);
             });
-            manager_comp
+        });
+        manager_comp
         //    self.node_manager = Some(manager_comp);
         // }
     }
@@ -417,13 +433,12 @@ fn create_source_node<S, B>(
     );
     let source_node_comp = app.data_system().create(|| source_node);
 
-    app.data_system()
-        .start_notify(&source_node_comp)
-        .wait_timeout(std::time::Duration::from_millis(2000))
-        .expect("Failed to start Source Node");
-
     biconnect_components::<SourceManagerPort, _, _>(source_manager_comp, &source_node_comp)
         .expect("failed to biconnect components");
+
+    app.data_system().start(&source_node_comp);
+    //.wait_timeout(std::time::Duration::from_millis(5000))
+    //.expect("Failed to start Source Node");
 
     let source_node_comp_dyn: Arc<dyn AbstractComponent<Message = SourceEvent>> = source_node_comp;
 

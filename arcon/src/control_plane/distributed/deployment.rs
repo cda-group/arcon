@@ -116,21 +116,23 @@ impl Deployment {
         match dfg_node.kind {
             DFGNodeKind::Source(source_factory) => {
                 eprintln!("Building a Source");
-                let sources = source_factory
-                    .build_source(local_receivers, remote_receivers, &mut self.application);
+                let sources = source_factory.build_source(
+                    local_receivers,
+                    remote_receivers,
+                    &mut self.application,
+                );
                 self.application.set_source_manager(sources);
                 eprintln!("Source Built");
             }
             DFGNodeKind::Node(constructor) => {
                 eprintln!("Building a Node");
-                let components = constructor
-                    .build_nodes(
-                        node_config_set.get_node_ids(),
-                        node_config_set.get_input_channels().clone(),
-                        local_receivers,
-                        remote_receivers,
-                        &mut self.application,
-                    );
+                let components = constructor.build_nodes(
+                    node_config_set.get_node_ids(),
+                    node_config_set.get_input_channels().clone(),
+                    local_receivers,
+                    remote_receivers,
+                    &mut self.application,
+                );
                 eprintln!("Node Built");
                 components.iter().cloned().for_each(|(id, component)| {
                     self.local_nodes.insert(id, component);

@@ -250,7 +250,10 @@ impl<IN: ArconType> Stream<IN> {
 
         // Spawn ProcessController
         let source_manager_future = assembled.spawn_process_controller();
-        if let Some(source_manager) = source_manager_future.wait_timeout(BUILD_TIMEOUT).expect("Process Controller Build Timeout") {
+        if let Some(source_manager) = source_manager_future
+            .wait_timeout(BUILD_TIMEOUT)
+            .expect("Process Controller Build Timeout")
+        {
             assembled.set_source_manager(source_manager);
         }
         assembled
