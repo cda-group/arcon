@@ -8,18 +8,11 @@
 *.rs.swp
 *.proto.swp
 target/
-spec.json
-run-pass/
 shell.nix
+Cargo.lock
 
 op_*
-
-# Compile workspace
-build/
 
 # Sublime Text
 *.sublime-project
 *.sublime-workspace
-
-#mdbook output
-book

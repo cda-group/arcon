@@ -7,7 +7,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  msrv: 1.53.0
+  msrv: 1.56.1
 
 jobs:
   rustfmt:
@@ -70,7 +70,7 @@ jobs:
       - name: Install cargo-hack
         run: cargo install cargo-hack
 
-      # Run tests with all features on
+      # Run tests with all features on workspace
       - name: test all --all-features
         uses: actions-rs/cargo@v1
         with:
@@ -80,8 +80,9 @@ jobs:
       # Run tests for each Arcon feature
       - name: test --each-feature
         run: cargo hack test --each-feature
+        working-directory: arcon
 
-      # Verify benches build but does not run
+      # Verify benches
       - name: bench check
         uses: actions-rs/cargo@v1
         with:

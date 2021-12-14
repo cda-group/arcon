@@ -1,0 +1,94 @@
+[package]
+name = "arcon"
+version = "0.1.3"
+authors = ["Max Meldrum <mmeldrum@kth.se>"]
+edition = "2018"
+rust-version = "1.56"
+readme = "README.md"
+license = "Apache-2.0"
+repository = "https://github.com/cda-group/arcon"
+homepage = "https://github.com/cda-group/arcon"
+description = """
+A runtime for writing streaming applications
+"""
+
+[features]
+default = []
+unsafe_flight = ["arcon_macros/unsafe_flight"]
+kafka = ["rdkafka", "futures", "serde_json"]
+thread_pinning = ["kompact/thread_pinning"]
+socket = ["tokio", "tokio-util", "futures", "serde_json"]
+hardware_counters = ["perf-event", "metrics"]
+prometheus_exporter = ["metrics-exporter-prometheus", "metrics"]
+allocator_metrics = ["arcon_allocator/metrics"]
+state_metrics = ["arcon_state/metrics"]
+rocksdb = ["arcon_state/rocks"]
+
+[dependencies]
+arcon_allocator = { version = "0.1", path = "arcon_allocator" }
+arcon_macros = { version = "0.1", path = "../arcon_macros" }
+arcon_state = { version = "0.1", path = "arcon_state" }
+arcon_util = { version = "0.1", path = "../arcon_util", features = ["hasher"] }
+
+kompact = { git = "https://github.com/kompics/kompact.git", branch = "master" }
+uuid = "0.8"
+cfg-if = "0.1.10"
+crossbeam-utils = "0.7"
+num_cpus = "1.0"
+hierarchical_hash_wheel_timer = "1.1"
+hocon = { version = "0.3", default-features = false, features = ["serde-support"] }
+snafu = "0.6"
+
+# Logging
+slog = "2"
+slog-async = "2"
+slog-term = "2"
+
+# Hashing
+fxhash = "0.2.1"
+twox-hash = "1.5.0"
+
+# Serialisation
+prost = "0.7"
+bytes = "1.0"
+serde = { version = "1.0.104", features = ["derive"] }
+
+arrow = "5.0"
+parquet = { version = "5.0", features = ["zstd"] }
+datafusion = "5.0"
+
+# Optional
+rdkafka = { version = "0.26", optional = true }
+tokio = { version = "1.0", optional = true, features = ["full"] } # TODO: figure out which are truly needed
+tokio-util = { version = "0.6", optional = true, features = ["full"] }
+futures = { version = "0.3", optional = true }
+serde_json = { version = "1.0.44", optional = true }
+metrics = { version = "0.16.0", optional = true }
+metrics-exporter-prometheus = { version = "0.5.0", optional = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+perf-event = { version = "0.4.7", optional = true }
+
+
+[dev-dependencies]
+tempfile = "3"
+rand = "0.6.5"
+slog = { version = "2.2", features = ["max_level_error"] }
+criterion = "0.3"
+once_cell = "1.3.1"
+
+[[bench]]
+name = "allocator"
+harness = false
+
+[[bench]]
+name = "buffer_pool"
+harness = false
+
+[[bench]]
+name = "hash_table"
+harness = false
+
+[[bench]]
+name = "value"
+harness = false

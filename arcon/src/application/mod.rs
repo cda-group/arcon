@@ -1,0 +1,474 @@
+#[cfg(all(feature = "metrics", not(feature = "prometheus_exporter")))]
+use crate::metrics::log_recorder::LogRecorder;
+#[cfg(feature = "kafka")]
+use crate::stream::source::{
+    kafka::{KafkaConsumer, KafkaConsumerConf, KafkaConsumerState},
+    schema::SourceSchema,
+};
+use crate::{
+    application::conf::{logger::ArconLogger, ApplicationConf, ControlPlaneMode, ExecutionMode},
+    buffer::event::PoolInfo,
+    control_plane::{conf::ControlPlaneConf, app::AppRegistration, ControlPlane, ControlPlaneContainer},
+    data::ArconMessage,
+    dataflow::{
+        api::{ParallelSourceBuilder, SourceBuilder, SourceBuilderType},
+        conf::SourceConf,
+        constructor::{source_manager_constructor, ErasedComponent},
+        dfg::*,
+        stream::Context,
+    },
+    manager::{
+        epoch::{EpochEvent, EpochManager},
+        snapshot::SnapshotManager,
+    },
+    prelude::*,
+    stream::{
+        node::{debug::DebugNode, source::SourceEvent},
+        source::{local_file::LocalFileSource, Source},
+    },
+};
+use arcon_allocator::Allocator;
+use kompact::{component::AbstractComponent, prelude::KompactSystem};
+use std::sync::{Arc, Mutex};
+
+mod assembled;
+pub mod conf;
+
+pub use crate::dataflow::stream::Stream;
+pub use assembled::AssembledApplication;
+
+#[cfg(all(feature = "prometheus_exporter", feature = "metrics", not(test)))]
+use metrics_exporter_prometheus::PrometheusBuilder;
+
+/// An Application is the starting point of all Arcon applications.
+/// It contains all necessary runtime components, configuration,
+/// and a custom allocator.
+///
+/// # Creating a Application
+///
+/// See [Configuration](ApplicationConf)
+///
+/// With the default configuration
+/// ```no_run
+/// use arcon::prelude::Application;
+///
+/// let app = Application::default();
+/// ```
+///
+/// With configuration
+/// ```no_run
+/// use arcon::prelude::{Application, ApplicationConf};
+///
+/// let conf = ApplicationConf {
+///     watermark_interval: 2000,
+///     ..Default::default()
+/// };
+/// let app = Application::with_conf(conf);
+/// ```
+#[derive(Clone)]
+pub struct Application {
+    /// [`KompactSystem`] for Control Components
+    pub(crate) ctrl_system: KompactSystem,
+    /// [`KompactSystem`] for Data Processing Components
+    pub(crate) data_system: KompactSystem,
+    /// Configuration for this application
+    pub(crate) conf: ApplicationConf,
+    /// Arcon allocator for this application
+    pub(crate) allocator: Arc<Mutex<Allocator>>,
+    /// SourceManager component for this application
+    pub(crate) source_manager: Option<Arc<dyn AbstractComponent<Message = SourceEvent>>>,
+    /// EpochManager component for this application
+    pub(crate) epoch_manager: Option<Arc<Component<EpochManager>>>,
+    /// SnapshotManager component for this application
+    pub(crate) snapshot_manager: Arc<Component<SnapshotManager>>,
+    /// A container holding information about the application's control plane
+    pub(crate) control_plane: ControlPlaneContainer,
+    /// Flag indicating whether to spawn a debug node for the Application
+    debug_node_flag: bool,
+    // Type erased Arc<Component<DebugNode<A>>>
+    pub(crate) debug_node: Option<ErasedComponent>,
+    // Type erased Arc<dyn AbstractComponent<Message = ArconMessage<A>>>
+    pub(crate) abstract_debug_node: Option<ErasedComponent>,
+    /// Configured Logger for the Application
+    pub(crate) arcon_logger: ArconLogger,
+}
+
+impl Default for Application {
+    fn default() -> Self {
+        let conf: ApplicationConf = Default::default();
+        Self::new(conf)
+    }
+}
+
+impl Application {
+    /// Creates a new Application using the given ApplicationConf
+
+    fn new(conf: ApplicationConf) -> Self {
+        #[cfg(all(feature = "prometheus_exporter", feature = "metrics", not(test)))]
+        {
+            PrometheusBuilder::new()
+                .install()
+                .expect("failed to install Prometheus recorder")
+        }
+
+        let allocator = Arc::new(Mutex::new(Allocator::new(conf.allocator_capacity)));
+        let arcon_logger = conf.arcon_logger();
+
+        #[cfg(all(feature = "metrics", not(feature = "prometheus_exporter")))]
+        {
+            let recorder = LogRecorder {
+                logger: arcon_logger.clone(),
+            };
+            if let Err(_) = metrics::set_boxed_recorder(Box::new(recorder)) {
+                // for tests, ignore logging this message as it will try to set the recorder multiple times..
+                #[cfg(not(test))]
+                error!(arcon_logger, "metrics recorder has already been set");
+            }
+        }
+
+        let (ctrl_system, data_system, snapshot_manager, epoch_manager) =
+            Self::setup(&conf, &arcon_logger);
+
+        let control_plane = match &conf.control_plane_mode {
+            ControlPlaneMode::Embedded => {
+                let mut cp_conf = ControlPlaneConf::default();
+                let mut dir = conf.base_dir.clone();
+                dir.push("control_plane");
+                cp_conf.dir = dir;
+                ControlPlaneContainer::Embedded(ControlPlane::new(cp_conf))
+            }
+            ControlPlaneMode::Remote(addr) => ControlPlaneContainer::Remote(addr.clone()),
+        };
+
+        Self {
+            ctrl_system,
+            data_system,
+            conf,
+            allocator,
+            snapshot_manager,
+            epoch_manager,
+            source_manager: None,
+            control_plane,
+            debug_node_flag: false,
+            debug_node: None,
+            abstract_debug_node: None,
+            arcon_logger,
+        }
+    }
+
+    /// Creates a new Application using the given ApplicationConf
+    pub fn with_conf(conf: ApplicationConf) -> Self {
+        Self::new(conf)
+    }
+
+    /// Helper function to set up internals of the application
+    #[allow(clippy::type_complexity)]
+    fn setup(
+        arcon_conf: &ApplicationConf,
+        logger: &ArconLogger,
+    ) -> (
+        KompactSystem,
+        KompactSystem,
+        Arc<Component<SnapshotManager>>,
+        Option<Arc<Component<EpochManager>>>,
+    ) {
+        let data_system = arcon_conf
+            .data_system_conf()
+            .build()
+            .expect("KompactSystem");
+        let ctrl_system = arcon_conf
+            .ctrl_system_conf()
+            .build()
+            .expect("KompactSystem");
+
+        let timeout = std::time::Duration::from_millis(500);
+
+        let snapshot_manager = ctrl_system.create(SnapshotManager::new);
+
+        let epoch_manager = match arcon_conf.execution_mode {
+            ExecutionMode::Local => {
+                let snapshot_manager_ref = snapshot_manager.actor_ref().hold().expect("fail");
+                let epoch_manager = ctrl_system.create(|| {
+                    EpochManager::new(
+                        arcon_conf.epoch_interval,
+                        snapshot_manager_ref,
+                        logger.clone(),
+                    )
+                });
+                ctrl_system
+                    .start_notify(&epoch_manager)
+                    .wait_timeout(timeout)
+                    .expect("EpochManager comp never started!");
+
+                Some(epoch_manager)
+            }
+            ExecutionMode::Distributed(_) => None,
+        };
+
+        ctrl_system
+            .start_notify(&snapshot_manager)
+            .wait_timeout(timeout)
+            .expect("SnapshotManager comp never started!");
+
+        (ctrl_system, data_system, snapshot_manager, epoch_manager)
+    }
+
+    /// Create a parallel data source
+    ///
+    /// Returns a [`Stream`] object that users may execute transformations on.
+    pub fn parallel_source<S>(self, builder: ParallelSourceBuilder<S>) -> Stream<S::Item>
+    where
+        S: Source,
+    {
+        self.source_to_stream(SourceBuilderType::Parallel(builder))
+    }
+
+    /// Create a non-parallel data source
+    ///
+    /// Returns a [`Stream`] object that users may execute transformations on.
+    pub fn source<S>(self, builder: SourceBuilder<S>) -> Stream<S::Item>
+    where
+        S: Source,
+    {
+        self.source_to_stream(SourceBuilderType::Single(builder))
+    }
+
+    fn source_to_stream<S, B>(self, builder_type: SourceBuilderType<S, B>) -> Stream<S::Item>
+    where
+        S: Source,
+        B: Backend,
+    {
+        let parallelism = builder_type.parallelism();
+
+        let mut state_dir = self.arcon_conf().state_dir();
+        state_dir.push("source_manager");
+        let backend = Arc::new(B::create(&state_dir, String::from("source_manager")).unwrap());
+        let time = builder_type.time();
+        let manager_constructor = source_manager_constructor::<S, B>(
+            String::from("source_manager"),
+            builder_type,
+            backend,
+            self.arcon_conf().watermark_interval,
+            time,
+        );
+        let mut ctx = Context::new(self);
+        let kind = DFGNodeKind::Source(Default::default(), manager_constructor);
+        let incoming_channels = 0; // sources have 0 incoming channels..
+        let outgoing_channels = parallelism;
+        let dfg_node = DFGNode::new(kind, outgoing_channels, incoming_channels, vec![]);
+        ctx.dfg.insert(dfg_node);
+        Stream::new(ctx)
+    }
+
+    /// Creates a bounded data Stream using a local file
+    ///
+    /// Returns a [`Stream`] object that users may execute transformations on.
+    ///
+    /// Example
+    /// ```no_run
+    /// use arcon::prelude::*;
+    /// let stream: Stream<u64> = Application::default()
+    ///     .file("/tmp/source_file", |conf| {
+    ///         conf.set_arcon_time(ArconTime::Process);
+    ///     });
+    /// ```
+    pub fn file<I, A>(self, i: I, f: impl FnOnce(&mut SourceConf<A>)) -> Stream<A>
+    where
+        I: Into<String>,
+        A: ArconType + std::str::FromStr + std::fmt::Display,
+        <A as std::str::FromStr>::Err: std::fmt::Display,
+    {
+        let path = i.into();
+        assert!(
+            std::path::Path::new(&path).exists(),
+            "File {} does not exist",
+            path
+        );
+        let mut conf = SourceConf::default();
+        f(&mut conf);
+
+        let builder = SourceBuilder {
+            constructor: Arc::new(move |_| LocalFileSource::new(path.clone())),
+            conf,
+        };
+        self.source(builder)
+    }
+
+    /// Creates a bounded data Stream using a Collection
+    ///
+    /// Returns a [`Stream`] object that users may execute transformations on.
+    ///
+    /// Example
+    /// ```no_run
+    /// use arcon::prelude::*;
+    /// let stream: Stream<u64> = Application::default()
+    ///     .iterator(0u64..100, |conf| {
+    ///         conf.set_arcon_time(ArconTime::Process);
+    ///     });
+    /// ```
+    pub fn iterator<I>(self, i: I, f: impl FnOnce(&mut SourceConf<I::Item>)) -> Stream<I::Item>
+    where
+        I: IntoIterator + 'static + Clone + Send + Sync,
+        I::IntoIter: Send,
+        I::Item: ArconType,
+    {
+        let mut conf = SourceConf::default();
+        f(&mut conf);
+
+        let builder = SourceBuilder {
+            constructor: Arc::new(move |_| i.clone().into_iter()),
+            conf,
+        };
+        self.source(builder)
+    }
+
+    /// Creates an unbounded stream using Kafka
+    ///
+    /// Returns a [`Stream`] object that users may execute transformations on.
+    ///
+    /// Example
+    /// ```no_run
+    /// use arcon::prelude::*;
+    /// let consumer_conf = KafkaConsumerConf::default()
+    ///  .with_topic("test")
+    ///  .set("group.id", "test")
+    ///  .set("bootstrap.servers", "127.0.0.1:9092")
+    ///  .set("enable.auto.commit", "false");
+    ///
+    /// let stream: Stream<u64> = Application::default()
+    ///  .kafka(consumer_conf, JsonSchema::new(), 1, |conf| {
+    ///     conf.set_arcon_time(ArconTime::Event);
+    ///     conf.set_timestamp_extractor(|x: &u64| *x);
+    ///  });
+    /// ```
+    #[cfg(feature = "kafka")]
+    pub fn kafka<S: SourceSchema>(
+        self,
+        kafka_conf: KafkaConsumerConf,
+        schema: S,
+        parallelism: usize,
+        f: impl FnOnce(&mut SourceConf<S::Data>),
+    ) -> Stream<S::Data> {
+        let mut conf = SourceConf::default();
+        f(&mut conf);
+
+        let builder = ParallelSourceBuilder {
+            constructor: Arc::new(move |backend, index, total_sources| {
+                KafkaConsumer::new(
+                    kafka_conf.clone(),
+                    KafkaConsumerState::new(backend),
+                    schema.clone(),
+                    index,
+                    total_sources,
+                )
+            }),
+            conf,
+            parallelism,
+        };
+        self.parallel_source(builder)
+    }
+
+    /// Enable DebugNode for the Application
+    ///
+    ///
+    /// The component can be accessed through [method](AssembledApplication::get_debug_node).
+    pub fn with_debug_node(mut self) -> Self {
+        self.debug_node_flag = true;
+        self
+    }
+
+    // Internal helper for creating PoolInfo for a ChannelStrategy
+    pub(crate) fn get_pool_info(&self) -> PoolInfo {
+        PoolInfo::new(
+            self.conf.channel_batch_size,
+            self.conf.buffer_pool_size,
+            self.allocator.clone(),
+        )
+    }
+
+    // TODO: Remove
+    pub fn shutdown(self) {
+        let _ = self.data_system.shutdown();
+        let _ = self.ctrl_system.shutdown();
+    }
+
+    pub(crate) fn data_system(&mut self) -> &mut KompactSystem {
+        &mut self.data_system
+    }
+
+    pub(crate) fn ctrl_system(&mut self) -> &mut KompactSystem {
+        &mut self.ctrl_system
+    }
+
+    /// Give out a reference to the ApplicationConf of the application
+    pub(crate) fn arcon_conf(&self) -> &ApplicationConf {
+        &self.conf
+    }
+
+    pub(crate) fn epoch_manager(&self) -> ActorRefStrong<EpochEvent> {
+        if let Some(epoch_manager) = &self.epoch_manager {
+            epoch_manager
+                .actor_ref()
+                .hold()
+                .expect("Failed to fetch actor ref")
+        } else {
+            panic!(
+                "Only local reference supported for now. should really be an ActorPath later on"
+            );
+        }
+    }
+    pub fn debug_node_enabled(&self) -> bool {
+        self.debug_node_flag
+    }
+
+    // internal helper to create a DebugNode from a Stream object
+    pub(crate) fn create_debug_node<A>(&mut self, node: DebugNode<A>)
+    where
+        A: ArconType,
+    {
+        assert!(
+            self.debug_node.is_none(),
+            "DebugNode has already been created!"
+        );
+        let component = self.ctrl_system.create(|| node);
+
+        self.ctrl_system
+            .start_notify(&component)
+            .wait_timeout(std::time::Duration::from_millis(500))
+            .expect("DebugNode comp never started!");
+
+        self.debug_node = Some(component.clone());
+        // define abstract version of the component as the building phase needs it to downcast properly..
+        let comp: Arc<dyn AbstractComponent<Message = ArconMessage<A>>> = component;
+        self.abstract_debug_node = Some(Arc::new(comp) as ErasedComponent);
+    }
+
+    // internal helper to help fetch DebugNode from an AssembledApplication
+    pub(crate) fn get_debug_node<A: ArconType>(&self) -> Option<Arc<Component<DebugNode<A>>>> {
+        self.debug_node.as_ref().map(|erased_comp| {
+            erased_comp
+                .clone()
+                .downcast::<Component<DebugNode<A>>>()
+                .unwrap()
+        })
+    }
+
+    // NOTE: this function can be used while we are building up the dataflow.
+    // Basically, we want to send information about this Arcon Process (conf.arcon_pid)
+    // to the ControlPlane. 
+    pub(crate) fn _register_app(&self) {
+        let source_manager: ActorPath = NamedPath::with_system(
+            self.ctrl_system.system_path(),
+            vec!["source_manager".into()],
+        )
+        .into();
+
+        let _app = AppRegistration {
+            name: self.conf.app_name.clone(),
+            arcon_pids: vec![self.conf.arcon_pid], // TODO: all pids..
+            sources: vec![source_manager.to_string()],
+            pid: self.conf.arcon_pid,
+        };
+        // TODO: communicate with a component at the ControlPlane 
+    }
+}

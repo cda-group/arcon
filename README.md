@@ -15,7 +15,7 @@ Arcon is in development and should be considered experimental until further noti
 
 #### Rust Version
 
-Arcon builds against the latest stable release and the current MSRV is 1.53.0.
+Arcon builds against the latest stable release and the current MSRV is 1.56.1
 
 ### Roadmap
 
@@ -56,31 +56,32 @@ fn main() {
 }
 ```
 
-More advanced examples can be found [here](arcon_examples/src/bin).
+More examples can be found [here](examples).
 
 ## Project Layout
 
-* [`arcon_allocator`]: Custom allocator.
+* [`arcon`]: Arcon crate
 * [`arcon_build`]: Protobuf builder
-* [`arcon_examples`]: Example Applications
 * [`arcon_macros`]: Arcon derive macros.
-* [`arcon_shell`]: Explore a live Arcon application
-* [`arcon_state`]: State management features.
 * [`arcon_tests`]: Integration tests
-* [`benches`]: Criterion benchmarks
-* [`src`]: Core arcon crate
+* [`examples`]: Example applications
 * [`website`]: Project website
 
-[`arcon_allocator`]: arcon_allocator
+[`arcon`]: arcon
 [`arcon_build`]: arcon_build
-[`arcon_examples`]: arcon_examples
 [`arcon_macros`]: arcon_macros
-[`arcon_shell`]: arcon_shell
-[`arcon_state`]: arcon_state
 [`arcon_tests`]: arcon_tests
-[`benches`]: benches
-[`src`]: src
+[`examples`]: examples
 [`website`]: website
+
+## Acknowledgements
+
+Arcon is influenced by many great projects whether it is implementation, code practices or project structure:
+
+- [Tokio](https://github.com/tokio-rs/tokio)
+- [Datafusion](https://github.com/apache/arrow-datafusion)
+- [Apache Flink](https://github.com/apache/flink)
+- [Sled](https://github.com/spacejam/sled)
 
 ## License
 

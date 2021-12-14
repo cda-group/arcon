@@ -26,12 +26,15 @@ mod basic {
 /// Test basic functionality with Arcon.
 #[cfg(test)]
 mod with_arcon {
-    use arcon::prelude::Arcon;
 
     #[arcon::proto]
-    #[cfg_attr(feature = "arcon_serde", derive(serde::Serialize, serde::Deserialize))]
-    #[derive(Arcon, Clone, abomonation_derive::Abomonation)]
-    #[arcon(reliable_ser_id = 1, unsafe_ser_id = 2, version = 1)]
+    struct Advanced {
+        option: Option<u64>,
+        bytes: Vec<u8>,
+        repeated: Vec<Point>,
+    }
+
+    #[arcon::proto]
     struct Point {
         x: i32,
         y: i32,
@@ -46,6 +49,11 @@ mod with_arcon {
     #[test]
     fn test() {
         let _p = Point { x: 0, y: 1 };
+        let _advanced = Advanced {
+            option: Some(1),
+            bytes: Vec::new(),
+            repeated: vec![_p],
+        };
         let _f = Foo {
             this: Some(FooEnum::Bar(5)),
         };
