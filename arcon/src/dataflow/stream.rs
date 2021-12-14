@@ -17,7 +17,7 @@ use crate::{
     },
     util::ArconFnBounds,
 };
-use kompact::prelude::KFuture;
+
 use std::{marker::PhantomData, sync::Arc, time::Duration};
 
 const BUILD_TIMEOUT: Duration = Duration::from_secs(60);

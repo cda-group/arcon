@@ -624,7 +624,7 @@ mod tests {
         ) -> (ActorRef<ArconMessage<i32>>, Arc<Component<DebugNode<i32>>>) {
             // Returns a filter Node with input channels: sender1..sender3
             // And a debug sink receiving its results
-            let mut app = AssembledApplication::default();
+            let app = AssembledApplication::default();
             let pool_info = app.app.get_pool_info();
             let epoch_manager_ref = app.epoch_manager();
 

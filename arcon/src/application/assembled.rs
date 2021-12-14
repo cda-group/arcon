@@ -13,8 +13,7 @@ use crate::{
 use kompact::{
     component::AbstractComponent,
     prelude::{
-        ActorPath, ActorRefFactory, ActorRefStrong, Component, KFuture, KPromise, KompactSystem,
-        NamedPath,
+        ActorPath, ActorRefFactory, ActorRefStrong, Component, KFuture, KompactSystem, NamedPath,
     },
 };
 use std::{sync::Arc, time::Duration};

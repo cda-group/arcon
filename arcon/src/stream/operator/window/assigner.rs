@@ -275,7 +275,7 @@ mod tests {
         ActorRefStrong<ArconMessage<u64>>,
         Arc<Component<DebugNode<u64>>>,
     ) {
-        let mut app = AssembledApplication::default();
+        let app = AssembledApplication::default();
         let pool_info = app.app.get_pool_info();
         let epoch_manager_ref = app.epoch_manager();
 

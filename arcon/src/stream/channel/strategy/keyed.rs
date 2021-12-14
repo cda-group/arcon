@@ -161,7 +161,7 @@ mod tests {
 
     #[test]
     fn keyby_test() {
-        let mut app = AssembledApplication::default();
+        let app = AssembledApplication::default();
         let pool_info = app.app.get_pool_info();
         let system = app.data_system();
 

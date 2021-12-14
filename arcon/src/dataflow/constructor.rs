@@ -132,7 +132,7 @@ impl<OP: Operator + 'static, B: Backend> NodeFactory for NodeConstructor<OP, B> 
             } else {
                 panic!("Faulty Pipeline. No output channels for a Node.");
             }
-        } 
+        }
         for node_id in node_ids {
             // Create the Nodes arguments
             let node_descriptor = format!("{}_{}", self.descriptor, node_id.node_id.id);
