@@ -14,6 +14,7 @@ use crate::{
 use arcon_macros::ArconState;
 use arcon_state::Backend;
 use kompact::prelude::error;
+
 use prost::Message;
 use std::{marker::PhantomData, sync::Arc};
 
@@ -251,6 +252,7 @@ mod tests {
     use crate::{
         application::*,
         data::{ArconMessage, NodeID},
+        dataflow::dfg::GlobalNodeId,
         index::AppenderWindow,
         manager::node::{NodeManager, NodeManagerPort},
         prelude::OperatorBuilder,
@@ -276,8 +278,8 @@ mod tests {
         ActorRefStrong<ArconMessage<u64>>,
         Arc<Component<DebugNode<u64>>>,
     ) {
-        let mut app = Application::default();
-        let pool_info = app.get_pool_info();
+        let app = AssembledApplication::default();
+        let pool_info = app.app.get_pool_info();
         let epoch_manager_ref = app.epoch_manager();
 
         // Create a sink
@@ -329,9 +331,9 @@ mod tests {
 
         let nm = NodeManager::new(
             descriptor.clone(),
-            app.data_system.clone(),
+            app.data_system().clone(),
             in_channels.clone(),
-            app.arcon_logger.clone(),
+            app.app.arcon_logger.clone(),
             Arc::new(builder),
         );
 
@@ -353,11 +355,12 @@ mod tests {
             operator_state(backend.clone()),
             NodeState::new(NodeID::new(0), in_channels, backend.clone()),
             backend,
-            app.arcon_logger.clone(),
+            app.app.arcon_logger.clone(),
             epoch_manager_ref,
             #[cfg(feature = "hardware_counters")]
             #[cfg(not(test))]
             perf_events,
+            GlobalNodeId::null(),
         );
 
         let window_comp = app.data_system().create(|| node);
@@ -368,7 +371,7 @@ mod tests {
 
         app.data_system()
             .start_notify(&window_comp)
-            .wait_timeout(std::time::Duration::from_millis(100))
+            .wait_timeout(std::time::Duration::from_millis(1000))
             .expect("started");
 
         let win_ref: ActorRefStrong<ArconMessage<u64>> = window_comp
@@ -378,7 +381,8 @@ mod tests {
 
         node_manager_comp.on_definition(|cd| {
             // Insert the created Node into the NodeManager
-            cd.nodes.insert(NodeID::new(0), (window_comp, required_ref));
+            cd.nodes
+                .insert(GlobalNodeId::null(), (window_comp, required_ref));
         });
 
         (win_ref, sink)

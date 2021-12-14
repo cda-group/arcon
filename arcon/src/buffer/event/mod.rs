@@ -112,6 +112,7 @@ impl<T> Drop for EventBuffer<T> {
 
 /// An EventBuffer writer
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct BufferWriter<T> {
     /// Reference to the underlying buffer
     buffer: Arc<EventBuffer<T>>,
@@ -301,6 +302,7 @@ impl<T> From<Vec<T>> for BufferReader<T> {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct PoolInfo {
     pub(crate) buffer_size: usize,

@@ -56,6 +56,7 @@ impl<OP: Operator, Backend: arcon_state::Backend> OperatorBuilder<OP, Backend> {
 type SourceIndex = usize;
 type TotalSources = usize;
 
+#[derive(Clone)]
 pub enum SourceBuilderType<S, B>
 where
     S: Source,

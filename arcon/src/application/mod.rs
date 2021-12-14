@@ -6,31 +6,23 @@ use crate::stream::source::{
     schema::SourceSchema,
 };
 use crate::{
-    application::conf::{logger::ArconLogger, ApplicationConf, ExecutionMode},
+    application::conf::{logger::ArconLogger, ApplicationConf},
     buffer::event::PoolInfo,
-    data::ArconMessage,
     dataflow::{
         api::{ParallelSourceBuilder, SourceBuilder, SourceBuilderType},
         conf::SourceConf,
-        constructor::{source_manager_constructor, ErasedComponent},
+        constructor::SourceConstructor,
         dfg::*,
         stream::Context,
     },
-    manager::{
-        epoch::{EpochEvent, EpochManager},
-        snapshot::SnapshotManager,
-    },
     prelude::*,
-    stream::{
-        node::{debug::DebugNode, source::SourceEvent},
-        source::{local_file::LocalFileSource, Source},
-    },
+    stream::source::{local_file::LocalFileSource, Source},
 };
 use arcon_allocator::Allocator;
-use kompact::{component::AbstractComponent, prelude::KompactSystem};
+
 use std::sync::{Arc, Mutex};
 
-mod assembled;
+pub(crate) mod assembled;
 pub mod conf;
 
 pub use crate::dataflow::stream::Stream;
@@ -66,26 +58,16 @@ use metrics_exporter_prometheus::PrometheusBuilder;
 /// ```
 #[derive(Clone)]
 pub struct Application {
-    /// [`KompactSystem`] for Control Components
-    pub(crate) ctrl_system: KompactSystem,
-    /// [`KompactSystem`] for Data Processing Components
-    pub(crate) data_system: KompactSystem,
     /// Configuration for this application
     pub(crate) conf: ApplicationConf,
+    /// The DFG of this application
+    pub(crate) dfg: DFG,
     /// Arcon allocator for this application
     pub(crate) allocator: Arc<Mutex<Allocator>>,
-    /// SourceManager component for this application
-    pub(crate) source_manager: Option<Arc<dyn AbstractComponent<Message = SourceEvent>>>,
-    /// EpochManager component for this application
-    pub(crate) epoch_manager: Option<Arc<Component<EpochManager>>>,
-    /// SnapshotManager component for this application
-    pub(crate) snapshot_manager: Arc<Component<SnapshotManager>>,
+    /// A container holding information about the application's control plane
+    // pub(crate) control_plane: ControlPlaneContainer,
     /// Flag indicating whether to spawn a debug node for the Application
     debug_node_flag: bool,
-    // Type erased Arc<Component<DebugNode<A>>>
-    pub(crate) debug_node: Option<ErasedComponent>,
-    // Type erased Arc<dyn AbstractComponent<Message = ArconMessage<A>>>
-    pub(crate) abstract_debug_node: Option<ErasedComponent>,
     /// Configured Logger for the Application
     pub(crate) arcon_logger: ArconLogger,
 }
@@ -122,21 +104,24 @@ impl Application {
                 error!(arcon_logger, "metrics recorder has already been set");
             }
         }
-
-        let (ctrl_system, data_system, snapshot_manager, epoch_manager) =
-            Self::setup(&conf, &arcon_logger);
-
+        /*
+        let control_plane = match &conf.control_plane_mode {
+            ControlPlaneMode::Embedded => {
+                let mut cp_conf = ControlPlaneConf::default();
+                let mut dir = conf.base_dir.clone();
+                dir.push("control_plane");
+                cp_conf.dir = dir;
+                ControlPlaneContainer::Embedded(ControlPlane::new(cp_conf))
+            }
+            ControlPlaneMode::Remote(addr) => ControlPlaneContainer::Remote(addr.clone()),
+        };
+        */
         Self {
-            ctrl_system,
-            data_system,
             conf,
+            dfg: DFG::default(),
             allocator,
-            snapshot_manager,
-            epoch_manager,
-            source_manager: None,
+            //control_plane,
             debug_node_flag: false,
-            debug_node: None,
-            abstract_debug_node: None,
             arcon_logger,
         }
     }
@@ -144,58 +129,6 @@ impl Application {
     /// Creates a new Application using the given ApplicationConf
     pub fn with_conf(conf: ApplicationConf) -> Self {
         Self::new(conf)
-    }
-
-    /// Helper function to set up internals of the application
-    #[allow(clippy::type_complexity)]
-    fn setup(
-        arcon_conf: &ApplicationConf,
-        logger: &ArconLogger,
-    ) -> (
-        KompactSystem,
-        KompactSystem,
-        Arc<Component<SnapshotManager>>,
-        Option<Arc<Component<EpochManager>>>,
-    ) {
-        let data_system = arcon_conf
-            .data_system_conf()
-            .build()
-            .expect("KompactSystem");
-        let ctrl_system = arcon_conf
-            .ctrl_system_conf()
-            .build()
-            .expect("KompactSystem");
-
-        let timeout = std::time::Duration::from_millis(500);
-
-        let snapshot_manager = ctrl_system.create(SnapshotManager::new);
-
-        let epoch_manager = match arcon_conf.execution_mode {
-            ExecutionMode::Local => {
-                let snapshot_manager_ref = snapshot_manager.actor_ref().hold().expect("fail");
-                let epoch_manager = ctrl_system.create(|| {
-                    EpochManager::new(
-                        arcon_conf.epoch_interval,
-                        snapshot_manager_ref,
-                        logger.clone(),
-                    )
-                });
-                ctrl_system
-                    .start_notify(&epoch_manager)
-                    .wait_timeout(timeout)
-                    .expect("EpochManager comp never started!");
-
-                Some(epoch_manager)
-            }
-            ExecutionMode::Distributed(_) => None,
-        };
-
-        ctrl_system
-            .start_notify(&snapshot_manager)
-            .wait_timeout(timeout)
-            .expect("SnapshotManager comp never started!");
-
-        (ctrl_system, data_system, snapshot_manager, epoch_manager)
     }
 
     /// Create a parallel data source
@@ -229,7 +162,7 @@ impl Application {
         state_dir.push("source_manager");
         let backend = Arc::new(B::create(&state_dir, String::from("source_manager")).unwrap());
         let time = builder_type.time();
-        let manager_constructor = source_manager_constructor::<S, B>(
+        let manager_constructor = SourceConstructor::new(
             String::from("source_manager"),
             builder_type,
             backend,
@@ -237,11 +170,12 @@ impl Application {
             time,
         );
         let mut ctx = Context::new(self);
-        let kind = DFGNodeKind::Source(Default::default(), manager_constructor);
-        let incoming_channels = 0; // sources have 0 incoming channels..
-        let outgoing_channels = parallelism;
-        let dfg_node = DFGNode::new(kind, outgoing_channels, incoming_channels, vec![]);
-        ctx.dfg.insert(dfg_node);
+        let kind = DFGNodeKind::Source(Arc::new(manager_constructor));
+        let _incoming_channels = 0; // sources have 0 incoming channels..
+        let operator_id = 0; // source is the first operator
+        let _outgoing_channels = parallelism;
+        let dfg_node = DFGNode::new(kind, operator_id, parallelism, vec![]);
+        ctx.app.dfg.insert(dfg_node);
         Stream::new(ctx)
     }
 
@@ -371,37 +305,11 @@ impl Application {
         )
     }
 
-    // TODO: Remove
-    pub fn shutdown(self) {
-        let _ = self.data_system.shutdown();
-        let _ = self.ctrl_system.shutdown();
-    }
-
-    pub(crate) fn data_system(&mut self) -> &mut KompactSystem {
-        &mut self.data_system
-    }
-
-    pub(crate) fn ctrl_system(&mut self) -> &mut KompactSystem {
-        &mut self.ctrl_system
-    }
-
     /// Give out a reference to the ApplicationConf of the application
     pub(crate) fn arcon_conf(&self) -> &ApplicationConf {
         &self.conf
     }
 
-    pub(crate) fn epoch_manager(&self) -> ActorRefStrong<EpochEvent> {
-        if let Some(epoch_manager) = &self.epoch_manager {
-            epoch_manager
-                .actor_ref()
-                .hold()
-                .expect("Failed to fetch actor ref")
-        } else {
-            panic!(
-                "Only local reference supported for now. should really be an ActorPath later on"
-            );
-        }
-    }
     pub fn debug_node_enabled(&self) -> bool {
         self.debug_node_flag
     }

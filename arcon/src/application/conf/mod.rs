@@ -15,6 +15,8 @@ pub enum ExecutionMode {
     Local,
     Distributed(DistributedConf),
 }
+
+#[allow(dead_code)]
 #[derive(Deserialize, Clone, Debug)]
 #[allow(dead_code)]
 pub struct DistributedConf {

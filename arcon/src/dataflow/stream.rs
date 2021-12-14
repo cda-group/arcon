@@ -1,37 +1,33 @@
 use crate::{
-    application::Application,
-    data::{ArconType, NodeID},
+    application::{assembled::Runtime, Application},
+    data::ArconType,
     dataflow::{
         api::OperatorBuilder,
         conf::{OperatorConf, ParallelismStrategy},
         constructor::*,
-        dfg::{ChannelKind, DFGNode, DFGNodeID, DFGNodeKind, DFG},
+        dfg::{DFGNode, DFGNodeKind, GlobalNodeId, OperatorId},
     },
     index::EmptyState,
     prelude::AssembledApplication,
-    stream::{
-        node::debug::DebugNode,
-        operator::{
-            function::{Filter, FlatMap, Map, MapInPlace},
-            sink::measure::MeasureSink,
-            Operator,
-        },
+    stream::operator::{
+        function::{Filter, FlatMap, Map, MapInPlace},
+        sink::measure::MeasureSink,
+        Operator,
     },
     util::ArconFnBounds,
 };
+
 use std::{marker::PhantomData, sync::Arc};
 
 #[derive(Default)]
 pub struct Context {
-    pub(crate) dfg: DFG,
-    app: Application,
+    pub(crate) app: Application,
     console_output: bool,
 }
 
 impl Context {
     pub fn new(app: Application) -> Self {
         Self {
-            dfg: Default::default(),
             app,
             console_output: false,
         }
@@ -42,7 +38,7 @@ impl Context {
 pub struct Stream<IN: ArconType> {
     _marker: PhantomData<IN>,
     // ID of the node which outputs this stream.
-    prev_dfg_id: DFGNodeID,
+    prev_dfg_id: OperatorId,
     ctx: Context,
 }
 
@@ -168,30 +164,31 @@ impl<IN: ArconType> Stream<IN> {
         // Set up directory for the operator and create Backend
         let mut state_dir = self.ctx.app.arcon_conf().state_dir();
         let state_id = builder.state_id();
-        state_dir.push(state_id.clone());
+        state_dir.push(state_id);
 
-        let outgoing_channels = match builder.conf.parallelism_strategy {
+        let paralellism = match builder.conf.parallelism_strategy {
             ParallelismStrategy::Static(num) => num,
             _ => unreachable!("Managed Parallelism not Supported yet"),
         };
 
-        let manager_constructor = node_manager_constructor::<OP, _>(
-            state_id,
+        let manager_constructor = NodeConstructor::new(
+            "Operator".to_string(),
             state_dir,
-            self.ctx.app.data_system.clone(),
             Arc::new(builder),
             self.ctx.app.arcon_logger.clone(),
         );
 
-        let prev_dfg_node = self.ctx.dfg.get_mut(&self.prev_dfg_id);
-        let incoming_channels = prev_dfg_node.outgoing_channels;
-
-        let next_dfg_id = self.ctx.dfg.insert(DFGNode::new(
-            DFGNodeKind::Node(manager_constructor),
-            outgoing_channels,
+        let prev_dfg_node = self.ctx.app.dfg.get_mut(&self.prev_dfg_id);
+        let incoming_channels = prev_dfg_node.get_node_ids();
+        let operator_id = prev_dfg_node.get_operator_id() + 1;
+        let dfg_node = DFGNode::new(
+            DFGNodeKind::Node(Arc::new(manager_constructor)),
+            operator_id,
+            paralellism,
             incoming_channels,
-            vec![self.prev_dfg_id],
-        ));
+        );
+        prev_dfg_node.set_outgoing_channels(dfg_node.get_node_ids());
+        let next_dfg_id = self.ctx.app.dfg.insert(dfg_node);
 
         self.prev_dfg_id = next_dfg_id;
         Stream {
@@ -240,64 +237,58 @@ impl<IN: ArconType> Stream<IN> {
     /// Note that this method only builds the application. In order
     /// to start it, see the following [method](AssembledApplication::start).
     pub fn build(mut self) -> AssembledApplication {
-        let mut target_nodes: Option<Vec<Arc<dyn std::any::Any + Send + Sync>>> = None;
+        let runtime = self.build_runtime();
+        let mut assembled = AssembledApplication::new(self.ctx.app.clone(), runtime);
 
-        for dfg_node in self.ctx.dfg.graph.into_iter().rev() {
-            match dfg_node.kind {
-                DFGNodeKind::Source(channel_kind, source_manager_cons) => {
-                    let nodes = target_nodes.take().unwrap();
-                    let source_manager =
-                        source_manager_cons(nodes, channel_kind, &mut self.ctx.app);
+        let mut output_channels = Vec::new();
 
-                    self.ctx.app.source_manager = Some(source_manager);
+        for dfg_node in self.ctx.app.dfg.graph.iter().rev() {
+            let operator_id = dfg_node.get_operator_id();
+            let input_channels = dfg_node.get_input_channels();
+            let node_ids = dfg_node
+                .get_node_ids()
+                .iter()
+                .map(|id| GlobalNodeId {
+                    operator_id,
+                    node_id: *id,
+                })
+                .collect();
+            match &dfg_node.kind {
+                DFGNodeKind::Source(source_factory) => {
+                    eprintln!("Building a Source");
+                    let sources = source_factory.build_source(
+                        output_channels.clone(),
+                        Vec::new(),
+                        &mut assembled,
+                    );
+                    assembled.set_source_manager(sources);
+                    eprintln!("Source Built");
                 }
-                DFGNodeKind::Node(manager_cons) => {
-                    let (channel_kind, components) = {
-                        match target_nodes {
-                            Some(comps) => (dfg_node.channel_kind, comps),
-                            None => {
-                                // At the end of the graph....
-                                if self.ctx.app.debug_node_enabled() {
-                                    let node: DebugNode<IN> = DebugNode::new();
-                                    self.ctx.app.create_debug_node(node);
-                                }
-
-                                match self.ctx.app.abstract_debug_node {
-                                    Some(ref debug_node) => {
-                                        (ChannelKind::Forward, vec![debug_node.clone()])
-                                    }
-                                    None => (
-                                        if self.ctx.console_output {
-                                            ChannelKind::Console
-                                        } else {
-                                            ChannelKind::Mute
-                                        },
-                                        vec![],
-                                    ),
-                                }
-                            }
-                        }
-                    };
-
-                    // Create expected incoming channels ids
-                    let in_channels: Vec<NodeID> = (0..dfg_node.ingoing_channels)
-                        .map(|i| NodeID::new(i as u32))
-                        .collect();
-
-                    let nodes =
-                        manager_cons(in_channels, components, channel_kind, &mut self.ctx.app);
-
-                    target_nodes = Some(nodes);
+                DFGNodeKind::Node(constructor) => {
+                    eprintln!("Building a Node");
+                    let components = constructor.build_nodes(
+                        node_ids,
+                        input_channels.to_vec(),
+                        output_channels.clone(),
+                        Vec::new(),
+                        &mut assembled,
+                    );
+                    output_channels = components.iter().map(|(_, c)| c.clone()).collect();
+                    eprintln!("Node Built");
                 }
             }
         }
-        AssembledApplication::new(self.ctx.app)
+        assembled
+    }
+
+    fn build_runtime(&mut self) -> Runtime {
+        Runtime::new(self.ctx.app.arcon_conf(), &self.ctx.app.arcon_logger)
     }
 
     pub(crate) fn new(ctx: Context) -> Self {
         Self {
             _marker: PhantomData,
-            prev_dfg_id: DFGNodeID(0),
+            prev_dfg_id: 0,
             ctx,
         }
     }
