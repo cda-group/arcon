@@ -246,9 +246,11 @@ impl<IN: ArconType> Stream<IN> {
 
         let mut assembled = AssembledApplication::new(self.ctx.app, runtime);
 
+        // guarantees that application_controller is configured
         assembled.init_application_controller();
 
         // Spawn ProcessController
+        // todo set the future in the spawn_process_controller method
         let source_manager_future = assembled.spawn_process_controller();
         if let Some(source_manager) = source_manager_future
             .wait_timeout(BUILD_TIMEOUT)

@@ -112,7 +112,6 @@ impl Deployment {
             .dfg
             .get(&node_config_set.operator_id)
             .clone();
-        let channel_kind = dfg_node.get_channel_kind().clone();
         match dfg_node.kind {
             DFGNodeKind::Source(source_factory) => {
                 eprintln!("Building a Source");

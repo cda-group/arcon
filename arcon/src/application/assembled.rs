@@ -207,7 +207,8 @@ impl AssembledApplication {
             .wait_timeout(REGISTRATION_TIMEOUT)
             .expect("registration failed");
         self.runtime.ctrl_system.start(&process_controller_comp);
-        future
+        todo!();
+        future.wait_expect("");
     }
 }
 
