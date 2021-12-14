@@ -1,6 +1,7 @@
 use crate::{
     application::conf::logger::ArconLogger,
     data::{ArconMessage, Epoch, NodeID, StateID, Watermark},
+    dataflow::dfg::GlobalNodeId,
     error::*,
     index::EMPTY_STATE_ID,
     manager::snapshot::{Snapshot, SnapshotEvent, SnapshotManagerPort},
@@ -101,7 +102,7 @@ where
     /// Monotonically increasing Node ID index
     node_index: u32,
     /// Active Nodes on this NodeManager
-    pub(crate) nodes: FxHashMap<NodeID, AbstractNode<OP::IN>>,
+    pub(crate) nodes: FxHashMap<GlobalNodeId, AbstractNode<OP::IN>>,
     /// Internal manager state
     manager_state: NodeManagerState,
     latest_snapshot: Option<Snapshot>,
@@ -137,7 +138,7 @@ where
             max_node_parallelism: (num_cpus::get() * 2) as usize,
             node_index: 0,
             in_channels,
-            nodes: FxHashMap::default(),
+            nodes: FxHashMap::<GlobalNodeId, AbstractNode<OP::IN>>::default(),
             manager_state: NodeManagerState::new(),
             latest_snapshot: None,
             logger,

@@ -280,6 +280,7 @@ mod tests {
     use tempfile::TempDir;
 
     #[derive(Debug)]
+    #[allow(dead_code)]
     pub struct TestDb {
         sled: Arc<Sled>,
         dir: TempDir,
