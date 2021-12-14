@@ -19,6 +19,7 @@ use crate::{
             Channel,
         },
         node::{
+            debug::DebugNode,
             source::{SourceEvent, SourceNode},
             Node, NodeState,
         },
@@ -124,7 +125,9 @@ impl<OP: Operator + 'static, B: Backend> NodeFactory for NodeConstructor<OP, B> 
         let node_manager = self.create_node_manager(application, &in_channels);
 
         if components.is_empty() && paths.is_empty() {
-            application.app.debug_node_enabled() {
+            if application.app.debug_node_enabled() {
+                let debug_node = DebugNode::<OP::OUT>::new();
+                // Create the debug node centrally instead?
                 todo!(); // create debug node and make sure the node is built sending to it.
             } else {
                 panic!("Faulty Pipeline. No output channels for a Node.");
