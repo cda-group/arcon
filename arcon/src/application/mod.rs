@@ -104,23 +104,11 @@ impl Application {
                 error!(arcon_logger, "metrics recorder has already been set");
             }
         }
-        /*
-        let control_plane = match &conf.control_plane_mode {
-            ControlPlaneMode::Embedded => {
-                let mut cp_conf = ControlPlaneConf::default();
-                let mut dir = conf.base_dir.clone();
-                dir.push("control_plane");
-                cp_conf.dir = dir;
-                ControlPlaneContainer::Embedded(ControlPlane::new(cp_conf))
-            }
-            ControlPlaneMode::Remote(addr) => ControlPlaneContainer::Remote(addr.clone()),
-        };
-        */
+
         Self {
             conf,
             dfg: DFG::default(),
             allocator,
-            //control_plane,
             debug_node_flag: false,
             arcon_logger,
         }

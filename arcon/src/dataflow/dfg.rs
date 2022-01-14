@@ -56,10 +56,6 @@ impl DFG {
     }
 }
 
-// /// The ID of a [`DFGNode`] in the dataflow graph.
-// #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
-// pub struct OperatorId(pub usize);
-
 /// A logical node in the dataflow graph.
 #[allow(dead_code)]
 #[derive(Clone)]

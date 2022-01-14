@@ -85,6 +85,7 @@ impl<T: ArconType> Stream<T> {
     ///         conf.set_arcon_time(ArconTime::Process);
     ///     })
     ///     .key_by(|i: &u64| i);
+    /// ```
     pub fn key_by<F, KEY>(mut self, key_extractor: F) -> Stream<T>
     where
         KEY: Hash + 'static,
@@ -121,6 +122,7 @@ impl<T: ArconType> Stream<T> {
     ///         conf.set_arcon_time(ArconTime::Process);
     ///     })
     ///     .channel_kind(ChannelKind::Forward);
+    /// ```
     pub fn channel_kind(mut self, channel_kind: ChannelKind) -> Stream<T> {
         if let Some(ref mut node_factory) = self.last_node {
             let mut_node_factory = Arc::get_mut(node_factory).unwrap();

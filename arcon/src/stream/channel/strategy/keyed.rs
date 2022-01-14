@@ -1,6 +1,9 @@
 use crate::{
     buffer::event::{BufferPool, BufferWriter, PoolInfo},
-    data::{ArconEvent, ArconEventWrapper, ArconMessage, ArconType, NodeID},
+    data::{
+        partition::shard_lookup_with_key, ArconEvent, ArconEventWrapper, ArconMessage, ArconType,
+        NodeID,
+    },
     dataflow::stream::KeyBuilder,
     stream::channel::Channel,
 };
@@ -92,13 +95,12 @@ where
         match &event {
             ArconEvent::Element(e) => {
                 // Get key placement
-                //let key = self.extractor(&element.data);
                 let key = self.key_builder.get_key(&e.data);
                 // Calculate which key range index is responsible for this key
-                let index = (key % self.key_ranges) as usize; // ??
+                let index = shard_lookup_with_key(key, self.key_ranges);
 
-                self.push_event(index, event)
-                    .map(move |msg| vec![(self.channels[index].clone(), msg)])
+                self.push_event(index as usize, event)
+                    .map(move |msg| vec![(self.channels[index as usize].clone(), msg)])
                     .unwrap_or_else(Vec::new)
             }
             _ => {
@@ -182,6 +184,7 @@ mod tests {
         let key_builder = KeyBuilder::<Input> {
             extractor: Arc::new(|i: &Input| i.id as u64),
         };
+
         let mut channel_strategy =
             ChannelStrategy::Keyed(Keyed::new(channels, NodeID::new(1), pool_info, key_builder));
 

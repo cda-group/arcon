@@ -34,9 +34,10 @@ const NUM_KEYS: usize = 256;
 const EVENT_COUNT: u64 = 99946; // Idk what's special about this number but 100k wasn't reliable
 
 fn operator_conf() -> OperatorConf {
-    let mut op_conf = OperatorConf::default();
-    op_conf.parallelism_strategy = ParallelismStrategy::Static(PARALLELISM);
-    op_conf
+    OperatorConf {
+        parallelism_strategy: ParallelismStrategy::Static(PARALLELISM),
+        ..Default::default()
+    }
 }
 
 // Sets up a pipeline of iterator -> event -> key_by -> enriched_event
@@ -100,7 +101,7 @@ fn enriched_event_stream() -> Stream<EnrichedEvent> {
 fn key_by_integration() {
     let mut app = enriched_event_stream().build();
     app.start();
-    sleep(Duration::from_secs(10));
+    sleep(Duration::from_secs(2));
 
     if let Some(debug_node) = app.get_debug_node::<EnrichedEvent>() {
         debug_node.on_definition(|c| {
@@ -110,7 +111,7 @@ fn key_by_integration() {
             }
             // all events were received by the debug node
             // assert_eq!(first_val_vec.len(), (EVENT_COUNT-2) as usize); // Something funky is happening to the events?
-            first_val_vec.sort();
+            first_val_vec.sort_unstable();
             first_val_vec.dedup();
             // Only NUM_KEYS number of first_val were received, i.e. State was handled properly
             assert_eq!(first_val_vec.len(), NUM_KEYS);
@@ -138,7 +139,7 @@ fn key_by_to_forward_integration() {
 
     app.start();
 
-    sleep(Duration::from_secs(10));
+    sleep(Duration::from_secs(2));
     if let Some(debug_node) = app.get_debug_node::<EnrichedEvent>() {
         debug_node.on_definition(|c| {
             let mut first_val_vec = Vec::new();
@@ -147,7 +148,7 @@ fn key_by_to_forward_integration() {
             }
             // all events were received by the debug node
             // assert_eq!(first_val_vec.len(), (EVENT_COUNT-2) as usize); // Something funky is happening to the events?
-            first_val_vec.sort();
+            first_val_vec.sort_unstable();
             first_val_vec.dedup();
             // Only NUM_KEYS number of first_val were received, i.e. State was handled properly
             assert_eq!(first_val_vec.len(), NUM_KEYS);

@@ -209,7 +209,7 @@ impl<OP: Operator + 'static, B: Backend> NodeFactory for NodeConstructor<OP, B> 
                 self.logger.clone(),
                 application.epoch_manager().clone(),
                 #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
-                builder.conf.perf_events.clone(),
+                self.builder.conf.perf_events.clone(),
                 node_id,
                 self.in_key_builder.clone(),
             );
@@ -501,9 +501,10 @@ fn create_source_node<S, B>(
     biconnect_components::<SourceManagerPort, _, _>(source_manager_comp, &source_node_comp)
         .expect("failed to biconnect components");
 
-    app.data_system().start(&source_node_comp);
-    //.wait_timeout(std::time::Duration::from_millis(5000))
-    //.expect("Failed to start Source Node");
+    app.data_system()
+        .start_notify(&source_node_comp)
+        .wait_timeout(std::time::Duration::from_millis(5000))
+        .expect("Failed to start Source Node");
 
     let source_node_comp_dyn: Arc<dyn AbstractComponent<Message = SourceEvent>> = source_node_comp;
 

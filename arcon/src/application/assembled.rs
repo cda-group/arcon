@@ -9,9 +9,7 @@ use crate::{
     },
     stream::node::{debug::DebugNode, source::SourceEvent},
 };
-use kompact::prelude::{
-    ActorPath, ActorRefFactory, ActorRefStrong, Component, KompactSystem, NamedPath,
-};
+use kompact::prelude::{ActorRefFactory, ActorRefStrong, Component, KompactSystem};
 use std::sync::Arc;
 
 /// An [`Application`] that has been fully assembled
@@ -139,25 +137,6 @@ impl AssembledApplication {
 
     pub(crate) fn snapshot_manager(&self) -> &Arc<Component<SnapshotManager>> {
         &self.snapshot_manager
-    }
-
-    // NOTE: this function can be used while we are building up the dataflow.
-    // Basically, we want to send information about this Arcon Process (conf.arcon_pid)
-    // to the ControlPlane.
-    pub(crate) fn _register_app(&mut self) {
-        let _source_manager: ActorPath = NamedPath::with_system(
-            self.ctrl_system().system_path(),
-            vec!["source_manager".into()],
-        )
-        .into();
-        /*
-        let _app = AppRegistration {
-            name: self.app.conf.app_name.clone(),
-            arcon_pids: vec![self.app.conf.arcon_pid], // TODO: all pids..
-            sources: vec![source_manager.to_string()],
-            pid: self.app.conf.process_id,
-        };*/
-        // TODO: communicate with a component at the ControlPlane
     }
 
     /// Fetch DebugNode component of the [Application]

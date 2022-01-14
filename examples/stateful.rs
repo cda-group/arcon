@@ -27,7 +27,7 @@ fn main() {
         .iterator((0..1000000).map(|x| Event { id: x, data: 1.5 }), |conf| {
             conf.set_timestamp_extractor(|x: &Event| x.id);
         })
-        //.key_by(Arc::new(|event: &Event| &event.id)) TODO
+        .key_by(|event: &Event| &event.id)
         .operator(OperatorBuilder {
             operator: Arc::new(|| {
                 Map::stateful(|event, state: &mut MyState<_>| {
