@@ -214,6 +214,7 @@ impl<T> BufferReader<T> {
 
     /// Convert into Vec
     #[inline]
+    #[allow(clippy::uninit_vec)]
     pub fn to_vec(&self) -> Vec<T> {
         let mut dst = Vec::with_capacity(self.len);
         unsafe {

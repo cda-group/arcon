@@ -1085,6 +1085,7 @@ impl<T> RawIterRange<T> {
 
 // We make raw iterators unconditionally Send and Sync, and let the PhantomData
 // in the actual iterator implementations determine the real Send/Sync bounds.
+#[allow(clippy::non_send_fields_in_send_ty)]
 unsafe impl<T> Send for RawIterRange<T> {}
 unsafe impl<T> Sync for RawIterRange<T> {}
 

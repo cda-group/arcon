@@ -279,6 +279,7 @@ impl Application {
     ///
     ///
     /// The component can be accessed through [method](AssembledApplication::get_debug_node).
+    #[must_use]
     pub fn with_debug_node(mut self) -> Self {
         self.debug_node_flag = true;
         self

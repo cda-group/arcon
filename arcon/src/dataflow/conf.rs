@@ -114,7 +114,7 @@ impl<S: ArconType> Default for SourceConf<S> {
             extractor: None,
             time: Default::default(),
             batch_size: 1024,
-            name: format!("source_{}", uuid::Uuid::new_v4().to_string()),
+            name: format!("source_{}", uuid::Uuid::new_v4()),
         }
     }
 }

@@ -86,6 +86,7 @@ impl<T: ArconType> Stream<T> {
     ///     })
     ///     .key_by(|i: &u64| i);
     /// ```
+    #[must_use]
     pub fn key_by<F, KEY>(mut self, key_extractor: F) -> Stream<T>
     where
         KEY: Hash + 'static,
@@ -123,6 +124,7 @@ impl<T: ArconType> Stream<T> {
     ///     })
     ///     .channel_kind(ChannelKind::Forward);
     /// ```
+    #[must_use]
     pub fn channel_kind(mut self, channel_kind: ChannelKind) -> Stream<T> {
         if let Some(ref mut node_factory) = self.last_node {
             let mut_node_factory = Arc::get_mut(node_factory).unwrap();
@@ -238,6 +240,7 @@ impl<T: ArconType> Stream<T> {
     ///     })
     ///     .map_in_place(|x| *x += 10);
     /// ```
+    #[must_use]
     pub fn map_in_place<F>(self, f: F) -> Stream<T>
     where
         F: Fn(&mut T) + ArconFnBounds,
@@ -262,6 +265,7 @@ impl<T: ArconType> Stream<T> {
     ///     })
     ///     .filter(|x| x < &50);
     /// ```
+    #[must_use]
     pub fn filter<F>(self, f: F) -> Stream<T>
     where
         F: Fn(&T) -> bool + ArconFnBounds,
@@ -303,6 +307,7 @@ impl<T: ArconType> Stream<T> {
     ///
     /// Note that if the Application has been configured with a debug node, it will take precedence.
     #[allow(clippy::wrong_self_convention)]
+    #[must_use]
     pub fn to_console(mut self) -> Stream<T> {
         self.ctx.console_output = true;
 
