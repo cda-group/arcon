@@ -1,11 +1,10 @@
 use prost::*;
 use std::hash::Hash;
 
-type PartitionIndex = u64;
 /// Defines the total amount of keys in the key space
-const MAX_KEY: PartitionIndex = 65535;
+const MAX_KEY: u64 = 65535;
 
-pub fn create_shards(total: PartitionIndex) -> Vec<Shard> {
+pub fn create_shards(total: u64) -> Vec<Shard> {
     assert!(
         total < MAX_KEY,
         "Attempted to create more shards than allowed keys {}",
@@ -21,7 +20,7 @@ pub fn create_shards(total: PartitionIndex) -> Vec<Shard> {
         .collect()
 }
 
-pub fn shard_lookup<K>(data: &K, total_shards: PartitionIndex) -> PartitionIndex
+pub fn shard_lookup<K>(data: &K, total_shards: u64) -> u64
 where
     K: Hash + ?Sized,
 {
@@ -33,9 +32,9 @@ where
 
 #[inline]
 pub fn shard_lookup_with_key(
-    hashed_key: PartitionIndex,
-    total_shards: PartitionIndex,
-) -> PartitionIndex {
+    hashed_key: u64,
+    total_shards: u64,
+) -> u64 {
     let key = hashed_key % MAX_KEY;
     key * total_shards / MAX_KEY
 }
@@ -44,13 +43,13 @@ pub fn shard_lookup_with_key(
 #[derive(Debug)]
 pub struct Shard {
     /// Shard Identifier
-    id: PartitionIndex,
+    id: u64,
     /// Range of keys the shard is responsible for
     range: KeyRange,
 }
 
 impl Shard {
-    pub fn new(id: PartitionIndex, range: KeyRange) -> Self {
+    pub fn new(id: u64, range: KeyRange) -> Self {
         Self { id, range }
     }
 }
@@ -60,15 +59,15 @@ impl Shard {
 pub struct KeyRange {
     /// Start of the Key Range
     #[prost(uint64)]
-    pub start: PartitionIndex,
+    pub start: u64,
     /// End of the Key Range
     #[prost(uint64)]
-    pub end: PartitionIndex,
+    pub end: u64,
 }
 
 impl KeyRange {
     /// Creates a new KeyRange
-    pub fn new(start: PartitionIndex, end: PartitionIndex) -> KeyRange {
+    pub fn new(start: u64, end: u64) -> KeyRange {
         assert!(start < end, "start range has to be smaller than end range");
         KeyRange { start, end }
     }
