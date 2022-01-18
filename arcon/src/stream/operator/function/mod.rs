@@ -44,7 +44,7 @@ mod tests {
     // helper to check common result between Map/MapInPlace
     fn check_map_result(mut app: AssembledApplication) {
         app.start();
-        wait(250);
+        wait(1000);
 
         let debug_node = app.get_debug_node::<i32>().unwrap();
 
@@ -66,7 +66,7 @@ mod tests {
 
         app.start();
 
-        wait(250);
+        wait(1000);
 
         let debug_node = app.get_debug_node::<i32>().unwrap();
 
@@ -87,7 +87,7 @@ mod tests {
 
         app.start();
 
-        wait(250);
+        wait(1000);
 
         let debug_node = app.get_debug_node::<i32>().unwrap();
 

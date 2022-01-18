@@ -1,6 +1,10 @@
 use crate::{
     buffer::event::{BufferPool, BufferWriter, PoolInfo},
-    data::{ArconEvent, ArconEventWrapper, ArconMessage, ArconType, NodeID},
+    data::{
+        partition::shard_lookup_with_key, ArconEvent, ArconEventWrapper, ArconMessage, ArconType,
+        NodeID,
+    },
+    dataflow::stream::KeyBuilder,
     stream::channel::Channel,
 };
 use std::sync::Arc;
@@ -14,14 +18,12 @@ where
 {
     /// A buffer pool of EventBuffer's
     buffer_pool: BufferPool<ArconEventWrapper<A>>,
-    /// The highest possible key value
-    ///
-    /// This should not be set too low or ridiculously high
-    max_key: u64,
     /// Number of ranges on the contiguous key space
     key_ranges: u64,
     /// An identifier that is embedded with outgoing messages
     sender_id: NodeID,
+    /// Extract the Key from A
+    key_builder: KeyBuilder<A>,
     buffers: Vec<BufferWriter<ArconEventWrapper<A>>>,
     channels: Vec<Arc<Channel<A>>>,
     /// Struct holding information regarding the BufferPool
@@ -34,10 +36,10 @@ where
 {
     /// Creates a Keyed strategy
     pub fn new(
-        max_key: u64,
         channels: Vec<Channel<A>>,
         sender_id: NodeID,
         pool_info: PoolInfo,
+        key_builder: KeyBuilder<A>,
     ) -> Keyed<A> {
         let channels_len: u64 = channels.len() as u64;
         assert!(
@@ -58,15 +60,14 @@ where
                 .expect("failed to fetch initial buffer");
             buffers.push(writer)
         }
-
         Keyed {
             buffer_pool,
             key_ranges: channels_len,
-            max_key,
             sender_id,
             channels: channels.into_iter().map(Arc::new).collect::<Vec<_>>(),
             buffers,
             _pool_info: pool_info,
+            key_builder,
         }
     }
     #[inline]
@@ -92,14 +93,14 @@ where
     #[inline]
     pub fn add(&mut self, event: ArconEvent<A>) -> Vec<(Arc<Channel<A>>, ArconMessage<A>)> {
         match &event {
-            ArconEvent::Element(element) => {
+            ArconEvent::Element(e) => {
                 // Get key placement
-                let key = element.data.get_key() % self.max_key;
+                let key = self.key_builder.get_key(&e.data);
                 // Calculate which key range index is responsible for this key
-                let index = (key * self.key_ranges / self.max_key) as usize;
+                let index = shard_lookup_with_key(key, self.key_ranges);
 
-                self.push_event(index, event)
-                    .map(move |msg| vec![(self.channels[index].clone(), msg)])
+                self.push_event(index as usize, event)
+                    .map(move |msg| vec![(self.channels[index as usize].clone(), msg)])
                     .unwrap_or_else(Vec::new)
             }
             _ => {
@@ -148,7 +149,7 @@ where
 mod tests {
     use super::{Channel, *};
     use crate::{
-        application::Application,
+        application::assembled::AssembledApplication,
         data::{ArconElement, ArconEvent, NodeID, Watermark},
         stream::{
             channel::strategy::{send, tests::*, ChannelStrategy},
@@ -161,8 +162,8 @@ mod tests {
 
     #[test]
     fn keyby_test() {
-        let mut app = Application::default();
-        let pool_info = app.get_pool_info();
+        let app = AssembledApplication::default();
+        let pool_info = app.app.get_pool_info();
         let system = app.data_system();
 
         let parallelism: u32 = 8;
@@ -180,9 +181,12 @@ mod tests {
             comps.push(comp);
         }
 
-        let max_key = 256;
+        let key_builder = KeyBuilder::<Input> {
+            extractor: Arc::new(|i: &Input| i.id as u64),
+        };
+
         let mut channel_strategy =
-            ChannelStrategy::Keyed(Keyed::new(max_key, channels, NodeID::new(1), pool_info));
+            ChannelStrategy::Keyed(Keyed::new(channels, NodeID::new(1), pool_info, key_builder));
 
         let mut rng = rand::thread_rng();
 

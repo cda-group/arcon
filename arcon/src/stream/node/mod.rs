@@ -18,6 +18,8 @@ use crate::application::conf::logger::ArconLogger;
 use crate::data::flight_serde::unsafe_remote::UnsafeSerde;
 use crate::{
     data::{flight_serde::reliable_remote::ReliableSerde, RawArconMessage, *},
+    dataflow::dfg::GlobalNodeId,
+    dataflow::stream::KeyBuilder,
     error::{ArconResult, *},
     index::{AppenderIndex, ArconState, EagerAppender, IndexOps},
     manager::epoch::EpochEvent,
@@ -131,6 +133,8 @@ where
     #[cfg(feature = "metrics")]
     /// Struct holding metrics information
     node_metrics: NodeMetrics,
+    pub node_id: GlobalNodeId,
+    in_key_builder: Option<KeyBuilder<OP::IN>>,
 }
 
 impl<OP, B> Node<OP, B>
@@ -152,6 +156,8 @@ where
         #[cfg(all(feature = "hardware_counters", target_os = "linux"))]
         #[cfg(not(test))]
         perf_events: PerfEvents,
+        node_id: GlobalNodeId,
+        in_key_builder: Option<KeyBuilder<OP::IN>>,
     ) -> Self {
         let timer_id = format!("_{}_timer", descriptor);
         let timer = crate::index::timer::Timer::new(timer_id, backend.clone());
@@ -195,6 +201,8 @@ where
             perf_events,
             #[cfg(feature = "metrics")]
             node_metrics: NodeMetrics::new(),
+            node_id,
+            in_key_builder,
         }
     }
 
@@ -310,12 +318,19 @@ where
         Ok(())
     }
 
+    fn get_in_key(&self, e: &OP::IN) -> u64 {
+        if let Some(key_builder) = &self.in_key_builder {
+            key_builder.get_key(e)
+        } else {
+            0
+        }
+    }
+
     #[inline(always)]
     fn handle_element(&mut self, e: ArconElement<OP::IN>) -> ArconResult<()> {
         // Set key for the current element
-        // TODO: Should use a pre-defined key for Non-Keyed Streams.
         let mut context = self.operator_context.borrow_mut();
-        context.current_key = e.data.get_key();
+        context.current_key = self.get_in_key(&e.data);
         for elem in self.operator.handle_element(e, &mut context)? {
             self.add_outgoing_event(ArconEvent::Element(elem))?;
         }
@@ -619,8 +634,8 @@ mod tests {
         ) -> (ActorRef<ArconMessage<i32>>, Arc<Component<DebugNode<i32>>>) {
             // Returns a filter Node with input channels: sender1..sender3
             // And a debug sink receiving its results
-            let mut app = Application::default();
-            let pool_info = app.get_pool_info();
+            let app = AssembledApplication::default();
+            let pool_info = app.app.get_pool_info();
             let epoch_manager_ref = app.epoch_manager();
 
             let sink = app.data_system().create(DebugNode::<i32>::new);
@@ -650,9 +665,9 @@ mod tests {
 
             let nm = NodeManager::<OP, B>::new(
                 descriptor.clone(),
-                app.data_system.clone(),
+                app.data_system().clone(),
                 in_channels.clone(),
-                app.arcon_logger.clone(),
+                app.app.arcon_logger.clone(),
                 Arc::new(builder),
             );
             let node_manager_comp = app.ctrl_system().create(|| nm);
@@ -669,10 +684,12 @@ mod tests {
                 operator_state(backend.clone()),
                 NodeState::new(NodeID::new(0), in_channels, backend.clone()),
                 backend,
-                app.arcon_logger.clone(),
+                app.app.arcon_logger.clone(),
                 epoch_manager_ref,
                 #[cfg(not(test))]
                 perf_events,
+                GlobalNodeId::null(),
+                None,
             );
 
             let filter_comp = app.data_system().create(|| node);
@@ -690,7 +707,8 @@ mod tests {
 
             node_manager_comp.on_definition(|cd| {
                 // Insert the created Node into the NodeManager
-                cd.nodes.insert(NodeID::new(0), (filter_comp, required_ref));
+                cd.nodes
+                    .insert(GlobalNodeId::null(), (filter_comp, required_ref));
             });
 
             (filter_ref, sink)

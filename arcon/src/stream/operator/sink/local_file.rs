@@ -57,7 +57,7 @@ where
         _ctx: &mut OperatorContext<Self::TimerState, Self::OperatorState>,
     ) -> ArconResult<Self::ElementIterator> {
         if let Err(err) = writeln!(self.file.borrow_mut(), "{:?}", element.data) {
-            eprintln!("Error while writing to file sink {}", err.to_string());
+            eprintln!("Error while writing to file sink {}", err);
         }
         Ok(std::iter::empty::<ArconElement<Self::OUT>>())
     }

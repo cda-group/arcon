@@ -99,7 +99,7 @@ where
 mod tests {
     use super::{Channel, *};
     use crate::{
-        application::Application,
+        application::assembled::AssembledApplication,
         data::{ArconElement, ArconEvent, Watermark},
         stream::{
             channel::strategy::{forward::Forward, send, tests::*, ChannelStrategy},
@@ -110,8 +110,8 @@ mod tests {
 
     #[test]
     fn forward_test() {
-        let mut app = Application::default();
-        let pool_info = app.get_pool_info();
+        let app = AssembledApplication::default();
+        let pool_info = app.app.get_pool_info();
         let system = app.data_system();
 
         let total_msgs = 10;

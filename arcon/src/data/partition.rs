@@ -2,9 +2,9 @@ use prost::*;
 use std::hash::Hash;
 
 /// Defines the total amount of keys in the key space
-const MAX_KEY: u32 = 65535;
+const MAX_KEY: u64 = 65535;
 
-pub fn create_shards(total: u32) -> Vec<Shard> {
+pub fn create_shards(total: u64) -> Vec<Shard> {
     assert!(
         total < MAX_KEY,
         "Attempted to create more shards than allowed keys {}",
@@ -15,21 +15,24 @@ pub fn create_shards(total: u32) -> Vec<Shard> {
         .map(|index| {
             let start = (index * MAX_KEY + total - 1) / total;
             let end = ((index + 1) * MAX_KEY - 1) / total;
-            Shard::new(index, KeyRange::new(start as u32, end as u32))
+            Shard::new(index, KeyRange::new(start, end))
         })
         .collect()
 }
 
-// Maps the data and its key to the shard responsible for it
-#[inline]
-pub fn shard_lookup<K>(data: &K, total_shards: u32) -> u32
+pub fn shard_lookup<K>(data: &K, total_shards: u64) -> u64
 where
     K: Hash + ?Sized,
 {
     let mut hasher = arcon_util::key_hasher();
     data.hash(&mut hasher);
 
-    let key = hasher.finish32() % MAX_KEY;
+    shard_lookup_with_key(hasher.finish32() as u64, total_shards)
+}
+
+#[inline]
+pub fn shard_lookup_with_key(hashed_key: u64, total_shards: u64) -> u64 {
+    let key = hashed_key % MAX_KEY;
     key * total_shards / MAX_KEY
 }
 
@@ -37,13 +40,13 @@ where
 #[derive(Debug)]
 pub struct Shard {
     /// Shard Identifier
-    id: u32,
+    id: u64,
     /// Range of keys the shard is responsible for
     range: KeyRange,
 }
 
 impl Shard {
-    pub fn new(id: u32, range: KeyRange) -> Self {
+    pub fn new(id: u64, range: KeyRange) -> Self {
         Self { id, range }
     }
 }
@@ -52,16 +55,16 @@ impl Shard {
 #[derive(Message, PartialEq, Clone)]
 pub struct KeyRange {
     /// Start of the Key Range
-    #[prost(uint32)]
-    pub start: u32,
+    #[prost(uint64)]
+    pub start: u64,
     /// End of the Key Range
-    #[prost(uint32)]
-    pub end: u32,
+    #[prost(uint64)]
+    pub end: u64,
 }
 
 impl KeyRange {
     /// Creates a new KeyRange
-    pub fn new(start: u32, end: u32) -> KeyRange {
+    pub fn new(start: u64, end: u64) -> KeyRange {
         assert!(start < end, "start range has to be smaller than end range");
         KeyRange { start, end }
     }
@@ -83,7 +86,7 @@ mod tests {
     #[test]
     fn shard_lookup_test() {
         let shards = create_shards(4);
-        let total_shards = shards.len() as u32;
+        let total_shards = shards.len() as u64;
 
         let s1 = shard_lookup("a", total_shards);
         let s2 = shard_lookup("a", total_shards);

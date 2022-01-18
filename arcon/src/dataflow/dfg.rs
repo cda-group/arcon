@@ -1,9 +1,33 @@
 use super::constructor::*;
+use crate::data::NodeID;
+
+use crate::prelude::Arc;
+
+pub type OperatorId = usize;
+
+/// Logical Name, can be derived from a Deployment.
+/// Resolveable to an `ActorPath` during runtime.
+#[derive(Debug, Clone, PartialEq, std::cmp::Eq, std::hash::Hash, Copy)]
+pub struct GlobalNodeId {
+    pub operator_id: OperatorId,
+    pub node_id: NodeID,
+}
+
+#[allow(dead_code)]
+impl GlobalNodeId {
+    // Helper function to make place-holder GlobalNodeId (used in testing etc.)
+    pub fn null() -> GlobalNodeId {
+        GlobalNodeId {
+            operator_id: 0,
+            node_id: NodeID::new(0),
+        }
+    }
+}
 
 /// A logical dataflow-graph.
 #[allow(dead_code)]
 #[allow(clippy::upper_case_acronyms)]
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct DFG {
     /// The graph is represented as a Vec for maximum space-efficiency.
     /// This works since nodes are never deleted from the graph.
@@ -13,124 +37,112 @@ pub struct DFG {
 impl DFG {
     /// Inserts a [`DFGNode`] into the dataflow graph and returns a unique
     /// identifier of it.
-    pub fn insert(&mut self, node: DFGNode) -> DFGNodeID {
-        let id = DFGNodeID(self.graph.len());
+    pub fn insert(&mut self, node: DFGNode) -> OperatorId {
+        let id = self.graph.len();
         self.graph.push(node);
         id
     }
 
-    /// Returns a reference to the [`DFGNode`] associated to a [`DFGNodeID`].
+    /// Returns a reference to the [`DFGNode`] associated to a [`OperatorId`].
     #[allow(dead_code)]
-    pub fn get(&self, id: &DFGNodeID) -> &DFGNode {
-        self.graph.get(id.0).unwrap()
+    pub fn get(&self, id: &OperatorId) -> &DFGNode {
+        self.graph.get(*id).unwrap()
     }
 
-    /// Returns a mutable reference to the [`DFGNode`] associated to a [`DFGNodeID`].
+    /// Returns a mutable reference to the [`DFGNode`] associated to a [`OperatorId`].
     #[allow(dead_code)]
-    pub fn get_mut(&mut self, id: &DFGNodeID) -> &mut DFGNode {
-        self.graph.get_mut(id.0).unwrap()
+    pub fn get_mut(&mut self, id: &OperatorId) -> &mut DFGNode {
+        self.graph.get_mut(*id).unwrap()
     }
 }
 
-/// The ID of a [`DFGNode`] in the dataflow graph.
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
-pub struct DFGNodeID(pub usize);
-
 /// A logical node in the dataflow graph.
 #[allow(dead_code)]
+#[derive(Clone)]
 pub struct DFGNode {
-    pub(crate) kind: DFGNodeKind,
-    pub(crate) outgoing_channels: usize,
-    pub(crate) ingoing_channels: usize,
+    pub kind: DFGNodeKind,
+    operator_id: OperatorId,
+    paralellism: usize,
+    outgoing_channels: Vec<NodeID>,
     /// Ingoing edges to a node.
-    pub(crate) ingoing: Vec<DFGNodeID>,
-    pub(crate) channel_kind: ChannelKind,
+    ingoing: Vec<NodeID>,
+    channel_kind: ChannelKind,
 }
 
 impl DFGNode {
     pub fn new(
         kind: DFGNodeKind,
-        outgoing_channels: usize,
-        ingoing_channels: usize,
-        ingoing: Vec<DFGNodeID>,
+        operator_id: OperatorId,
+        paralellism: usize,
+        ingoing: Vec<NodeID>,
     ) -> Self {
         Self {
             kind,
-            outgoing_channels,
-            ingoing_channels,
+            operator_id,
+            paralellism,
+            outgoing_channels: Vec::new(),
             ingoing,
             channel_kind: Default::default(),
         }
     }
+
+    /// Returns a vector of NodeID's which this node will receive messages from
+    pub fn get_input_channels(&self) -> &Vec<NodeID> {
+        &self.ingoing
+    }
+
+    /// Returns a vector of NodeID's for this node
+    pub fn get_node_ids(&self) -> Vec<NodeID> {
+        (0..self.paralellism)
+            .map(|i| NodeID::new(i as u32))
+            .collect()
+    }
+
+    /// Sets the number of outgoing channels from this node
+    pub fn set_outgoing_channels(&mut self, outgoing_channels: Vec<NodeID>) {
+        self.outgoing_channels = outgoing_channels;
+    }
+
+    /// Returns the ChannelKind
+    #[allow(dead_code)]
+    pub fn get_channel_kind(&self) -> &ChannelKind {
+        &self.channel_kind
+    }
+
+    pub fn get_operator_id(&self) -> OperatorId {
+        self.operator_id
+    }
 }
 
+#[derive(Clone)]
 pub enum DFGNodeKind {
-    Source(ChannelKind, SourceManagerConstructor),
-    Node(NodeManagerConstructor),
-}
-
-#[allow(dead_code)]
-pub enum SourceKind {
-    Single(SourceConstructor),
-    Parallel,
+    Source(Arc<dyn SourceFactory>),
+    Node(Arc<dyn NodeFactory>),
+    Placeholder,
 }
 
 #[derive(Clone, Copy, Debug)]
-#[allow(dead_code)]
 pub enum ChannelKind {
+    /// If Operator A with parallelism P (nodes a1, a2, ..., aP) sends messages
+    /// to Operator B with parallelism P (nodes b1, b2, ..., bP)
+    /// node a1 sends to b1, a2 sends to b2 etc.
     Forward,
+    /// If Operator A with parallelism P (nodes a1, a2, ..., aP) sends messages
+    /// to Operator B with parallelism P (nodes b1, b2, ..., bP)
+    /// all nodes executing A will broadcast each message to all nodes executing B.
     Broadcast,
+    /// Unimplemented
     RoundRobin,
+    /// Hashes elements according to a given key_extractor function and distributes the messages according to the hash.
     Keyed,
+    /// Logs outgoing elements to the console without sending anything
     Console,
+    /// Outgoing messages will be discarded
     Mute,
 }
 
 impl Default for ChannelKind {
     fn default() -> Self {
-        ChannelKind::Keyed
+        ChannelKind::Forward
     }
 }
-
-// TODO: Fix
-/*
-#[test]
-fn create_dfg() {
-    use DFGNodeKind::*;
-    let mut dfg = DFG::default();
-
-    let node0 = dfg.insert(DFGNode::new(
-        Node(Box::new(())),
-        OperatorConfig::default(),
-        vec![],
-    ));
-    let node1 = dfg.insert(DFGNode::new(
-        Node(Box::new(())),
-        OperatorConfig::default(),
-        vec![node0],
-    ));
-    let node2 = dfg.insert(DFGNode::new(
-        Node(Box::new(())),
-        OperatorConfig::default(),
-        vec![node0],
-    ));
-    let node3 = dfg.insert(DFGNode::new(
-        Node(Box::new(())),
-        OperatorConfig::default(),
-        vec![node1, node2],
-    ));
-
-    // Constructs the dataflow graph:
-    //
-    //        +-> node1 -+
-    //        |          |
-    // node0 -+          +-> node3
-    //        |          |
-    //        +-> node2 -+
-
-    assert_eq!(DFGNodeID(0), node0);
-    assert_eq!(DFGNodeID(1), node1);
-    assert_eq!(DFGNodeID(2), node2);
-    assert_eq!(DFGNodeID(3), node3);
-}
-*/

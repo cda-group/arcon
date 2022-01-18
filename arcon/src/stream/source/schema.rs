@@ -4,7 +4,7 @@ use arcon_state::backend::serialization::protobuf;
 pub trait SourceSchema: Send + Sync + Clone + 'static {
     type Data: ArconType;
 
-    fn from_bytes(&self, bytes: &[u8]) -> Result<Self::Data, SourceError>;
+    fn from_bytes(bytes: &[u8]) -> Result<Self::Data, SourceError>;
 }
 
 #[cfg(feature = "serde_json")]
@@ -45,7 +45,7 @@ where
 {
     type Data = IN;
 
-    fn from_bytes(&self, bytes: &[u8]) -> Result<Self::Data, SourceError> {
+    fn from_bytes(bytes: &[u8]) -> Result<Self::Data, SourceError> {
         let s = std::str::from_utf8(bytes).map_err(|err| SourceError::Parse {
             msg: err.to_string(),
         })?;
@@ -93,7 +93,7 @@ where
 {
     type Data = IN;
 
-    fn from_bytes(&self, bytes: &[u8]) -> Result<Self::Data, SourceError> {
+    fn from_bytes(bytes: &[u8]) -> Result<Self::Data, SourceError> {
         match protobuf::deserialize(bytes) {
             Ok(data) => Ok(data),
             Err(err) => Err(SourceError::Schema {

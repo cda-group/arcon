@@ -1,28 +1,13 @@
 use proc_macro::TokenStream;
-use proc_macro2::{Ident, Span};
 use quote::ToTokens;
 use syn::DeriveInput;
-
-/// An estimation of how many bytes a string contains
-const STRING_BYTES_ESTIMATION: usize = 10;
-/// An estimation of how many bytes a byte array contains
-const BYTE_ARRAY_ESTIMATION: usize = 10;
-
-const STRING_IDENT: &str = "String";
-const VEC_IDENT: &str = "Vec";
-const U8_IDENT: &str = "u8";
-const U32_IDENT: &str = "u32";
-const U64_IDENT: &str = "u64";
-const I32_IDENT: &str = "i32";
-const I64_IDENT: &str = "i64";
-const BOOL_IDENT: &str = "bool";
 
 pub fn derive_arcon(input: TokenStream) -> TokenStream {
     let input: DeriveInput = syn::parse(input).unwrap();
     let name = &input.ident;
 
     #[allow(unused)]
-    let (unsafe_ser_id, reliable_ser_id, version, keys) = {
+    let (unsafe_ser_id, reliable_ser_id, version) = {
         let arcon_attr = input.attrs.iter().find_map(|attr| match attr.parse_meta() {
             Ok(m) => {
                 if m.path().is_ident("arcon") {
@@ -76,40 +61,10 @@ pub fn derive_arcon(input: TokenStream) -> TokenStream {
     let generics = &input.generics;
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
-    let key_quote: proc_macro2::TokenStream;
-
-    if let syn::Data::Struct(ref s) = input.data {
-        if let Some(keys) = keys {
-            // keys were specified...
-            let fields: Vec<String> = keys.trim().split(',').map(|s| s.to_string()).collect();
-            let estimated_bytes = bytes_estimation(s, fields.clone());
-            let hasher_quote = hasher_stream(estimated_bytes);
-            key_quote = hash_fields_stream(fields, hasher_quote);
-        } else {
-            // If no keys attr was given, use all valid fields of the struct instead..
-            let fields = hashable_fields(s);
-            let estimated_bytes = bytes_estimation(s, fields.clone());
-            let hasher_quote = hasher_stream(estimated_bytes);
-            key_quote = hash_fields_stream(fields, hasher_quote);
-        }
-    } else if let syn::Data::Enum(..) = input.data {
-        if keys.is_some() {
-            panic!("Hashing keys only work for structs");
-        }
-        key_quote = quote! { 0 }; // make get_key return 0
-    } else {
-        panic!("#[derive(Arcon)] only works for structs/enums");
-    }
-
     let output: proc_macro2::TokenStream = {
         quote! {
             impl #impl_generics ::arcon::ArconType for #name #ty_generics #where_clause {
                 #(#ids)*
-
-                #[inline]
-                fn get_key(&self) -> u64 {
-                    #key_quote
-                }
             }
         }
     };
@@ -117,152 +72,11 @@ pub fn derive_arcon(input: TokenStream) -> TokenStream {
     proc_macro::TokenStream::from(output)
 }
 
-/// Return a Vec of field names that may be hashed
-fn hashable_fields(s: &syn::DataStruct) -> Vec<String> {
-    let mut fields: Vec<String> = Vec::new();
-    for field in s.fields.iter() {
-        match field.ident {
-            Some(ref ident) => {
-                if let syn::Type::Path(p) = &field.ty {
-                    for segment in &p.path.segments {
-                        let inner_ident = &segment.ident.to_string();
-                        match inner_ident.as_str() {
-                            STRING_IDENT | U32_IDENT | U64_IDENT | I32_IDENT | I64_IDENT
-                            | BOOL_IDENT => {
-                                fields.push(ident.to_string());
-                            }
-                            VEC_IDENT => {
-                                if let syn::PathArguments::AngleBracketed(ag) = &segment.arguments {
-                                    for a in ag.args.iter() {
-                                        if let syn::GenericArgument::Type(syn::Type::Path(tp)) = a {
-                                            for s in &tp.path.segments {
-                                                if s.ident == U8_IDENT {
-                                                    fields.push(ident.to_string());
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            _ => (),
-                        }
-                    }
-                }
-            }
-            None => panic!("Struct missing identiy"),
-        }
-    }
-
-    fields
-}
-
-/// Estimate the required bytes for hashing a struct given the selected `fields`
-fn bytes_estimation(s: &syn::DataStruct, fields: Vec<String>) -> usize {
-    let mut bytes = 0;
-    for field in s.fields.iter() {
-        match field.ident {
-            Some(ref ident) => {
-                if fields.contains(&ident.to_string()) {
-                    if let syn::Type::Path(p) = &field.ty {
-                        for segment in &p.path.segments {
-                            let inner_ident = &segment.ident.to_string();
-                            match inner_ident.as_str() {
-                                STRING_IDENT => {
-                                    bytes += STRING_BYTES_ESTIMATION;
-                                }
-                                U32_IDENT => {
-                                    bytes += std::mem::size_of::<u32>();
-                                }
-                                U64_IDENT => {
-                                    bytes += std::mem::size_of::<u64>();
-                                }
-                                I32_IDENT => {
-                                    bytes += std::mem::size_of::<i32>();
-                                }
-                                I64_IDENT => {
-                                    bytes += std::mem::size_of::<i64>();
-                                }
-                                BOOL_IDENT => {
-                                    bytes += std::mem::size_of::<bool>();
-                                }
-                                VEC_IDENT => {
-                                    if let syn::PathArguments::AngleBracketed(ag) =
-                                        &segment.arguments
-                                    {
-                                        for a in ag.args.iter() {
-                                            if let syn::GenericArgument::Type(syn::Type::Path(tp)) =
-                                                a
-                                            {
-                                                for s in &tp.path.segments {
-                                                    if s.ident == U8_IDENT {
-                                                        bytes += BYTE_ARRAY_ESTIMATION;
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                _ => (),
-                            }
-                        }
-                    }
-                }
-            }
-            None => panic!("Struct missing identiy"),
-        }
-    }
-
-    bytes
-}
-
-/// Return a TokenStream with a Hasher implementation based on the estimated bytes
-fn hasher_stream(estimated_bytes: usize) -> proc_macro2::TokenStream {
-    // Selection Process:
-    //
-    // Low bytes estimation: Pick a hasher suited for small values
-    // Medium bytes estimation: Pick Rust's default hasher
-    // High bytes estimation: Pick XXHash that performs much better on larger values
-
-    if estimated_bytes <= 8 {
-        quote! { ::arcon::FxHasher::default(); }
-    } else if estimated_bytes <= 32 {
-        quote! { ::std::collections::hash_map::DefaultHasher::new(); }
-    } else {
-        quote! { ::arcon::XxHash64::default(); }
-    }
-}
-
-/// Return the body of a function that hashes on a number of fields
-///
-/// The output of the function is a key in the form of a [u64].
-fn hash_fields_stream(
-    keys: Vec<String>,
-    hasher: proc_macro2::TokenStream,
-) -> proc_macro2::TokenStream {
-    let keys: Vec<proc_macro2::TokenStream> = keys
-        .into_iter()
-        .map(|k| {
-            let struct_field = Ident::new(k.trim(), Span::call_site());
-            quote! { self.#struct_field.hash(&mut state); }
-        })
-        .collect();
-
-    quote! {
-        use ::std::hash::{Hash, Hasher};
-        let mut state = #hasher
-        #(#keys)*
-        state.finish()
-    }
-}
-
 /// Collect arcon attrs #[arcon(..)] meta list
-fn arcon_attr_meta(
-    meta_list: syn::MetaList,
-) -> (Option<u64>, Option<u64>, Option<u32>, Option<String>) {
+fn arcon_attr_meta(meta_list: syn::MetaList) -> (Option<u64>, Option<u64>, Option<u32>) {
     let mut unsafe_ser_id = None;
     let mut reliable_ser_id = None;
     let mut version = None;
-    let mut keys = None;
 
     for item in meta_list.nested {
         let pair = match item {
@@ -291,12 +105,6 @@ fn arcon_attr_meta(
             } else {
                 panic!("version must be an Int literal");
             }
-        } else if pair.path.is_ident("keys") {
-            if let syn::Lit::Str(ref s) = pair.lit {
-                keys = Some(s.value())
-            } else {
-                panic!("keys must be string literal");
-            }
         } else {
             panic!(
                 "unsupported attribute key '{}' found",
@@ -304,17 +112,14 @@ fn arcon_attr_meta(
             )
         }
     }
-    (unsafe_ser_id, reliable_ser_id, version, keys)
+    (unsafe_ser_id, reliable_ser_id, version)
 }
 
 /// Collect arcon attrs from doc comments
-fn arcon_doc_attr(
-    name_values: Vec<syn::Meta>,
-) -> (Option<u64>, Option<u64>, Option<u32>, Option<String>) {
+fn arcon_doc_attr(name_values: Vec<syn::Meta>) -> (Option<u64>, Option<u64>, Option<u32>) {
     let mut unsafe_ser_id = None;
     let mut reliable_ser_id = None;
     let mut version = None;
-    let mut keys = None;
 
     for attr in name_values {
         let lit = match attr {
@@ -341,13 +146,11 @@ fn arcon_doc_attr(
                     reliable_ser_id = Some(str_parts[2].parse::<u64>().unwrap());
                 } else if str_parts[0] == "version" {
                     version = Some(str_parts[2].parse::<u32>().unwrap());
-                } else if str_parts[0] == "keys" {
-                    keys = Some(str_parts[2].to_string())
                 }
             }
         } else {
             panic!("unsafe_ser_id must be an Str literal");
         }
     }
-    (unsafe_ser_id, reliable_ser_id, version, keys)
+    (unsafe_ser_id, reliable_ser_id, version)
 }

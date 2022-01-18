@@ -1,11 +1,12 @@
 use arcon::prelude::*;
 use std::sync::Arc;
 
-#[arcon::proto]
-#[derive(Arcon, Arrow, Copy, Clone)]
-#[arcon(unsafe_ser_id = 12, reliable_ser_id = 13, version = 1, keys = "id")]
+#[derive(Arcon, Arrow, prost::Message, Copy, Clone)]
+#[arcon(unsafe_ser_id = 12, reliable_ser_id = 13, version = 1)]
 pub struct Event {
+    #[prost(uint64)]
     pub id: u64,
+    #[prost(float)]
     pub data: f32,
 }
 
@@ -26,6 +27,7 @@ fn main() {
         .iterator((0..1000000).map(|x| Event { id: x, data: 1.5 }), |conf| {
             conf.set_timestamp_extractor(|x: &Event| x.id);
         })
+        .key_by(|event: &Event| &event.id)
         .operator(OperatorBuilder {
             operator: Arc::new(|| {
                 Map::stateful(|event, state: &mut MyState<_>| {

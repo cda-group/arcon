@@ -2,6 +2,7 @@
 use crate::data::flight_serde::unsafe_remote::UnsafeSerde;
 use crate::data::{flight_serde::reliable_remote::ReliableSerde, *};
 use kompact::prelude::*;
+use std::collections::HashSet;
 
 /// A DebugNode is a debug version of [Node]
 ///
@@ -19,6 +20,8 @@ where
     pub watermarks: Vec<Watermark>,
     /// Buffer holding all received [Epoch]
     pub epochs: Vec<Epoch>,
+    /// Buffer holding all NodeID's the DebugNode has received messages from
+    pub senders: HashSet<NodeID>,
 }
 
 impl<IN> DebugNode<IN>
@@ -31,6 +34,7 @@ where
             data: Vec::new(),
             watermarks: Vec::new(),
             epochs: Vec::new(),
+            senders: HashSet::new(),
         }
     }
     #[inline]
@@ -82,6 +86,7 @@ where
     type Message = ArconMessage<IN>;
 
     fn receive_local(&mut self, msg: Self::Message) -> Handled {
+        self.senders.insert(msg.sender);
         self.handle_events(msg.events);
         Handled::Ok
     }
@@ -98,6 +103,7 @@ where
                 panic!("Unexpected deserialiser")
             }
         };
+        self.senders.insert(arcon_msg.sender);
         self.handle_events(arcon_msg.events);
         Handled::Ok
     }

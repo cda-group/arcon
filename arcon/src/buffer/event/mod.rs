@@ -112,6 +112,7 @@ impl<T> Drop for EventBuffer<T> {
 
 /// An EventBuffer writer
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct BufferWriter<T> {
     /// Reference to the underlying buffer
     buffer: Arc<EventBuffer<T>>,
@@ -213,6 +214,7 @@ impl<T> BufferReader<T> {
 
     /// Convert into Vec
     #[inline]
+    #[allow(clippy::uninit_vec)]
     pub fn to_vec(&self) -> Vec<T> {
         let mut dst = Vec::with_capacity(self.len);
         unsafe {
@@ -301,6 +303,7 @@ impl<T> From<Vec<T>> for BufferReader<T> {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct PoolInfo {
     pub(crate) buffer_size: usize,

@@ -11,7 +11,7 @@ use rdkafka::{
     message::*,
     topic_partition_list::{Offset, TopicPartitionList},
 };
-use std::{sync::Arc, time::Duration};
+use std::{marker::PhantomData, sync::Arc, time::Duration};
 
 /// Default timeout duration for consumer polling
 const DEFAULT_POLL_TIMEOUT_MS: u64 = 250;
@@ -38,6 +38,7 @@ pub struct KafkaConsumerConf {
 
 impl KafkaConsumerConf {
     /// Set topic for the conf
+    #[must_use]
     pub fn with_topic(mut self, topic: &str) -> Self {
         self.topic = Some(topic.to_string());
         self
@@ -45,12 +46,14 @@ impl KafkaConsumerConf {
     /// Set poll timeout for the Kafka consumer
     ///
     /// If not defined, the default [DEFAULT_POLL_TIMEOUT] will be used.
+    #[must_use]
     pub fn with_poll_timeout(mut self, timeout_ms: u64) -> Self {
         self.poll_timeout_ms = timeout_ms;
         self
     }
 
     /// Configure rdkafka's ClientConfig
+    #[must_use]
     pub fn set(mut self, key: &str, value: &str) -> Self {
         self.client_config.set(key, value);
         self
@@ -93,7 +96,7 @@ where
     conf: KafkaConsumerConf,
     consumer: BaseConsumer<DefaultConsumerContext>,
     state: KafkaConsumerState<B>,
-    schema: S,
+    schema: PhantomData<S>,
 }
 
 impl<S, B> KafkaConsumer<S, B>
@@ -104,7 +107,7 @@ where
     pub fn new(
         conf: KafkaConsumerConf,
         mut state: KafkaConsumerState<B>,
-        schema: S,
+        _schema: S,
         source_index: usize,
         total_sources: usize,
     ) -> Self {
@@ -147,7 +150,7 @@ where
             conf,
             consumer,
             state,
-            schema,
+            schema: PhantomData,
         }
     }
 }
@@ -165,7 +168,7 @@ where
             .poll(Duration::from_millis(self.conf.poll_timeout()))
         {
             Some(Ok(msg)) => match msg.payload() {
-                Some(bytes) => match self.schema.from_bytes(bytes) {
+                Some(bytes) => match S::from_bytes(bytes) {
                     Ok(data) => {
                         let partition = msg.partition();
                         let offset = msg.offset();
