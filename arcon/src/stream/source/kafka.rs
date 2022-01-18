@@ -11,7 +11,7 @@ use rdkafka::{
     message::*,
     topic_partition_list::{Offset, TopicPartitionList},
 };
-use std::{sync::Arc, time::Duration, marker::PhantomData};
+use std::{marker::PhantomData, sync::Arc, time::Duration};
 
 /// Default timeout duration for consumer polling
 const DEFAULT_POLL_TIMEOUT_MS: u64 = 250;

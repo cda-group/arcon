@@ -31,10 +31,7 @@ where
 }
 
 #[inline]
-pub fn shard_lookup_with_key(
-    hashed_key: u64,
-    total_shards: u64,
-) -> u64 {
+pub fn shard_lookup_with_key(hashed_key: u64, total_shards: u64) -> u64 {
     let key = hashed_key % MAX_KEY;
     key * total_shards / MAX_KEY
 }

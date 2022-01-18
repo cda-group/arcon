@@ -101,7 +101,7 @@ fn enriched_event_stream() -> Stream<EnrichedEvent> {
 fn key_by_integration() {
     let mut app = enriched_event_stream().build();
     app.start();
-    sleep(Duration::from_secs(2));
+    sleep(Duration::from_secs(4));
 
     if let Some(debug_node) = app.get_debug_node::<EnrichedEvent>() {
         debug_node.on_definition(|c| {
@@ -139,7 +139,7 @@ fn key_by_to_forward_integration() {
 
     app.start();
 
-    sleep(Duration::from_secs(2));
+    sleep(Duration::from_secs(4));
     if let Some(debug_node) = app.get_debug_node::<EnrichedEvent>() {
         debug_node.on_definition(|c| {
             let mut first_val_vec = Vec::new();
