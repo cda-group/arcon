@@ -124,13 +124,10 @@ where
 
         let ts = window_start + (window_ctx.index * self.window_slide) + self.window_length;
 
-        let current_key = ctx.current_key;
-        ctx.current_key = 0; // the "global" key
         let request = ctx.schedule_at(
             ts + self.late_arrival_time,
             WindowEvent::new(window_ctx.key, window_ctx.index, ts),
         )?;
-        ctx.current_key = current_key;
 
         if let Err(expired) = request {
             // For now just log the error..
