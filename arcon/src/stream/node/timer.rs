@@ -1,9 +1,5 @@
-use super::{hash_table::eager::EagerHashTable, IndexOps};
-use crate::{
-    error::timer::{TimerExpiredError, TimerResult},
-    error::ArconResult,
-    table::ImmutableTable,
-};
+use crate::error::timer::{TimerExpiredError, TimerResult};
+use crate::index::hash_table::eager::EagerHashTable;
 use arcon_state::{
     backend::{
         handles::{ActiveHandle, Handle},
@@ -47,11 +43,26 @@ pub struct TimeoutId {
     timestamp: u64,
 }
 
+pub struct TimerEntry<V> {
+    id: TimeoutId,
+    value: V,
+}
+impl<V> TimerEntry<V> {
+    #[inline]
+    pub fn key(&self) -> u64 {
+        self.id.key
+    }
+    #[inline]
+    pub fn value(self) -> V {
+        self.value
+    }
+}
+
 pub trait ArconTimer: Send {
     type Value: std::fmt::Debug;
 
     fn schedule_at(&mut self, time: u64, entry: Self::Value) -> TimerResult<Self::Value>;
-    fn advance_to(&mut self, ts: u64) -> Result<Vec<Self::Value>>;
+    fn advance_to(&mut self, ts: u64) -> Result<Vec<TimerEntry<Self::Value>>>;
     fn get_time(&self) -> Result<u64>;
     fn active_key(&mut self, key: u64);
 }
@@ -134,7 +145,11 @@ where
     }
 
     #[inline(always)]
-    pub fn tick_and_collect(&mut self, mut time_left: u32, res: &mut Vec<V>) -> Result<()> {
+    pub fn tick_and_collect(
+        &mut self,
+        mut time_left: u32,
+        res: &mut Vec<TimerEntry<V>>,
+    ) -> Result<()> {
         while time_left > 0 {
             match self.timer.can_skip() {
                 Skip::Empty => {
@@ -172,11 +187,14 @@ where
 
     // Lookup id, remove from storage, and return Executable action
     #[inline(always)]
-    fn take_entry(&mut self, id: TimeoutId) -> Option<V> {
+    fn take_entry(&mut self, id: TimeoutId) -> Option<TimerEntry<V>> {
         self.timeouts
             .remove(&id)
             .expect("no timeout found for id") // this wouldn't necessarily be an error anymore if we add a cancellation API at some point
-            .map(|e| e.payload)
+            .map(|e| TimerEntry {
+                id,
+                value: e.payload,
+            })
     }
 
     #[inline(always)]
@@ -232,7 +250,7 @@ where
     }
 
     #[inline]
-    fn advance_to(&mut self, ts: u64) -> Result<Vec<Self::Value>> {
+    fn advance_to(&mut self, ts: u64) -> Result<Vec<TimerEntry<Self::Value>>> {
         let mut res = Vec::new();
         let curr_time = self.current_time().unwrap();
         if ts < curr_time {
@@ -252,23 +270,6 @@ where
     fn get_time(&self) -> Result<u64> {
         let time = self.time_handle.get()?;
         Ok(time.unwrap_or(0))
-    }
-}
-
-impl<V, B> IndexOps for Timer<V, B>
-where
-    V: Value,
-    B: Backend,
-{
-    fn persist(&mut self) -> ArconResult<()> {
-        self.timeouts.persist()?;
-        Ok(())
-    }
-    fn set_key(&mut self, key: u64) {
-        self.current_key = key;
-    }
-    fn table(&mut self) -> ArconResult<Option<ImmutableTable>> {
-        Ok(None)
     }
 }
 

@@ -12,7 +12,8 @@ use crate::{
     application::conf::logger::ArconLogger,
     data::{ArconElement, ArconType},
     error::{timer::TimerResult, *},
-    index::{timer::ArconTimer, ArconState},
+    index::ArconState,
+    stream::node::timer::ArconTimer,
 };
 use prost::Message;
 
