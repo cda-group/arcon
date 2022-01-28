@@ -193,9 +193,8 @@ pub mod prelude {
     };
 
     pub use crate::index::{
-        timer, AppenderIndex, AppenderWindow, ArrowWindow, EagerAppender, EagerHashTable,
-        EagerValue, EmptyState, HashTable, IncrementalWindow, IndexOps, LazyValue, LocalValue,
-        ValueIndex,
+        AppenderIndex, AppenderWindow, ArrowWindow, EagerAppender, EagerHashTable, EagerValue,
+        EmptyState, HashTable, IncrementalWindow, IndexOps, LazyValue, LocalValue, ValueIndex,
     };
 
     pub use prost::*;

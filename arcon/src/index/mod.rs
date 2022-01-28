@@ -1,7 +1,6 @@
 #[allow(dead_code)]
 pub mod appender;
 pub mod hash_table;
-pub mod timer;
 pub mod value;
 pub mod window;
 
@@ -22,7 +21,6 @@ impl<T> IndexValue for T where T: Value + ToArrow {}
 pub use self::{
     appender::eager::EagerAppender,
     hash_table::{eager::EagerHashTable, HashTable},
-    timer::{Timer, TimerEvent},
     value::{EagerValue, LazyValue, LocalValue},
     window::appender::AppenderWindow,
     window::arrow::ArrowWindow,

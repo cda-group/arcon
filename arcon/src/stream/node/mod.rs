@@ -4,6 +4,8 @@ pub mod common;
 pub mod debug;
 /// SourceNode components that drives the execution of sources
 pub mod source;
+/// Event-time timer implementation
+pub(crate) mod timer;
 
 #[cfg(feature = "metrics")]
 use metrics::{
@@ -39,6 +41,8 @@ use std::{
     cell::{RefCell, UnsafeCell},
     sync::Arc,
 };
+
+use self::timer::Timer;
 
 /// Type alias for a Node description
 pub type NodeDescriptor = String;
@@ -160,7 +164,7 @@ where
         in_key_builder: Option<KeyBuilder<OP::IN>>,
     ) -> Self {
         let timer_id = format!("_{}_timer", descriptor);
-        let timer = crate::index::timer::Timer::new(timer_id, backend.clone());
+        let timer = Timer::new(timer_id, backend.clone());
 
         let operator_context = OperatorContext::new(
             Box::new(timer),
@@ -328,13 +332,20 @@ where
 
     #[inline(always)]
     fn handle_element(&mut self, e: ArconElement<OP::IN>) -> ArconResult<()> {
-        // Set key for the current element
-        let mut context = self.operator_context.borrow_mut();
-        context.current_key = self.get_in_key(&e.data);
-        for elem in self.operator.handle_element(e, &mut context)? {
+        self.set_context(self.get_in_key(&e.data));
+        for elem in self
+            .operator
+            .handle_element(e, &mut self.operator_context.borrow_mut())?
+        {
             self.add_outgoing_event(ArconEvent::Element(elem))?;
         }
         Ok(())
+    }
+
+    #[inline]
+    fn set_context(&mut self, key: u64) {
+        let mut context = self.operator_context.borrow_mut();
+        context.current_key = key;
     }
 
     #[inline]
@@ -373,10 +384,11 @@ where
                 .timer
                 .advance_to(new_watermark.timestamp)?;
 
-            for timeout in timeouts {
+            for timer_entry in timeouts {
+                self.set_context(timer_entry.key());
                 if let Some(elems) = self
                     .operator
-                    .handle_timeout(timeout, &mut self.operator_context.borrow_mut())?
+                    .handle_timeout(timer_entry.value(), &mut self.operator_context.borrow_mut())?
                 {
                     for elem in elems {
                         self.add_outgoing_event(ArconEvent::Element(elem))?;
