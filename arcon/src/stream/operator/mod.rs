@@ -53,7 +53,7 @@ pub trait Operator: Send + Sized {
     ) -> ArconResult<Option<Self::ElementIterator>>;
 }
 
-/// Helper macro to implement an empty ´handle_timeout` function
+/// Helper macro to implement an empty ´handle_timeout` function while creating a custom [Operator]
 #[macro_export]
 macro_rules! ignore_timeout {
     () => {

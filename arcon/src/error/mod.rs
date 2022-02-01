@@ -1,5 +1,6 @@
-/// A helper macro to indicate a reportable bug
+// A helper macro to indicate a reportable bug
 #[macro_export]
+#[doc(hidden)]
 macro_rules! reportable_error {
     ( $($arg:tt)* ) => ({
         $crate::error::ArconResult::Err($crate::error::Error::ReportableBug { msg: format!($($arg)*) })

@@ -30,7 +30,7 @@ arcon_macros = { version = "0.1", path = "../arcon_macros" }
 arcon_state = { version = "0.1", path = "arcon_state" }
 arcon_util = { version = "0.1", path = "../arcon_util", features = ["hasher"] }
 
-kompact = { git = "https://github.com/kompics/kompact.git", branch = "master" }
+kompact = "0.11"
 uuid = "0.8"
 cfg-if = "0.1.10"
 crossbeam-utils = "0.7"

@@ -1,6 +1,6 @@
 use crate::{
+    application::assembled::AssembledApplication,
     application::conf::logger::ArconLogger,
-    application::AssembledApplication,
     buffer::event::PoolInfo,
     data::{flight_serde::FlightSerde, ArconMessage, ArconType, NodeID},
     dataflow::{

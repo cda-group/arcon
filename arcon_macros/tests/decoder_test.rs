@@ -1,13 +1,13 @@
 #[macro_use]
 extern crate arcon_macros;
 
-#[arcon_decoder(,)]
+#[decoder(,)]
 pub struct CommaItem {
     id: u64,
     price: u32,
 }
 
-#[arcon_decoder(;)]
+#[decoder(;)]
 pub struct SemicolonItem {
     id: u64,
     name: String,

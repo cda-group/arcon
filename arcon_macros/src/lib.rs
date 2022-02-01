@@ -16,12 +16,19 @@ mod state;
 
 /// Derive macro for declaring an ArconType
 ///
+/// ArconType has 3 required attributes:
+///
+/// *   ``unsafe_ser_id``: an identifier used for identifying if an ArconType was sent over the wire using unsafe flight mode
+/// *   ``reliable_ser_id``: an identifier used for identifying if an ArconType was sent over the wire using reliable flight mode
+/// *   ``version``: an identifier used for schema evolution and deployment updates
+///
 /// ```rust,ignore
+/// #[arcon::proto]
 /// #[derive(Arcon)]
 /// #[arcon(unsafe_ser_id = 104, reliable_ser_id = 105, version = 1)]
 /// pub struct ArconStruct {
-///     #[prost(uint32, tag = "1")]
 ///     pub id: u32,
+///     pub timestamp: u64,
 /// }
 /// ```
 #[proc_macro_derive(Arcon, attributes(arcon))]
@@ -29,7 +36,7 @@ pub fn arcon(input: TokenStream) -> TokenStream {
     arcon::derive_arcon(input)
 }
 
-/// Derive macro to declare ArconState
+/// Derive macro for declaring an ArconState
 ///
 /// ```rust,ignore
 /// #[derive(ArconState)]
@@ -42,7 +49,15 @@ pub fn state(input: TokenStream) -> TokenStream {
     state::derive_state(input)
 }
 
-/// Derive macro for declaring a type a type that supports the Arrow data format the Arrow data format
+/// Derive macro for declaring an Arrow convertable type within the Arcon runtime
+///
+/// ```rust,ignore
+/// #[derive(Arrow)]
+/// pub struct ArrowStruct {
+///     pub id: u32,
+///     pub name: String,
+/// }
+/// ```
 #[proc_macro_derive(Arrow)]
 pub fn arrow(input: TokenStream) -> TokenStream {
     arrow::derive_arrow(input)
@@ -53,11 +68,11 @@ pub fn arrow(input: TokenStream) -> TokenStream {
 /// If no delimiter is specified, then `,` is chosen as default.
 /// Note: All inner fields of the struct need to implement [std::str::FromStr] for the macro to work.
 #[proc_macro_attribute]
-pub fn arcon_decoder(delimiter: TokenStream, input: TokenStream) -> TokenStream {
+pub fn decoder(delimiter: TokenStream, input: TokenStream) -> TokenStream {
     decoder::derive_decoder(delimiter, input)
 }
 
-/// Makes a struct or enum prost-compatible.
+/// Helper macro to make a struct or enum prost-compatible without the need for annotations.
 ///
 /// ```rust,ignore
 /// #[arcon_macros::proto]

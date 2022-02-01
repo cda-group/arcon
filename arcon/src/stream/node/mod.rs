@@ -619,7 +619,7 @@ mod tests {
     #[cfg(not(test))]
     use crate::metrics::perf_event::HardwareCounter;
     use crate::{
-        application::*,
+        application::assembled::AssembledApplication,
         dataflow::api::OperatorBuilder,
         index::EmptyState,
         stream::{

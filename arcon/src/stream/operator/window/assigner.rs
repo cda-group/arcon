@@ -235,7 +235,7 @@ mod tests {
     #[cfg(not(test))]
     use crate::metrics::perf_event::{HardwareCounter, PerfEvents};
     use crate::{
-        application::*,
+        application::assembled::AssembledApplication,
         data::{ArconMessage, NodeID},
         dataflow::dfg::GlobalNodeId,
         index::AppenderWindow,

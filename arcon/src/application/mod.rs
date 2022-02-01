@@ -1,3 +1,46 @@
+//! The application module provides necessary utilties for creating an Arcon application.
+//!
+//! ## Application Configuration
+//!
+//! Each Arcon application must have an [ApplicationConf](conf::ApplicationConf) configured.
+//! If you don't have any need to modify any parameter, then you can simply rely on the
+//! defaults.
+//!
+//!
+//! ## Application
+//!
+//! [Application] is where everything starts from. It represents the logical plan
+//! of the pipeline that you are building. First you need to add a [Source](arcon::prelude::Source) implementation
+//! on the Application and that will return a [Stream] type that you may then perform transformations on before finally building
+//! into an [AssembledApplication].
+//!
+//! ## AssembledApplication
+//!
+//! [AssembledApplication] represents an application that has been built and is ready to be started.
+//! See its [Start](AssembledApplication::start) method.
+//!
+//! ## Example
+//!
+//! ```no_run
+//! use arcon::prelude::*;
+//!
+//! let conf = ApplicationConf {
+//!     watermark_interval: 2000,
+//!     ..Default::default()
+//! };
+//!
+//! let mut app: AssembledApplication = Application::with_conf(conf)
+//!     .iterator(0..100, |conf| {
+//!         conf.set_arcon_time(ArconTime::Process);
+//!     })
+//!     .filter(|x| *x > 50)
+//!     .to_console()
+//!     .build();
+//!
+//! app.start();
+//! app.await_termination();
+//! ```
+
 #[cfg(all(feature = "metrics", not(feature = "prometheus_exporter")))]
 use crate::metrics::log_recorder::LogRecorder;
 #[cfg(feature = "kafka")]
@@ -19,21 +62,15 @@ use crate::{
     stream::source::{local_file::LocalFileSource, Source},
 };
 use arcon_allocator::Allocator;
-
 use std::sync::{Arc, Mutex};
 
-pub(crate) mod assembled;
+pub mod assembled;
 pub mod conf;
-
-pub use crate::dataflow::stream::Stream;
-pub use assembled::AssembledApplication;
 
 #[cfg(all(feature = "prometheus_exporter", feature = "metrics", not(test)))]
 use metrics_exporter_prometheus::PrometheusBuilder;
 
-/// An Application is the starting point of all Arcon applications.
-/// It contains all necessary runtime components, configuration,
-/// and a custom allocator.
+/// An Application represents the logical plan of a streaming pipeline
 ///
 /// # Creating a Application
 ///

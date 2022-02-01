@@ -1,6 +1,30 @@
-//! A runtime for writing real-time analytics applications in the Rust programming language.
+//! # Arcon - State-first Streaming Applications in Rust.
 //!
-//! # Example
+//! ## What is Arcon
+//!
+//! Arcon is a library for building real-time analytics applications in Rust. The Arcon runtime
+//! is based on the Dataflow model, similarly to systems such as Apache Flink and Timely Dataflow.
+//!
+//! Key features:
+//!
+//! * Out-of-order Processing
+//! * Event-time
+//! * Watermarks
+//! * Epoch Snapshotting for Exactly-once Processing
+//! * Hybrid Row(Protobuf) / Columnar (Arrow) System
+//! * Modular State Backend Abstraction
+//!
+//! The Arcon philosophy is state first. Most other streaming systems are output-centric and lack a way of
+//! working with internal state with support for time semantics. Arcon's upcoming TSS query language allows extracting and operating on state snapshots consistently
+//! based on application-time constraints and interfacing with other systems for batch and warehouse analytics.
+//!
+//! ## Disclaimer
+//!
+//! Arcon is still in development and should be considered experimental!
+//!
+//! The APIs may break and you should not be running Arcon with important data!
+//!
+//! ## Example
 //!
 //! ```no_run
 //! use arcon::prelude::*;
@@ -47,7 +71,6 @@
 extern crate arcon_macros;
 extern crate self as arcon;
 
-#[doc(hidden)]
 pub use arcon_macros::*;
 #[doc(hidden)]
 pub use arcon_state::*;
@@ -89,8 +112,8 @@ pub mod bench_utils {
     pub use crate::buffer::event::{BufferPool, BufferReader};
 }
 
-/// Utilities for creating an Arcon Application
-mod application;
+pub mod application;
+
 /// Arcon buffer implementations
 mod buffer;
 /// Arcon data types, serialisers/deserialisers
@@ -100,7 +123,7 @@ mod dataflow;
 /// Arcon Error types
 pub mod error;
 /// Arcon State Indexes
-mod index;
+pub mod index;
 /// Module containing different runtime managers
 mod manager;
 #[cfg(feature = "metrics")]
@@ -139,13 +162,13 @@ pub mod test_utils {
 pub mod prelude {
     pub use crate::{
         application::conf::{logger::LoggerType, ApplicationConf},
-        application::{Application, AssembledApplication, Stream},
+        application::{assembled::AssembledApplication, Application},
         data::{ArconElement, ArconNever, ArconType, StateID, VersionId},
         dataflow::{
             api::{Assigner, OperatorBuilder, SourceBuilder},
             conf::{OperatorConf, ParallelismStrategy, SourceConf, StreamKind, WindowConf},
             dfg::ChannelKind,
-            stream::KeyBuilder,
+            stream::{KeyBuilder, Stream},
         },
         manager::snapshot::Snapshot,
         stream::{
