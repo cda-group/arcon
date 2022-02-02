@@ -1,5 +1,5 @@
 ![ci](https://github.com/cda-group/arcon/workflows/ci/badge.svg)
-[![Cargo](https://img.shields.io/badge/crates.io-v0.1.0-orange)](https://crates.io/crates/arcon_allocator)
+[![Cargo](https://img.shields.io/badge/crates.io-v0.2.1-orange)](https://crates.io/crates/arcon_allocator)
 
 # arcon allocator
 

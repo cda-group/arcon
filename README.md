@@ -4,14 +4,18 @@
 
 # Arcon
 
-A runtime for writing real-time analytics applications in the Rust programming language.
+Arcon is a library for building real-time analytics applications in Rust.
 
 ![ci](https://github.com/cda-group/arcon/workflows/ci/badge.svg)
+[![Cargo](https://img.shields.io/badge/crates.io-v0.2.0-orange)](https://crates.io/crates/arcon)
+[![Documentation](https://docs.rs/arcon/badge.svg)](https://docs.rs/arcon)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/cda-group/arcon)
 
 #### Project Status
 
 Arcon is in development and should be considered experimental until further notice.
+
+The APIs may break and you should not be running Arcon with important data!
 
 #### Rust Version
 
@@ -23,18 +27,11 @@ See the roadmap [here](https://github.com/cda-group/arcon/projects/1)
 
 ## Highlights
 
-*   Arrow-native
-*   Hybrid Row(Protobuf) / Columnar (Arrow) System
-*   Dynamic & Scalable [Middleware](https://github.com/kompics/kompact)
-*   Flexible State Management
-    *   Backend per Operator (e.g., RocksDB, Sled)
-    *   Eager and Lazy state indexes
-
-## Vision
-
-<p align="center">
-  <img width="600" height="300" src=".github/arcon_vision.png">
-</p>
+* Out-of-order Processing
+* Event-time & Watermarks
+* Epoch Snapshotting for Exactly-once Processing
+* Hybrid Row(Protobuf) / Columnar (Arrow) System
+* Modular State Backend Abstraction
 
 ## Example
 
