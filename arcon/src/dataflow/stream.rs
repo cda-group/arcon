@@ -1,5 +1,8 @@
 use crate::{
-    application::{assembled::Runtime, Application},
+    application::{
+        assembled::{AssembledApplication, Runtime},
+        Application,
+    },
     data::ArconType,
     dataflow::{
         api::OperatorBuilder,
@@ -8,7 +11,6 @@ use crate::{
         dfg::{DFGNode, DFGNodeKind, GlobalNodeId, OperatorId},
     },
     index::EmptyState,
-    prelude::AssembledApplication,
     stream::operator::{
         function::{Filter, FlatMap, Map, MapInPlace},
         sink::measure::MeasureSink,
@@ -71,10 +73,9 @@ impl<T: ArconType> Stream<T> {
         }
     }
 
-    /// Consistently partition the Stream using the given [key_extractor] method.
-    /// Also sets the [ChannelKind] of the last node to [ChannelKind::Keyed]
+    /// Consistently partition the Stream using the given key extractor method.
     ///
-    /// The [key_extractor] function must be deterministic, for two identical events it
+    /// The key extractor function must be deterministic, for two identical events it
     /// must return the same key whenever it is called.
     ///
     /// Example

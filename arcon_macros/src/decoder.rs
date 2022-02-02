@@ -1,7 +1,7 @@
 use proc_macro::TokenStream;
 use syn::{parse_macro_input, DeriveInput};
 
-/// Implements [std::str::FromStr] for a struct using a delimiter
+/// Implements [FromStr](std::str::FromStr) for a struct using a delimiter
 ///
 /// If no delimiter is specified, then `,` is chosen as default.
 /// Note: All inner fields of the struct need to implement [std::str::FromStr] for the macro to work.
@@ -58,6 +58,6 @@ pub fn derive_decoder(delimiter: TokenStream, input: TokenStream) -> TokenStream
 
         proc_macro::TokenStream::from(output)
     } else {
-        panic!("#[arcon_decoder] is only defined for structs!");
+        panic!("#[decoder] is only defined for structs!");
     }
 }

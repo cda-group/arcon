@@ -143,8 +143,7 @@ impl AssembledApplication {
     ///
     /// Returns `None` if the [Application] was not configured with a DebugNode.
     /// Note that it is up to the user to make sure `A` is of correct type.
-    #[allow(dead_code)]
-    pub(crate) fn get_debug_node<A: ArconType>(&self) -> Option<Arc<Component<DebugNode<A>>>> {
+    pub fn get_debug_node<A: ArconType>(&self) -> Option<Arc<Component<DebugNode<A>>>> {
         self.debug_node.as_ref().map(|erased_comp| {
             erased_comp
                 .clone()
