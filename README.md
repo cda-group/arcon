@@ -4,11 +4,12 @@
 
 # Arcon
 
-Arcon is a library for building real-time analytics applications in Rust.
+Arcon is a library for building state-first streaming applications in Rust.
 
 ![ci](https://github.com/cda-group/arcon/workflows/ci/badge.svg)
 [![Cargo](https://img.shields.io/badge/crates.io-v0.2.0-orange)](https://crates.io/crates/arcon)
 [![Documentation](https://docs.rs/arcon/badge.svg)](https://docs.rs/arcon)
+[![project chat](https://img.shields.io/badge/zulip-join%20chat-ff69b4)](https://arcon.zulipchat.com)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/cda-group/arcon)
 
 #### Project Status
@@ -61,6 +62,7 @@ More examples can be found [here](examples).
 * [`arcon_build`]: Protobuf builder
 * [`arcon_macros`]: Arcon derive macros.
 * [`arcon_tests`]: Integration tests
+* [`arcon_util`]: Common Arcon utilities
 * [`examples`]: Example applications
 * [`website`]: Project website
 
@@ -68,8 +70,19 @@ More examples can be found [here](examples).
 [`arcon_build`]: arcon_build
 [`arcon_macros`]: arcon_macros
 [`arcon_tests`]: arcon_tests
+[`arcon_util`]: arcon_util
 [`examples`]: examples
 [`website`]: website
+
+## Contributing
+
+See [Contributing](CONTRIBUTING.md)
+
+## Community
+
+Arcon is an ambitious project with many different development & research areas.
+
+If you find Arcon interesting and want to learn more, then join the [Zulip](https://arcon.zulipchat.com) community!
 
 ## Acknowledgements
 

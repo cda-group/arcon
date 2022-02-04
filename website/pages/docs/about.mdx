@@ -11,8 +11,18 @@ import {
 
 # Overview
 
-Arcon is a runtime for writing real-time analytics applications with the Rust programming language. 
-At the core, Arcon aims to enable users to build scalable stateful streaming applications with event-time semantics.
+Arcon is a library for building real-time analytics applications in Rust. The Arcon runtime is based on the Dataflow model, similarly to systems such as Apache Flink and Timely Dataflow.
+
+The Arcon philosophy is state first. Most other streaming systems are output-centric and lack a way of working with internal state with support for time semantics. Arcon’s upcoming TSS query language allows extracting and operating on state snapshots consistently based on application-time constraints and interfacing with other systems for batch and warehouse analytics.
+
+Key features:
+
+* Out-of-order Processing
+* Event-time &Watermarks
+* Epoch Snapshotting for Exactly-once Processing
+* Hybrid Row(Protobuf) / Columnar (Arrow) System
+* Modular State Backend Abstraction
+
 
 ## Project Status
 
