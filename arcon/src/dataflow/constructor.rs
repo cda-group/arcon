@@ -35,7 +35,7 @@ use kompact::{
         biconnect_components, biconnect_ports, ActorRefFactory, ActorRefStrong, RequiredRef, *,
     },
 };
-use std::{any::Any, path::PathBuf, sync::Arc};
+use std::{any::Any, path::PathBuf, rc::Rc, sync::Arc};
 
 pub type ErasedSourceManager = Arc<dyn AbstractComponent<Message = SourceEvent>>;
 
@@ -110,7 +110,7 @@ fn channel_strategy<T: ArconType>(
 pub(crate) trait TypedNodeFactory<T: ArconType>: NodeFactory {
     fn set_key_builder(&mut self, key_builder: KeyBuilder<T>);
     fn set_channel_kind(&mut self, channel_kind: ChannelKind);
-    fn untype(self: Arc<Self>) -> Arc<dyn NodeFactory>;
+    fn untype(self: Rc<Self>) -> Rc<dyn NodeFactory>;
 }
 
 impl<OP: Operator<OUT = T>, B: Backend, T: ArconType> TypedNodeFactory<T>
@@ -123,7 +123,7 @@ impl<OP: Operator<OUT = T>, B: Backend, T: ArconType> TypedNodeFactory<T>
     fn set_channel_kind(&mut self, channel_kind: ChannelKind) {
         self.channel_kind = channel_kind;
     }
-    fn untype(self: Arc<Self>) -> Arc<dyn NodeFactory> {
+    fn untype(self: Rc<Self>) -> Rc<dyn NodeFactory> {
         self
     }
 }
@@ -131,7 +131,7 @@ impl<OP: Operator<OUT = T>, B: Backend, T: ArconType> TypedNodeFactory<T>
 pub(crate) trait TypedSourceFactory<T: ArconType>: SourceFactory {
     fn set_key_builder(&mut self, key_builder: KeyBuilder<T>);
     fn set_channel_kind(&mut self, channel_kind: ChannelKind);
-    fn untype(self: Arc<Self>) -> Arc<dyn SourceFactory>;
+    fn untype(self: Rc<Self>) -> Rc<dyn SourceFactory>;
 }
 
 impl<S: Source<Item = T>, B: Backend, T: ArconType> TypedSourceFactory<T>
@@ -144,7 +144,7 @@ impl<S: Source<Item = T>, B: Backend, T: ArconType> TypedSourceFactory<T>
     fn set_channel_kind(&mut self, channel_kind: ChannelKind) {
         self.channel_kind = channel_kind;
     }
-    fn untype(self: Arc<Self>) -> Arc<dyn SourceFactory> {
+    fn untype(self: Rc<Self>) -> Rc<dyn SourceFactory> {
         self
     }
 }

@@ -1,7 +1,6 @@
 use super::constructor::*;
 use crate::data::NodeID;
-
-use crate::prelude::Arc;
+use std::rc::Rc;
 
 pub type OperatorId = usize;
 
@@ -116,8 +115,8 @@ impl DFGNode {
 
 #[derive(Clone)]
 pub enum DFGNodeKind {
-    Source(Arc<dyn SourceFactory>),
-    Node(Arc<dyn NodeFactory>),
+    Source(Rc<dyn SourceFactory>),
+    Node(Rc<dyn NodeFactory>),
     Placeholder,
 }
 

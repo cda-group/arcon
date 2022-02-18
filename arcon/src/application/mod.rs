@@ -54,7 +54,7 @@ use crate::{
     dataflow::{
         api::{ParallelSourceBuilder, SourceBuilder, SourceBuilderType},
         conf::SourceConf,
-        constructor::SourceConstructor,
+        constructor::{SourceConstructor, TypedSourceFactory},
         dfg::*,
         stream::Context,
     },
@@ -62,6 +62,7 @@ use crate::{
     stream::source::{local_file::LocalFileSource, Source},
 };
 use arcon_allocator::Allocator;
+use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
 pub mod assembled;
@@ -195,13 +196,12 @@ impl Application {
             time,
         );
         let mut ctx = Context::new(self);
-        let kind = DFGNodeKind::Source(Arc::new(manager_constructor));
-        let _incoming_channels = 0; // sources have 0 incoming channels..
+        let typed_source_factory: Rc<dyn TypedSourceFactory<S::Item>> =
+            Rc::new(manager_constructor);
         let operator_id = 0; // source is the first operator
-        let _outgoing_channels = parallelism;
-        let dfg_node = DFGNode::new(kind, operator_id, parallelism, vec![]);
+        let dfg_node = DFGNode::new(DFGNodeKind::Placeholder, operator_id, parallelism, vec![]);
         ctx.app.dfg.insert(dfg_node);
-        Stream::new(ctx)
+        Stream::new(ctx, typed_source_factory)
     }
 
     /// Creates a bounded data Stream using a local file

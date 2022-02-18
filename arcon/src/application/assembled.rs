@@ -13,7 +13,6 @@ use kompact::prelude::{ActorRefFactory, ActorRefStrong, Component, KompactSystem
 use std::sync::Arc;
 
 /// An [`Application`] that has been fully assembled
-#[derive(Clone)]
 pub struct AssembledApplication {
     pub(crate) app: Application,
     start_flag: bool,
