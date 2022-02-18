@@ -18,7 +18,7 @@ use crate::{
     },
     util::ArconFnBounds,
 };
-use std::{hash::Hash, hash::Hasher, marker::PhantomData, sync::Arc};
+use std::{hash::Hash, hash::Hasher, marker::PhantomData, rc::Rc, sync::Arc};
 
 use super::dfg::ChannelKind;
 
@@ -55,8 +55,8 @@ pub struct Stream<T: ArconType> {
     prev_dfg_id: OperatorId,
     ctx: Context,
     key_builder: Option<KeyBuilder<T>>,
-    last_node: Option<Arc<dyn TypedNodeFactory<T>>>,
-    source: Option<Arc<dyn TypedSourceFactory<T>>>,
+    last_node: Option<Rc<dyn TypedNodeFactory<T>>>,
+    source: Option<Rc<dyn TypedSourceFactory<T>>>,
 }
 
 impl<T: ArconType> Stream<T> {
@@ -101,12 +101,12 @@ impl<T: ArconType> Stream<T> {
             }),
         };
         if let Some(ref mut node_factory) = self.last_node {
-            let mut_node_factory = Arc::get_mut(node_factory).unwrap();
-            mut_node_factory.set_key_builder(key_builder.clone());
+            let node_factory = Rc::get_mut(node_factory).unwrap();
+            node_factory.set_key_builder(key_builder.clone());
             self.key_builder = Some(key_builder);
         } else if let Some(ref mut source_factory) = self.source {
-            let mut_source_factory = Arc::get_mut(source_factory).unwrap();
-            mut_source_factory.set_key_builder(key_builder.clone());
+            let source_factory = Rc::get_mut(source_factory).unwrap();
+            source_factory.set_key_builder(key_builder.clone());
             self.key_builder = Some(key_builder);
         } else {
             panic!("Nothing to apply key_by on!");
@@ -128,11 +128,13 @@ impl<T: ArconType> Stream<T> {
     #[must_use]
     pub fn channel_kind(mut self, channel_kind: ChannelKind) -> Stream<T> {
         if let Some(ref mut node_factory) = self.last_node {
-            let mut_node_factory = Arc::get_mut(node_factory).unwrap();
-            mut_node_factory.set_channel_kind(channel_kind);
+            Rc::get_mut(node_factory)
+                .unwrap()
+                .set_channel_kind(channel_kind);
         } else if let Some(ref mut source_factory) = self.source {
-            let mut_source_factory = Arc::get_mut(source_factory).unwrap();
-            mut_source_factory.set_channel_kind(channel_kind);
+            Rc::get_mut(source_factory)
+                .unwrap()
+                .set_channel_kind(channel_kind);
         } else {
             panic!("Nothing to configure ChannelKind on!");
         }
@@ -154,6 +156,7 @@ impl<T: ArconType> Stream<T> {
     ///         conf: Default::default(),
     ///     });
     /// ```
+    #[must_use]
     pub fn operator<OP>(mut self, builder: OperatorBuilder<OP>) -> Stream<OP::OUT>
     where
         OP: Operator<IN = T> + 'static,
@@ -197,7 +200,7 @@ impl<T: ArconType> Stream<T> {
             _marker: PhantomData,
             prev_dfg_id: self.prev_dfg_id,
             ctx: self.ctx,
-            last_node: Some(Arc::new(node_constructor)),
+            last_node: Some(Rc::new(node_constructor)),
             key_builder: None,
             source: None,
         }
@@ -216,6 +219,7 @@ impl<T: ArconType> Stream<T> {
     ///     })
     ///     .map(|x| x + 10);
     /// ```
+    #[must_use]
     pub fn map<F, OUT>(self, f: F) -> Stream<OUT>
     where
         OUT: ArconType,
@@ -291,6 +295,7 @@ impl<T: ArconType> Stream<T> {
     ///     })
     ///     .flatmap(|x| (0..x));
     /// ```
+    #[must_use]
     pub fn flatmap<F, OUTS>(self, f: F) -> Stream<OUTS::Item>
     where
         OUTS: IntoIterator + 'static,
@@ -327,6 +332,7 @@ impl<T: ArconType> Stream<T> {
     /// `log_frequency` can be used to tune how often (e.g., every 1000000 events) measurements are logged.
     ///
     /// Note: For more stable outputs, use a somewhat large loq frequency > 1000000
+    #[must_use]
     pub fn measure(self, log_frequency: u64) -> AssembledApplication {
         let stream = self.operator(OperatorBuilder {
             operator: Arc::new(move || MeasureSink::new(log_frequency)),
@@ -346,14 +352,16 @@ impl<T: ArconType> Stream<T> {
     ///
     /// Note that this method only builds the application. In order
     /// to start it, see the following [method](AssembledApplication::start).
+    #[must_use]
     pub fn build(mut self) -> AssembledApplication {
         self.move_last_node();
         let runtime = self.build_runtime();
-        let mut assembled = AssembledApplication::new(self.ctx.app.clone(), runtime);
+        let app = self.ctx.app;
+        let mut assembled = AssembledApplication::new(app.clone(), runtime);
 
         let mut output_channels = Vec::new();
 
-        for dfg_node in self.ctx.app.dfg.graph.iter().rev() {
+        for dfg_node in app.dfg.graph.iter().rev() {
             let operator_id = dfg_node.get_operator_id();
             let input_channels = dfg_node.get_input_channels();
             let node_ids = dfg_node
@@ -395,14 +403,14 @@ impl<T: ArconType> Stream<T> {
         Runtime::new(self.ctx.app.arcon_conf(), &self.ctx.app.arcon_logger)
     }
 
-    pub(crate) fn new(ctx: Context) -> Self {
+    pub(crate) fn new(ctx: Context, source: Rc<dyn TypedSourceFactory<T>>) -> Self {
         Self {
             _marker: PhantomData,
             prev_dfg_id: 0,
             ctx,
             last_node: None,
             key_builder: None,
-            source: None,
+            source: Some(source),
         }
     }
 }
