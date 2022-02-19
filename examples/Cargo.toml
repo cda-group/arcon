@@ -10,7 +10,7 @@ kafka = ["arcon/kafka"]
 
 [dev-dependencies]
 arcon = { path = "../arcon" }
-prost = "0.7"
+prost = "0.9"
 
 [[example]]
 name = "custom_operator"

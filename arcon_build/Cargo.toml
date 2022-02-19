@@ -6,4 +6,4 @@ repository = "https://github.com/cda-group/arcon"
 edition = "2018"
 
 [dependencies]
-prost-build = "0.7"
+prost-build = "0.9"
