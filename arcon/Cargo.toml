@@ -49,7 +49,7 @@ fxhash = "0.2.1"
 twox-hash = "1.5.0"
 
 # Serialisation
-prost = "0.7"
+prost = "0.9"
 bytes = "1.0"
 serde = { version = "1.0.104", features = ["derive"] }
 
