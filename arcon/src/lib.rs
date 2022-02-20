@@ -100,11 +100,7 @@ pub use arrow::{
     error::ArrowError,
 };
 #[doc(hidden)]
-pub use fxhash::FxHasher;
-#[doc(hidden)]
 pub use kompact::prelude::SerId;
-#[doc(hidden)]
-pub use twox_hash::XxHash64;
 
 // exposed for benching
 #[doc(hidden)]
@@ -203,8 +199,7 @@ pub mod prelude {
     pub use kompact::{get_core_ids, CoreId};
 
     pub use super::{Arrow, MutableTable, ToArrow};
-    pub use arrow::{datatypes::Schema, record_batch::RecordBatch, util::pretty};
-    pub use datafusion::{datasource::MemTable, prelude::*};
+    pub use arrow::{datatypes::Schema, record_batch::RecordBatch};
 
     pub use arcon_state as state;
 
