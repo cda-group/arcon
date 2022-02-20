@@ -17,7 +17,7 @@ default = []
 unsafe_flight = ["arcon_macros/unsafe_flight"]
 kafka = ["rdkafka", "futures", "serde_json"]
 thread_pinning = ["kompact/thread_pinning"]
-socket = ["tokio", "tokio-util", "futures", "serde_json"]
+socket = ["tokio", "tokio-util", "futures", "serde", "serde_json"]
 hardware_counters = ["perf-event", "metrics"]
 prometheus_exporter = ["metrics-exporter-prometheus", "metrics"]
 allocator_metrics = ["arcon_allocator/metrics"]
@@ -51,7 +51,6 @@ fxhash = "0.2.1"
 # Serialisation
 prost = "0.9"
 bytes = "1.0"
-
 
 # Optional
 rdkafka = { version = "0.26", optional = true }

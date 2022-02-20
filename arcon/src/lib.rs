@@ -182,7 +182,7 @@ pub mod prelude {
 
     #[cfg(feature = "kafka")]
     pub use crate::stream::source::kafka::KafkaConsumerConf;
-    #[cfg(feature = "serde_json")]
+    #[cfg(all(feature = "serde_json", feature = "serde"))]
     pub use crate::stream::source::schema::JsonSchema;
     #[cfg(feature = "kafka")]
     pub use rdkafka::config::ClientConfig;

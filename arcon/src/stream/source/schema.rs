@@ -7,7 +7,7 @@ pub trait SourceSchema: Send + Sync + Clone + 'static {
     fn from_bytes(bytes: &[u8]) -> Result<Self::Data, SourceError>;
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(all(feature = "serde_json", feature = "serde"))]
 #[derive(Clone)]
 pub struct JsonSchema<IN>
 where
@@ -16,7 +16,7 @@ where
     _marker: std::marker::PhantomData<IN>,
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(all(feature = "serde_json", feature = "serde"))]
 impl<IN> Default for JsonSchema<IN>
 where
     IN: ArconType + ::serde::de::DeserializeOwned,
@@ -26,7 +26,7 @@ where
     }
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(all(feature = "serde_json", feature = "serde"))]
 impl<IN> JsonSchema<IN>
 where
     IN: ArconType + ::serde::de::DeserializeOwned,
@@ -38,7 +38,7 @@ where
     }
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(all(feature = "serde_json", feature = "serde"))]
 impl<IN> SourceSchema for JsonSchema<IN>
 where
     IN: ArconType + ::serde::de::DeserializeOwned,
