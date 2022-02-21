@@ -10,7 +10,6 @@ use arrow::{
     },
     record_batch::RecordBatch,
 };
-use datafusion::{datasource::MemTable, error::DataFusionError};
 use parquet::arrow::ParquetFileArrowReader;
 use parquet::basic::Compression;
 use parquet::file::properties::WriterProperties;
@@ -154,9 +153,6 @@ pub struct ImmutableTable {
 }
 
 impl ImmutableTable {
-    pub fn mem_table(self) -> Result<MemTable, DataFusionError> {
-        MemTable::try_new(self.schema, vec![self.batches])
-    }
     pub fn name(&self) -> String {
         self.name.clone()
     }

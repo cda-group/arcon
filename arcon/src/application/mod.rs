@@ -280,7 +280,7 @@ impl Application {
     ///  .set("enable.auto.commit", "false");
     ///
     /// let stream: Stream<u64> = Application::default()
-    ///  .kafka(consumer_conf, JsonSchema::new(), 1, |conf| {
+    ///  .kafka(consumer_conf, ProtoSchema::new(), 1, |conf| {
     ///     conf.set_arcon_time(ArconTime::Event);
     ///     conf.set_timestamp_extractor(|x: &u64| *x);
     ///  });

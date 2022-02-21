@@ -1,8 +1,6 @@
 use super::api::Assigner;
 use crate::{data::ArconType, stream::time::ArconTime};
-use hocon::HoconLoader;
-use serde::Deserialize;
-use std::{path::Path, sync::Arc};
+use std::sync::Arc;
 
 #[cfg(all(feature = "hardware_counters", target_os = "linux"))]
 use crate::metrics::perf_event::PerfEvents;
@@ -22,7 +20,8 @@ cfg_if::cfg_if! {
 
 /// Defines how the runtime will manage the
 /// parallelism for a specific Arcon Operator.
-#[derive(Deserialize, Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize))]
 pub enum ParallelismStrategy {
     /// Use a static number of Arcon nodes
     Static(usize),
@@ -40,7 +39,8 @@ impl Default for ParallelismStrategy {
 /// Defines whether a stream is Keyed or Local
 ///
 /// Streams are by default Keyed in Arcon.
-#[derive(Deserialize, Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize))]
 pub enum StreamKind {
     Keyed,
     Local,
@@ -55,7 +55,8 @@ impl Default for StreamKind {
 /// Operator Configuration
 ///
 /// Defines how an Operator is to be executed on Arcon.
-#[derive(Deserialize, Default, Clone, Debug)]
+#[derive(Default, Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize))]
 pub struct OperatorConf {
     /// Parallelism Strategy for this Operator
     pub parallelism_strategy: ParallelismStrategy,
@@ -67,10 +68,11 @@ pub struct OperatorConf {
 
 impl OperatorConf {
     /// Load an OperatorConf from a File using the Hocon format
-    pub fn from_file(path: impl AsRef<Path>) -> OperatorConf {
+    #[cfg(all(feature = "serde", feature = "hocon"))]
+    pub fn from_file(path: impl AsRef<std::path::Path>) -> OperatorConf {
         // okay to panic here as this is during setup code...
         let data = std::fs::read_to_string(path).unwrap();
-        HoconLoader::new()
+        hocon::HoconLoader::new()
             .load_str(&data)
             .unwrap()
             .resolve()

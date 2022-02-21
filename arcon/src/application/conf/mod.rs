@@ -1,91 +1,98 @@
 pub mod logger;
 
-use hocon::HoconLoader;
 use kompact::{
     net::buffers::BufferConfig,
     prelude::{DeadletterBox, KompactConfig, NetworkConfig},
 };
 use logger::{file_logger, term_logger, ArconLogger, LoggerType};
-use serde::Deserialize;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 /// Types of modes that `arcon` may run in
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize))]
 pub enum ExecutionMode {
     Local,
     Distributed(DistributedConf),
 }
 
 #[allow(dead_code)]
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize))]
 pub struct DistributedConf {
     peers: Vec<String>, // ["192.168.1.1:2000",  "192.168.1.2:2000"]
 }
 
 /// Configuration for an Arcon Application
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize))]
 pub struct ApplicationConf {
     /// Either a `Local` or `Distributed` Execution Mode
-    #[serde(default = "execution_mode_default")]
+    #[cfg_attr(feature = "serde", serde(default = "execution_mode_default"))]
     pub execution_mode: ExecutionMode,
     /// Base directory for the application
-    #[serde(default = "base_dir_default")]
+    #[cfg_attr(feature = "serde", serde(default = "base_dir_default"))]
     pub base_dir: PathBuf,
     /// [LoggerType] for arcon related logging
-    #[serde(default)]
+    #[cfg_attr(feature = "serde", serde(default))]
     pub arcon_logger_type: LoggerType,
     /// [LoggerType] for kompact related logging
-    #[serde(default)]
+    #[cfg_attr(feature = "serde", serde(default))]
     pub kompact_logger_type: LoggerType,
     /// Generation interval in milliseconds for Epochs
-    #[serde(default = "epoch_interval_default")]
+    #[cfg_attr(feature = "serde", serde(default = "epoch_interval_default"))]
     pub epoch_interval: u64,
     /// Generation interval in milliseconds for Watermarks at sources
-    #[serde(default = "watermark_interval_default")]
+    #[cfg_attr(feature = "serde", serde(default = "watermark_interval_default"))]
     pub watermark_interval: u64,
     /// The highest possible key value for a keyed stream
     ///
     /// This should not be set too low or ridiculously high
-    #[serde(default = "max_key_default")]
+    #[cfg_attr(feature = "serde", serde(default = "max_key_default"))]
     pub max_key: u64,
     /// Interval in milliseconds for sending off metrics from nodes
-    #[serde(default = "node_metrics_interval_default")]
+    #[cfg_attr(feature = "serde", serde(default = "node_metrics_interval_default"))]
     pub node_metrics_interval: u64,
     /// Amount of buffers pre-allocated to a BufferPool
-    #[serde(default = "buffer_pool_size_default")]
+    #[cfg_attr(feature = "serde", serde(default = "buffer_pool_size_default"))]
     pub buffer_pool_size: usize,
     /// A limit for amount of buffers in a BufferPool
-    #[serde(default = "buffer_pool_limit_default")]
+    #[cfg_attr(feature = "serde", serde(default = "buffer_pool_limit_default"))]
     pub buffer_pool_limit: usize,
     /// Batch size for channels
-    #[serde(default = "channel_batch_size_default")]
+    #[cfg_attr(feature = "serde", serde(default = "channel_batch_size_default"))]
     pub channel_batch_size: usize,
     /// Max amount of bytes allowed to be allocated by the Arcon Allocator
-    #[serde(default = "allocator_capacity_default")]
+    #[cfg_attr(feature = "serde", serde(default = "allocator_capacity_default"))]
     pub allocator_capacity: usize,
-    #[serde(default = "ctrl_system_host_default")]
+    #[cfg_attr(feature = "serde", serde(default = "ctrl_system_host_default"))]
     pub ctrl_system_host: Option<String>,
     /// Amount of threads for Kompact's threadpool
-    #[serde(default = "kompact_threads_default")]
+    #[cfg_attr(feature = "serde", serde(default = "kompact_threads_default"))]
     pub kompact_threads: usize,
     /// Controls the amount of messages a component processes per schedule iteration
-    #[serde(default = "kompact_throughput_default")]
+    #[cfg_attr(feature = "serde", serde(default = "kompact_throughput_default"))]
     pub kompact_throughput: usize,
     /// Float value that sets message priority
-    #[serde(default = "kompact_msg_priority_default")]
+    #[cfg_attr(feature = "serde", serde(default = "kompact_msg_priority_default"))]
     pub kompact_msg_priority: f32,
     /// Host address for the KompactSystem
     ///
     /// It is set as optional as it is not necessary for local deployments
-    #[serde(default = "kompact_network_host_default")]
+    #[cfg_attr(feature = "serde", serde(default = "kompact_network_host_default"))]
     pub kompact_network_host: Option<String>,
-    #[serde(default = "kompact_chunk_size_default")]
+    #[cfg_attr(feature = "serde", serde(default = "kompact_chunk_size_default"))]
     pub kompact_chunk_size: usize,
-    #[serde(default = "kompact_initial_chunk_count_default")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(default = "kompact_initial_chunk_count_default")
+    )]
     pub kompact_initial_chunk_count: usize,
-    #[serde(default = "kompact_max_chunk_count_default")]
+    #[cfg_attr(feature = "serde", serde(default = "kompact_max_chunk_count_default"))]
     pub kompact_max_chunk_count: usize,
-    #[serde(default = "kompact_encode_buf_min_free_space_default")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(default = "kompact_encode_buf_min_free_space_default")
+    )]
     pub kompact_encode_buf_min_free_space: usize,
 }
 impl Default for ApplicationConf {
@@ -236,7 +243,9 @@ impl ApplicationConf {
     }
 
     /// Loads ApplicationConf from a file
-    pub fn from_file(path: impl AsRef<Path>) -> ApplicationConf {
+    #[cfg(all(feature = "serde", feature = "hocon"))]
+    pub fn from_file(path: impl AsRef<std::path::Path>) -> ApplicationConf {
+        use hocon::HoconLoader;
         let data = std::fs::read_to_string(path).unwrap();
 
         let loader: HoconLoader = HoconLoader::new().load_str(&data).unwrap();
@@ -336,12 +345,14 @@ fn kompact_encode_buf_min_free_space_default() -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use std::io::prelude::*;
-    use tempfile::NamedTempFile;
 
     #[test]
+    #[cfg(all(feature = "serde", feature = "hocon"))]
     fn conf_from_file_test() {
+        use super::*;
+        use std::io::prelude::*;
+        use tempfile::NamedTempFile;
+
         // Set up Config File
         let mut file = NamedTempFile::new().unwrap();
         let file_path = file.path().to_string_lossy().into_owned();

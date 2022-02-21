@@ -1,4 +1,3 @@
-use serde::Deserialize;
 use slog::{o, Drain, Fuse, Logger};
 use slog_async::Async;
 use std::{fs::OpenOptions, sync::Arc};
@@ -10,7 +9,8 @@ pub const ARCON_LOG_NAME: &str = "arcon.log";
 pub const KOMPACT_LOG_NAME: &str = "kompact.log";
 
 /// Defines a logger type
-#[derive(Deserialize, Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize))]
 pub enum LoggerType {
     /// Logs output directly to the terminal
     Terminal,
