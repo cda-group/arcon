@@ -34,8 +34,7 @@
 //!         conf.set_arcon_time(ArconTime::Process);
 //!     })
 //!     .filter(|x| *x > 50)
-//!     .to_console()
-//!     .build();
+//!     .to_console();
 //!
 //! app.start();
 //! app.await_termination();
@@ -115,7 +114,7 @@ mod buffer;
 /// Arcon data types, serialisers/deserialisers
 mod data;
 /// Dataflow API
-mod dataflow;
+pub mod dataflow;
 /// Arcon Error types
 pub mod error;
 /// Arcon State Indexes
@@ -161,10 +160,13 @@ pub mod prelude {
         application::{assembled::AssembledApplication, Application},
         data::{ArconElement, ArconNever, ArconType, StateID, VersionId},
         dataflow::{
-            api::{Assigner, OperatorBuilder, SourceBuilder},
+            builder::{Assigner, OperatorBuilder, SourceBuilder},
             conf::{OperatorConf, ParallelismStrategy, SourceConf, StreamKind, WindowConf},
             dfg::ChannelKind,
-            stream::{KeyBuilder, Stream},
+            stream::{
+                BenchExt, BuildExt, DebugExt, FilterExt, KeyBuilder, KeyedStream, MapExt,
+                OperatorExt, PartitionExt, Stream,
+            },
         },
         manager::snapshot::Snapshot,
         stream::{

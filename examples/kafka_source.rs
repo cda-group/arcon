@@ -13,8 +13,7 @@ fn main() {
             conf.set_timestamp_extractor(|x: &u64| *x);
         })
         .map(|x| x + 10)
-        .to_console()
-        .build();
+        .to_console();
 
     app.start();
     app.await_termination();

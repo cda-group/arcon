@@ -82,7 +82,7 @@ mod tests {
             .iterator(0..5, |conf| {
                 conf.set_arcon_time(ArconTime::Process);
             })
-            .flatmap(|x| (0..x))
+            .flat_map(|x| (0..x))
             .build();
 
         app.start();

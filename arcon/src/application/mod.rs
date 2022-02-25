@@ -30,12 +30,11 @@
 //! };
 //!
 //! let mut app: AssembledApplication = Application::with_conf(conf)
-//!     .iterator(0..100, |conf| {
+//!     .iterator(0..100u64, |conf| {
 //!         conf.set_arcon_time(ArconTime::Process);
 //!     })
 //!     .filter(|x| *x > 50)
-//!     .to_console()
-//!     .build();
+//!     .to_console();
 //!
 //! app.start();
 //! app.await_termination();
@@ -52,7 +51,7 @@ use crate::{
     application::conf::{logger::ArconLogger, ApplicationConf},
     buffer::event::PoolInfo,
     dataflow::{
-        api::{ParallelSourceBuilder, SourceBuilder, SourceBuilderType},
+        builder::{ParallelSourceBuilder, SourceBuilder, SourceBuilderType},
         conf::SourceConf,
         constructor::{SourceConstructor, TypedSourceFactory},
         dfg::*,

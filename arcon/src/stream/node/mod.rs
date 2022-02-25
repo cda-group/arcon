@@ -20,8 +20,8 @@ use crate::application::conf::logger::ArconLogger;
 use crate::data::flight_serde::unsafe_remote::UnsafeSerde;
 use crate::{
     data::{flight_serde::reliable_remote::ReliableSerde, RawArconMessage, *},
+    dataflow::builder::KeyBuilder,
     dataflow::dfg::GlobalNodeId,
-    dataflow::stream::KeyBuilder,
     error::{ArconResult, *},
     index::{AppenderIndex, ArconState, EagerAppender, IndexOps},
     manager::epoch::EpochEvent,
@@ -620,7 +620,7 @@ mod tests {
     use crate::metrics::perf_event::HardwareCounter;
     use crate::{
         application::assembled::AssembledApplication,
-        dataflow::api::OperatorBuilder,
+        dataflow::builder::OperatorBuilder,
         index::EmptyState,
         stream::{
             channel::{strategy::forward::Forward, Channel},

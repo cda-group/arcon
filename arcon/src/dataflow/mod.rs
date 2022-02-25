@@ -1,10 +1,11 @@
 /// Builder types used in the API
-pub mod api;
+pub mod builder;
 /// Dataflow configurations for Operators and Sources
 pub mod conf;
-/// Runtime constructors
-pub mod constructor;
-/// Logical Dataflow Graph
-pub mod dfg;
-/// High-level Stream type that users may perform a series of transformations on
+/// High-level Stream types that users may perform a series of transformations on
 pub mod stream;
+
+/// Runtime constructors
+pub(crate) mod constructor;
+/// Logical Dataflow Graph
+pub(crate) mod dfg;

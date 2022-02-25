@@ -107,6 +107,17 @@ pub struct ParallelSourceBuilder<S: Source, Backend = DefaultBackend> {
     pub parallelism: usize,
 }
 
+#[derive(Clone)]
+pub struct KeyBuilder<T> {
+    pub extractor: Arc<(dyn Fn(&T) -> u64 + Send + Sync)>,
+}
+
+impl<T> KeyBuilder<T> {
+    pub fn get_key(&self, event: &T) -> u64 {
+        (self.extractor)(event)
+    }
+}
+
 /// Enum containing different window assigner types
 #[derive(Clone, Copy)]
 pub enum Assigner {
