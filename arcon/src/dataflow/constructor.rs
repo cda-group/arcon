@@ -4,10 +4,9 @@ use crate::{
     buffer::event::PoolInfo,
     data::{flight_serde::FlightSerde, ArconMessage, ArconType, NodeID},
     dataflow::{
-        api::{OperatorBuilder, SourceBuilderType},
+        builder::{KeyBuilder, OperatorBuilder, SourceBuilderType},
         conf::SourceConf,
         dfg::{ChannelKind, GlobalNodeId},
-        stream::KeyBuilder,
     },
     manager::{
         node::{NodeManager, NodeManagerPort},

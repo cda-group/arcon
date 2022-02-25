@@ -27,8 +27,7 @@ fn main() {
             }),
             conf: OperatorConf::default(),
         })
-        .to_console()
-        .build();
+        .to_console();
 
     app.start();
     app.await_termination();

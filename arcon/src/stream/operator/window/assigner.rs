@@ -1,5 +1,5 @@
 use super::WindowContext;
-use crate::dataflow::{api::Assigner, conf::WindowConf};
+use crate::dataflow::{builder::Assigner, conf::WindowConf};
 use crate::index::WindowIndex;
 use crate::prelude::EagerValue;
 use crate::{

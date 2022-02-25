@@ -1,4 +1,4 @@
-use super::api::Assigner;
+use super::builder::Assigner;
 use crate::{data::ArconType, stream::time::ArconTime};
 use std::sync::Arc;
 
