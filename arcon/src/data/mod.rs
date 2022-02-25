@@ -434,23 +434,23 @@ impl ArconType for ArconNever {
 }
 impl fmt::Debug for ArconNever {
     fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        unreachable!(ArconNever::IS_UNREACHABLE);
+        unreachable!("{}", ArconNever::IS_UNREACHABLE);
     }
 }
 impl prost::Message for ArconNever {
     fn encoded_len(&self) -> usize {
-        unreachable!(ArconNever::IS_UNREACHABLE);
+        unreachable!("{}", ArconNever::IS_UNREACHABLE);
     }
 
     fn clear(&mut self) {
-        unreachable!(ArconNever::IS_UNREACHABLE);
+        unreachable!("{}", ArconNever::IS_UNREACHABLE);
     }
 
     fn encode_raw<B>(&self, _: &mut B)
     where
         B: bytes::buf::BufMut,
     {
-        unreachable!(ArconNever::IS_UNREACHABLE);
+        unreachable!("{}", ArconNever::IS_UNREACHABLE);
     }
     fn merge_field<B>(
         &mut self,
@@ -462,12 +462,12 @@ impl prost::Message for ArconNever {
     where
         B: bytes::buf::Buf,
     {
-        unreachable!(ArconNever::IS_UNREACHABLE);
+        unreachable!("{}", ArconNever::IS_UNREACHABLE);
     }
 }
 
 impl Default for ArconNever {
     fn default() -> Self {
-        unreachable!(ArconNever::IS_UNREACHABLE);
+        unreachable!("{}", ArconNever::IS_UNREACHABLE);
     }
 }
