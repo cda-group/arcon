@@ -29,8 +29,8 @@ pub use map::MapExt;
 pub use operator::OperatorExt;
 pub use partition::PartitionExt;
 
-pub use keyed::KeyedStream;
 pub use super::builder::KeyBuilder;
+pub use keyed::KeyedStream;
 
 /// Represents a possibly infinite stream of records
 pub struct Stream<T: ArconType> {
