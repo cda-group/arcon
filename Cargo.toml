@@ -6,7 +6,3 @@ members = [
     "arcon_tests",
     "examples"
 ]
-
-exclude = [
-    "arcon_shell",
-]
