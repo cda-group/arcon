@@ -27,18 +27,16 @@
 //! ## Example
 //!
 //! ```no_run
-//! use arcon::prelude::*;
-//!
-//! let mut app = Application::default()
-//!     .iterator(0..100, |conf| {
-//!         conf.set_arcon_time(ArconTime::Process);
-//!     })
-//!     .filter(|x| *x > 50)
-//!     .to_console();
-//!
-//! app.start();
-//! app.await_termination();
+//! #[arcon::app]
+//! fn main() {
+//!     (0..100u64)
+//!         .to_stream(|conf| conf.set_arcon_time(ArconTime::Process))
+//!         .filter(|x| *x > 50)
+//!         .map(|x| x * 10)
+//!         .print()
+//! }
 //! ```
+//!
 //! # Feature Flags
 //!
 //! - `rocksdb`
@@ -157,15 +155,16 @@ pub mod test_utils {
 pub mod prelude {
     pub use crate::{
         application::conf::{logger::LoggerType, ApplicationConf},
-        application::{assembled::AssembledApplication, Application},
+        application::{Application, ApplicationBuilder},
         data::{ArconElement, ArconNever, ArconType, StateID, VersionId},
         dataflow::{
             builder::{Assigner, OperatorBuilder, SourceBuilder},
             conf::{OperatorConf, ParallelismStrategy, SourceConf, StreamKind, WindowConf},
             dfg::ChannelKind,
+            sink::{Sink, ToBuilderExt, ToSinkExt},
+            source::{LocalFileSource, ToStreamExt},
             stream::{
-                BenchExt, BuildExt, DebugExt, FilterExt, KeyBuilder, KeyedStream, MapExt,
-                OperatorExt, PartitionExt, Stream,
+                FilterExt, KeyBuilder, KeyedStream, MapExt, OperatorExt, PartitionExt, Stream,
             },
         },
         manager::snapshot::Snapshot,
@@ -182,6 +181,8 @@ pub mod prelude {
         Arcon, ArconState,
     };
 
+    #[cfg(feature = "kafka")]
+    pub use crate::dataflow::source::kafka::KafkaSource;
     #[cfg(feature = "kafka")]
     pub use crate::stream::source::kafka::KafkaConsumerConf;
     #[cfg(all(feature = "serde_json", feature = "serde"))]

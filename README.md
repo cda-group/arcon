@@ -37,20 +37,13 @@ See the roadmap [here](https://github.com/cda-group/arcon/projects/1)
 ## Example
 
 ```rust,no_run
-use arcon::prelude::*;
-
+#[arcon::app]
 fn main() {
-    let mut app = Application::default()
-        .iterator(0u64..100, |conf| {
-            conf.set_arcon_time(ArconTime::Event);
-            conf.set_timestamp_extractor(|x: &u64| *x);
-        })
+    (0..100u64)
+        .to_stream(|conf| conf.set_arcon_time(ArconTime::Process))
         .filter(|x| *x > 50)
-        .to_console()
-        .build();
-
-    app.start();
-    app.await_termination();
+        .map(|x| x * 10)
+        .print()
 }
 ```
 

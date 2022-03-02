@@ -1,12 +1,11 @@
-use arcon::prelude::*;
-
 fn window_sum(buffer: &[u64]) -> u64 {
     buffer.iter().sum()
 }
 
+#[arcon::app(debug = true)]
 fn main() {
-    let mut app = Application::default()
-        .iterator(0u64..100000, |conf| {
+    (0u64..100000)
+        .to_stream(|conf| {
             conf.set_arcon_time(ArconTime::Event);
             conf.set_timestamp_extractor(|x: &u64| *x);
         })
@@ -27,8 +26,5 @@ fn main() {
             }),
             conf: OperatorConf::default(),
         })
-        .to_console();
-
-    app.start();
-    app.await_termination();
+        .print()
 }

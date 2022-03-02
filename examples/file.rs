@@ -1,13 +1,8 @@
-use arcon::prelude::*;
-
+#[arcon::app]
 fn main() {
-    let mut app = Application::default()
-        .file("file_source_data", |cfg| {
-            cfg.set_arcon_time(ArconTime::Process);
-        })
-        .flat_map(|x| (0..x))
-        .to_console();
-
-    app.start();
-    app.await_termination();
+    LocalFileSource::new("file_source_data")
+        .to_stream(|conf| conf.set_arcon_time(ArconTime::Process))
+        .filter(|x| *x > 50)
+        .map(|x: i32| x * 10)
+        .print()
 }

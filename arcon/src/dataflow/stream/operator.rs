@@ -44,25 +44,18 @@ impl<T: ArconType> OperatorExt<T> for Stream<T> {
         // No more mutations on the previous node, move it from the stream.current_node to the DFG Graph
         self.move_last_node();
 
-        // Set up directory for the operator and create Backend
-        let mut state_dir = self.ctx.app.arcon_conf().state_dir();
-        let state_id = builder.state_id();
-        state_dir.push(state_id);
-
         let paralellism = match builder.conf.parallelism_strategy {
             ParallelismStrategy::Static(num) => num,
             _ => unreachable!("Managed Parallelism not Supported yet"),
         };
 
-        let prev_dfg_node = self.ctx.app.dfg.get_mut(&self.prev_dfg_id);
+        let prev_dfg_node = self.ctx.dfg.get_mut(&self.prev_dfg_id);
         let incoming_channels = prev_dfg_node.get_node_ids();
         let operator_id = prev_dfg_node.get_operator_id() + 1;
 
         let node_constructor = NodeConstructor::<OP, DefaultBackend>::new(
             format!("Operator_{}", operator_id),
-            state_dir,
             Arc::new(builder),
-            self.ctx.app.arcon_logger.clone(),
             self.key_builder.take(),
         );
 
@@ -73,7 +66,7 @@ impl<T: ArconType> OperatorExt<T> for Stream<T> {
             incoming_channels,
         );
         prev_dfg_node.set_outgoing_channels(dfg_node.get_node_ids());
-        let next_dfg_id = self.ctx.app.dfg.insert(dfg_node);
+        let next_dfg_id = self.ctx.dfg.insert(dfg_node);
 
         self.prev_dfg_id = next_dfg_id;
         Stream {

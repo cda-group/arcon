@@ -1,5 +1,4 @@
 use arcon::{ignore_timeout, prelude::*};
-use std::sync::Arc;
 
 #[arcon::proto]
 #[derive(Arcon, Copy, Clone)]
@@ -69,9 +68,10 @@ impl Operator for TimerOperator {
     }
 }
 
+#[arcon::app(debug = true)]
 fn main() {
-    let mut app = Application::default()
-        .iterator(0u64..10000000, |conf| {
+    (0u64..10000000)
+        .to_stream(|conf| {
             conf.set_timestamp_extractor(|x: &u64| *x);
         })
         .operator(OperatorBuilder {
@@ -84,8 +84,5 @@ fn main() {
             state: Arc::new(|_| EmptyState),
             conf: Default::default(),
         })
-        .build();
-
-    app.start();
-    app.await_termination();
+        .measure(1000000)
 }

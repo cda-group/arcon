@@ -8,6 +8,7 @@ extern crate quote;
 
 use proc_macro::TokenStream;
 
+mod app;
 mod arcon;
 mod arrow;
 mod decoder;
@@ -34,6 +35,44 @@ mod state;
 #[proc_macro_derive(Arcon, attributes(arcon))]
 pub fn arcon(input: TokenStream) -> TokenStream {
     arcon::derive_arcon(input)
+}
+
+/// A macro that helps set up and run an [Application](../arcon/application/struct.Application.html).
+///
+/// This macro is meant to simplify the creation of
+/// arcon applications that do not require complex configuration. For more flexibility,
+/// have a look at [ApplicationBulder](../arcon/application/builder/struct.ApplicationBuilder.html).
+///
+/// ## Usage
+///
+/// ### With no arguments
+///
+/// ```rust
+/// #[arcon::app]
+/// fn main() {
+///  (0..100u64)
+///     .to_stream(|conf| conf.set_arcon_time(ArconTime::Process))
+///     .map(|x: i32| x * 10)
+///     .print()
+/// }
+/// ```
+///
+/// Expands to the following
+///
+/// ```rust
+/// fn main() {
+///    let builder = (0..100u64)
+///     .to_stream(|conf| conf.set_arcon_time(ArconTime::Process))
+///     .map(|x: i32| x * 10)
+///     .print()
+///     .builder();
+///
+///    builder.build().run();
+/// }
+/// ```
+#[proc_macro_attribute]
+pub fn app(delimiter: TokenStream, input: TokenStream) -> TokenStream {
+    app::main(delimiter, input)
 }
 
 /// Derive macro for declaring an ArconState
