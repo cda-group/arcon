@@ -54,31 +54,6 @@ impl fmt::Display for HardwareCounter {
     }
 }
 
-/// Configurable hardware counters that may be added to an Operator's config
-///```no_run
-/// use arcon::prelude::*;
-/// fn main() {
-///     let mut perf_events = PerfEvents::new();
-///     perf_events.add(HardwareCounter::CpuCycles);
-///     perf_events.add(HardwareCounter::BranchMisses);
-///     let mut app = Application::default()
-///         .iterator(0..100, |conf| {
-///             conf.set_arcon_time(ArconTime::Process);
-///         })
-///         .operator(OperatorBuilder {
-///             operator: Arc::new(|| Map::new(|x| x + 10)),
-///             state: Arc::new(|_| EmptyState),
-///             conf: OperatorConf {
-///                 parallelism_strategy: ParallelismStrategy::Static(6),
-///                 perf_events,
-///                 ..Default::default()
-///             },
-///         })
-///         .to_console();
-///     app.start();
-///     app.await_termination();
-/// }
-///```
 #[derive(Clone, Debug, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize))]
 pub struct PerfEvents {

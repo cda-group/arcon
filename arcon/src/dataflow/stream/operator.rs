@@ -19,8 +19,9 @@ pub trait OperatorExt<T: ArconType> {
     /// Example
     /// ```no_run
     /// use arcon::prelude::*;
-    /// let stream: Stream<u64> = Application::default()
-    ///     .iterator(0u64..100, |conf| {
+    ///
+    /// let stream: Stream<u64> = (0..100u64)
+    ///     .to_stream(|conf| {
     ///         conf.set_arcon_time(ArconTime::Process);
     ///     })
     ///     .operator(OperatorBuilder {

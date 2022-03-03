@@ -14,4 +14,5 @@ fn main() {
             conf.set_timestamp_extractor(|x: &u64| *x);
         })
         .map(|x| x + 10)
+        .print()
 }

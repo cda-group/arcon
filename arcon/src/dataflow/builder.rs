@@ -42,7 +42,7 @@ impl<OP: Operator, Backend: arcon_state::Backend> OperatorBuilder<OP, Backend> {
     ) -> Arc<Backend> {
         Arc::new(Backend::create(&state_dir, name).unwrap())
     }
-    pub(crate) fn state_id(&self) -> StateID {
+    pub(crate) fn _state_id(&self) -> StateID {
         let mut state_id = OP::OperatorState::STATE_ID.to_owned();
         if state_id == EMPTY_STATE_ID {
             // create unique identifier so there is no clash between empty states

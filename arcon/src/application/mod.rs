@@ -33,28 +33,6 @@ pub use conf::ApplicationConf;
 use metrics_exporter_prometheus::PrometheusBuilder;
 
 /// An Arcon Application
-///
-/// # Creating an Application
-///
-/// See [Configuration](ApplicationConf)
-///
-/// With the default configuration
-/// ```no_run
-/// use arcon::prelude::Application;
-///
-/// let app = Application::default();
-/// ```
-///
-/// With configuration
-/// ```no_run
-/// use arcon::prelude::{Application, ApplicationConf};
-///
-/// let conf = ApplicationConf {
-///     watermark_interval: 2000,
-///     ..Default::default()
-/// };
-/// let app = Application::with_conf(conf);
-/// ```
 #[derive(Clone)]
 pub struct Application {
     /// Configuration for this application
@@ -166,10 +144,8 @@ impl Application {
     ///
     ///
     /// The component can be accessed through [method](Application::get_debug_node).
-    #[must_use]
-    pub fn with_debug_node(mut self) -> Self {
+    pub fn with_debug_node(&mut self) {
         self.debug_node_flag = true;
-        self
     }
 
     // Internal helper for creating PoolInfo for a ChannelStrategy
@@ -230,12 +206,16 @@ impl Application {
                 .unwrap()
         })
     }
-    /// Instructs the SourceManager of the application
-    /// to inject a start message to the source components
-    /// of the application.
-    ///
-    /// The function will panic if no sources have been created
-    pub fn run(mut self) {
+
+    pub fn run_and_block(mut self) {
+        self.start();
+        self.await_termination();
+    }
+    pub fn run(&mut self) {
+        self.start();
+    }
+
+    fn start(&mut self) {
         assert!(!self.start_flag, "The Application has already been started");
 
         // Send start message to manager component
@@ -254,9 +234,7 @@ impl Application {
                 .wait_timeout(std::time::Duration::from_millis(500))
                 .expect("Failed to start EpochManager");
         }
-
         self.start_flag = true;
-        self.await_termination();
     }
 
     /// Awaits termination from the application

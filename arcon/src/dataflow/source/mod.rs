@@ -29,7 +29,10 @@ pub trait ToStreamExt<S: ArconType> {
     /// # Example
     /// ```no_run
     /// use arcon::prelude::*;
-    /// let stream: Stream<u64> = (0..100u64).to_stream(|conf| _);
+    /// let stream: Stream<u64> = (0..100u64)
+    ///     .to_stream(|conf| {
+    ///         conf.set_arcon_time(ArconTime::Process);
+    ///     });
     /// ```
     fn to_stream<F: FnOnce(&mut SourceConf<S>)>(self, f: F) -> Stream<S>;
 }

@@ -33,7 +33,12 @@ use kompact::{
         biconnect_components, biconnect_ports, ActorRefFactory, ActorRefStrong, RequiredRef, *,
     },
 };
-use std::{any::Any, path::PathBuf, rc::Rc, sync::Arc};
+use std::{
+    any::Any,
+    path::{Path, PathBuf},
+    rc::Rc,
+    sync::Arc,
+};
 
 pub type ErasedSourceManager = Arc<dyn AbstractComponent<Message = SourceEvent>>;
 
@@ -331,7 +336,7 @@ impl<OP: Operator + 'static, B: Backend> NodeConstructor<OP, B> {
         manager_comp
     }
 
-    fn init_state_dir(&self, path: &PathBuf) {
+    fn init_state_dir(&self, path: &Path) {
         // Ensure there's a state_directory
         std::fs::create_dir_all(path).unwrap();
     }
@@ -419,7 +424,7 @@ impl<S: Source + 'static, B: Backend> SourceFactory for SourceConstructor<S, B> 
                 let source_cons = builder.constructor.clone();
                 let source_conf = builder.conf.clone();
                 let source_index = 0;
-                let source = source_cons(backend.clone());
+                let source = source_cons(backend);
                 let channel_strategy = channel_strategy(
                     components.clone(),
                     paths,

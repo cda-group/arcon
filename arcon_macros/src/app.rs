@@ -9,15 +9,7 @@ use syn::parse::Parser;
 // syn::AttributeArgs does not implement syn::Parse
 type AttributeArgs = syn::punctuated::Punctuated<syn::NestedMeta, syn::Token![,]>;
 
-impl Default for ExecutionConfig {
-    fn default() -> Self {
-        Self {
-            debug: false,
-            name: None,
-        }
-    }
-}
-
+#[derive(Default)]
 struct ExecutionConfig {
     debug: bool,
     name: Option<String>,
@@ -153,7 +145,7 @@ pub(crate) fn main(args: TokenStream, item: TokenStream) -> TokenStream {
     }
 }
 
-fn parse_knobs(mut input: syn::ItemFn, config: ExecutionConfig) -> TokenStream {
+fn parse_knobs(mut input: syn::ItemFn, _config: ExecutionConfig) -> TokenStream {
     // If type mismatch occurs, the current rustc points to the last statement.
     let (_, last_stmt_end_span) = {
         let mut last_stmt = input
@@ -189,7 +181,7 @@ fn parse_knobs(mut input: syn::ItemFn, config: ExecutionConfig) -> TokenStream {
         _ => (quote! {}, quote! {}),
     };
 
-    if let Some(_) = config.name {}
+    //if let Some(_) = config.name {}
 
     input.block = syn::parse2(quote_spanned! {last_stmt_end_span=>
         {
@@ -200,7 +192,7 @@ fn parse_knobs(mut input: syn::ItemFn, config: ExecutionConfig) -> TokenStream {
 
                 builder
                 .build()
-                .run();
+                .run_and_block();
             }
             run(#body)#tail_semicolon
         }

@@ -21,7 +21,9 @@ pub trait ToSinkExt<A: ArconType> {
     /// ```no_run
     /// use arcon::prelude::*;
     /// let sink = (0..10u64)
-    ///     .to_stream(|conf| _)
+    ///     .to_stream(|conf| {
+    ///         conf.set_arcon_time(ArconTime::Process);
+    ///     })
     ///     .print();
     /// ```
     fn print(self) -> Sink<A>;
@@ -31,17 +33,22 @@ pub trait ToSinkExt<A: ArconType> {
     /// ```no_run
     /// use arcon::prelude::*;
     /// let sink = (0..10u64)
-    ///     .to_stream(|conf| _)
+    ///     .to_stream(|conf| {
+    ///         conf.set_arcon_time(ArconTime::Process);
+    ///     })
     ///     .ignore();
     /// ```
     fn ignore(self) -> Sink<A>;
+    fn debug(self) -> Sink<A>;
     /// Send stream outputs to a Measure Sink
     ///
     /// # Usage
     /// ```no_run
     /// use arcon::prelude::*;
     /// let sink = (0..10u64)
-    ///     .to_stream(|conf| _)
+    ///     .to_stream(|conf| {
+    ///         conf.set_arcon_time(ArconTime::Process);
+    ///     })
     ///     .measure(10000000);
     /// ```
     fn measure(self, log_freq: u64) -> Sink<A>;
@@ -54,6 +61,10 @@ pub struct Sink<A: ArconType> {
 impl<A: ArconType> ToSinkExt<A> for Stream<A> {
     fn print(mut self) -> Sink<A> {
         self.set_channel_kind(ChannelKind::Console);
+        Sink { stream: self }
+    }
+    fn debug(mut self) -> Sink<A> {
+        self.set_channel_kind(ChannelKind::Forward);
         Sink { stream: self }
     }
     fn ignore(mut self) -> Sink<A> {

@@ -1,3 +1,5 @@
+#![allow(clippy::needless_doctest_main)]
+
 //! # Arcon - State-first Streaming Applications in Rust.
 //!
 //! ## What is Arcon

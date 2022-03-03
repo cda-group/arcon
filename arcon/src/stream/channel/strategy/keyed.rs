@@ -149,7 +149,7 @@ where
 mod tests {
     use super::{Channel, *};
     use crate::{
-        application::assembled::AssembledApplication,
+        application::Application,
         data::{ArconElement, ArconEvent, NodeID, Watermark},
         stream::{
             channel::strategy::{send, tests::*, ChannelStrategy},
@@ -162,8 +162,8 @@ mod tests {
 
     #[test]
     fn keyby_test() {
-        let app = AssembledApplication::default();
-        let pool_info = app.app.get_pool_info();
+        let app = Application::default();
+        let pool_info = app.get_pool_info();
         let system = app.data_system();
 
         let parallelism: u32 = 8;

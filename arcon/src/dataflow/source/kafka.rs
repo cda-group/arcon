@@ -25,11 +25,11 @@ use std::sync::Arc;
 /// .set("enable.auto.commit", "false");
 ///
 /// let paralellism = 2;
-/// KafkaSource::new(consumer_conf, ProtoSchema::new(), paralellism)
+/// let stream = KafkaSource::new(consumer_conf, ProtoSchema::new(), paralellism)
 ///     .to_stream(|conf| {
 ///         conf.set_arcon_time(ArconTime::Event);
 ///         conf.set_timestamp_extractor(|x: &u64| *x);
-///     })
+///     });
 /// ```
 pub struct KafkaSource<S: SourceSchema> {
     kafka_conf: KafkaConsumerConf,

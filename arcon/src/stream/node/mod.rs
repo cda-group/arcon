@@ -619,7 +619,7 @@ mod tests {
     #[cfg(not(test))]
     use crate::metrics::perf_event::HardwareCounter;
     use crate::{
-        application::assembled::AssembledApplication,
+        application::Application,
         dataflow::builder::OperatorBuilder,
         index::EmptyState,
         stream::{
@@ -646,8 +646,8 @@ mod tests {
         ) -> (ActorRef<ArconMessage<i32>>, Arc<Component<DebugNode<i32>>>) {
             // Returns a filter Node with input channels: sender1..sender3
             // And a debug sink receiving its results
-            let app = AssembledApplication::default();
-            let pool_info = app.app.get_pool_info();
+            let app = Application::default();
+            let pool_info = app.get_pool_info();
             let epoch_manager_ref = app.epoch_manager();
 
             let sink = app.data_system().create(DebugNode::<i32>::new);
@@ -679,7 +679,7 @@ mod tests {
                 descriptor.clone(),
                 app.data_system().clone(),
                 in_channels.clone(),
-                app.app.arcon_logger.clone(),
+                app.arcon_logger.clone(),
                 Arc::new(builder),
             );
             let node_manager_comp = app.ctrl_system().create(|| nm);
@@ -696,7 +696,7 @@ mod tests {
                 operator_state(backend.clone()),
                 NodeState::new(NodeID::new(0), in_channels, backend.clone()),
                 backend,
-                app.app.arcon_logger.clone(),
+                app.arcon_logger.clone(),
                 epoch_manager_ref,
                 #[cfg(not(test))]
                 perf_events,

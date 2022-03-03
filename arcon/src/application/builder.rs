@@ -8,21 +8,23 @@ use crate::dataflow::{
 /// A Builder for Arcon Applications
 ///
 /// ApplicationBuilder may be created through any type that implement the extension
-/// trait [ToBuilderExt](../../../dataflow/sink/trait.ToBuilderExt.html).
+/// trait [ToBuilderExt](../../dataflow/sink/trait.ToBuilderExt.html).
 ///
 /// ## Usage
 /// ```no_run
 /// use arcon::prelude::*;
-/// let builder: ApplicationBuilder = (0..100u64)
+/// let mut builder: ApplicationBuilder = (0..100u64)
 ///     .to_stream(|conf| conf.set_arcon_time(ArconTime::Process))
 ///     .print()
 ///     .builder();
 ///
-/// let app = builder.build();
+/// let app: Application = builder.build();
 /// ```
 #[derive(Default)]
 pub struct ApplicationBuilder {
     ctx: Context,
+    name: Option<String>,
+    debug: bool,
     conf: ApplicationConf,
 }
 
@@ -30,10 +32,23 @@ impl ApplicationBuilder {
     pub(crate) fn new(ctx: Context) -> ApplicationBuilder {
         ApplicationBuilder {
             ctx,
+            name: None,
+            debug: false,
             conf: ApplicationConf::default(),
         }
     }
-    pub fn with_config(&mut self, conf: ApplicationConf) -> &mut Self {
+    /// Sets the name of the application
+    pub fn name(&mut self, name: impl Into<String>) -> &mut Self {
+        self.name = Some(name.into());
+        self
+    }
+    pub fn enable_debug(&mut self) -> &mut Self {
+        self.debug = true;
+        self
+    }
+
+    /// Sets the configuration that is used during the build phase
+    pub fn config(&mut self, conf: ApplicationConf) -> &mut Self {
         self.conf = conf;
         self
     }
@@ -42,13 +57,16 @@ impl ApplicationBuilder {
     ///
     /// Note that this method only builds the application. In order
     /// to start it, see the following [method](Application::run).
-    pub fn build(self) -> Application {
-        let mut app = Application::with_conf(self.conf);
+    pub fn build(&mut self) -> Application {
+        let mut app = Application::with_conf(self.conf.clone());
+        if self.debug {
+            app.with_debug_node();
+        }
 
         let mut output_channels = Vec::new();
-        let dfg = self.ctx.dfg;
+        //let dfg = self.ctx.dfg;
 
-        for dfg_node in dfg.graph.iter().rev() {
+        for dfg_node in self.ctx.dfg.graph.iter().rev() {
             let operator_id = dfg_node.get_operator_id();
             let input_channels = dfg_node.get_input_channels();
             let node_ids = dfg_node

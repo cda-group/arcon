@@ -1,3 +1,5 @@
+#![allow(clippy::needless_doctest_main)]
+
 //! The arcon_macros crate contains macros used by arcon.
 
 #![recursion_limit = "128"]
@@ -23,9 +25,11 @@ mod state;
 /// *   ``reliable_ser_id``: an identifier used for identifying if an ArconType was sent over the wire using reliable flight mode
 /// *   ``version``: an identifier used for schema evolution and deployment updates
 ///
-/// ```rust,ignore
+/// ```rust
+/// use arcon::prelude::*;
+///
 /// #[arcon::proto]
-/// #[derive(Arcon)]
+/// #[derive(Arcon, Clone)]
 /// #[arcon(unsafe_ser_id = 104, reliable_ser_id = 105, version = 1)]
 /// pub struct ArconStruct {
 ///     pub id: u32,
@@ -47,27 +51,30 @@ pub fn arcon(input: TokenStream) -> TokenStream {
 ///
 /// ### With no arguments
 ///
-/// ```rust
+/// ```no_run
 /// #[arcon::app]
 /// fn main() {
 ///  (0..100u64)
 ///     .to_stream(|conf| conf.set_arcon_time(ArconTime::Process))
-///     .map(|x: i32| x * 10)
+///     .map(|x| x * 10)
 ///     .print()
 /// }
 /// ```
 ///
 /// Expands to the following
 ///
-/// ```rust
+/// ```no_run
 /// fn main() {
-///    let builder = (0..100u64)
+///    use arcon::prelude::*;
+///    let mut builder = (0..100u64)
 ///     .to_stream(|conf| conf.set_arcon_time(ArconTime::Process))
-///     .map(|x: i32| x * 10)
+///     .map(|x| x * 10)
 ///     .print()
 ///     .builder();
 ///
-///    builder.build().run();
+///    builder
+///     .build()
+///     .run_and_block();
 /// }
 /// ```
 #[proc_macro_attribute]
@@ -77,7 +84,9 @@ pub fn app(delimiter: TokenStream, input: TokenStream) -> TokenStream {
 
 /// Derive macro for declaring an ArconState
 ///
-/// ```rust,ignore
+/// ```rust
+/// use arcon::prelude::*;
+///
 /// #[derive(ArconState)]
 /// pub struct StreamingState<B: Backend> {
 ///   values: LazyValue<u64, B>,
@@ -90,7 +99,9 @@ pub fn state(input: TokenStream) -> TokenStream {
 
 /// Derive macro for declaring an Arrow convertable type within the Arcon runtime
 ///
-/// ```rust,ignore
+/// ```rust
+/// use arcon::prelude::*;
+///
 /// #[derive(Arrow)]
 /// pub struct ArrowStruct {
 ///     pub id: u32,
@@ -113,13 +124,15 @@ pub fn decoder(delimiter: TokenStream, input: TokenStream) -> TokenStream {
 
 /// Helper macro to make a struct or enum prost-compatible without the need for annotations.
 ///
-/// ```rust,ignore
-/// #[arcon_macros::proto]
+/// ```rust
+/// use arcon::prelude::*;
+///
+/// #[arcon::proto]
 /// struct Event {
 ///     s: String,
 ///     p: Point,
 /// }
-/// #[arcon_macros::proto]
+/// #[arcon::proto]
 /// struct Point {
 ///     x: i32,
 ///     y: i32,
