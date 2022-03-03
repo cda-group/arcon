@@ -39,6 +39,31 @@ pub trait ToSinkExt<A: ArconType> {
     ///     .ignore();
     /// ```
     fn ignore(self) -> Sink<A>;
+    /// Insert the stream outputs to a Debug Node
+    ///
+    /// # Usage
+    /// ```rust
+    /// use arcon::prelude::*;
+    /// use std::time::Duration;
+    ///
+    /// let mut app = (0..10i32)
+    ///     .to_stream(|conf| {
+    ///         conf.set_arcon_time(ArconTime::Process);
+    ///     })
+    ///     .filter(|x| *x < 5)
+    ///     .debug()
+    ///     .builder()
+    ///     .build();
+    ///
+    /// app.run();
+    ///
+    /// std::thread::sleep(Duration::from_millis(1000));
+    ///
+    /// let debug_node = app.get_debug_node::<i32>().unwrap();
+    /// debug_node.on_definition(|cd| {
+    ///     assert_eq!(cd.data.len(), 5);
+    /// });
+    /// ```
     fn debug(self) -> Sink<A>;
     /// Send stream outputs to a Measure Sink
     ///
@@ -56,20 +81,30 @@ pub trait ToSinkExt<A: ArconType> {
 
 pub struct Sink<A: ArconType> {
     stream: Stream<A>,
+    debug: bool,
 }
 
 impl<A: ArconType> ToSinkExt<A> for Stream<A> {
     fn print(mut self) -> Sink<A> {
         self.set_channel_kind(ChannelKind::Console);
-        Sink { stream: self }
+        Sink {
+            stream: self,
+            debug: false,
+        }
     }
     fn debug(mut self) -> Sink<A> {
         self.set_channel_kind(ChannelKind::Forward);
-        Sink { stream: self }
+        Sink {
+            stream: self,
+            debug: true,
+        }
     }
     fn ignore(mut self) -> Sink<A> {
         self.set_channel_kind(ChannelKind::Mute);
-        Sink { stream: self }
+        Sink {
+            stream: self,
+            debug: false,
+        }
     }
     fn measure(self, log_freq: u64) -> Sink<A> {
         let mut stream = self.operator(OperatorBuilder {
@@ -81,7 +116,10 @@ impl<A: ArconType> ToSinkExt<A> for Stream<A> {
             },
         });
         stream.set_channel_kind(ChannelKind::Mute);
-        Sink { stream }
+        Sink {
+            stream,
+            debug: false,
+        }
     }
 }
 
@@ -99,6 +137,6 @@ pub trait ToBuilderExt: private::Sealed {
 impl<T: ArconType> ToBuilderExt for Sink<T> {
     fn builder(mut self) -> ApplicationBuilder {
         self.stream.move_last_node();
-        ApplicationBuilder::new(self.stream.ctx)
+        ApplicationBuilder::new(self.stream.ctx, self.debug)
     }
 }

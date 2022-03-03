@@ -92,11 +92,7 @@ fn enriched_event_stream() -> Stream<EnrichedEvent> {
 
 #[test]
 fn key_by_integration() {
-    let mut app = enriched_event_stream()
-        .debug()
-        .builder()
-        .enable_debug()
-        .build();
+    let mut app = enriched_event_stream().debug().builder().build();
     app.run();
     sleep(Duration::from_secs(4));
 
@@ -134,7 +130,6 @@ fn key_by_to_forward_integration() {
         })
         .debug()
         .builder()
-        .enable_debug()
         .build();
 
     app.run();

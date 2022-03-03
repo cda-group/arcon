@@ -29,21 +29,17 @@ pub struct ApplicationBuilder {
 }
 
 impl ApplicationBuilder {
-    pub(crate) fn new(ctx: Context) -> ApplicationBuilder {
+    pub(crate) fn new(ctx: Context, debug: bool) -> ApplicationBuilder {
         ApplicationBuilder {
             ctx,
             name: None,
-            debug: false,
+            debug,
             conf: ApplicationConf::default(),
         }
     }
     /// Sets the name of the application
     pub fn name(&mut self, name: impl Into<String>) -> &mut Self {
         self.name = Some(name.into());
-        self
-    }
-    pub fn enable_debug(&mut self) -> &mut Self {
-        self.debug = true;
         self
     }
 
@@ -64,7 +60,6 @@ impl ApplicationBuilder {
         }
 
         let mut output_channels = Vec::new();
-        //let dfg = self.ctx.dfg;
 
         for dfg_node in self.ctx.dfg.graph.iter().rev() {
             let operator_id = dfg_node.get_operator_id();

@@ -25,7 +25,6 @@ mod tests {
             .map(|x| x + 10)
             .debug()
             .builder()
-            .enable_debug()
             .build();
 
         check_map_result(app);
@@ -40,7 +39,6 @@ mod tests {
             .map_in_place(|x| *x += 10)
             .debug()
             .builder()
-            .enable_debug()
             .build();
 
         check_map_result(app);
@@ -61,14 +59,13 @@ mod tests {
 
     #[test]
     fn filter_test() {
-        let mut app = (0..10)
+        let mut app = (0..10i32)
             .to_stream(|conf| {
                 conf.set_arcon_time(ArconTime::Process);
             })
             .filter(|x| *x < 5)
             .debug()
             .builder()
-            .enable_debug()
             .build();
 
         app.run();
@@ -83,7 +80,7 @@ mod tests {
 
     #[test]
     fn flatmap_test() {
-        let mut builder = (0..5)
+        let mut builder = (0..5i32)
             .to_stream(|conf| {
                 conf.set_arcon_time(ArconTime::Process);
             })
@@ -91,7 +88,7 @@ mod tests {
             .debug()
             .builder();
 
-        let mut app = builder.enable_debug().build();
+        let mut app = builder.build();
 
         app.run();
         wait(1000);
