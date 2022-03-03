@@ -11,16 +11,10 @@ type AttributeArgs = syn::punctuated::Punctuated<syn::NestedMeta, syn::Token![,]
 
 #[derive(Default)]
 struct ExecutionConfig {
-    debug: bool,
     name: Option<String>,
 }
 
 impl ExecutionConfig {
-    fn set_debug(&mut self, debug: syn::Lit, span: Span) -> Result<(), syn::Error> {
-        let debug = parse_bool(debug, span, "debug")?;
-        self.debug = debug;
-        Ok(())
-    }
     fn set_name(&mut self, name: syn::Lit, span: Span) -> Result<(), syn::Error> {
         if self.name.is_some() {
             return Err(syn::Error::new(span, "`name` set multiple times."));
@@ -32,10 +26,7 @@ impl ExecutionConfig {
     }
 }
 /// Config used in case of the attribute not being able to build a valid config
-const DEFAULT_ERROR_CONFIG: ExecutionConfig = ExecutionConfig {
-    debug: false,
-    name: None,
-};
+const DEFAULT_ERROR_CONFIG: ExecutionConfig = ExecutionConfig { name: None };
 
 fn parse_string(int: syn::Lit, span: Span, field: &str) -> Result<String, syn::Error> {
     match int {
@@ -48,7 +39,7 @@ fn parse_string(int: syn::Lit, span: Span, field: &str) -> Result<String, syn::E
     }
 }
 
-fn parse_bool(bool: syn::Lit, span: Span, field: &str) -> Result<bool, syn::Error> {
+fn _parse_bool(bool: syn::Lit, span: Span, field: &str) -> Result<bool, syn::Error> {
     match bool {
         syn::Lit::Bool(b) => Ok(b.value),
         _ => Err(syn::Error::new(
@@ -73,12 +64,6 @@ fn parse_config(_: syn::ItemFn, args: AttributeArgs) -> Result<ExecutionConfig, 
                     .to_string()
                     .to_lowercase();
                 match ident.as_str() {
-                    "debug" => {
-                        config.set_debug(
-                            namevalue.lit.clone(),
-                            syn::spanned::Spanned::span(&namevalue.lit),
-                        )?;
-                    }
                     "name" => {
                         config.set_name(
                             namevalue.lit.clone(),
@@ -87,7 +72,7 @@ fn parse_config(_: syn::ItemFn, args: AttributeArgs) -> Result<ExecutionConfig, 
                     }
                     name => {
                         let msg = format!(
-                            "Unknown attribute {} is specified; expected one of: `debug`, `name`",
+                            "Unknown attribute {} is specified; expected one of: `name`",
                             name,
                         );
                         return Err(syn::Error::new_spanned(namevalue, msg));
@@ -101,12 +86,12 @@ fn parse_config(_: syn::ItemFn, args: AttributeArgs) -> Result<ExecutionConfig, 
                     .to_string()
                     .to_lowercase();
                 let msg = match name.as_str() {
-                    "debug" | "multi_thread" => {
-                        format!("Set debug mode with #[{}(debug = \"true\")].", "arcon::app",)
+                    "name" => {
+                        format!("Set app name with #[{}(name = \"name\")].", "arcon::app",)
                     }
                     name => {
                         format!(
-                            "Unknown attribute {} is specified; expected one of: `debug`",
+                            "Unknown attribute {} is specified; expected one of: `name`",
                             name
                         )
                     }
@@ -145,7 +130,7 @@ pub(crate) fn main(args: TokenStream, item: TokenStream) -> TokenStream {
     }
 }
 
-fn parse_knobs(mut input: syn::ItemFn, _config: ExecutionConfig) -> TokenStream {
+fn parse_knobs(mut input: syn::ItemFn, config: ExecutionConfig) -> TokenStream {
     // If type mismatch occurs, the current rustc points to the last statement.
     let (_, last_stmt_end_span) = {
         let mut last_stmt = input
@@ -181,16 +166,20 @@ fn parse_knobs(mut input: syn::ItemFn, _config: ExecutionConfig) -> TokenStream 
         _ => (quote! {}, quote! {}),
     };
 
-    //if let Some(_) = config.name {}
+    let mut builder_cfg = quote! {};
+
+    if let Some(name) = &config.name {
+        builder_cfg = quote! { #builder_cfg.name(#name) }
+    }
 
     input.block = syn::parse2(quote_spanned! {last_stmt_end_span=>
         {
             use arcon::prelude::*;
-            #[allow(unused_mut)]
             fn run(ext: impl ToBuilderExt) {
                 let mut builder = ext.builder();
 
                 builder
+                #builder_cfg
                 .build()
                 .run_and_block();
             }

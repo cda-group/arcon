@@ -68,7 +68,7 @@ impl Operator for TimerOperator {
     }
 }
 
-#[arcon::app(debug = true)]
+#[arcon::app]
 fn main() {
     (0u64..10000000)
         .to_stream(|conf| {

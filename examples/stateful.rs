@@ -15,7 +15,7 @@ pub struct MyState<B: Backend> {
     events: EagerValue<Event, B>,
 }
 
-#[arcon::app(debug = true)]
+#[arcon::app]
 fn main() {
     (0..1000000)
         .map(|x| Event { id: x, data: 1.5 })

@@ -1,4 +1,4 @@
-#[arcon::app(debug = true)]
+#[arcon::app]
 fn main() {
     let consumer_conf = KafkaConsumerConf::default()
         .with_topic("test")

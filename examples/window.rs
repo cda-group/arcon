@@ -2,7 +2,7 @@ fn window_sum(buffer: &[u64]) -> u64 {
     buffer.iter().sum()
 }
 
-#[arcon::app(debug = true)]
+#[arcon::app]
 fn main() {
     (0u64..100000)
         .to_stream(|conf| {
