@@ -76,7 +76,7 @@ where
 /// Returns a [`Stream`] object that users may execute transformations on.
 ///
 /// # Example
-/// ```
+/// ```no_run
 /// use arcon::prelude::*;
 ///
 /// let stream: Stream<u64> = LocalFileSource::new("path_to_file")

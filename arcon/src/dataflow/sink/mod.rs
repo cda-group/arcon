@@ -42,7 +42,7 @@ pub trait ToSinkExt<A: ArconType> {
     /// Insert the stream outputs to a Debug Node
     ///
     /// # Usage
-    /// ```rust
+    /// ```no_run
     /// use arcon::prelude::*;
     /// use std::time::Duration;
     ///
@@ -79,6 +79,9 @@ pub trait ToSinkExt<A: ArconType> {
     fn measure(self, log_freq: u64) -> Sink<A>;
 }
 
+/// A Sink struct that implements the [ToBuilderExt] trait
+///
+/// Note that Arcon currently doesn't have a specific Sink trait at this moment.
 pub struct Sink<A: ArconType> {
     stream: Stream<A>,
     debug: bool,

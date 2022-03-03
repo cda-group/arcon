@@ -43,6 +43,8 @@
 //!
 //! - `rocksdb`
 //!     - Enables RocksDB to be used as a Backend
+//! - `kafka`
+//!     - Enables Kafka support
 //! - `metrics`
 //!     - Records internal runtime metrics and allows users to register custom metrics from an Operator
 //!     - If no exporter (e.g., prometheus_exporter) is enabled, the metrics will be logged by the runtime.
@@ -58,10 +60,8 @@
 //!         scrape_interval: 1s
 //!          static_configs:
 //!           - targets: ['localhost:9000']
-//!
 //! - `allocator_metrics`
 //!     - With this feature on, the runtime will record allocator metrics (e.g., total_bytes, bytes_remaining, alloc_counter).
-//!
 //! - `state_metrics`
 //!     - With this feature on, the runtime will record various state metrics (e.g., bytes in/out, last checkpoint size).
 
@@ -199,9 +199,6 @@ pub mod prelude {
         default_components::*,
         prelude::{Channel as KompactChannel, *},
     };
-
-    #[cfg(feature = "thread_pinning")]
-    pub use kompact::{get_core_ids, CoreId};
 
     pub use super::{Arrow, MutableTable, ToArrow};
     pub use arrow::{datatypes::Schema, record_batch::RecordBatch};
