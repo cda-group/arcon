@@ -15,10 +15,10 @@ pub trait MapExt<T: ArconType> {
     /// Map each stream record to a possibly new type
     ///
     /// # Example
-    /// ```no_run
+    /// ```rust
     /// use arcon::prelude::*;
-    /// let stream: Stream<u64> = Application::default()
-    ///     .iterator(0..100, |conf| {
+    /// let stream: Stream<u64> = (0..100)
+    ///     .to_stream(|conf| {
     ///         conf.set_arcon_time(ArconTime::Process);
     ///     })
     ///     .map(|x| x + 10);
@@ -27,10 +27,10 @@ pub trait MapExt<T: ArconType> {
     /// Map each record in place keeping the same stream type
     ///
     /// # Example
-    /// ```no_run
+    /// ```rust
     /// use arcon::prelude::*;
-    /// let stream: Stream<u64> = Application::default()
-    ///     .iterator(0..100, |conf| {
+    /// let stream: Stream<u64> = (0..100)
+    ///     .to_stream(|conf| {
     ///         conf.set_arcon_time(ArconTime::Process);
     ///     })
     ///     .map_in_place(|x| *x += 10);
@@ -39,10 +39,10 @@ pub trait MapExt<T: ArconType> {
     /// Akin to [Iterator::flat_map] but on a Stream
     ///
     /// # Example
-    /// ```no_run
+    /// ```rust
     /// use arcon::prelude::*;
-    /// let stream: Stream<u64> = Application::default()
-    ///     .iterator(0..100, |conf| {
+    /// let stream: Stream<u64> = (0..100)
+    ///     .to_stream(|conf| {
     ///         conf.set_arcon_time(ArconTime::Process);
     ///     })
     ///     .flat_map(|x| (0..x));

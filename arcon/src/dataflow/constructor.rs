@@ -1,6 +1,5 @@
 use crate::{
-    application::assembled::AssembledApplication,
-    application::conf::logger::ArconLogger,
+    application::Application,
     buffer::event::PoolInfo,
     data::{flight_serde::FlightSerde, ArconMessage, ArconType, NodeID},
     dataflow::{
@@ -34,7 +33,12 @@ use kompact::{
         biconnect_components, biconnect_ports, ActorRefFactory, ActorRefStrong, RequiredRef, *,
     },
 };
-use std::{any::Any, path::PathBuf, rc::Rc, sync::Arc};
+use std::{
+    any::Any,
+    path::{Path, PathBuf},
+    rc::Rc,
+    sync::Arc,
+};
 
 pub type ErasedSourceManager = Arc<dyn AbstractComponent<Message = SourceEvent>>;
 
@@ -49,9 +53,6 @@ fn channel_strategy<T: ArconType>(
     channel_kind: ChannelKind,
     key_builder: Option<KeyBuilder<T>>,
 ) -> ChannelStrategy<T> {
-    if components.len() + paths.len() == 0 {
-        return ChannelStrategy::<T>::Mute;
-    }
     match channel_kind {
         ChannelKind::Forward => {
             assert!((components.len() == 1) || (components.len() > node_id.id as usize));
@@ -102,6 +103,7 @@ fn channel_strategy<T: ArconType>(
         }
         ChannelKind::Console => ChannelStrategy::Console,
         ChannelKind::Mute => ChannelStrategy::Mute,
+        _ if components.len() + paths.len() == 0 => ChannelStrategy::Mute,
         _ => todo!("Unimplemented ChannelKind {:?}", channel_kind),
     }
 }
@@ -155,7 +157,7 @@ pub trait NodeFactory {
         in_channels: Vec<NodeID>,
         components: ErasedComponents,
         paths: Vec<ActorPath>,
-        application: &mut AssembledApplication,
+        application: &mut Application,
     ) -> Vec<(GlobalNodeId, ErasedComponent)>;
 }
 
@@ -164,7 +166,7 @@ pub trait SourceFactory {
         &self,
         components: ErasedComponents,
         paths: Vec<ActorPath>,
-        application: &mut AssembledApplication,
+        application: &mut Application,
     ) -> ErasedSourceManager;
 }
 
@@ -175,24 +177,26 @@ impl<OP: Operator + 'static, B: Backend> NodeFactory for NodeConstructor<OP, B> 
         in_channels: Vec<NodeID>,
         mut components: ErasedComponents,
         paths: Vec<ActorPath>,
-        application: &mut AssembledApplication,
+        app: &mut Application,
     ) -> Vec<(GlobalNodeId, ErasedComponent)> {
         // Initialize state and manager
-        self.init_state_dir();
-        let node_manager = self.create_node_manager(application, &in_channels);
+        let state_dir = app.arcon_conf().state_dir();
+        self.init_state_dir(&state_dir);
 
-        if components.is_empty() && paths.is_empty() && application.app.debug_node_enabled() {
-            components.push(self.create_debug_node(application));
+        let node_manager = self.create_node_manager(app, &in_channels);
+
+        if components.is_empty() && paths.is_empty() && app.debug_node_enabled() {
+            components.push(self.create_debug_node(app));
         }
         for node_id in node_ids {
             // Create the Nodes arguments
             let node_descriptor = format!("{}_{}", self.descriptor, node_id.node_id.id);
-            let backend = self.create_backend(node_descriptor.clone());
+            let backend = self.create_backend(node_descriptor.clone(), state_dir.clone());
             let channel_strategy = channel_strategy(
                 components.clone(),
                 paths.clone(),
                 node_id.node_id,
-                application.app.get_pool_info().clone(),
+                app.get_pool_info().clone(),
                 self.channel_kind,
                 self.out_key_builder.clone(),
             );
@@ -205,19 +209,18 @@ impl<OP: Operator + 'static, B: Backend> NodeFactory for NodeConstructor<OP, B> 
                 self.builder.state.clone()(backend.clone()),
                 NodeState::new(node_id.node_id, in_channels.clone(), backend.clone()),
                 backend.clone(),
-                self.logger.clone(),
-                application.epoch_manager().clone(),
+                app.arcon_logger.clone(),
+                app.epoch_manager().clone(),
                 #[cfg(all(feature = "hardware_counters", target_os = "linux", not(test)))]
                 self.builder.conf.perf_events.clone(),
                 node_id,
                 self.in_key_builder.clone(),
             );
             // Create the node and connect it to the NodeManager
-            self.create_node_component(application, node, &node_manager);
+            self.create_node_component(app, node, &node_manager);
         }
         // Start NodeManager
-        application
-            .ctrl_system()
+        app.ctrl_system()
             .start_notify(&node_manager)
             .wait_timeout(std::time::Duration::from_millis(2000))
             .expect("Failed to start NodeManager");
@@ -236,8 +239,6 @@ impl<OP: Operator + 'static, B: Backend> NodeFactory for NodeConstructor<OP, B> 
 #[derive(Clone)]
 pub(crate) struct NodeConstructor<OP: Operator + 'static, B: Backend> {
     descriptor: String,
-    state_dir: PathBuf,
-    logger: ArconLogger,
     channel_kind: ChannelKind,
     builder: Arc<OperatorBuilder<OP, B>>,
     in_key_builder: Option<KeyBuilder<OP::IN>>,
@@ -247,15 +248,11 @@ pub(crate) struct NodeConstructor<OP: Operator + 'static, B: Backend> {
 impl<OP: Operator + 'static, B: Backend> NodeConstructor<OP, B> {
     pub fn new(
         descriptor: String,
-        state_dir: PathBuf,
         builder: Arc<OperatorBuilder<OP, B>>,
-        logger: ArconLogger,
         in_key_builder: Option<KeyBuilder<OP::IN>>,
     ) -> NodeConstructor<OP, B> {
         NodeConstructor {
             descriptor,
-            state_dir,
-            logger,
             channel_kind: ChannelKind::default(),
             builder,
             in_key_builder,
@@ -265,7 +262,7 @@ impl<OP: Operator + 'static, B: Backend> NodeConstructor<OP, B> {
 
     fn create_node_component(
         &self,
-        application: &mut AssembledApplication,
+        application: &mut Application,
         node: Node<OP, B>,
         node_manager: &Arc<Component<NodeManager<OP, B>>>,
     ) {
@@ -289,7 +286,7 @@ impl<OP: Operator + 'static, B: Backend> NodeConstructor<OP, B> {
         });
     }
 
-    fn create_debug_node(&self, application: &mut AssembledApplication) -> ErasedComponent {
+    fn create_debug_node(&self, application: &mut Application) -> ErasedComponent {
         let debug_node = DebugNode::<OP::OUT>::new();
         let debug_component = application.data_system().create(|| debug_node);
         application
@@ -307,17 +304,16 @@ impl<OP: Operator + 'static, B: Backend> NodeConstructor<OP, B> {
         erased
     }
 
-    fn create_backend(&self, node_descriptor: String) -> Arc<B> {
-        let mut node_dir = self.state_dir.clone();
-        node_dir.push(&node_descriptor);
+    fn create_backend(&self, node_descriptor: String, mut state_dir: PathBuf) -> Arc<B> {
+        state_dir.push(&node_descriptor);
         self.builder
-            .create_backend(node_dir, node_descriptor.clone())
+            .create_backend(state_dir, node_descriptor.clone())
     }
 
     /// Initializes things like state directory and NodeManager
     fn create_node_manager(
         &self,
-        application: &mut AssembledApplication,
+        application: &mut Application,
         in_channels: &[NodeID],
     ) -> Arc<Component<NodeManager<OP, B>>> {
         // Define the NodeManager
@@ -325,7 +321,7 @@ impl<OP: Operator + 'static, B: Backend> NodeConstructor<OP, B> {
             self.descriptor.clone(),
             application.data_system().clone(),
             in_channels.to_vec(),
-            self.logger.clone(),
+            application.arcon_logger.clone(),
             self.builder.clone(),
         );
         // Create the actual NodeManager component
@@ -340,9 +336,9 @@ impl<OP: Operator + 'static, B: Backend> NodeConstructor<OP, B> {
         manager_comp
     }
 
-    fn init_state_dir(&self) {
+    fn init_state_dir(&self, path: &Path) {
         // Ensure there's a state_directory
-        std::fs::create_dir_all(&self.state_dir).unwrap();
+        std::fs::create_dir_all(path).unwrap();
     }
 }
 
@@ -350,8 +346,6 @@ impl<OP: Operator + 'static, B: Backend> NodeConstructor<OP, B> {
 pub(crate) struct SourceConstructor<S: Source + 'static, B: Backend> {
     descriptor: String,
     builder_type: SourceBuilderType<S, B>,
-    backend: Arc<B>,
-    watermark_interval: u64,
     time: ArconTime,
     channel_kind: ChannelKind,
     key_builder: Option<KeyBuilder<S::Item>>,
@@ -361,15 +355,11 @@ impl<S: Source + 'static, B: Backend> SourceConstructor<S, B> {
     pub(crate) fn new(
         descriptor: String,
         builder_type: SourceBuilderType<S, B>,
-        backend: Arc<B>,
-        watermark_interval: u64,
         time: ArconTime,
     ) -> Self {
         SourceConstructor {
             descriptor,
             builder_type,
-            backend,
-            watermark_interval,
             time,
             channel_kind: ChannelKind::default(),
             key_builder: None,
@@ -379,23 +369,25 @@ impl<S: Source + 'static, B: Backend> SourceConstructor<S, B> {
     // Source Manager needs to be (re-)inserted after calling this function
     fn create_source_manager(
         &self,
-        application: &mut AssembledApplication,
+        app: &mut Application,
+        backend: Arc<B>,
     ) -> Arc<Component<SourceManager<B>>> {
+        let watermark_interval = app.arcon_conf().watermark_interval;
         let manager = SourceManager::new(
             self.descriptor.clone(),
             self.time,
-            self.watermark_interval,
-            application.epoch_manager(),
-            self.backend.clone(),
-            application.app.arcon_logger.clone(),
+            watermark_interval,
+            app.epoch_manager(),
+            backend,
+            app.arcon_logger.clone(),
         );
-        application.ctrl_system().create(|| manager)
+        app.ctrl_system().create(|| manager)
     }
 
     fn start_source_manager(
         &self,
         source_manager: &Arc<Component<SourceManager<B>>>,
-        application: &mut AssembledApplication,
+        application: &mut Application,
     ) {
         let source_ref: ActorRefStrong<SourceEvent> =
             source_manager.actor_ref().hold().expect("fail");
@@ -419,26 +411,30 @@ impl<S: Source + 'static, B: Backend> SourceFactory for SourceConstructor<S, B> 
         &self,
         components: ErasedComponents,
         paths: Vec<ActorPath>,
-        application: &mut AssembledApplication,
+        app: &mut Application,
     ) -> ErasedSourceManager {
-        let source_manager = self.create_source_manager(application);
+        let mut state_dir = app.arcon_conf().state_dir();
+        state_dir.push("source_manager");
+        let backend = Arc::new(B::create(&state_dir, String::from("source_manager")).unwrap());
+
+        let source_manager = self.create_source_manager(app, backend.clone());
 
         match &self.builder_type {
             SourceBuilderType::Single(builder) => {
                 let source_cons = builder.constructor.clone();
                 let source_conf = builder.conf.clone();
                 let source_index = 0;
-                let source = source_cons(self.backend.clone());
+                let source = source_cons(backend);
                 let channel_strategy = channel_strategy(
                     components.clone(),
                     paths,
                     NodeID::new(source_index as u32),
-                    application.app.get_pool_info(),
+                    app.get_pool_info(),
                     self.channel_kind,
                     self.key_builder.clone(),
                 );
                 create_source_node(
-                    application,
+                    app,
                     channel_strategy,
                     source_index,
                     source,
@@ -451,17 +447,17 @@ impl<S: Source + 'static, B: Backend> SourceFactory for SourceConstructor<S, B> 
                 let parallelism = builder.parallelism;
                 for source_index in 0..builder.parallelism {
                     let source_conf = builder.conf.clone();
-                    let source = source_cons(self.backend.clone(), source_index, parallelism);
+                    let source = source_cons(backend.clone(), source_index, parallelism);
                     let channel_strategy = channel_strategy(
                         components.clone(),
                         paths.clone(),
                         NodeID::new(source_index as u32),
-                        application.app.get_pool_info(),
+                        app.get_pool_info(),
                         self.channel_kind,
                         self.key_builder.clone(),
                     );
                     create_source_node(
-                        application,
+                        app,
                         channel_strategy,
                         source_index,
                         source,
@@ -471,14 +467,14 @@ impl<S: Source + 'static, B: Backend> SourceFactory for SourceConstructor<S, B> 
                 }
             }
         }
-        self.start_source_manager(&source_manager, application);
+        self.start_source_manager(&source_manager, app);
         source_manager
     }
 }
 
 // helper function to create source node..
 fn create_source_node<S, B>(
-    app: &mut AssembledApplication,
+    app: &mut Application,
     channel_strategy: ChannelStrategy<S::Item>,
     source_index: usize,
     source: S,
@@ -493,7 +489,7 @@ fn create_source_node<S, B>(
         source,
         source_conf,
         channel_strategy,
-        app.app.arcon_logger.clone(),
+        app.arcon_logger.clone(),
     );
     let source_node_comp = app.data_system().create(|| source_node);
 

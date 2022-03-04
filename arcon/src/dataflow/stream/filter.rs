@@ -15,10 +15,10 @@ pub trait FilterExt<T: ArconType> {
     /// Filter out records based on the given predicate
     ///
     /// # Example
-    /// ```no_run
+    /// ```rust
     /// use arcon::prelude::*;
-    /// let stream: Stream<u64> = Application::default()
-    ///     .iterator(0..100, |conf| {
+    /// let stream: Stream<u64> = (0..100)
+    ///     .to_stream(|conf| {
     ///         conf.set_arcon_time(ArconTime::Process);
     ///     })
     ///     .filter(|x| x < &50);

@@ -1,18 +1,12 @@
-## Creating an Arcon Application
+## Creating and running an Arcon application
 
 ```rust
-use arcon::prelude::*;
-
+#[arcon::app]
 fn main() {
-    let mut app = Application::default()
-        .iterator(0..100, |conf| {
-            conf.set_arcon_time(ArconTime::Process);
-        })
+    (0..10u64)
+        .to_stream(|conf| conf.set_arcon_time(ArconTime::Process))
         .filter(|x| *x > 50)
-        .map(|x| x + 10)
-        .build();
-
-    app.start();
-    app.await_termination();
+        .map(|x| x * 10)
+        .print()
 }
 ```

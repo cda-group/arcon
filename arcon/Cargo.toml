@@ -1,6 +1,6 @@
 [package]
 name = "arcon"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Max Meldrum <mmeldrum@kth.se>"]
 edition = "2018"
 rust-version = "1.56"
@@ -14,15 +14,13 @@ A runtime for writing streaming applications
 
 [features]
 default = []
-unsafe_flight = ["arcon_macros/unsafe_flight"]
+rocksdb = ["arcon_state/rocks"]
 kafka = ["rdkafka", "futures", "serde_json"]
-thread_pinning = ["kompact/thread_pinning"]
 socket = ["tokio", "tokio-util", "futures", "serde", "serde_json"]
 hardware_counters = ["perf-event", "metrics"]
 prometheus_exporter = ["metrics-exporter-prometheus", "metrics"]
 allocator_metrics = ["arcon_allocator/metrics"]
 state_metrics = ["arcon_state/metrics"]
-rocksdb = ["arcon_state/rocks"]
 
 [dependencies]
 arcon_allocator = { version = "0.2", path = "arcon_allocator" }

@@ -5,14 +5,6 @@ pub enum FlightSerde {
     ///
     /// Reliable is the default serde option.
     Reliable,
-    #[cfg(feature = "unsafe_flight")]
-    #[allow(dead_code)]
-    /// Unsafe, but highly performant option
-    ///
-    /// For Unsafe to be a feasible choice, the remote machine
-    /// must have the same underlying architecture and data layout. An example of such an execution
-    /// is where two processes on the same machine transfer serialised data over loopback.
-    Unsafe,
 }
 
 impl Default for FlightSerde {
@@ -58,49 +50,6 @@ pub mod reliable_remote {
     }
 }
 
-#[cfg(feature = "unsafe_flight")]
-/// Module containing the [kompact] serialiser/deserialiser implementation for [FlightSerde::Unsafe]
-pub mod unsafe_remote {
-    use crate::data::{ArconType, RawArconMessage};
-    use kompact::prelude::*;
-
-    #[derive(Clone, Debug)]
-    pub struct UnsafeSerde<A: ArconType>(pub RawArconMessage<A>);
-
-    impl<A: ArconType> Deserialiser<RawArconMessage<A>> for UnsafeSerde<A> {
-        const SER_ID: SerId = A::UNSAFE_SER_ID;
-
-        fn deserialise(buf: &mut dyn Buf) -> Result<RawArconMessage<A>, SerError> {
-            let version_id = buf.get_u32();
-            if version_id != A::VERSION_ID {
-                let err = format!(
-                    "Mismatch on ArconType version. Got {} while expecting {}",
-                    version_id,
-                    A::VERSION_ID
-                );
-                return Err(SerError::InvalidData(err));
-            }
-            todo!("https://github.com/cda-group/arcon/issues/266");
-        }
-    }
-
-    impl<A: ArconType> Serialisable for UnsafeSerde<A> {
-        fn ser_id(&self) -> u64 {
-            A::UNSAFE_SER_ID
-        }
-        fn size_hint(&self) -> Option<usize> {
-            None
-        }
-        fn serialise(&self, buf: &mut dyn BufMut) -> Result<(), SerError> {
-            buf.put_u32(A::VERSION_ID);
-            todo!("https://github.com/cda-group/arcon/issues/266");
-        }
-        fn local(self: Box<Self>) -> Result<Box<dyn Any + Send>, Box<dyn Serialisable>> {
-            Ok(self)
-        }
-    }
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
@@ -126,7 +75,7 @@ mod test {
 
     // The flight_serde application will always send data of ArconDataTest
     #[derive(Arcon, prost::Message, Clone)]
-    #[arcon(unsafe_ser_id = 104, reliable_ser_id = 105, version = 1)]
+    #[arcon(reliable_ser_id = 105, version = 1)]
     pub struct ArconDataTest {
         #[prost(uint32, tag = "1")]
         pub id: u32,
@@ -139,7 +88,7 @@ mod test {
     // Down below are different structs the unit tests may attempt to deserialise into
 
     #[derive(Arcon, prost::Message, Clone)]
-    #[arcon(unsafe_ser_id = 104, reliable_ser_id = 105, version = 2)]
+    #[arcon(reliable_ser_id = 105, version = 2)]
     pub struct UpdatedVer {
         #[prost(uint32, tag = "1")]
         pub id: u32,
@@ -150,7 +99,7 @@ mod test {
     }
 
     #[derive(Arcon, prost::Message, Clone)]
-    #[arcon(unsafe_ser_id = 204, reliable_ser_id = 205, version = 2)]
+    #[arcon(reliable_ser_id = 205, version = 2)]
     pub struct UpdatedSerId {
         #[prost(uint32, tag = "1")]
         pub id: u32,
@@ -161,7 +110,7 @@ mod test {
     }
 
     #[derive(Arcon, prost::Message, Clone)]
-    #[arcon(unsafe_ser_id = 104, reliable_ser_id = 105, version = 1)]
+    #[arcon(reliable_ser_id = 105, version = 1)]
     pub struct RemovedField {
         #[prost(uint32, tag = "1")]
         pub id: u32,
@@ -170,7 +119,7 @@ mod test {
     }
 
     #[derive(Arcon, prost::Message, Clone)]
-    #[arcon(unsafe_ser_id = 104, reliable_ser_id = 105, version = 1)]
+    #[arcon(reliable_ser_id = 105, version = 1)]
     pub struct AddedField {
         #[prost(uint32, tag = "1")]
         pub id: u32,
@@ -183,7 +132,7 @@ mod test {
     }
 
     #[derive(Arcon, prost::Message, Clone)]
-    #[arcon(unsafe_ser_id = 104, reliable_ser_id = 105, version = 1)]
+    #[arcon(reliable_ser_id = 105, version = 1)]
     pub struct RearrangedFieldOrder {
         #[prost(bytes, tag = "1")]
         pub bytes: Vec<u8>,
@@ -212,37 +161,6 @@ mod test {
             assert_eq!(d.data.price, PRICE);
             assert_eq!(d.data.id, ID);
         }
-    }
-
-    #[cfg(feature = "unsafe_flight")]
-    #[should_panic]
-    #[test]
-    fn unsafe_serde_test() {
-        let data = flight_test::<ArconDataTest>(FlightSerde::Unsafe);
-        for d in data {
-            assert_eq!(d.data.items, *ITEMS);
-            assert_eq!(d.data.price, PRICE);
-            assert_eq!(d.data.id, ID);
-        }
-    }
-
-    #[cfg(feature = "unsafe_flight")]
-    #[test]
-    #[should_panic]
-    fn unsafe_version_mismatch_test() {
-        // Should panic on ArconType version mismatch
-        // Expected Version 1 but Received Version 2.
-        let _ = flight_test::<UpdatedVer>(FlightSerde::Unsafe);
-    }
-
-    #[cfg(feature = "unsafe_flight")]
-    #[test]
-    #[should_panic]
-    fn serde_id_mismatch_test() {
-        // Should panic with Unexpected Deserializer.
-        // reliable/unsafe ser_ids do not match
-        // NOTE: does not matter whether it is Unsafe/Reliable
-        let _ = flight_test::<UpdatedSerId>(FlightSerde::Unsafe);
     }
 
     #[test]

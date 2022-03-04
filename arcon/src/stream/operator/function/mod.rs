@@ -18,32 +18,35 @@ mod tests {
 
     #[test]
     fn map_test() {
-        let app = Application::default()
-            .with_debug_node()
-            .iterator(0..10, |conf| {
+        let app = (0..10)
+            .to_stream(|conf| {
                 conf.set_arcon_time(ArconTime::Process);
             })
             .map(|x| x + 10)
+            .debug()
+            .builder()
             .build();
+
         check_map_result(app);
     }
 
     #[test]
     fn map_in_place_test() {
-        let app = Application::default()
-            .with_debug_node()
-            .iterator(0..10, |conf| {
+        let app = (0..10)
+            .to_stream(|conf| {
                 conf.set_arcon_time(ArconTime::Process);
             })
             .map_in_place(|x| *x += 10)
+            .debug()
+            .builder()
             .build();
 
         check_map_result(app);
     }
 
     // helper to check common result between Map/MapInPlace
-    fn check_map_result(mut app: AssembledApplication) {
-        app.start();
+    fn check_map_result(mut app: Application) {
+        app.run();
         wait(1000);
 
         let debug_node = app.get_debug_node::<i32>().unwrap();
@@ -56,16 +59,16 @@ mod tests {
 
     #[test]
     fn filter_test() {
-        let mut app = Application::default()
-            .with_debug_node()
-            .iterator(0..10, |conf| {
+        let mut app = (0..10i32)
+            .to_stream(|conf| {
                 conf.set_arcon_time(ArconTime::Process);
             })
             .filter(|x| *x < 5)
+            .debug()
+            .builder()
             .build();
 
-        app.start();
-
+        app.run();
         wait(1000);
 
         let debug_node = app.get_debug_node::<i32>().unwrap();
@@ -77,16 +80,17 @@ mod tests {
 
     #[test]
     fn flatmap_test() {
-        let mut app = Application::default()
-            .with_debug_node()
-            .iterator(0..5, |conf| {
+        let mut builder = (0..5i32)
+            .to_stream(|conf| {
                 conf.set_arcon_time(ArconTime::Process);
             })
             .flat_map(|x| (0..x))
-            .build();
+            .debug()
+            .builder();
 
-        app.start();
+        let mut app = builder.build();
 
+        app.run();
         wait(1000);
 
         let debug_node = app.get_debug_node::<i32>().unwrap();

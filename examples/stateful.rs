@@ -1,12 +1,9 @@
 use arcon::prelude::*;
-use std::sync::Arc;
 
-#[derive(Arcon, Arrow, prost::Message, Copy, Clone)]
-#[arcon(unsafe_ser_id = 12, reliable_ser_id = 13, version = 1)]
+#[arcon::proto]
+#[derive(Arcon, Arrow, Copy, Clone)]
 pub struct Event {
-    #[prost(uint64)]
     pub id: u64,
-    #[prost(float)]
     pub data: f32,
 }
 
@@ -16,15 +13,11 @@ pub struct MyState<B: Backend> {
     events: EagerValue<Event, B>,
 }
 
+#[arcon::app]
 fn main() {
-    let conf = ApplicationConf {
-        epoch_interval: 2500,
-        ctrl_system_host: Some("127.0.0.1:2000".to_string()),
-        ..Default::default()
-    };
-
-    let mut app = Application::with_conf(conf)
-        .iterator((0..1000000).map(|x| Event { id: x, data: 1.5 }), |conf| {
+    (0..1000000)
+        .map(|x| Event { id: x, data: 1.5 })
+        .to_stream(|conf| {
             conf.set_timestamp_extractor(|x: &Event| x.id);
         })
         .key_by(|event: &Event| &event.id)
@@ -40,8 +33,5 @@ fn main() {
             }),
             conf: Default::default(),
         })
-        .build();
-
-    app.start();
-    app.await_termination();
+        .ignore()
 }

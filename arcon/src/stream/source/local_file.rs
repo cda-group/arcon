@@ -14,7 +14,7 @@ use std::{
     str::FromStr,
 };
 
-pub struct LocalFileSource<A>
+pub struct LocalFileSourceImpl<A>
 where
     A: ArconType + FromStr + Display,
     <A as FromStr>::Err: Display,
@@ -23,7 +23,7 @@ where
     _marker: std::marker::PhantomData<A>,
 }
 
-impl<A> LocalFileSource<A>
+impl<A> LocalFileSourceImpl<A>
 where
     A: ArconType + FromStr + Display,
     <A as FromStr>::Err: Display,
@@ -32,14 +32,14 @@ where
         let f = File::open(file_path).expect("failed to open file");
         let reader = BufReader::new(f);
         let lines = reader.lines();
-        LocalFileSource {
+        Self {
             lines,
             _marker: std::marker::PhantomData,
         }
     }
 }
 
-impl<A> Source for LocalFileSource<A>
+impl<A> Source for LocalFileSourceImpl<A>
 where
     A: ArconType + FromStr + Display,
     <A as FromStr>::Err: Display,

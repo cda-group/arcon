@@ -1,3 +1,5 @@
+#![allow(clippy::needless_doctest_main)]
+
 //! # Arcon - State-first Streaming Applications in Rust.
 //!
 //! ## What is Arcon
@@ -27,22 +29,22 @@
 //! ## Example
 //!
 //! ```no_run
-//! use arcon::prelude::*;
-//!
-//! let mut app = Application::default()
-//!     .iterator(0..100, |conf| {
-//!         conf.set_arcon_time(ArconTime::Process);
-//!     })
-//!     .filter(|x| *x > 50)
-//!     .to_console();
-//!
-//! app.start();
-//! app.await_termination();
+//! #[arcon::app(name = "example")]
+//! fn main() {
+//!     (0..100u64)
+//!         .to_stream(|conf| conf.set_arcon_time(ArconTime::Process))
+//!         .filter(|x| *x > 50)
+//!         .map(|x| x * 10)
+//!         .print()
+//! }
 //! ```
+//!
 //! # Feature Flags
 //!
 //! - `rocksdb`
 //!     - Enables RocksDB to be used as a Backend
+//! - `kafka`
+//!     - Enables Kafka support
 //! - `metrics`
 //!     - Records internal runtime metrics and allows users to register custom metrics from an Operator
 //!     - If no exporter (e.g., prometheus_exporter) is enabled, the metrics will be logged by the runtime.
@@ -58,10 +60,8 @@
 //!         scrape_interval: 1s
 //!          static_configs:
 //!           - targets: ['localhost:9000']
-//!
 //! - `allocator_metrics`
 //!     - With this feature on, the runtime will record allocator metrics (e.g., total_bytes, bytes_remaining, alloc_counter).
-//!
 //! - `state_metrics`
 //!     - With this feature on, the runtime will record various state metrics (e.g., bytes in/out, last checkpoint size).
 
@@ -157,15 +157,16 @@ pub mod test_utils {
 pub mod prelude {
     pub use crate::{
         application::conf::{logger::LoggerType, ApplicationConf},
-        application::{assembled::AssembledApplication, Application},
+        application::{Application, ApplicationBuilder},
         data::{ArconElement, ArconNever, ArconType, StateID, VersionId},
         dataflow::{
             builder::{Assigner, OperatorBuilder, SourceBuilder},
             conf::{OperatorConf, ParallelismStrategy, SourceConf, StreamKind, WindowConf},
             dfg::ChannelKind,
+            sink::{Sink, ToBuilderExt, ToSinkExt},
+            source::{LocalFileSource, ToStreamExt},
             stream::{
-                BenchExt, BuildExt, DebugExt, FilterExt, KeyBuilder, KeyedStream, MapExt,
-                OperatorExt, PartitionExt, Stream,
+                FilterExt, KeyBuilder, KeyedStream, MapExt, OperatorExt, PartitionExt, Stream,
             },
         },
         manager::snapshot::Snapshot,
@@ -183,6 +184,8 @@ pub mod prelude {
     };
 
     #[cfg(feature = "kafka")]
+    pub use crate::dataflow::source::kafka::KafkaSource;
+    #[cfg(feature = "kafka")]
     pub use crate::stream::source::kafka::KafkaConsumerConf;
     #[cfg(all(feature = "serde_json", feature = "serde"))]
     pub use crate::stream::source::schema::JsonSchema;
@@ -196,9 +199,6 @@ pub mod prelude {
         default_components::*,
         prelude::{Channel as KompactChannel, *},
     };
-
-    #[cfg(feature = "thread_pinning")]
-    pub use kompact::{get_core_ids, CoreId};
 
     pub use super::{Arrow, MutableTable, ToArrow};
     pub use arrow::{datatypes::Schema, record_batch::RecordBatch};

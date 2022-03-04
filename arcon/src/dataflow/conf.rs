@@ -32,7 +32,7 @@ pub enum ParallelismStrategy {
 impl Default for ParallelismStrategy {
     fn default() -> Self {
         // static for now until managed is complete and stable..
-        ParallelismStrategy::Static(num_cpus::get() / 2)
+        ParallelismStrategy::Static(1)
     }
 }
 

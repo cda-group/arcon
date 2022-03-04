@@ -1,6 +1,6 @@
 [package]
 name = "arcon_macros"
-version = "0.2.1"
+version = "0.2.2"
 authors = ["Max Meldrum <mmeldrum@kth.se>"]
 readme = "README.md"
 license = "Apache-2.0"
@@ -11,13 +11,14 @@ Macros for Arcon
 """
 edition = "2018"
 
-[features]
-unsafe_flight = []
-
 [dependencies]
 syn = { version = "1.0", features = ["full"] }
 quote = "1.0"
 proc-macro2 = "1.0"
+
+[dev-dependencies]
+arcon = { version = "0.2", path = "../arcon" }
+prost = "0.9"
 
 [lib]
 proc-macro = true

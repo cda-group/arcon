@@ -44,8 +44,6 @@ impl KafkaConsumerConf {
         self
     }
     /// Set poll timeout for the Kafka consumer
-    ///
-    /// If not defined, the default [DEFAULT_POLL_TIMEOUT] will be used.
     #[must_use]
     pub fn with_poll_timeout(mut self, timeout_ms: u64) -> Self {
         self.poll_timeout_ms = timeout_ms;

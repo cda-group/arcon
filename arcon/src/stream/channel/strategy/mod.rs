@@ -1,5 +1,3 @@
-#[cfg(feature = "unsafe_flight")]
-use crate::data::flight_serde::unsafe_remote::UnsafeSerde;
 use crate::{
     data::{
         flight_serde::{reliable_remote::ReliableSerde, FlightSerde},
@@ -87,11 +85,6 @@ pub(crate) fn send<A: ArconType>(
             actor_ref.tell(message);
             Ok(())
         }
-        #[cfg(feature = "unsafe_flight")]
-        Channel::Remote(actor_path, FlightSerde::Unsafe) => {
-            let unsafe_msg = UnsafeSerde(message.into());
-            actor_path.tell_serialised(unsafe_msg, source)
-        }
         Channel::Remote(actor_path, FlightSerde::Reliable) => {
             let reliable_msg = ReliableSerde(message.into());
             actor_path.tell_serialised(reliable_msg, source)
@@ -102,7 +95,7 @@ pub(crate) fn send<A: ArconType>(
 #[cfg(test)]
 pub mod tests {
     #[derive(Arcon, prost::Message, Clone)]
-    #[arcon(unsafe_ser_id = 12, reliable_ser_id = 13, version = 1)]
+    #[arcon(reliable_ser_id = 13, version = 1)]
     pub struct Input {
         #[prost(uint32, tag = "1")]
         pub id: u32,

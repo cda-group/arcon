@@ -235,7 +235,7 @@ mod tests {
     #[cfg(not(test))]
     use crate::metrics::perf_event::{HardwareCounter, PerfEvents};
     use crate::{
-        application::assembled::AssembledApplication,
+        application::Application,
         data::{ArconMessage, NodeID},
         dataflow::dfg::GlobalNodeId,
         index::AppenderWindow,
@@ -264,8 +264,8 @@ mod tests {
         ActorRefStrong<ArconMessage<u64>>,
         Arc<Component<DebugNode<u64>>>,
     ) {
-        let app = AssembledApplication::default();
-        let pool_info = app.app.get_pool_info();
+        let app = Application::default();
+        let pool_info = app.get_pool_info();
         let epoch_manager_ref = app.epoch_manager();
 
         // Create a sink
@@ -318,7 +318,7 @@ mod tests {
             descriptor.clone(),
             app.data_system().clone(),
             in_channels.clone(),
-            app.app.arcon_logger.clone(),
+            app.arcon_logger.clone(),
             Arc::new(builder),
         );
 
@@ -348,7 +348,7 @@ mod tests {
             operator_state(backend.clone()),
             NodeState::new(NodeID::new(0), in_channels, backend.clone()),
             backend,
-            app.app.arcon_logger.clone(),
+            app.arcon_logger.clone(),
             epoch_manager_ref,
             #[cfg(feature = "hardware_counters")]
             #[cfg(not(test))]

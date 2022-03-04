@@ -7,7 +7,7 @@
 Arcon is a library for building state-first streaming applications in Rust.
 
 ![ci](https://github.com/cda-group/arcon/workflows/ci/badge.svg)
-[![Cargo](https://img.shields.io/badge/crates.io-v0.2.0-orange)](https://crates.io/crates/arcon)
+[![Cargo](https://img.shields.io/badge/crates.io-v0.2.1-orange)](https://crates.io/crates/arcon)
 [![Documentation](https://docs.rs/arcon/badge.svg)](https://docs.rs/arcon)
 [![project chat](https://img.shields.io/badge/zulip-join%20chat-ff69b4)](https://arcon.zulipchat.com)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/cda-group/arcon)
@@ -37,20 +37,13 @@ See the roadmap [here](https://github.com/cda-group/arcon/projects/1)
 ## Example
 
 ```rust,no_run
-use arcon::prelude::*;
-
+#[arcon::app]
 fn main() {
-    let mut app = Application::default()
-        .iterator(0u64..100, |conf| {
-            conf.set_arcon_time(ArconTime::Event);
-            conf.set_timestamp_extractor(|x: &u64| *x);
-        })
+    (0..100u64)
+        .to_stream(|conf| conf.set_arcon_time(ArconTime::Process))
         .filter(|x| *x > 50)
-        .to_console()
-        .build();
-
-    app.start();
-    app.await_termination();
+        .map(|x| x * 10)
+        .print()
 }
 ```
 

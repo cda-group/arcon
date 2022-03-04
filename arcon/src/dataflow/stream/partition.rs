@@ -11,10 +11,10 @@ pub trait PartitionExt<T: ArconType> {
     /// must return the same key whenever it is called.
     ///
     /// Example
-    /// ```no_run
+    /// ```rust
     /// use arcon::prelude::*;
-    /// let stream: KeyedStream<u64> = Application::default()
-    ///     .iterator(0u64..100, |conf| {
+    /// let stream: KeyedStream<u64> = (0..100)
+    ///     .to_stream(|conf| {
     ///         conf.set_arcon_time(ArconTime::Process);
     ///     })
     ///     .key_by(|i: &u64| i);

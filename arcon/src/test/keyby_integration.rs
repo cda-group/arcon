@@ -4,7 +4,7 @@ use std::thread::sleep;
 use std::time::Duration;
 
 #[derive(Arcon, Arrow, prost::Message, Copy, Clone)]
-#[arcon(unsafe_ser_id = 12, reliable_ser_id = 13, version = 1)]
+#[arcon(reliable_ser_id = 13, version = 1)]
 pub struct Event {
     #[prost(uint64)]
     pub data: u64,
@@ -13,7 +13,7 @@ pub struct Event {
 }
 
 #[derive(Arcon, Arrow, prost::Message, Copy, Clone)]
-#[arcon(unsafe_ser_id = 12, reliable_ser_id = 13, version = 1)]
+#[arcon(reliable_ser_id = 13, version = 1)]
 pub struct EnrichedEvent {
     #[prost(uint64)]
     pub data: u64,
@@ -42,15 +42,8 @@ fn operator_conf() -> OperatorConf {
 
 // Sets up a pipeline of iterator -> event -> key_by -> enriched_event
 fn enriched_event_stream() -> Stream<EnrichedEvent> {
-    let app_conf = ApplicationConf {
-        epoch_interval: 2500,
-        ctrl_system_host: Some("127.0.0.1:0".to_string()),
-        ..Default::default()
-    };
-
-    Application::with_conf(app_conf)
-        .with_debug_node()
-        .iterator(0u64..EVENT_COUNT, |conf| {
+    (0u64..EVENT_COUNT)
+        .to_stream(|conf| {
             conf.set_arcon_time(ArconTime::Event);
             conf.set_timestamp_extractor(|x: &u64| *x);
         })
@@ -99,8 +92,8 @@ fn enriched_event_stream() -> Stream<EnrichedEvent> {
 
 #[test]
 fn key_by_integration() {
-    let mut app = enriched_event_stream().build();
-    app.start();
+    let mut app = enriched_event_stream().debug().builder().build();
+    app.run();
     sleep(Duration::from_secs(4));
 
     if let Some(debug_node) = app.get_debug_node::<EnrichedEvent>() {
@@ -135,9 +128,11 @@ fn key_by_to_forward_integration() {
             state: Arc::new(|_| EmptyState),
             conf: operator_conf(),
         })
+        .debug()
+        .builder()
         .build();
 
-    app.start();
+    app.run();
 
     sleep(Duration::from_secs(4));
     if let Some(debug_node) = app.get_debug_node::<EnrichedEvent>() {
