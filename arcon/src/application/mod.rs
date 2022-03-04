@@ -5,6 +5,33 @@
 //! Each Arcon application must have an [ApplicationConf](conf::ApplicationConf) configured.
 //! If you don't have any need to modify any parameter, then you can simply rely on the
 //! defaults.
+//!
+//! ## Application Builder
+//!
+//! An [ApplicationBuilder](builder::ApplicationBuilder) holds the logical plan of an Arcon application
+//! but also its configuration. You can use this struct to build an [Application].
+//!
+//! ### Usage
+//! ```no_run
+//! use arcon::prelude::*;
+//!
+//! let conf = ApplicationConf {
+//!     watermark_interval: 2000,
+//!     ..Default::default()
+//! };
+//!
+//! let mut builder: ApplicationBuilder = (0..100u64)
+//!     .to_stream(|conf| conf.set_arcon_time(ArconTime::Process))
+//!     .map(|x| x * 10)
+//!     .print()
+//!     .builder();
+//!
+//! let mut app: Application = builder
+//!     .config(conf)
+//!     .build();
+//!
+//! app.run_and_block();
+//! ```
 
 #[cfg(all(feature = "metrics", not(feature = "prometheus_exporter")))]
 use crate::metrics::log_recorder::LogRecorder;
@@ -140,14 +167,6 @@ impl Application {
         Self::new(conf)
     }
 
-    /// Enable DebugNode for the Application
-    ///
-    ///
-    /// The component can be accessed through [method](Application::get_debug_node).
-    pub fn with_debug_node(&mut self) {
-        self.debug_node_flag = true;
-    }
-
     // Internal helper for creating PoolInfo for a ChannelStrategy
     pub(crate) fn get_pool_info(&self) -> PoolInfo {
         PoolInfo::new(
@@ -160,6 +179,10 @@ impl Application {
     /// Give out a reference to the ApplicationConf of the application
     pub(crate) fn arcon_conf(&self) -> &ApplicationConf {
         &self.conf
+    }
+
+    pub(crate) fn with_debug_node(&mut self) {
+        self.debug_node_flag = true;
     }
 
     pub fn debug_node_enabled(&self) -> bool {
@@ -207,10 +230,15 @@ impl Application {
         })
     }
 
+    /// Run the application and block until it terminates
     pub fn run_and_block(mut self) {
         self.start();
         self.await_termination();
     }
+
+    /// Run the application without blocking
+    ///
+    /// Note that if this method called more than once, it will panic!
     pub fn run(&mut self) {
         self.start();
     }
@@ -253,7 +281,7 @@ impl Application {
 }
 
 #[derive(Clone)]
-pub struct Runtime {
+pub(crate) struct Runtime {
     /// [`KompactSystem`] for Control Components
     pub(crate) ctrl_system: KompactSystem,
     /// [`KompactSystem`] for Data Processing Components
