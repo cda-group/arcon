@@ -1,5 +1,3 @@
-#[cfg(feature = "unsafe_flight")]
-use crate::data::flight_serde::unsafe_remote::UnsafeSerde;
 use crate::data::{flight_serde::reliable_remote::ReliableSerde, *};
 use kompact::prelude::*;
 use std::collections::HashSet;
@@ -94,10 +92,6 @@ where
         let arcon_msg = match *msg.ser_id() {
             id if id == IN::RELIABLE_SER_ID => msg
                 .try_deserialise::<RawArconMessage<IN>, ReliableSerde<IN>>()
-                .unwrap(),
-            #[cfg(feature = "unsafe_flight")]
-            id if id == IN::UNSAFE_SER_ID => msg
-                .try_deserialise::<RawArconMessage<IN>, UnsafeSerde<IN>>()
                 .unwrap(),
             _ => {
                 panic!("Unexpected deserialiser")

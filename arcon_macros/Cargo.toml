@@ -11,14 +11,10 @@ Macros for Arcon
 """
 edition = "2018"
 
-[features]
-unsafe_flight = []
-
 [dependencies]
 syn = { version = "1.0", features = ["full"] }
 quote = "1.0"
 proc-macro2 = "1.0"
-
 
 [dev-dependencies]
 arcon = { version = "0.2", path = "../arcon" }

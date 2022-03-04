@@ -1,11 +1,9 @@
 use arcon::prelude::*;
 
-#[derive(Arcon, Arrow, prost::Message, Copy, Clone)]
-#[arcon(unsafe_ser_id = 12, reliable_ser_id = 13, version = 1)]
+#[arcon::proto]
+#[derive(Arcon, Arrow, Copy, Clone)]
 pub struct Event {
-    #[prost(uint64)]
     pub id: u64,
-    #[prost(float)]
     pub data: f32,
 }
 

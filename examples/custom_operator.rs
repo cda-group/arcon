@@ -2,7 +2,6 @@ use arcon::{ignore_timeout, prelude::*};
 
 #[arcon::proto]
 #[derive(Arcon, Copy, Clone)]
-#[arcon(unsafe_ser_id = 12, reliable_ser_id = 13, version = 1)]
 pub struct CustomEvent {
     pub id: u64,
 }

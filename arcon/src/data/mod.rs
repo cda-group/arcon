@@ -36,9 +36,6 @@ pub trait ArconType: ArconTypeBounds
 where
     Self: std::marker::Sized,
 {
-    #[cfg(feature = "unsafe_flight")]
-    /// Serialisation ID for Arcon's Unsafe In-flight serde
-    const UNSAFE_SER_ID: SerId;
     /// Serialisation ID for Arcon's Reliable In-flight serde
     const RELIABLE_SER_ID: SerId;
     /// Current version of this ArconType
@@ -272,50 +269,34 @@ impl From<u32> for NodeID {
 // an ArconType is always a struct or enum.
 
 impl ArconType for u32 {
-    #[cfg(feature = "unsafe_flight")]
-    const UNSAFE_SER_ID: SerId = ser_id::UNSAFE_U32_ID;
     const RELIABLE_SER_ID: SerId = ser_id::RELIABLE_U32_ID;
     const VERSION_ID: VersionId = 1;
 }
 impl ArconType for u64 {
-    #[cfg(feature = "unsafe_flight")]
-    const UNSAFE_SER_ID: SerId = ser_id::UNSAFE_U64_ID;
     const RELIABLE_SER_ID: SerId = ser_id::RELIABLE_U64_ID;
     const VERSION_ID: VersionId = 1;
 }
 impl ArconType for i32 {
-    #[cfg(feature = "unsafe_flight")]
-    const UNSAFE_SER_ID: SerId = ser_id::UNSAFE_I32_ID;
     const RELIABLE_SER_ID: SerId = ser_id::RELIABLE_I32_ID;
     const VERSION_ID: VersionId = 1;
 }
 impl ArconType for i64 {
-    #[cfg(feature = "unsafe_flight")]
-    const UNSAFE_SER_ID: SerId = ser_id::UNSAFE_I64_ID;
     const RELIABLE_SER_ID: SerId = ser_id::RELIABLE_I64_ID;
     const VERSION_ID: VersionId = 1;
 }
 impl ArconType for ArconF32 {
-    #[cfg(feature = "unsafe_flight")]
-    const UNSAFE_SER_ID: SerId = ser_id::UNSAFE_F32_ID;
     const RELIABLE_SER_ID: SerId = ser_id::RELIABLE_F32_ID;
     const VERSION_ID: VersionId = 1;
 }
 impl ArconType for ArconF64 {
-    #[cfg(feature = "unsafe_flight")]
-    const UNSAFE_SER_ID: SerId = ser_id::UNSAFE_F64_ID;
     const RELIABLE_SER_ID: SerId = ser_id::RELIABLE_F64_ID;
     const VERSION_ID: VersionId = 1;
 }
 impl ArconType for bool {
-    #[cfg(feature = "unsafe_flight")]
-    const UNSAFE_SER_ID: SerId = ser_id::UNSAFE_BOOLEAN_ID;
     const RELIABLE_SER_ID: SerId = ser_id::RELIABLE_BOOLEAN_ID;
     const VERSION_ID: VersionId = 1;
 }
 impl ArconType for String {
-    #[cfg(feature = "unsafe_flight")]
-    const UNSAFE_SER_ID: SerId = ser_id::UNSAFE_STRING_ID;
     const RELIABLE_SER_ID: SerId = ser_id::RELIABLE_STRING_ID;
     const VERSION_ID: VersionId = 1;
 }
@@ -427,8 +408,6 @@ impl ArconNever {
     pub const IS_UNREACHABLE: &'static str = "The ArconNever type cannot be instantiated!";
 }
 impl ArconType for ArconNever {
-    #[cfg(feature = "unsafe_flight")]
-    const UNSAFE_SER_ID: SerId = ser_id::NEVER_ID;
     const RELIABLE_SER_ID: SerId = ser_id::NEVER_ID;
     const VERSION_ID: VersionId = 1;
 }

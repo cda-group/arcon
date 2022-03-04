@@ -14,7 +14,6 @@ A runtime for writing streaming applications
 
 [features]
 default = []
-unsafe_flight = ["arcon_macros/unsafe_flight"]
 rocksdb = ["arcon_state/rocks"]
 kafka = ["rdkafka", "futures", "serde_json"]
 socket = ["tokio", "tokio-util", "futures", "serde", "serde_json"]

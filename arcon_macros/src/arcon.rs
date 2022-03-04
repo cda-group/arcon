@@ -2,12 +2,15 @@ use proc_macro::TokenStream;
 use quote::ToTokens;
 use syn::DeriveInput;
 
+const DEFAULT_RELIABLE_SER_ID: u64 = 150;
+const DEFAULT_VERSION_ID: u32 = 1;
+
 pub fn derive_arcon(input: TokenStream) -> TokenStream {
     let input: DeriveInput = syn::parse(input).unwrap();
     let name = &input.ident;
 
     #[allow(unused)]
-    let (unsafe_ser_id, reliable_ser_id, version) = {
+    let (reliable_ser_id, version) = {
         let arcon_attr = input.attrs.iter().find_map(|attr| match attr.parse_meta() {
             Ok(m) => {
                 if m.path().is_ident("arcon") {
@@ -36,27 +39,21 @@ pub fn derive_arcon(input: TokenStream) -> TokenStream {
                     doc_attrs.push(attr.clone());
                 }
             }
-            arcon_doc_attr(doc_attrs)
+
+            if doc_attrs.is_empty() {
+                (Some(DEFAULT_RELIABLE_SER_ID), Some(DEFAULT_VERSION_ID))
+            } else {
+                arcon_doc_attr(doc_attrs)
+            }
         }
     };
 
     let reliable_ser_id = reliable_ser_id.expect("missing reliable_ser_id attr");
     let version = version.expect("missing version attr");
-    #[cfg(feature = "unsafe_flight")]
-    let unsafe_ser_id = unsafe_ser_id.expect("missing unsafe_ser_id attr");
 
-    #[cfg(feature = "unsafe_flight")]
-    // Id check
-    assert_ne!(
-        unsafe_ser_id, reliable_ser_id,
-        "UNSAFE_SER_ID and RELIABLE_SER_ID must have different values"
-    );
-
-    let mut ids: Vec<proc_macro2::TokenStream> = Vec::with_capacity(3);
+    let mut ids: Vec<proc_macro2::TokenStream> = Vec::with_capacity(2);
     ids.push(quote! { const RELIABLE_SER_ID: ::arcon::SerId  = #reliable_ser_id; });
     ids.push(quote! { const VERSION_ID: ::arcon::VersionId = #version; });
-    #[cfg(feature = "unsafe_flight")]
-    ids.push(quote! { const UNSAFE_SER_ID: ::arcon::SerId = #unsafe_ser_id; });
 
     let generics = &input.generics;
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
@@ -73,8 +70,7 @@ pub fn derive_arcon(input: TokenStream) -> TokenStream {
 }
 
 /// Collect arcon attrs #[arcon(..)] meta list
-fn arcon_attr_meta(meta_list: syn::MetaList) -> (Option<u64>, Option<u64>, Option<u32>) {
-    let mut unsafe_ser_id = None;
+fn arcon_attr_meta(meta_list: syn::MetaList) -> (Option<u64>, Option<u32>) {
     let mut reliable_ser_id = None;
     let mut version = None;
 
@@ -87,13 +83,7 @@ fn arcon_attr_meta(meta_list: syn::MetaList) -> (Option<u64>, Option<u64>, Optio
             ),
         };
 
-        if pair.path.is_ident("unsafe_ser_id") {
-            if let syn::Lit::Int(ref s) = pair.lit {
-                unsafe_ser_id = Some(s.base10_parse::<u64>().unwrap());
-            } else {
-                panic!("unsafe_ser_id must be an Int literal");
-            }
-        } else if pair.path.is_ident("reliable_ser_id") {
+        if pair.path.is_ident("reliable_ser_id") {
             if let syn::Lit::Int(ref s) = pair.lit {
                 reliable_ser_id = Some(s.base10_parse::<u64>().unwrap());
             } else {
@@ -112,12 +102,11 @@ fn arcon_attr_meta(meta_list: syn::MetaList) -> (Option<u64>, Option<u64>, Optio
             )
         }
     }
-    (unsafe_ser_id, reliable_ser_id, version)
+    (reliable_ser_id, version)
 }
 
 /// Collect arcon attrs from doc comments
-fn arcon_doc_attr(name_values: Vec<syn::Meta>) -> (Option<u64>, Option<u64>, Option<u32>) {
-    let mut unsafe_ser_id = None;
+fn arcon_doc_attr(name_values: Vec<syn::Meta>) -> (Option<u64>, Option<u32>) {
     let mut reliable_ser_id = None;
     let mut version = None;
 
@@ -138,10 +127,6 @@ fn arcon_doc_attr(name_values: Vec<syn::Meta>) -> (Option<u64>, Option<u64>, Opt
                 .collect();
 
             if str_parts.len() == 3 && str_parts[1] == "=" {
-                if str_parts[0] == "unsafe_ser_id" {
-                    unsafe_ser_id = Some(str_parts[2].parse::<u64>().unwrap());
-                }
-
                 if str_parts[0] == "reliable_ser_id" {
                     reliable_ser_id = Some(str_parts[2].parse::<u64>().unwrap());
                 } else if str_parts[0] == "version" {
@@ -149,8 +134,8 @@ fn arcon_doc_attr(name_values: Vec<syn::Meta>) -> (Option<u64>, Option<u64>, Opt
                 }
             }
         } else {
-            panic!("unsafe_ser_id must be an Str literal");
+            panic!("must be an Str literal");
         }
     }
-    (unsafe_ser_id, reliable_ser_id, version)
+    (reliable_ser_id, version)
 }

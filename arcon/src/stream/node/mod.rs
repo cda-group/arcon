@@ -16,8 +16,6 @@ use metrics::{
 use perf_event::{Builder, Group};
 
 use crate::application::conf::logger::ArconLogger;
-#[cfg(feature = "unsafe_flight")]
-use crate::data::flight_serde::unsafe_remote::UnsafeSerde;
 use crate::{
     data::{flight_serde::reliable_remote::ReliableSerde, RawArconMessage, *},
     dataflow::builder::KeyBuilder,
@@ -588,12 +586,6 @@ where
                 .try_deserialise::<RawArconMessage<OP::IN>, ReliableSerde<OP::IN>>()
                 .map_err(|e| Error::Unsupported {
                     msg: format!("Failed to unpack reliable ArconMessage with err {:?}", e),
-                }),
-            #[cfg(feature = "unsafe_flight")]
-            id if id == OP::IN::UNSAFE_SER_ID => msg
-                .try_deserialise::<RawArconMessage<OP::IN>, UnsafeSerde<OP::IN>>()
-                .map_err(|e| Error::Unsupported {
-                    msg: format!("Failed to unpack unreliable ArconMessage with err {:?}", e),
                 }),
             id => reportable_error!("Unexpected deserialiser with id {}", id),
         };

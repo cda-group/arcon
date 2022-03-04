@@ -19,18 +19,13 @@ mod state;
 
 /// Derive macro for declaring an ArconType
 ///
-/// ArconType has 3 required attributes:
-///
-/// *   ``unsafe_ser_id``: an identifier used for identifying if an ArconType was sent over the wire using unsafe flight mode
-/// *   ``reliable_ser_id``: an identifier used for identifying if an ArconType was sent over the wire using reliable flight mode
-/// *   ``version``: an identifier used for schema evolution and deployment updates
+/// ## Usage
 ///
 /// ```rust
 /// use arcon::prelude::*;
 ///
 /// #[arcon::proto]
 /// #[derive(Arcon, Clone)]
-/// #[arcon(unsafe_ser_id = 104, reliable_ser_id = 105, version = 1)]
 /// pub struct ArconStruct {
 ///     pub id: u32,
 ///     pub timestamp: u64,

@@ -29,7 +29,7 @@
 //! ## Example
 //!
 //! ```no_run
-//! #[arcon::app]
+//! #[arcon::app(name = "example")]
 //! fn main() {
 //!     (0..100u64)
 //!         .to_stream(|conf| conf.set_arcon_time(ArconTime::Process))

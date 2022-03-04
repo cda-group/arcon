@@ -4,7 +4,7 @@ use std::thread::sleep;
 use std::time::Duration;
 
 #[derive(Arcon, Arrow, prost::Message, Copy, Clone)]
-#[arcon(unsafe_ser_id = 12, reliable_ser_id = 13, version = 1)]
+#[arcon(reliable_ser_id = 13, version = 1)]
 pub struct Event {
     #[prost(uint64)]
     pub data: u64,
@@ -13,7 +13,7 @@ pub struct Event {
 }
 
 #[derive(Arcon, Arrow, prost::Message, Copy, Clone)]
-#[arcon(unsafe_ser_id = 12, reliable_ser_id = 13, version = 1)]
+#[arcon(reliable_ser_id = 13, version = 1)]
 pub struct EnrichedEvent {
     #[prost(uint64)]
     pub data: u64,
