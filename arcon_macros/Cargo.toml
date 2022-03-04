@@ -1,6 +1,6 @@
 [package]
 name = "arcon_macros"
-version = "0.2.1"
+version = "0.2.2"
 authors = ["Max Meldrum <mmeldrum@kth.se>"]
 readme = "README.md"
 license = "Apache-2.0"

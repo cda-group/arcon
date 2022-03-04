@@ -1,6 +1,6 @@
 [package]
 name = "arcon_state"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Mikołaj Robakowski <mikolajr@kth.se>, Max Meldrum <mmeldrum@kth.se>"]
 edition = "2018"
 readme = "README.md"
