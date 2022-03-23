@@ -1,6 +1,0 @@
-.cache
-public
-node_modules
-yarn.lock
-.env.local
-package-lock.json

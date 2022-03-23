@@ -1,15 +1,18 @@
----
-title: About
-section: Arcon
-slug: /learn/about/
-order: 1
----
++++
+title = "About"
+description = ""
+date = 2021-05-01T18:20:00+00:00
+updated = 2021-05-01T18:20:00+00:00
+draft = false
+weight = 120
+sort_by = "weight"
+template = "docs/page.html"
 
-import {
-  Button,
-} from 'smooth-doc/components'
-
-# Overview
+[extra]
+lead = ""
+toc = true
+top = false
++++
 
 Arcon is a library for building real-time analytics applications in Rust. The Arcon runtime is based on the Dataflow model, similarly to systems such as Apache Flink and Timely Dataflow.
 
@@ -18,7 +21,7 @@ The Arcon philosophy is state first. Most other streaming systems are output-cen
 Key features:
 
 * Out-of-order Processing
-* Event-time &Watermarks
+* Event-time & Watermarks
 * Epoch Snapshotting for Exactly-once Processing
 * Hybrid Row(Protobuf) / Columnar (Arrow) System
 * Modular State Backend Abstraction
