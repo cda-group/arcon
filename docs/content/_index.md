@@ -35,4 +35,12 @@ content = 'Arcon has first-class integration with both Apache Arrow and Apache P
 title = "Temporal Stream State"
 content = 'Work-in-Progress Feature'
 
+[[extra.list]]
+title = "Exactly-Once"
+content = 'Exactly-Once consistency through epoch snapshotting'
+
+[[extra.list]]
+title = "Modular State Backends"
+content = 'Flexible state abstraction that allow multiple backends per application'
+
 +++

@@ -7,6 +7,14 @@ theme = "adidoks"
 # Whether to automatically compile all Sass files in the sass directory
 compile_sass = true
 
+taxonomies = [
+    {name = "authors"},
+]
+
+edit_page = false
+docs_repo = "https://github.com/cda-group/arcon"
+repo_branch = "master"
+
 # Whether to build a search index to be used later on by a JavaScript library
 build_search_index = true
 

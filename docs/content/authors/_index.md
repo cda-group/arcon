@@ -12,7 +12,7 @@ draft = false
 #
 # Note: We use quoted keys here.
 [extra.author_pages]
-"Max-Meldrum" = "authors/max-meldrum.md"
+"max-meldrum" = "authors/max-meldrum.md"
 +++
 
 The authors of the blog articles.

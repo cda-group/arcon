@@ -7,7 +7,7 @@ draft = false
 template = "blog/page.html"
 
 [taxonomies]
-authors = ["Rustaceans"]
+authors = ["Max Meldrum"]
 
 [extra]
 lead = ""

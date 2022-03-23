@@ -56,16 +56,16 @@ More examples can be found [here](examples).
 * [`arcon_macros`]: Arcon derive macros.
 * [`arcon_tests`]: Integration tests
 * [`arcon_util`]: Common Arcon utilities
+* [`docs`]: Project website docs
 * [`examples`]: Example applications
-* [`website`]: Project website
 
 [`arcon`]: arcon
 [`arcon_build`]: arcon_build
 [`arcon_macros`]: arcon_macros
 [`arcon_tests`]: arcon_tests
 [`arcon_util`]: arcon_util
+[`docs`]: docs
 [`examples`]: examples
-[`website`]: website
 
 ## Contributing
 
