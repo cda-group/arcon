@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="x-ua-compatible" content="ie=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+  <link rel="preload" as="font" href="https://cda-group.github.io/arcon/fonts/vendor/jost/jost-v4-latin-regular.woff2" type="font/woff2" crossorigin>
+  <link rel="preload" as="font" href="https://cda-group.github.io/arcon/fonts/vendor/jost/jost-v4-latin-700.woff2"  type="font/woff2" crossorigin>
+
+
+<link rel="stylesheet" href="https://cda-group.github.io/arcon/main.css">
+
+
+
+  
+  
+  
+  
+  
+    
+  
+
+  
+  
+    
+    
+  
+  
+  
+    
+  
+  
+  
+  
+    
+  
+  
+  
+
+
+  <meta name="robots" content="index, follow">
+  <meta name="googlebot" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1">
+  <meta name="bingbot" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1">
+
+
+	
+
+
+	
+
+<title>Dev Update | Arcon</title>
+<meta name="description" content="">
+<link rel="canonical" href="https://cda-group.github.io/arcon/blog/dev-update-22-08-10/">
+
+
+
+
+
+
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "http://schema.org",
+    "@type": "BreadcrumbList",
+    
+      
+      
+        
+        
+        
+        
+        
+        
+        
+        
+          {
+            "@type": "ListItem",
+            "position":  1 ,
+            "name": "Home",
+            "item": "https://cda-group.github.io/arcon/"
+          },
+          
+          
+          {
+            "@type": "ListItem",
+            "position":  2 ,
+            "name": "Blog",
+            "item": "https://cda-group.github.io/arcon/blog/"
+          },
+        
+      
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+          
+          
+          {
+            "@type": "ListItem",
+            "position":  3 ,
+            "name": "Dev Update 22 08 10",
+            "item": "https://cda-group.github.io/arcon/blog/dev-update-22-08-10/"
+          },
+        
+      
+    
+  }
+</script>
+
+
+
+
+
+
+
+  <meta name="theme-color" content="#fff">
+  <link rel="apple-touch-icon" sizes="180x180" href="https://cda-group.github.io/arcon/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="https://cda-group.github.io/arcon/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="https://cda-group.github.io/arcon/favicon-16x16.png">
+  
+    <link rel="manifest" href="https://cda-group.github.io/arcon/site.webmanifest" crossorigin>
+  
+
+
+  
+
+</head>
+
+  
+
+<body class="blog single">
+  
+  
+<div class="header-bar fixed-top"></div>
+<header class="navbar fixed-top navbar-expand-md navbar-light">
+	<div class="container">
+		<input class="menu-btn order-0" type="checkbox" id="menu-btn">
+		<label class="menu-icon d-md-none" for="menu-btn"><span class="navicon"></span></label>
+		<a class="navbar-brand order-1 order-md-0 me-auto" href="https://cda-group.github.io/arcon">Arcon</a>
+		<button id="mode" class="btn btn-link order-2 order-md-4" type="button" aria-label="Toggle mode">
+			<span class="toggle-dark"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-moon"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg></span>
+			<span class="toggle-light"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-sun"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg></span>
+		</button>
+		<ul class="navbar-nav fork-me order-3 order-md-5">
+			
+				
+					<li class="nav-item">
+						<a class="nav-link" href="https://github.com/cda-group/arcon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-github"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path></svg><span class="ms-2 visually-hidden">GitHub</span></a>
+					</li>
+				
+			
+		</ul>
+		<div class="collapse navbar-collapse order-4 order-md-1">
+			<ul class="navbar-nav main-nav me-auto order-5 order-md-2">
+				
+					
+				
+				
+				
+					
+						<li class="nav-item">
+							<a class="nav-link" href="https://cda-group.github.io/arcon/docs/arcon/about/">Learn</a>
+						</li>
+					
+						<li class="nav-item blog active">
+							<a class="nav-link" href="https://cda-group.github.io/arcon/blog/">Blog</a>
+						</li>
+					
+				
+			</ul>
+			<div class="break order-6 d-md-none"></div>
+			
+				<form class="navbar-form flex-grow-1 order-7 order-md-3">
+					<input id="userinput" class="form-control is-search" type="search" placeholder="Search docs..."
+						aria-label="Search docs..." autocomplete="off">
+					<div id="suggestions" class="shadow bg-white rounded"></div>
+				</form>
+			
+		</div>
+	</div>
+</header>
+
+
+
+  
+<div class="wrap container" role="document">
+  <div class="content">
+    <div class="row justify-content-center">
+      <div class="col-md-12 col-lg-10 col-xxl-8">
+        <article>
+          <div class="blog-header">
+            <h1>Dev Update</h1>
+            
+<p><small>Posted 2022-08-10 00:00:00 by <a class="stretched-link position-relative" href="https://cda-group.github.io/arcon/authors/max-meldrum/">Max Meldrum</a>&nbsp;&hyphen;&nbsp;<strong>2&nbsp;min read</strong></small><p>
+
+          </div>
+          
+          <p>This will be a short blog post giving a dev update on what is going on with Arcon.</p>
+<p>For the last few months, efforts have been put into Arcon's new runtime/kernel with a strong focus on the state management aspect. </p>
+<h2 id="a-non-blocking-async-friendly-runtime">A Non-blocking Async Friendly Runtime</h2>
+<p>The initial Arcon executor was implemented using <a href="https://github.com/kompics/kompact">Kompact</a>, a hybrid actor + component framework. And then, similarly to other systems, state management was offloaded to a store like <a href="http://rocksdb.org/">RocksDB</a>. While Kompact and RocksDB are excellent libraries by themselves, they are not a great fit for Arcon due to numerous reasons.</p>
+<p><strong>Blocking APIs</strong>
+Arcon is an I/O bound system that also needs to manage a set of concurrent tasks in a non-blocking cooperative manner. This is not possible to achieve using synchronous frameworks such as Kompact and RocksDB.</p>
+<p><strong>Decoupled Executor + I/O</strong>
+As noted in the following Redpanda blog <a href="https://redpanda.com/blog/tpc-buffers">post</a>, the advances in NVMe disks and Networks have turned the CPU into the new bottleneck of modern storage systems. This has made it essential to couple the CPU scheduler with non-blocking async I/O as a way of maximising CPU utilisation. Also, with a decoupled approach, we have no control over the execution of state compactions as they occur in separate threads. This may cause disturbance to the overall system performance and health.</p>
+<p><strong>Compilation times</strong>
+RocksDB is a heavy project to compile, and as it's not native Rust code, it slows down the development process.</p>
+<p>The first stage is to implement the runtime for a single core, and this is currently what is in the works.
+The executor part will not be implemented from scratch, but here we rely on <a href="https://github.com/DataDog/glommio">glommio</a>, a thread-per-core io-uring async runtime. glommio offers a number of great <a href="https://docs.rs/glommio/latest/glommio/io/index.html">primitives</a> for building storage solutions on top of io_uring and Direct I/O.</p>
+<p>Some other things glommio provides out of the box:</p>
+<ol>
+<li>Cooperative scheduling</li>
+<li>Various channels</li>
+<li>Networking</li>
+<li>Timers</li>
+<li>Internal stats (I/O and CPU scheduler related).</li>
+</ol>
+<p>Taking a step back and re-architecting Arcon from zero has slowed the overall project progress. 
+It has been a great learning process as it has given me the chance to dive into various technologies (e.g., io_uring, Direct I/O, Rust async/await).</p>
+
+        </article>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+  
+    
+<footer class="footer text-muted">
+	<div class="container">
+		<div class="row">
+			<div class="col-lg-8 order-last order-lg-first">
+				<ul class="list-inline">
+					
+						<li class="list-inline-item">Powered by <a href="https://www.getzola.org/">Zola</a> and <a href="https://github.com/aaranxu/adidoks">AdiDoks</a></li>
+					
+				</ul>
+			</div>
+			<div class="col-lg-8 order-first order-lg-last text-lg-end">
+				<ul class="list-inline">
+					
+				</ul>
+			</div>
+		</div>
+	</div>
+</footer>
+
+  
+
+  
+<script type="text/javascript" src="https://cda-group.github.io/arcon/js/main.js" defer></script>
+
+  <script type="text/javascript" src="https://cda-group.github.io/arcon/plugins/elasticlunr.min.js" defer></script>
+  <script type="text/javascript" src="https://cda-group.github.io/arcon/search_index.en.js" defer></script>
+  <script type="text/javascript" src="https://cda-group.github.io/arcon/js/search.js" defer></script>
+
+  
+</body>
+</html>

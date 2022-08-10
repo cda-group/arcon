@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://cda-group.github.io/arcon/sitemap.xml
